@@ -22,6 +22,7 @@ The system is designed to spend minimal tokens on simple patches and concentrate
 
 ## Architecture
 
+see `docs/omniport_implementation_plan.md` for the full implementation plan we currently implementing to build this system phase by phase. 
 See `/docs/plan.md` for the full 9-agent LangGraph state machine, hybrid localization pipeline, token budgets, and evaluation methodology.
 
 **Key insight:** Classification is for observability/metrics only. Downstream agents completely ignore classifier output. Routing and all processing decisions are driven by localization evidence alone (method used: git_exact, fuzzy_text, gumtree_ast, javaparser; confidence scores; API changes detected). This eliminates misalignment between what the classifier thinks and what the code actually needs.
