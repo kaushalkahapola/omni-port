@@ -42,12 +42,14 @@ The system comprises 9 specialized agents orchestrated as a LangGraph `StateGrap
 stateDiagram-v2
     [*] --> CodeLocalizer
     
-    CodeLocalizer --> PatchClassifier
+    CodeLocalizer --> PatchClassifier: localization results (method, confidence, context)
     
-    PatchClassifier --> FastApply: TYPE_I or TYPE_II
-    PatchClassifier --> NamespaceAdapter: TYPE_III
-    PatchClassifier --> StructuralRefactor: TYPE_IV or TYPE_V
-    PatchClassifier --> HunkRouter: MIXED (per-hunk routing)
+    PatchClassifier --> HunkRouter: route based on localization method + confidence (ignore classification)
+    
+    HunkRouter --> FastApply: git_exact method + high confidence
+    HunkRouter --> NamespaceAdapter: import changes detected in localization
+    HunkRouter --> StructuralRefactor: gumtree_ast method OR low confidence
+    HunkRouter --> ParallelHunkProcessing: mixed per-hunk routing
     
     HunkRouter --> ParallelHunkProcessing: fan-out via Send API
     
@@ -104,7 +106,7 @@ class LocalizationResult(BaseModel):
     api_changes: list[APIChange]  # from japicmp if applicable
 ```
 
-**Agent 2 — Patch Classifier.** Uses Claude Haiku (cheapest tier) with structured output to classify each patch and each hunk within a patch based on the original patch AND the localization evidence from Agent 1. Input: the unified diff, the localization results (including method used like `git_exact` vs `gumtree_ast`), target context, and PatchKnowledgeIndex. Output: `PatchClassification` with per-hunk type assignments (TYPE I–V), confidence scores, and a recommended processing route. Pre-processing (like auto-generated file detection) is handled by a separate utility before classification. The classification schema:
+**Agent 2 — Patch Classifier.** Runs AFTER localization (Agent 1) to classify each patch and each hunk within a patch. Uses Claude Haiku (cheapest tier) with structured output for observability and metrics, grounded in localization evidence. Input: the unified diff, the localization results (including method used like `git_exact` vs `gumtree_ast`), target context, confidence scores from localization, and PatchKnowledgeIndex. Output: `PatchClassification` with per-hunk type assignments (TYPE I–V), confidence scores, and a recommended processing route. **Critical constraint:** downstream agents do NOT rely on classification output at all. Routing and processing decisions are made purely from localization evidence (method used, confidence scores, API changes detected). Classifier output is for logging/metrics only. Pre-processing (like auto-generated file detection) is handled by a separate utility before classification. The classification schema:
 
 ```python
 class HunkClassification(BaseModel):
@@ -124,7 +126,7 @@ class PatchClassification(BaseModel):
 
 Features for classification include: the method used to locate the hunk (`git_exact` usually means TYPE I, `fuzzy` usually TYPE II, `gumtree_ast` or `javaparser` indicate TYPE III/IV), import statement changes, method signature differences (extracted via JavaParser AST comparison), context line divergence score (RapidFuzz ratio between original context and target file), and whether the patch touches files flagged in the PatchKnowledgeIndex.
 
-**Agent 3 — Fast-Apply Agent.** Handles TYPE I and TYPE II patches with minimal LLM usage. For TYPE I: direct `git apply` or CLAW exact-string replacement (the existing `apply_hunk_with_claw_approach()`). For TYPE II: line-offset adjustment using localization results — rewrite the hunk header line numbers and apply. This agent should succeed without any LLM call in ~80% of TYPE I/II cases, using LLM only when CLAW's exact-string pre-validation fails.
+**Agent 3 — Fast-Apply Agent.** Routed when localization method is `git_exact` and confidence is high (>0.85). Uses direct `git apply` or CLAW exact-string replacement (the existing `apply_hunk_with_claw_approach()`). Performs no LLM-based reasoning — purely deterministic application. If CLAW's exact-string pre-validation fails, route to code relocalizer instead of using LLM.
 
 **Agent 4 — Namespace Adapter.** Handles TYPE III patches. Takes the `symbol_mappings` from the Code Localizer and systematically rewrites: import statements (using JavaParser's `ImportDeclaration` manipulation), fully qualified type references, method names, and variable names. Uses Claude Sonnet with a focused prompt containing only the hunk, the symbol mapping table, and the target file's import section. Token budget: ~2K input, ~1K output per hunk.
 
@@ -230,7 +232,11 @@ For patches touching N files, the system uses a **dependency-aware parallel/sequ
 3. Dependent file groups are processed sequentially in topological order (dependency providers before consumers).
 4. After all hunks are synthesized, a single atomic validation pass applies all hunks together and runs compilation + tests.
 
-For mixed-complexity patches (common: some hunks TYPE I, others TYPE V in the same commit), the **HunkRouter** node fans out individual hunks to the appropriate agent via `Send`, then collects results through the `operator.add` reducer on `adapted_hunks`. This avoids running expensive structural analysis on trivial hunks.
+For mixed-complexity patches (common: some hunks found via git_exact, others via gumtree_ast in the same commit), the **HunkRouter** node reads localization results and routes each hunk to the appropriate agent via `Send` based on localization method + confidence, then collects results through the `operator.add` reducer on `adapted_hunks`. Routing rules: 
+- `git_exact` + confidence >0.85 → Fast-Apply
+- `fuzzy_text` + confidence >0.7 → Fast-Apply or Namespace Adapter depending on import changes detected
+- `gumtree_ast` OR `javaparser` OR confidence <0.6 → Structural Refactor
+This avoids running expensive structural analysis on chunks we found exactly, and avoids simple apply on chunks that required complex AST diffing.
 
 ### Token optimization per agent
 

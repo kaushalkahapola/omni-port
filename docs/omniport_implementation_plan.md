@@ -59,12 +59,14 @@ The system uses a LangGraph `StateGraph` with conditional routing, parallel fan-
 stateDiagram-v2
     [*] --> CodeLocalizer
     
-    CodeLocalizer --> PatchClassifier
+    CodeLocalizer --> PatchClassifier: localization results (method, confidence, context)
     
-    PatchClassifier --> FastApply: TYPE_I or TYPE_II
-    PatchClassifier --> NamespaceAdapter: TYPE_III
-    PatchClassifier --> StructuralRefactor: TYPE_IV or TYPE_V
-    PatchClassifier --> HunkRouter: MIXED (per-hunk routing)
+    PatchClassifier --> HunkRouter: route based on localization method + confidence (ignore classification)
+    
+    HunkRouter --> FastApply: git_exact method + high confidence
+    HunkRouter --> NamespaceAdapter: import changes detected in localization
+    HunkRouter --> StructuralRefactor: gumtree_ast method OR low confidence
+    HunkRouter --> ParallelHunkProcessing: mixed per-hunk routing
     
     HunkRouter --> ParallelHunkProcessing: fan-out via Send API
     
@@ -106,8 +108,8 @@ stateDiagram-v2
 
 1. **Agent 0 — Git Orchestrator (No LLM):** Manages branch checkouts, `git worktree` isolation, patch extraction. Maintains clean/dirty state. Fails closed on bash operations.
 2. **Agent 1 — Code Localizer (Fast LLM + Tools):** Executes the 5-stage hybrid localization per-hunk, per-file. Outputs `LocalizationResult` (confidence, method used, context snapshot, symbol mappings).
-3. **Agent 2 — Patch Classifier (Fast LLM):** Classifies patch/hunks (TYPE I-V) by analyzing the original patch AND the output of the Code Localizer. Assigns confidence, and estimates token budgets. Uses unified diff, localization method evidence, and PatchKnowledgeIndex. Preprocessing logic (auto-generated detection) is handled before LLM invocation.
-4. **Agent 3 — Fast-Apply Agent (No LLM):** For TYPE I/II. Deterministic `git apply` or line-offset CLAW exact-string replacement.
+3. **Agent 2 — Patch Classifier (Fast LLM):** Classifies patch/hunks (TYPE I-V) using localization evidence from Code Localizer for observability and metrics only. Does NOT drive routing decisions. Outputs `PatchClassification` with confidence and token budget estimates. Uses unified diff, localization method evidence, and PatchKnowledgeIndex. Preprocessing logic (auto-generated detection) is handled before LLM invocation.
+4. **Agent 3 — Fast-Apply Agent (No LLM):** Routed when localization method is `git_exact` and confidence is high (>0.85). Uses deterministic `git apply` or CLAW exact-string replacement. Performs no LLM-based reasoning. If CLAW pre-validation fails, route to code relocalizer instead of using LLM.
 5. **Agent 4 — Namespace Adapter (Balanced LLM):** For TYPE III. Uses JavaParser `ImportDeclaration` manipulation and symbol mapping to rewrite imports/method references.
 6. **Agent 5 — Structural Refactor (Reasoning LLM):** For TYPE IV/V. Inputs GumTree edit scripts, japicmp reports, call graphs. Achieves semantic equivalence in structurally different codebases.
 7. **Agent 6 — Hunk Synthesizer (Balanced LLM):** Produces CLAW-compatible exact-string `old_string`/`new_string` pairs. Asserts `old_string` exists verbatim in target. If failed, expands context ±5 lines.
@@ -122,7 +124,7 @@ stateDiagram-v2
 Uses a `BackportState` TypedDict. For multi-file patches, the Code Localizer analyzes import graphs (via JavaParser).
 - **Independent files:** Dispatched in parallel (`max_concurrency=5`) via LangGraph `Send` API.
 - **Dependent groups:** Processed sequentially in topological order.
-- Mixed-complexity patches (e.g., TYPE I & V in same commit) are fanned out per-hunk via **HunkRouter**, avoiding expensive LLM calls for trivial hunks.
+- Mixed-complexity patches (e.g., some hunks via git_exact, others via gumtree_ast in same commit) are fanned out per-hunk via **HunkRouter** based on localization method + confidence, avoiding expensive LLM calls for chunks we found exactly.
 
 ---
 
@@ -230,7 +232,7 @@ The implementation strictly follows a 3-release migration strategy outlined in t
 **Goal:** Activate TYPE III-V handling, parallel processing, and persistent memory.
 1. **Agent 4 (Namespace Adapter):** Implement JavaParser `ImportDeclaration` manipulation.
 2. **Agent 5 (Structural Refactor):** Implement complex fallback using REASONING_MODEL for TYPE IV/V. Include GumTree edit scripts and japicmp call graphs in prompt.
-3. **HunkRouter & Parallel Fan-out:** Implement LangGraph `Send` API. Analyze import graphs via JavaParser to process independent files in parallel (max_concurrency=5) and dependent groups sequentially. Apply 15-file hard limit (80K token cap).
+3. **HunkRouter & Parallel Fan-out:** Implement LangGraph `Send` API that routes each hunk based on localization method + confidence (ignore classifier output). Routing rules: `git_exact` + confidence >0.85 → Fast-Apply; `gumtree_ast` OR confidence <0.6 → Structural Refactor; import changes detected → Namespace Adapter. Analyze import graphs via JavaParser to process independent files in parallel (max_concurrency=5) and dependent groups sequentially. Apply 15-file hard limit (80K token cap).
 4. **Agent 8 (Memory Manager):** Implement the AutoDream consolidation daemon (runs every 50 patches). Maintain the 3-tier memory (PatchKnowledgeIndex, TopicFiles, Transcripts).
 5. **Token Circuit Breaker:** Monitor `Tokens_used` in state. 70% -> Downgrade Agent 5. 85% -> Downgrade all to FAST_MODEL. 95% -> Abort and checkpoint LangGraph state.
 
