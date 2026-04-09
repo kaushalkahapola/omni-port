@@ -1,9 +1,9 @@
 import os
 from enum import Enum
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from dotenv import load_dotenv
 
-# Load environment variables (e.g., OPENAI_API_KEY, OPENAI_BASE_URL)
+# Load environment variables (e.g., OPENAI_API_KEY, OPENAI_BASE_URL, AZURE_OPENAI_ENDPOINT)
 load_dotenv()
 
 
@@ -15,36 +15,41 @@ class LLMTier(Enum):
 
 class LLMRouter:
     def __init__(self):
-        # Allow overrides for different models per tier, falling back to reasonable defaults
-        # The base URL and API key will be automatically picked up by ChatOpenAI
-        # from the OPENAI_BASE_URL and OPENAI_API_KEY env variables.
         self.fast_model_name = os.getenv("FAST_MODEL_NAME", "gpt-4o-mini")
         self.balanced_model_name = os.getenv("BALANCED_MODEL_NAME", "gpt-4o")
         self.reasoning_model_name = os.getenv("REASONING_MODEL_NAME", "o1-preview")
 
-        self._models = {
-            LLMTier.FAST: ChatOpenAI(model=self.fast_model_name, temperature=0.1),
-            LLMTier.BALANCED: ChatOpenAI(
-                model=self.balanced_model_name, temperature=0.2
-            ),
-            LLMTier.REASONING: ChatOpenAI(
-                model=self.reasoning_model_name, temperature=0.5
-            ),
-        }
+        self.azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_OPENAI_API_BASE")
+        self.azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        self.azure_api_version = os.getenv("OPENAI_API_VERSION", "2024-02-15-preview")
 
-    def get_model(self, tier: LLMTier) -> ChatOpenAI:
+    def _create_model(self, model_name: str, temperature: float):
+        if self.azure_endpoint and self.azure_api_key:
+            return AzureChatOpenAI(
+                azure_endpoint=self.azure_endpoint,
+                api_key=self.azure_api_key,
+                api_version=self.azure_api_version,
+                azure_deployment=model_name,
+                temperature=temperature
+            )
+        else:
+            return ChatOpenAI(model=model_name, temperature=temperature)
+
+    def get_model(self, tier: LLMTier):
         """
         Retrieve the appropriate LLM instance for a given tier.
-        FAST: Cheap routing, classification, memory (e.g. gpt-4o-mini)
-        BALANCED: Context-heavy synthesis, namespace adaptation (e.g. gpt-4o)
-        REASONING: Deep structural refactoring, extended thinking (e.g. o1-preview)
         """
-        if tier not in self._models:
+        if tier == LLMTier.FAST:
+            return self._create_model(self.fast_model_name, 0.1)
+        elif tier == LLMTier.BALANCED:
+            return self._create_model(self.balanced_model_name, 0.2)
+        elif tier == LLMTier.REASONING:
+            return self._create_model(self.reasoning_model_name, 0.5)
+        else:
             raise ValueError(f"Unknown tier: {tier}")
-        return self._models[tier]
 
 
-# Expose a default instance for convenience (do not initialize immediately to allow env mocking in tests)
+# Expose a default instance for convenience
 router = None
 
 
