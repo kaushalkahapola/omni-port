@@ -57,7 +57,9 @@ The system uses a LangGraph `StateGraph` with conditional routing, parallel fan-
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PatchClassifier
+    [*] --> CodeLocalizer
+    
+    CodeLocalizer --> PatchClassifier
     
     PatchClassifier --> FastApply: TYPE_I or TYPE_II
     PatchClassifier --> NamespaceAdapter: TYPE_III
@@ -103,8 +105,8 @@ stateDiagram-v2
 ### Agent Specifications & Token Budgets
 
 1. **Agent 0 — Git Orchestrator (No LLM):** Manages branch checkouts, `git worktree` isolation, patch extraction. Maintains clean/dirty state. Fails closed on bash operations.
-2. **Agent 1 — Patch Classifier (Fast LLM):** Classifies patch/hunks (TYPE I-V), assigns confidence, and estimates token budgets. Uses unified diff, commit msg, and PatchKnowledgeIndex.
-3. **Agent 2 — Code Localizer (Fast LLM + Tools):** Executes the 5-stage hybrid localization per-hunk, per-file. Outputs `LocalizationResult` (confidence, method used, context snapshot, symbol mappings).
+2. **Agent 1 — Code Localizer (Fast LLM + Tools):** Executes the 5-stage hybrid localization per-hunk, per-file. Outputs `LocalizationResult` (confidence, method used, context snapshot, symbol mappings).
+3. **Agent 2 — Patch Classifier (Fast LLM):** Classifies patch/hunks (TYPE I-V) by analyzing the original patch AND the output of the Code Localizer. Assigns confidence, and estimates token budgets. Uses unified diff, localization method evidence, and PatchKnowledgeIndex. Preprocessing logic (auto-generated detection) is handled before LLM invocation.
 4. **Agent 3 — Fast-Apply Agent (No LLM):** For TYPE I/II. Deterministic `git apply` or line-offset CLAW exact-string replacement.
 5. **Agent 4 — Namespace Adapter (Balanced LLM):** For TYPE III. Uses JavaParser `ImportDeclaration` manipulation and symbol mapping to rewrite imports/method references.
 6. **Agent 5 — Structural Refactor (Reasoning LLM):** For TYPE IV/V. Inputs GumTree edit scripts, japicmp reports, call graphs. Achieves semantic equivalence in structurally different codebases.
@@ -152,8 +154,8 @@ omniport/
 │   │
 │   ├── agents/                 # The 9 LangGraph Agents
 │   │   ├── agent0_git.py       # Git Orchestrator
-│   │   ├── agent1_classifier.py# Patch Classifier
-│   │   ├── agent2_localizer.py # Code Localizer
+│   │   ├── agent1_localizer.py # Code Localizer
+│   │   ├── agent2_classifier.py# Patch Classifier
 │   │   ├── agent3_fastapply.py # Fast-Apply Agent
 │   │   ├── agent4_namespace.py # Namespace Adapter
 │   │   ├── agent5_structural.py# Structural Refactor
@@ -210,8 +212,8 @@ The implementation strictly follows a 3-release migration strategy outlined in t
 
 ### Phase 1: Shadow Mode & Localization (Release 1)
 **Goal:** Deploy new classification and localization in "shadow mode" without disrupting the legacy pipeline. Compare accuracy.
-1. **Agent 1 (Patch Classifier):** Implement structured output parsing. Detect TYPE I-V. Add auto-generated file detection (Lombok `@Generated`, MapStruct, JOOQ, Thrift, OpenAPI).
-2. **5-Stage Localization (Agent 2):** Implement Stages 1 through 5 (Git, Fuzzy, GumTree, JavaParser, Embedding).
+1. **Agent 1 (Code Localizer):** Implement Stages 1 through 5 (Git, Fuzzy, GumTree, JavaParser, Embedding).
+2. **Agent 2 (Patch Classifier):** Implement structured output parsing. Detect TYPE I-V using evidence from Agent 1 (e.g. `method_used`). Implement `src/tools/preprocessor.py` for auto-generated file detection (Lombok `@Generated`, MapStruct, JOOQ, Thrift, OpenAPI).
 3. **Shadow Integration:** Modify `legacy/evaluate_full_workflow.py` to run Agent 1 and Agent 2, log their localization accuracy against existing Phase 1/2, but proceed with legacy execution.
 
 ### Phase 2: Core Replacement & Validation (Release 2)

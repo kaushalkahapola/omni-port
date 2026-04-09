@@ -6,8 +6,8 @@ import subprocess
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.core.state import BackportState
-from src.agents.agent1_classifier import classify_patch
-from src.agents.agent2_localizer import localize_hunks
+from src.agents.agent2_classifier import classify_patch
+from src.agents.agent1_localizer import localize_hunks
 from src.tools.patch_parser import parse_unified_diff
 
 
@@ -84,10 +84,16 @@ def run_evaluation():
         # 3. Parse hunks
         hunks = parse_unified_diff(patch_content)
 
-        # Filter down to just Java files for localization
-        java_hunks = [
-            h for h in hunks if h["file_path"] and h["file_path"].endswith(".java")
-        ]
+        # Filter to only production Java files (exclude non-Java, tests, and non-Java hunks)
+        def is_production_java_hunk(h):
+            path = h.get("file_path", "")
+            if not path.endswith(".java"):
+                return False
+            if "Test" in path or "Tests" in path:
+                return False
+            return True
+
+        java_hunks = [h for h in hunks if is_production_java_hunk(h)]
 
         # 4. Create State
         state = BackportState(
@@ -107,19 +113,8 @@ def run_evaluation():
             status="started",
         )
 
-        # 4. Agent 1: Classify Patch
-        print(f"Running Agent 1: Patch Classifier...")
-        try:
-            state = classify_patch(state)
-            cls = state["classification"]
-            print(f"  Classified as: {cls.patch_type}")
-            print(f"  Confidence: {cls.confidence}")
-            print(f"  Reasoning: {cls.reasoning}")
-        except Exception as e:
-            print(f"  [SKIPPED] Agent 1 Classification (Requires LLM API Key): {e}")
-
-        # 5. Agent 2: Code Localizer
-        print(f"\nRunning Agent 2: Code Localizer ({len(java_hunks)} Java hunks)...")
+        # 4. Agent 1: Code Localizer
+        print(f"\nRunning Agent 1: Code Localizer ({len(java_hunks)} Java hunks)...")
         try:
             state = localize_hunks(state)
             results = state["localization_results"]
@@ -130,6 +125,17 @@ def run_evaluation():
                 )
         except Exception as e:
             print(f"  Localization Failed: {e}")
+
+        # 5. Agent 2: Classify Patch
+        print(f"\nRunning Agent 2: Patch Classifier...")
+        try:
+            state = classify_patch(state)
+            cls = state["classification"]
+            print(f"  Classified as: {cls.patch_type}")
+            print(f"  Confidence: {cls.confidence}")
+            print(f"  Reasoning: {cls.reasoning}")
+        except Exception as e:
+            print(f"  [SKIPPED] Agent 2 Classification (Requires LLM API Key): {e}")
 
     print("\nRestoring repository to main branch...")
     try:

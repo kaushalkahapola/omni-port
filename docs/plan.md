@@ -40,7 +40,9 @@ The system comprises 9 specialized agents orchestrated as a LangGraph `StateGrap
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PatchClassifier
+    [*] --> CodeLocalizer
+    
+    CodeLocalizer --> PatchClassifier
     
     PatchClassifier --> FastApply: TYPE_I or TYPE_II
     PatchClassifier --> NamespaceAdapter: TYPE_III
@@ -87,7 +89,22 @@ stateDiagram-v2
 
 **Agent 0 — Git Orchestrator.** Manages all repository state: branch checkouts, working tree isolation (via `git worktree`), patch extraction, and rollback on failure. Implements safety guardrails inspired by Claude Code's fail-closed bash parser — all git operations go through an allowlist. Maintains a clean/dirty state tracker so validation failures always roll back to a known-good state. Uses `git stash` and `git worktree` to enable parallel processing of independent file groups without workspace conflicts.
 
-**Agent 1 — Patch Classifier.** Uses Claude Haiku (cheapest tier) with structured output to classify each patch and each hunk within a patch. Input: the unified diff, commit message, file paths, and PatchKnowledgeIndex. Output: `PatchClassification` with per-hunk type assignments (TYPE I–V), confidence scores, and a recommended processing route. The classification schema:
+**Agent 1 — Code Localizer.** Executes the 5-stage hybrid localization pipeline described above. Operates per-hunk, per-file. Produces a `LocalizationResult` for each hunk containing: target file path, target line range, confidence score, localization method used, and a context snapshot of the target region. For multi-file patches, runs file localization in parallel using `Send` API when files are independent. This agent replaces and subsumes the current `context_analyzer_node` (Phase 1) and part of `structural_locator_node` (Phase 2).
+
+```python
+class LocalizationResult(BaseModel):
+    hunk_id: str
+    target_file: str
+    target_start_line: int
+    target_end_line: int
+    confidence: float
+    method_used: Literal["git_native", "fuzzy_text", "gumtree_ast", "symbol_resolution", "embedding_search"]
+    target_context: str  # actual code at target location
+    symbol_mappings: dict[str, str]  # old_symbol -> new_symbol
+    api_changes: list[APIChange]  # from japicmp if applicable
+```
+
+**Agent 2 — Patch Classifier.** Uses Claude Haiku (cheapest tier) with structured output to classify each patch and each hunk within a patch based on the original patch AND the localization evidence from Agent 1. Input: the unified diff, the localization results (including method used like `git_exact` vs `gumtree_ast`), target context, and PatchKnowledgeIndex. Output: `PatchClassification` with per-hunk type assignments (TYPE I–V), confidence scores, and a recommended processing route. Pre-processing (like auto-generated file detection) is handled by a separate utility before classification. The classification schema:
 
 ```python
 class HunkClassification(BaseModel):
@@ -105,22 +122,7 @@ class PatchClassification(BaseModel):
     skip_reason: Optional[str]  # auto-generated file detection
 ```
 
-Features for classification include: file rename detection via `git diff --find-renames`, import statement changes, method signature differences (extracted via JavaParser AST comparison), context line divergence score (RapidFuzz ratio between original context and target file), and whether the patch touches files flagged in the PatchKnowledgeIndex.
-
-**Agent 2 — Code Localizer.** Executes the 5-stage hybrid localization pipeline described above. Operates per-hunk, per-file. Produces a `LocalizationResult` for each hunk containing: target file path, target line range, confidence score, localization method used, and a context snapshot of the target region. For multi-file patches, runs file localization in parallel using `Send` API when files are independent. This agent replaces and subsumes the current `context_analyzer_node` (Phase 1) and part of `structural_locator_node` (Phase 2).
-
-```python
-class LocalizationResult(BaseModel):
-    hunk_id: str
-    target_file: str
-    target_start_line: int
-    target_end_line: int
-    confidence: float
-    method_used: Literal["git_native", "fuzzy_text", "gumtree_ast", "symbol_resolution", "embedding_search"]
-    target_context: str  # actual code at target location
-    symbol_mappings: dict[str, str]  # old_symbol -> new_symbol
-    api_changes: list[APIChange]  # from japicmp if applicable
-```
+Features for classification include: the method used to locate the hunk (`git_exact` usually means TYPE I, `fuzzy` usually TYPE II, `gumtree_ast` or `javaparser` indicate TYPE III/IV), import statement changes, method signature differences (extracted via JavaParser AST comparison), context line divergence score (RapidFuzz ratio between original context and target file), and whether the patch touches files flagged in the PatchKnowledgeIndex.
 
 **Agent 3 — Fast-Apply Agent.** Handles TYPE I and TYPE II patches with minimal LLM usage. For TYPE I: direct `git apply` or CLAW exact-string replacement (the existing `apply_hunk_with_claw_approach()`). For TYPE II: line-offset adjustment using localization results — rewrite the hunk header line numbers and apply. This agent should succeed without any LLM call in ~80% of TYPE I/II cases, using LLM only when CLAW's exact-string pre-validation fails.
 
