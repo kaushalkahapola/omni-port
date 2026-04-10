@@ -119,6 +119,7 @@ class StructuralRefactor:
         target_context: str,
         edits: List[GumTreeEdit],
         api_changes: Optional[Dict[str, str]] = None,
+        intended_new_code: Optional[str] = None,
     ) -> StructuralAdaptationOutput:
         if not self.llm_client:
             return StructuralAdaptationOutput(
@@ -129,19 +130,26 @@ class StructuralRefactor:
                 error_message="LLM client not configured for Structural Refactor agent.",
             )
 
-        prompt = f"""You are Agent 5 (Structural Refactor) for OmniPort, a Java patch backporting system.
-The patch code below must be adapted to a target codebase that has undergone structural changes.
+        intended_section = ""
+        if intended_new_code and intended_new_code.strip():
+            intended_section = f"""
+Intended new code (mainline version after the patch — shows WHAT structural change to apply,
+but may use mainline API names that differ from the target branch):
+```java
+{intended_new_code}
+```
 
-Original code (from patch, may not compile in target as-is):
+"""
+
+        prompt = f"""You are Agent 5 (Structural Refactor) for OmniPort, a Java patch backporting system.
+The target-branch code below must be structurally refactored to match the intent of a
+mainline patch.
+
+Current code in the TARGET file (this is what refactored_code will REPLACE verbatim):
 ```java
 {original_code}
 ```
-
-Target codebase context (surrounding code at the localized position):
-```java
-{target_context}
-```
-
+{intended_section}
 Structural changes detected by GumTree:
 {self._format_edits(edits)}
 
@@ -149,11 +157,18 @@ API changes detected by japicmp:
 {self._format_api_changes(api_changes)}
 
 Task:
-1. Analyze how the original code must change to achieve the same semantic effect in the target.
-2. Produce refactored_code that compiles and behaves equivalently in the target codebase.
-3. Preserve the original logic and intent exactly — only adapt structure and API calls.
+1. Understand the structural change shown in the "Intended new code" (e.g. removing an
+   if/else version check, inlining a branch, simplifying a method body).
+2. Apply the SAME structural change to the TARGET's code shown above.
+   The target may use different field/method names than the mainline — use the TARGET's
+   names throughout (e.g. if the target code shows `barMap` where the mainline has `fooMap`,
+   use `barMap`).
+3. Produce refactored_code that replaces the "Current code in the TARGET file" block
+   exactly and compiles correctly in the target codebase.
 4. Assign a confidence score (0.0–1.0) reflecting how certain you are of semantic equivalence.
 
+CRITICAL: refactored_code will be substituted verbatim for the TARGET code shown above.
+It must use only identifiers that exist in the target branch (no mainline-specific names).
 Return ONLY valid Java code in refactored_code.
 """
 
@@ -176,8 +191,13 @@ Return ONLY valid Java code in refactored_code.
         loc_result: LocalizationResult,
         edit_script: Optional[str] = None,
     ) -> StructuralAdaptationOutput:
-        original_code = hunk.get("old_content", "")
+        # original_code is the TARGET's current code (context_snapshot), since Agent 5
+        # produces refactored_code that replaces it verbatim in the target file.
+        # intended_new_code is the mainline's new_content — it shows the structural
+        # intent (e.g. remove if/else) that must be applied to the target version.
+        original_code = loc_result.context_snapshot
         target_context = loc_result.context_snapshot
+        intended_new_code = hunk.get("new_content", "") or None
 
         edits = self.parse_gumtree_edits(edit_script) if edit_script else []
 
@@ -186,6 +206,7 @@ Return ONLY valid Java code in refactored_code.
             target_context,
             edits,
             loc_result.symbol_mappings if loc_result.symbol_mappings else None,
+            intended_new_code=intended_new_code,
         )
 
 
@@ -220,6 +241,10 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
     failed_hunks: List[Dict[str, Any]] = list(state.get("failed_hunks", []))
     retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
     tokens_used: int = state.get("tokens_used", 0)
+    # Hunks that Agent 4 explicitly escalated (e.g. structural refactoring disguised
+    # as a namespace change — Agent 4 detected empty adapted_new_content for a
+    # non-pure-removal hunk and deferred to Agent 5).
+    escalation_indices: List[int] = list(state.get("structural_escalation_indices", []))
 
     for i, hunk in enumerate(hunks):
         if i in processed_indices:
@@ -232,7 +257,8 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
         # least a file path and context snapshot to reason about structure.
         if loc_result.method_used == "failed" or not loc_result.file_path:
             continue
-        if not _should_structural_refactor(loc_result):
+        # Process if routing criteria met OR if Agent 4 explicitly escalated this hunk.
+        if not _should_structural_refactor(loc_result) and i not in escalation_indices:
             continue
 
         # Claim this hunk.
@@ -243,6 +269,10 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
         if output.success and output.confidence > 0.5:
             refactored_hunks.append({
                 **hunk,
+                # old_content = target's CURRENT code (context_snapshot), so Agent 6
+                # can find it verbatim in the target file for CLAW pair construction.
+                # new_content = Agent 5's refactored replacement.
+                "old_content": loc_result.context_snapshot,
                 "new_content": output.refactored_code,
                 "refactored": True,
                 "semantic_confidence": output.confidence,

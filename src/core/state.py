@@ -80,6 +80,10 @@ class BackportState(TypedDict):
     # Subsequent agents skip claimed indices so hunks aren't double-processed.
     processed_hunk_indices: List[int]
 
+    # Hunk indices that Agent 4 couldn't handle (structural change, not just symbol
+    # renames) — Agent 5 picks these up regardless of localization confidence/method.
+    structural_escalation_indices: List[int]
+
     # Retry and Validation
     retry_contexts: List[PatchRetryContext]
     current_attempt: int

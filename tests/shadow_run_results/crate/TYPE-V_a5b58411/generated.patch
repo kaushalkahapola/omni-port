@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
-index fe20bbb9bb..f063f990c6 100644
+index fe20bbb9bb..5863e21ae0 100644
 --- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
 +++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
 @@ -138,6 +138,12 @@ public class ExplainPlan implements Plan {
@@ -11,20 +11,25 @@ index fe20bbb9bb..f063f990c6 100644
 +            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
 +            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
 +        );
-+        consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());
++        consumer.completionFuture().whenComplete((__, ___) -> ramAccounting.close());
          if (context != null) {
              assert subPlan instanceof LogicalPlan : "subPlan must be a LogicalPlan";
              LogicalPlan plan = (LogicalPlan) subPlan;
-@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {
-                 subQueryResults,
+@@ -147,7 +153,12 @@ public class ExplainPlan implements Plan {
+                 plannerContext,
+                 consumer,
+                 params,
+-                subQueryResults,
++            subQueryResults,
++            new IdentityHashMap<>(),
++            new ArrayList<>(plan.dependencies().size()),
++            ramAccounting,
++            null
++        );
                  new IdentityHashMap<>(),
                  new ArrayList<>(plan.dependencies().size()),
--                null,
-+                ramAccounting,
-                 null
-             );
-         } else {
-@@ -236,24 +242,9 @@ public class ExplainPlan implements Plan {
+                 null,
+@@ -236,24 +247,9 @@ public class ExplainPlan implements Plan {
                                               SubQueryResults subQueryResults,
                                               Map<SelectSymbol, Object> valuesBySubQuery,
                                               List<Map<String, Object>> explainResults,
@@ -50,7 +55,7 @@ index fe20bbb9bb..f063f990c6 100644
          IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();
          ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());
          List<CompletableFuture<?>> subPlansFutures = new ArrayList<>(plan.dependencies().size());
-@@ -363,7 +354,6 @@ public class ExplainPlan implements Plan {
+@@ -363,7 +359,6 @@ public class ExplainPlan implements Plan {
              });
      }
  

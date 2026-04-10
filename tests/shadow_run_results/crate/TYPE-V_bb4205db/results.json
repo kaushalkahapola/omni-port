@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T07:49:59.274028",
+  "run_timestamp": "2026-04-10T08:45:54.845920",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "bb4205db375cc17694818cbb88f03dc039a805ce",
@@ -7,7 +7,7 @@
   "description": "",
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 10.95,
+      "elapsed_s": 12.61,
       "error": null,
       "localization_results": [
         {
@@ -247,12 +247,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.7,
+      "elapsed_s": 5.07,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch introduces a new method getAggReference() to centralize the logic of checking if an aggregation reference is valid, specifically adding a check for RowGranularity.DOC granularity. This method is then used across multiple aggregation implementations to replace direct access to aggregationReferences.get(0) and to add granularity checks. The patch also modifies multiple aggregation classes to use this new method and adjust their logic accordingly. These changes involve structural refactoring of method calls and logic flow, but do not represent a complete redesign or deep API divergence. The patch is not a trivial string replacement or whitespace fix, but a structural change to the aggregation function implementations. The localization evidence shows most hunks were found with high confidence via exact or pickaxe methods, supporting the assessment. Therefore, the patch complexity is best classified as TYPE_III (structural changes). The confidence is high at 0.95, and the token budget estimate is moderate at 1200 tokens due to the number of files and structural changes involved.",
+        "reasoning": "The patch introduces a new method getAggReference() to centralize the logic of checking if an aggregation reference is valid, specifically adding a check for RowGranularity.DOC. This method is then used across multiple aggregation implementations to replace direct access to aggregationReferences.get(0) and to add the granularity check. The patch also modifies several aggregation classes to use this new method and adjust their logic accordingly. These changes involve structural modifications to method calls and logic flow, but do not represent a complete redesign or deep refactoring of the API. The patch is not a trivial string replacement or whitespace fix, but a structural change to the aggregation function implementations. The localization evidence shows high confidence matches mostly via 'git_exact' and 'git_pickaxe', supporting the assessment that the patch applies with some structural adaptation. Therefore, the patch is classified as TYPE_III with high confidence. The token budget estimate reflects the moderate complexity and number of files affected.",
         "is_auto_generated": false
       }
     },
@@ -349,14 +349,14 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 46.63,
+      "elapsed_s": 51.38,
       "error": null,
-      "adapted_count": 8
+      "adapted_count": 6
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 32.06,
       "error": null,
-      "refactored_count": 0
+      "refactored_count": 2
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
@@ -368,23 +368,23 @@
         {
           "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
           "old_string": "            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
-          "new_string": "            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
+          "new_string": "            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (_, values, state) -> {",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
-          "old_string": "            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))\n                        // => mix64(doubleToLongBits(Double.longBitsToDouble(sortableDoubleBits(values.nextValue()))))\n                        // => mix64(sortableDoubleBits(values.nextValue()))\n                        var hash = BitMixer.mix64(NumericUtils.sortableDoubleBits(values.nextValue()));\n                        state.addHash(hash);\n                    }\n                );",
-          "new_string": "            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))\n                        // => mix64(doubleToLongBits(Double.longBitsToDouble(sortableDoubleBits(values.nextValue()))))\n                        // => mix64(sortableDoubleBits(values.nextValue()))\n                        var hash = BitMixer.mix64(NumericUtils.sortableDoubleBits(values.nextValue()));\n                        state.addHash(hash);\n                    }\n                );",
+          "old_string": "            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
+          "new_string": "            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
-          "old_string": "            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Float in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of float DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits((double)NumericUtils.sortableIntToFloat((int)values.nextValue())))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int)values.nextValue()))) - no need to double cast, auto widening\n                        var hash = BitMixer.mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int) values.nextValue())));\n                        state.addHash(hash);\n                    }\n                );",
-          "new_string": "            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Float in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of float DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits((double)NumericUtils.sortableIntToFloat((int)values.nextValue())))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int)values.nextValue()))) - no need to double cast, auto widening\n                        var hash = BitMixer.mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int) values.nextValue())));\n                        state.addHash(hash);\n                    }\n                );",
+          "old_string": "            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
+          "new_string": "            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -393,22 +393,6 @@
           "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java",
           "old_string": "import io.crate.memory.MemoryManager;\nimport io.crate.metadata.FunctionImplementation;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.doc.DocTableInfo;\nimport io.crate.types.DataType;",
           "new_string": "import io.crate.memory.MemoryManager;\nimport io.crate.metadata.FunctionImplementation;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.RowGranularity;\nimport io.crate.metadata.doc.DocTableInfo;\nimport io.crate.types.DataType;",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
-          "old_string": "    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues()) {\n            return null;\n        }\n        switch (ref.valueType().id()) {",
-          "new_string": "    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues() || ref.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        switch (ref.valueType().id()) {",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
-          "old_string": "        if (aggregationReferences.size() != 1) {\n            return null;\n        }\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            var aggregationRef = (Reference) aggregationReferences.get(0);\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(aggregationRef.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;",
-          "new_string": "        if (aggregationReferences.size() != 1) {\n            return null;\n        }\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(reference.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -423,8 +407,24 @@
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java",
-          "old_string": "        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }",
-          "new_string": "        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }",
+          "old_string": "        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:",
+          "new_string": "        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
+          "old_string": "    }\n\n    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues()) {\n            return null;\n        }\n        switch (ref.valueType().id()) {",
+          "new_string": "    }\n\n    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues() || ref.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        return switch (ref.valueType().id()) {",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
+          "old_string": "        if (aggregationReferences.size() != 1) {\n            return null;\n        }\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            var aggregationRef = (Reference) aggregationReferences.get(0);\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(aggregationRef.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;",
+          "new_string": "        if (aggregationReferences.size() != 1) {\n            return null;\n        }\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(reference.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -458,10 +458,10 @@
       2,
       3,
       7,
-      14,
-      15,
       21,
-      25
+      25,
+      14,
+      15
     ],
     "tokens_used": 0,
     "synthesis_status": "partial",
@@ -489,7 +489,7 @@
         "new_content": "        return null;\n    }\n\n    protected Reference getAggReference(List<Reference> aggregationReferences) {\n        if (aggregationReferences.isEmpty()) {\n            return null;\n        }\n        Reference reference = aggregationReferences.getFirst();\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues() || reference.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        return reference;\n    }\n\n    protected DocValueAggregator<?> getNumericDocValueAggregator(\n        List<Reference> aggregationReferences,\n        TriConsumer<RamAccounting, TPartial, BigDecimal> applyToState) {\n\n        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n\n        DataType<?> valueType = reference.valueType();\n        if (valueType.id() != NumericType.ID) {\n"
       }
     ],
-    "generated_patch_bytes": 26514,
+    "generated_patch_bytes": 30287,
     "target_patch_bytes": 28152
   }
 }

@@ -306,6 +306,7 @@ def process_patch(item: dict, run_ts: str) -> None:
         synthesized_hunks=[],
         failed_hunks=[],
         processed_hunk_indices=[],
+        structural_escalation_indices=[],
         retry_contexts=[],
         current_attempt=1,
         max_retries=3,
