@@ -136,6 +136,7 @@ def main() -> None:
     added_tests: set[str] = set()
     source_modules: set[str] = set()
     all_modules: set[str] = set()
+    changed_files: list[str] = []
 
     for status, f in _parse_status_output(output):
         module = _find_gradle_module(args.repo, f)
@@ -155,6 +156,10 @@ def main() -> None:
         if not _is_test_file(f):
             continue
 
+        # Record the file path so run_tests.sh can detect the correct source set
+        # (e.g. javaRestTest vs internalClusterTest vs test) via TEST_TARGET_FILES.
+        changed_files.append(f)
+
         # Build "module:ClassName" token.
         class_name = _extract_class_name(f)
         target = f"{module}:{class_name}" if module else class_name
@@ -169,6 +174,7 @@ def main() -> None:
         "added": sorted(added_tests),
         "source_modules": sorted(source_modules),
         "all_modules": sorted(all_modules),
+        "changed_files": sorted(changed_files),
     }
     print(json.dumps(result))
 

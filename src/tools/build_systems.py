@@ -229,6 +229,7 @@ def _is_gradle_repo(repo_path: str) -> bool:
 
 
 def _clear_junit_reports(repo_path: str) -> None:
+    # Clear Maven surefire XML reports.
     for xml_path in glob.glob(
         os.path.join(repo_path, "**", "surefire-reports", "TEST-*.xml"), recursive=True
     ):
@@ -236,6 +237,12 @@ def _clear_junit_reports(repo_path: str) -> None:
             os.remove(xml_path)
         except Exception:
             pass
+    # Clear Gradle test-results directories (each module writes here).
+    for test_results_dir in glob.glob(
+        os.path.join(repo_path, "**", "build", "test-results"), recursive=True
+    ):
+        if os.path.isdir(test_results_dir):
+            shutil.rmtree(test_results_dir, ignore_errors=True)
     aggregate = os.path.join(repo_path, "build", "all-test-results")
     if os.path.isdir(aggregate):
         shutil.rmtree(aggregate, ignore_errors=True)

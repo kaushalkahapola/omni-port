@@ -1,0 +1,167 @@
+{
+  "run_timestamp": "2026-04-10T15:57:21.875464",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "3247cc6e48a2d4da79bf8aa4ca77d750af5e164a",
+  "backport_commit": "1974dab17d6a3bc331291d0ed075e04a2deaef4a",
+  "description": "master \u2192 6.1",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 159,
+          "end_line": 168,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.13,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch changes a single return statement from returning null to returning 0L in the method terminatePartial. This is a straightforward exact string replacement with no structural or API changes. The test addition is also a simple new test verifying the new behavior. The localization evidence confirms the main hunk was found via 'git_exact' with high confidence. Therefore, this patch is a trivial backport classified as TYPE_I.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent7_validator": {
+      "elapsed_s": 318.56,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/extensions/functions/target/surefire-reports/TEST-io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest"
+        ],
+        "test_cases": {
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#testMurmur3HashCalculationsForAllTypes": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#test_without_precision_string": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#testStreaming": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#test_function_implements_doc_values_aggregator_for_string_based_types": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#testWithoutPrecision": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#testCallWithInvalidPrecisionResultsInAnError": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#test_terminate_partial_without_initialization_returns_0": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#testWithPrecision": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#testReturnTypeIsAlwaysLong": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#test_without_precision_long": "passed",
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#test_random_type_random_values": "passed"
+        },
+        "classes": {
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest": "passed"
+        },
+        "summary": {
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0,
+          "total": 11
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#test_terminate_partial_without_initialization_returns_0"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 11,
+        "patched_total": 11,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 11
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1338,
+    "target_patch_bytes": 4472,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.operation.aggregation.HyperLogLogDistinctAggregationTest#test_terminate_partial_without_initialization_returns_0"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 11,
+      "patched_total": 11,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}
