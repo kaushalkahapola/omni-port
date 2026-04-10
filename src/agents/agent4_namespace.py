@@ -309,23 +309,30 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
         processed_indices.append(i)
 
         # Extract lines before and after the localized region so the LLM
-        # has full context. Pre-region is critical when the old block in the target
-        # is larger than what localization found (e.g. an outer setup that was
-        # structurally different between branches, so git_pickaxe only matched
-        # the inner lines and missed the surrounding code).
+        # has full context. Pre-region is critical ONLY for git_pickaxe results,
+        # where the sliding-window may have matched only the inner lines of a
+        # larger block (e.g. the outer setup loop was structurally different
+        # between branches). For fuzzy/embedding/gumtree/javaparser the
+        # context_snapshot is already the correctly-sized window; passing
+        # pre_region_context there causes the LLM to over-extend
+        # adapted_old_content into surrounding code it should not touch.
         pre_region_context = ""
         post_region_context = ""
         if file_content and loc_result.start_line > 0:
             lines = file_content.splitlines(keepends=True)
-            # 20 lines before the localized region (0-indexed: start_line-1 is first match line)
-            pre_start = max(0, loc_result.start_line - 21)
-            pre_end = loc_result.start_line - 1
-            pre_region_context = "".join(lines[pre_start:pre_end])
 
+            # Always include post-region so the LLM knows what already exists
+            # after the replaced block (prevents it from re-emitting that code).
             if loc_result.end_line > 0:
                 post_start = loc_result.end_line  # end_line is 1-indexed; next line index
                 post_end = min(len(lines), post_start + 20)
                 post_region_context = "".join(lines[post_start:post_end])
+
+            # Pre-region context only for git_pickaxe: its window may be too narrow.
+            if loc_result.method_used == "git_pickaxe":
+                pre_start = max(0, loc_result.start_line - 21)
+                pre_end = loc_result.start_line - 1
+                pre_region_context = "".join(lines[pre_start:pre_end])
 
         output = _adapt_with_llm(hunk, loc_result, pre_region_context, post_region_context)
 

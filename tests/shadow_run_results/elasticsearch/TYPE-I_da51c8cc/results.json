@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T06:39:26.332178",
+  "run_timestamp": "2026-04-10T07:14:54.250181",
   "repo": "elasticsearch",
   "patch_type": "TYPE-I",
   "original_commit": "da51c8ccbf0171abefb2978810efd6db0f6f743e",
@@ -7,7 +7,7 @@
   "description": "Simple transport protocol refactor - high confidence git match",
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.22,
+      "elapsed_s": 0.34,
       "error": null,
       "localization_results": [
         {
@@ -130,12 +130,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.64,
+      "elapsed_s": 5.45,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch involves multiple non-trivial changes across several Java classes related to the transport pipeline, including method signature changes, control flow restructuring, and resource management improvements. The changes are not simple string replacements or whitespace fixes; they include structural modifications such as changing method parameters from Consumer to CheckedConsumer, refactoring how bytes are handled and decoded, and altering class inheritance and method overrides. These indicate structural changes but not a complete redesign or deep API refactoring. The localization evidence shows all hunks were found via 'git_exact' with high confidence, supporting that the patch applies cleanly but involves structural code changes. Therefore, the patch is best classified as TYPE_III with high confidence. The token budget estimate is moderate due to the patch's complexity and size.",
+        "reasoning": "The patch involves multiple non-trivial changes across several Java classes related to the transport pipeline, including refactoring of resource management (ref-counting), method signature changes (e.g., changing Consumer to CheckedConsumer), restructuring of method bodies, and changes in control flow and resource handling. The changes are not simple string replacements or whitespace fixes, but involve structural modifications to the code, such as replacing a MessageToMessageDecoder with a ChannelInboundHandlerAdapter and reworking the decoding and fragment forwarding logic. The localization evidence shows all hunks were found via 'git_exact' with high confidence, indicating the patch applies cleanly but the complexity of the changes is significant. Therefore, the patch is best classified as TYPE_III (structural changes). The confidence is high but not absolute due to the complexity and multiple files involved. The token budget estimate is moderate to high due to the size and complexity of the patch.",
         "is_auto_generated": false
       }
     },

@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T06:39:26.332178",
+  "run_timestamp": "2026-04-10T07:14:54.250181",
   "repo": "elasticsearch",
   "patch_type": "TYPE-IV",
   "original_commit": "110b2060a15dce0236c47345de094c4dae05e991",
@@ -7,7 +7,7 @@
   "description": "Structural refactor - GumTree AST analysis required",
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 6.15,
+      "elapsed_s": 6.13,
       "error": null,
       "localization_results": [
         {
@@ -67,12 +67,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.35,
+      "elapsed_s": 5.27,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.95,
-        "reasoning": "The patch involves adding a new deprecation check method and modifying existing lists of checks. The changes include adding a new method to check for source mode in component templates, removing an old method, and updating test cases accordingly. The localization evidence shows that most hunks were found with high confidence via 'git_exact' or 'fuzzy' matching, indicating that the patch applies with minor differences such as whitespace or formatting drift. There are no deep structural changes or API redesigns, so the patch complexity is best classified as TYPE_II, requiring fuzzy matching and some adaptation but not structural refactoring.",
+        "reasoning": "The patch involves adding a new deprecation check method and modifying existing lists of checks. The changes include adding a new method to check for 'source mode' in component templates and updating test cases accordingly. The localization evidence shows that most hunks are found via 'git_exact' with high confidence, but some are found via 'fuzzy' matching with confidence around 0.93 to 0.99, indicating minor differences in the target branch. The patch does not involve structural or API redesign but requires fuzzy matching due to some code drift, so it fits TYPE_II complexity. The token budget is moderate due to multiple files and test additions.",
         "is_auto_generated": false
       }
     },
@@ -99,7 +99,7 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 14.97,
+      "elapsed_s": 14.71,
       "error": null,
       "adapted_count": 3
     },
@@ -117,8 +117,8 @@
       "synthesized_hunks": [
         {
           "file_path": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
-          "old_string": "import org.elasticsearch.index.mapper.SourceFieldMapper;",
-          "new_string": "",
+          "old_string": "import org.elasticsearch.index.IndexVersion;\nimport org.elasticsearch.index.IndexVersions;\nimport org.elasticsearch.index.engine.frozen.FrozenEngine;\nimport org.elasticsearch.index.mapper.SourceFieldMapper;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;",
+          "new_string": "import org.elasticsearch.index.IndexVersion;\nimport org.elasticsearch.index.IndexVersions;\nimport org.elasticsearch.index.engine.frozen.FrozenEngine;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -133,10 +133,10 @@
         },
         {
           "file_path": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java",
-          "old_string": "\npackage org.elasticsearch.xpack.deprecation;\n\nimport org.elasticsearch.action.admin.cluster.node.info.PluginsAndModules;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.routing.allocation.DataTier;\nimport org.elasticsearch.cluster.routing.allocation.decider.DiskThresholdDecider;\nimport org.elasticsearch.common.settings.SecureSetting;\nimport org.elasticsearch.common.settings.Setting;\nimport org.elasticsearch.common.settings.Settings;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.env.Environment;\nimport org.elasticsearch.license.XPackLicenseState;\nimport org.elasticsearch.script.ScriptService;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;\nimport org.elasticsearch.xpack.core.ilm.LifecycleSettings;\nimport org.elasticsearch.xpack.core.monitoring.MonitoringDeprecatedSettings;\nimport org.elasticsearch.xpack.core.security.authc.RealmConfig;\n",
-          "new_string": "\npackage org.elasticsearch.xpack.deprecation;\n\nimport org.elasticsearch.action.admin.cluster.node.info.PluginsAndModules;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.routing.allocation.DataTier;\nimport org.elasticsearch.action.admin.cluster.node.info.PluginsAndModules;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.ComponentTemplate;\nimport org.elasticsearch.cluster.routing.allocation.DataTier;\nimport org.elasticsearch.common.settings.SecureSetting;\nimport org.elasticsearch.common.settings.Setting;\nimport org.elasticsearch.common.settings.Settings;\nimport org.elasticsearch.common.xcontent.XContentHelper;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.env.Environment;\nimport org.elasticsearch.index.mapper.SourceFieldMapper;\nimport org.elasticsearch.license.XPackLicenseState;\nimport org.elasticsearch.script.ScriptService;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;\nimport org.elasticsearch.license.XPackLicenseState;\nimport org.elasticsearch.script.ScriptService;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;\nimport org.elasticsearch.xpack.core.ilm.LifecycleSettings;\nimport org.elasticsearch.xpack.core.monitoring.MonitoringDeprecatedSettings;\nimport org.elasticsearch.xpack.core.security.authc.RealmConfig;\n",
+          "old_string": "import org.elasticsearch.action.admin.cluster.node.info.PluginsAndModules;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.routing.allocation.DataTier;\nimport org.elasticsearch.cluster.routing.allocation.decider.DiskThresholdDecider;\nimport org.elasticsearch.common.settings.SecureSetting;\nimport org.elasticsearch.common.settings.Setting;\nimport org.elasticsearch.common.settings.Settings;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.env.Environment;\nimport org.elasticsearch.license.XPackLicenseState;\nimport org.elasticsearch.script.ScriptService;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;",
+          "new_string": "import org.elasticsearch.action.admin.cluster.node.info.PluginsAndModules;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.ComponentTemplate;\nimport org.elasticsearch.cluster.routing.allocation.DataTier;\nimport org.elasticsearch.cluster.routing.allocation.decider.DiskThresholdDecider;\nimport org.elasticsearch.common.settings.SecureSetting;\nimport org.elasticsearch.common.settings.Setting;\nimport org.elasticsearch.common.settings.Settings;\nimport org.elasticsearch.common.xcontent.XContentHelper;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.env.Environment;\nimport org.elasticsearch.index.mapper.SourceFieldMapper;\nimport org.elasticsearch.license.XPackLicenseState;\nimport org.elasticsearch.script.ScriptService;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;",
           "confidence": 1.0,
-          "context_lines_included": 3,
+          "context_lines_included": 0,
           "verified": true
         }
       ]
@@ -161,7 +161,7 @@
     "failed_hunks_total": 0,
     "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 7079,
+    "generated_patch_bytes": 7077,
     "target_patch_bytes": 14420
   }
 }

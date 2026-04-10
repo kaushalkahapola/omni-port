@@ -23,19 +23,18 @@ index e62ffbb2ab7..898367ca706 100644
  
      static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(
 diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
-index f09f783cab0..6cfba840f97 100644
+index f09f783cab0..4332042c529 100644
 --- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
 +++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
-@@ -16,7 +16,7 @@ import org.elasticsearch.index.IndexSettings;
+@@ -16,7 +16,6 @@ import org.elasticsearch.index.IndexSettings;
  import org.elasticsearch.index.IndexVersion;
  import org.elasticsearch.index.IndexVersions;
  import org.elasticsearch.index.engine.frozen.FrozenEngine;
 -import org.elasticsearch.index.mapper.SourceFieldMapper;
-+
  import org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;
  import org.elasticsearch.xpack.core.deprecation.DeprecationIssue;
  
-@@ -204,31 +204,6 @@ public class IndexDeprecationChecks {
+@@ -204,31 +203,6 @@ public class IndexDeprecationChecks {
          return issues;
      }
  
@@ -68,15 +67,16 @@ index f09f783cab0..6cfba840f97 100644
          List<String> fields = new ArrayList<>();
          fieldLevelMappingIssue(
 diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java
-index 0d5863e42be..3819cf28f84 100644
+index 0d5863e42be..ac20d90590a 100644
 --- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java
 +++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java
-@@ -10,12 +10,14 @@ package org.elasticsearch.xpack.deprecation;
+@@ -9,13 +9,16 @@ package org.elasticsearch.xpack.deprecation;
+ 
  import org.elasticsearch.action.admin.cluster.node.info.PluginsAndModules;
  import org.elasticsearch.cluster.ClusterState;
- import org.elasticsearch.cluster.routing.allocation.DataTier;
--import org.elasticsearch.cluster.routing.allocation.decider.DiskThresholdDecider;
 +import org.elasticsearch.cluster.metadata.ComponentTemplate;
+ import org.elasticsearch.cluster.routing.allocation.DataTier;
+ import org.elasticsearch.cluster.routing.allocation.decider.DiskThresholdDecider;
  import org.elasticsearch.common.settings.SecureSetting;
  import org.elasticsearch.common.settings.Setting;
  import org.elasticsearch.common.settings.Settings;
@@ -87,7 +87,7 @@ index 0d5863e42be..3819cf28f84 100644
  import org.elasticsearch.license.XPackLicenseState;
  import org.elasticsearch.script.ScriptService;
  import org.elasticsearch.xpack.core.deprecation.DeprecationIssue;
-@@ -1035,4 +1037,43 @@ public class NodeDeprecationChecks {
+@@ -1035,4 +1038,43 @@ public class NodeDeprecationChecks {
              DeprecationIssue.Level.CRITICAL
          );
      }

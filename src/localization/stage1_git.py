@@ -1,3 +1,4 @@
+import os
 import subprocess
 from typing import Optional, Dict, Any
 from rapidfuzz import fuzz
@@ -142,5 +143,133 @@ def run_git_localization(repo_path: str, file_path: str, hunk: Dict[str, Any]) -
                 return None
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         pass
+
+    # ── Attempt 3: Content-based cross-repo search ────────────────────────────
+    # If the source file doesn't exist in the target branch AND wasn't renamed
+    # within this branch's history (e.g. the mainline split a class into a new
+    # file that never existed in the target), grep the repo's Java source tree
+    # for the most distinctive lines from old_content to find the real file.
+    if not os.path.exists(f"{repo_path}/{file_path}"):
+        result = _grep_for_content_in_repo(repo_path, file_path, old_content, old_content_lines)
+        if result:
+            return result
+
+    return None
+
+
+def _grep_for_content_in_repo(
+    repo_path: str,
+    original_file_path: str,
+    old_content: str,
+    old_content_lines: list,
+) -> Optional[LocalizationResult]:
+    """
+    When the source file doesn't exist in the target repo at all, search all
+    Java files in src/main/java for the most distinctive non-trivial lines from
+    old_content. Returns the file with the best fuzzy match, or None.
+    """
+    # Find the src/main/java root relative to the original file path.
+    parts = original_file_path.replace("\\", "/").split("/")
+    src_root = None
+    for i, part in enumerate(parts):
+        if part == "src" and i + 2 < len(parts) and parts[i+1] == "main" and parts[i+2] == "java":
+            src_root = os.path.join(repo_path, "/".join(parts[:i+3]))
+            break
+    if not src_root or not os.path.isdir(src_root):
+        return None
+
+    # Pick the most distinctive lines: non-trivial, non-boilerplate, not too short.
+    _SKIP = {"", "{", "}", "};", "});", ");", "*/", "/*", "//"}
+    candidate_lines = [
+        l.strip() for l in old_content_lines
+        if len(l.strip()) > 6 and l.strip() not in _SKIP
+        and not l.strip().startswith("//")
+        and not l.strip().startswith("*")
+        and not l.strip().startswith("@")
+        and l.strip() not in {"import", "package"}
+    ]
+    if not candidate_lines:
+        return None
+
+    # Prefer lines that are more unique (longer and less likely to be generic).
+    # Sort by length descending, pick the top candidates for grepping.
+    candidate_lines.sort(key=lambda l: len(l), reverse=True)
+
+    # Grep for up to 5 distinctive lines and collect file scores.
+    file_scores: Dict[str, int] = {}
+    for probe in candidate_lines[:5]:
+        try:
+            result = subprocess.run(
+                ["grep", "-rl", "--include=*.java", probe, "."],
+                capture_output=True, text=True, cwd=src_root, timeout=5.0,
+            )
+            for rel in result.stdout.strip().splitlines():
+                abs_path = os.path.join(src_root, rel.lstrip("./"))
+                rel_path = os.path.relpath(abs_path, repo_path)
+                file_scores[rel_path] = file_scores.get(rel_path, 0) + 1
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+    if not file_scores:
+        return None
+
+    # Score each candidate file with a fuzzy sliding window over old_content.
+    # Boost files that share the same package directory AND have a similar name
+    # to the original file, so a generic signature match in a different file
+    # doesn't beat the correct target.
+    original_dir = os.path.dirname(original_file_path).replace("\\", "/")
+    original_stem = os.path.basename(original_file_path).replace(".java", "").lower()
+    window_size = len(old_content_lines)
+    best_ratio = 0.0
+    best_result = None
+
+    # Sort by hit count descending; check top 5 candidates.
+    top_files = sorted(file_scores, key=file_scores.get, reverse=True)[:5]
+
+    # Always include same-package Java files even if not in the top grep hits.
+    same_pkg_dir = os.path.join(repo_path, original_dir)
+    if os.path.isdir(same_pkg_dir):
+        for fname in os.listdir(same_pkg_dir):
+            if fname.endswith(".java"):
+                rel = os.path.join(original_dir, fname)
+                if rel not in top_files:
+                    top_files.append(rel)
+
+    for rel_path in top_files:
+        try:
+            with open(os.path.join(repo_path, rel_path), "r") as f:
+                new_lines = f.readlines()
+        except (FileNotFoundError, IOError):
+            continue
+
+        if len(new_lines) < window_size:
+            continue
+
+        for i in range(len(new_lines) - window_size + 1):
+            window = "".join(new_lines[i : i + window_size])
+            ratio = fuzz.token_sort_ratio(old_content, window) / 100.0
+            # Boost files in the same package directory.
+            file_dir = os.path.dirname(rel_path).replace("\\", "/")
+            if file_dir == original_dir:
+                ratio = min(1.0, ratio + 0.15)
+            # Boost files whose name is similar to the original file name.
+            candidate_stem = os.path.basename(rel_path).replace(".java", "").lower()
+            name_sim = fuzz.partial_ratio(original_stem, candidate_stem) / 100.0
+            if name_sim >= 0.5:
+                ratio = min(1.0, ratio + name_sim * 0.10)
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_result = LocalizationResult(
+                    method_used="git_pickaxe",
+                    confidence=min(0.85, ratio),
+                    context_snapshot=window,
+                    symbol_mappings={},
+                    file_path=rel_path,
+                    start_line=i + 1,
+                    end_line=i + window_size,
+                )
+
+    if best_result and best_ratio >= 0.5:
+        return best_result
 
     return None
