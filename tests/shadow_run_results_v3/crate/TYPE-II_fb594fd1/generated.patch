@@ -1,0 +1,30 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index a3b6bee9de..6ecc8e7437 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -135,7 +135,6 @@ public class Indexer {
+     /// after dynamic column additions;
+     private List<Reference> indexOrder;
+ 
+-
+     public record IndexColumn<I>(Reference reference, List<? extends I> inputs) {
+     }
+ 
+@@ -795,7 +794,6 @@ public class Indexer {
+         }
+     }
+ 
+-
+     /**
+      * Looks for new columns in the values of the given IndexItem and returns them.
+      */
+@@ -1055,6 +1053,9 @@ public class Indexer {
+ 
+     public Object[] addGeneratedValues(IndexItem item) {
+         Object[] insertValues = item.insertValues();
++        if (onConflictIndexer() == null && undeterministic.isEmpty()) {
++            return insertValues;
++        }
+         assert onConflictIndexer() == null || new HashSet<>(onConflictIndexer().insertColumns().stream().map(Reference::column).toList())
+             .containsAll(insertColumns().stream().map(Reference::column).toList()) : "onConflictIndexer().insertColumns() is a superset of this.insertColumns()";
+         List<Reference> insertColumns = onConflictIndexer() == null ? insertColumns() : onConflictIndexer().insertColumns();

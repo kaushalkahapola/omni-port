@@ -1,0 +1,78 @@
+commit f110187717d7d702d7f16abdf9bced3a62a5d90e
+Author: Sebastian Utz <su@rtme.net>
+Date:   Tue Oct 28 13:55:00 2025 +0100
+
+    Fix error handling on insert-from-values statements
+    
+    The InsertFromValues logical plan must implement `executeOrFail` for
+    safe error handling instead of `execute` which does not catch and
+    propagate exceptions in the expected way.
+    This results in stuck `sys.jobs` entries as the related components
+    to remove the entries in error cases aren't called.
+
+diff --git a/docs/appendices/release-notes/6.0.4.rst b/docs/appendices/release-notes/6.0.4.rst
+index 5fb3177437..b3fa940318 100644
+--- a/docs/appendices/release-notes/6.0.4.rst
++++ b/docs/appendices/release-notes/6.0.4.rst
+@@ -90,3 +90,7 @@ Fixes
+ - Fixed an issue with ``atttypid`` column of the ``pg_attribute`` table not
+   being reset to ``0`` for dropped columns, which contradicts with the
+   PostgreSQL behavior.
++
++- Fixed an issue resulting in stuck :ref:`sys-jobs` entries when an
++  :ref:`sql-insert` statement using :ref:`ref-values` results in an execution
++  error, e.g. due to implicit cast or parsing issues.
+diff --git a/docs/appendices/release-notes/6.1.1.rst b/docs/appendices/release-notes/6.1.1.rst
+index ddc9abe335..31d700e4a9 100644
+--- a/docs/appendices/release-notes/6.1.1.rst
++++ b/docs/appendices/release-notes/6.1.1.rst
+@@ -65,3 +65,7 @@ Fixes
+ - Fixed an issue with ``atttypid`` column of the ``pg_attribute`` table not
+   being reset to ``0`` for dropped columns, which contradicts with the
+   PostgreSQL behavior.
++
++- Fixed an issue resulting in stuck :ref:`sys-jobs` entries when an
++  :ref:`sql-insert` statement using :ref:`ref-values` results in an execution
++  error, e.g. due to implicit cast or parsing issues.
+diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+index 86aa4619bc..55c316b8da 100644
+--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
++++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+@@ -132,11 +132,11 @@ public class InsertFromValues implements LogicalPlan {
+     }
+ 
+     @Override
+-    public void execute(DependencyCarrier dependencies,
+-                        PlannerContext plannerContext,
+-                        RowConsumer consumer,
+-                        Row params,
+-                        SubQueryResults subQueryResults) {
++    public void executeOrFail(DependencyCarrier dependencies,
++                              PlannerContext plannerContext,
++                              RowConsumer consumer,
++                              Row params,
++                              SubQueryResults subQueryResults) {
+         DocTableInfo tableInfo = dependencies
+             .schemas()
+             .getTableInfo(writerProjection.tableIdent());
+diff --git a/server/src/test/java/io/crate/integrationtests/InsertIntoIntegrationTest.java b/server/src/test/java/io/crate/integrationtests/InsertIntoIntegrationTest.java
+index f8c2621e01..3bd93447e1 100644
+--- a/server/src/test/java/io/crate/integrationtests/InsertIntoIntegrationTest.java
++++ b/server/src/test/java/io/crate/integrationtests/InsertIntoIntegrationTest.java
+@@ -2839,4 +2839,16 @@ public class InsertIntoIntegrationTest extends IntegTestCase {
+         assertThat(response.cols()).containsExactly("a", "b", "c", "d", "e");
+         assertThat(response).hasRows("1| 2| 3| NULL| 5", "2| NULL| NULL| 4| NULL");
+     }
++
++    @Test
++    public void test_insert_from_values_with_execution_error_gets_removed_from_sys_jobs() {
++        execute("CREATE TABLE doc.ti1 (\"a\" OBJECT(DYNAMIC))");
++        try {
++            execute("INSERT INTO doc.ti1 VALUES (?)", new Object[] {"{\"a\" 1}"});
++        } catch (Exception e) {
++            // ignore
++        }
++        execute("SELECT count(*) FROM sys.jobs WHERE stmt like 'INSERT%'");
++        assertThat(response).hasRows("0");
++    }
+ }

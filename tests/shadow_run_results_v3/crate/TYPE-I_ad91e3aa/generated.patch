@@ -1,0 +1,37 @@
+diff --git a/server/src/main/java/org/elasticsearch/threadpool/ThreadPool.java b/server/src/main/java/org/elasticsearch/threadpool/ThreadPool.java
+index 77edd21b5a..26556ae6d5 100644
+--- a/server/src/main/java/org/elasticsearch/threadpool/ThreadPool.java
++++ b/server/src/main/java/org/elasticsearch/threadpool/ThreadPool.java
+@@ -145,7 +145,7 @@ public class ThreadPool implements Scheduler {
+             new ScalingExecutorBuilder(Names.WARMER, 1, halfProcMaxAt5, TimeValue.timeValueMinutes(5)),
+             new ScalingExecutorBuilder(Names.SNAPSHOT, 1, halfProcMaxAt5, TimeValue.timeValueMinutes(5)),
+             new ScalingExecutorBuilder(Names.FETCH_SHARD_STARTED, 1, 2 * availableProcessors, TimeValue.timeValueMinutes(5)),
+-            new FixedExecutorBuilder(settings, Names.FORCE_MERGE, 1, -1),
++            new FixedExecutorBuilder(settings, Names.FORCE_MERGE, oneEightOfProcessors(availableProcessors), -1),
+             new ScalingExecutorBuilder(Names.FETCH_SHARD_STORE, 1, 2 * availableProcessors, TimeValue.timeValueMinutes(5)),
+             new FixedExecutorBuilder(settings, Names.LOGICAL_REPLICATION, searchThreadPoolSize(availableProcessors), 100)
+         );
+@@ -229,6 +229,15 @@ public class ThreadPool implements Scheduler {
+         return new ThreadPoolStats.Stats(name, -1, -1, -1, -1, -1, -1);
+     }
+ 
++    @Nullable
++    public ThreadPool.Info info(String name) {
++        ExecutorHolder holder = executors.get(name);
++        if (holder == null) {
++            return null;
++        }
++        return holder.info();
++    }
++
+     /**
+      * Get the generic {@link ExecutorService}. This executor service
+      * {@link Executor#execute(Runnable)} method will run the {@link Runnable} it is given in the
+@@ -583,7 +592,6 @@ public class ThreadPool implements Scheduler {
+         return false;
+     }
+ 
+-
+     public static boolean assertNotScheduleThread(String reason) {
+         assert Thread.currentThread().getName().contains("scheduler") == false :
+             "Expected current thread [" + Thread.currentThread() + "] to not be the scheduler thread. Reason: [" + reason + "]";

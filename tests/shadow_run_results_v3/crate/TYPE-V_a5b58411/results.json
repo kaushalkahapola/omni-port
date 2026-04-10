@@ -1,0 +1,200 @@
+{
+  "run_timestamp": "2026-04-10T16:08:57.247497",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "a5b58411425101903763df8df41237801652ca8b",
+  "backport_commit": "85b3c8adb1a8c2dc24188862e5f9fec4b5b0620a",
+  "description": "master \u2192 6.0",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 3.06,
+      "error": null,
+      "java_hunks": 3,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.737,
+          "start_line": 135,
+          "end_line": 140,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.85,
+          "start_line": 147,
+          "end_line": 153,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.85,
+          "start_line": 230,
+          "end_line": 253,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.82,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch modifies the ExplainProfilePlan.java file by adding and adjusting ram accounting logic to fix a memory leak issue. The changes involve adding a new ramAccounting variable and modifying method parameters and calls accordingly. The localization evidence indicates the hunks were found via 'git_pickaxe' with confidence around 0.74 to 0.85, suggesting some minor code drift but no major structural changes. The patch also updates documentation and adds a test case, which are straightforward additions. Overall, the patch requires fuzzy matching due to parameter changes and added logic but does not involve structural or API redesign, fitting TYPE_II classification.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 8.22,
+      "error": null,
+      "adapted_count": 2
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 2,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {",
+          "new_string": "    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n            \"multi-phase\",\n            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n        );\n        consumer.completionFuture().whenComplete((__, ___) -> ramAccounting.close());",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
+          "old_string": "                null,",
+          "new_string": "                ramAccounting,",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 278.0,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.integrationtests.ExplainAnalyzeIntegrationTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest"
+        ],
+        "test_cases": {
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_with_all_values_sub_query_does_not_leak_memory": "passed",
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_with_nested_subquery": "passed",
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_query_execution_contains_shard_information": "passed",
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_on_statement_with_subquery": "passed",
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#testExplainAnalyzeReportsExecutionTimesOnBothNodesInclQueryBreakdown": "passed",
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_query_execution_contains_shard_and_partition_information": "passed",
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#testExplainSelectWithoutJobExecutionContexts": "passed"
+        },
+        "classes": {
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest": "passed"
+        },
+        "summary": {
+          "passed": 7,
+          "failed": 0,
+          "skipped": 0,
+          "total": 7
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_with_all_values_sub_query_does_not_leak_memory"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 7,
+        "patched_total": 7,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 6,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 7
+    },
+    "java_production_hunks": 3,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      2,
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 2,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 2178,
+    "target_patch_bytes": 4854,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_with_all_values_sub_query_does_not_leak_memory"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 7,
+      "patched_total": 7,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

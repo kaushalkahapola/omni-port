@@ -1,0 +1,174 @@
+diff --git a/libs/shared/src/main/java/io/crate/common/collections/Maps.java b/libs/shared/src/main/java/io/crate/common/collections/Maps.java
+index b8293b3abb..6c4e8cb6a9 100644
+--- a/libs/shared/src/main/java/io/crate/common/collections/Maps.java
++++ b/libs/shared/src/main/java/io/crate/common/collections/Maps.java
+@@ -52,7 +52,6 @@ public final class Maps {
+         return Collections.unmodifiableMap(result);
+     }
+ 
+-
+     public static <K, V> Map<K, V> merge(Map<K, V> m1, Map<K, V> m2, BiFunction<V, V, V> mergeValues) {
+         if (m1.isEmpty()) {
+             return m2;
+@@ -139,6 +138,27 @@ public final class Maps {
+         return newList;
+     }
+ 
++    public static boolean pathExists(Map<?, ?> map, List<String> path) {
++        Map<?, ?> current = map;
++        for (int i = 0; i < path.size(); i++) {
++            String key = path.get(i);
++            // must use Map.containsKey instead of Map.get because a column can be mapped to a null value
++            if (!current.containsKey(key)) {
++                return false;
++            }
++            if (i + 1 == path.size()) {
++                return true;
++            }
++            var val = current.get(key);
++            if (val instanceof Map<?, ?> nested) {
++                current = nested;
++            } else {
++                return false;
++            }
++        }
++        return true;
++    }
++
+     @Nullable
+     @SuppressWarnings("unchecked")
+     public static <T> T removeByPath(Map<String, T> map, List<String> path) {
+@@ -217,7 +237,6 @@ public final class Maps {
+         return root;
+     }
+ 
+-
+     /**
+      * Add entries in `additions` to `map`.
+      * If `map` already contains an entry that is also present in `addition`:
+@@ -271,4 +290,31 @@ public final class Maps {
+         }
+         return null;
+     }
++
++    /**
++     * Returns a modifiable deep copy of the given map.
++     */
++    public static <K, V> Map<K, V> deepCopy(Map<K, V> map) {
++        Map<K, V> copy = new HashMap<>();
++        for (Map.Entry<K, V> e : map.entrySet()) {
++            K key = e.getKey();
++            V value = e.getValue();
++            if (value instanceof Map<?, ?> nested) {
++                copy.put(key, (V) deepCopy(nested));
++            } else if (value instanceof List<?> list) {
++                List<Object> newList = new ArrayList<>();
++                for (Object item : list) {
++                    if (item instanceof Map<?, ?> m) {
++                        newList.add(deepCopy(m));
++                    } else {
++                        newList.add(item);
++                    }
++                }
++                copy.put(key, (V) newList);
++            } else {
++                copy.put(key, value);
++            }
++        }
++        return copy;
++    }
+ }
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index a78d7bb617..a54e7e15a0 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -134,7 +134,6 @@ public class Indexer {
+     /// after dynamic column additions;
+     private List<Reference> indexOrder;
+ 
+-
+     public record IndexColumn<I>(Reference reference, List<? extends I> inputs) {
+     }
+ 
+@@ -243,7 +242,7 @@ public class Indexer {
+                 Object val = item.insertValues()[rootIndex];
+                 if (val instanceof Map<?, ?> m) {
+                     List<String> path = column.path();
+-                    val = Maps.getByPath((Map<String, Object>) m, path);
++                    val = Maps.getByPath(m, path);
+                 }
+                 if (val == null) {
+                     Symbol defaultExpression = ref.defaultExpression();
+@@ -601,7 +600,9 @@ public class Indexer {
+                     // across indexing and return values
+                     Synthetic synthetic = synthetics.get(ref.column());
+                     if (synthetic == null) {
+-                        return ctxForRefs.add(ref);
++                        Input<?> input = ctxForRefs.add(ref);
++                        // If 'ref' is an object column with synthetic children, the synthetic values need to be merged
++                        return () -> mergeSyntheticChildren(ref, input);
+                     } else {
+                         return synthetic;
+                     }
+@@ -637,6 +638,53 @@ public class Indexer {
+         return indexColumns;
+     }
+ 
++    /**
++     * Creates a copy of the given value and merges in its synthetic children for object columns; otherwise returns the
++     * original value unchanged.
++     * <p>
++     * Mainly used for `RETURNING` clause returning objects with synthetic sub-columns where the result set is expected
++     * to contain all children.
++     * <p>
++     * Background: the reason for creating a copy and merging - the current design for INSERT/UPDATE does not merge the
++     * insert values with synthetic sub-columns.
++     * They are held separately in {@link IndexItem#insertValues} and {@link Indexer#synthetics} to save the cost
++     * of streaming to replicas.
++     */
++    private Object mergeSyntheticChildren(Reference parentRef, Input<?> input) {
++        Object value = input.value();
++        if (value instanceof Map<?, ?>) {
++            @SuppressWarnings("unchecked")
++            Map<String, Object> m = Maps.deepCopy((Map<String, Object>) value);
++            ColumnIdent parentColumn = parentRef.column();
++            for (Synthetic childSynthetic : synthetics.values()) {
++                ColumnIdent childSyntheticColumn = childSynthetic.ref.column();
++                if (!childSyntheticColumn.isChildOf(parentColumn) ||
++                    // Sometimes Indexer#synthetics contains a non-synthetic object column
++                    // if it is a parent of a synthetic
++                    (!childSynthetic.ref.isGenerated() && childSynthetic.ref.defaultExpression() == null)) {
++                    continue;
++                }
++                var childSyntheticPath = childSyntheticColumn.path();
++
++                // preserve any existing synthetic children's values - even nulls
++                if (Maps.pathExists(m, childSyntheticPath)) {
++                    continue;
++                }
++
++                Maps.mergeInto(
++                    m,
++                    childSyntheticPath.getFirst(),
++                    childSyntheticPath.subList(1, childSyntheticPath.size()),
++                    childSynthetic.value(),
++                    Map::put,
++                    false);
++            }
++            return m;
++        } else {
++            return value;
++        }
++    }
++
+     /**
+      * To ensure default or generated expressions of object children are evaluated
+      * it's necessary to ensure the parent has values (or is present in the insert)
+@@ -791,7 +839,6 @@ public class Indexer {
+         }
+     }
+ 
+-
+     /**
+      * Looks for new columns in the values of the given IndexItem and returns them.
+      */

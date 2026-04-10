@@ -1,0 +1,110 @@
+diff --git a/libs/dex/src/main/java/io/crate/data/BatchIterator.java b/libs/dex/src/main/java/io/crate/data/BatchIterator.java
+index 2c567c7e70..ba0a6dd5d6 100644
+--- a/libs/dex/src/main/java/io/crate/data/BatchIterator.java
++++ b/libs/dex/src/main/java/io/crate/data/BatchIterator.java
+@@ -33,7 +33,6 @@ import java.util.stream.Stream;
+ 
+ import io.crate.common.concurrent.Killable;
+ 
+-
+ /**
+  * <p>
+  * An iterator used to navigate over data organized in batches. Though not required most
+@@ -78,7 +77,6 @@ import io.crate.common.concurrent.Killable;
+  */
+ public interface BatchIterator<T> extends Killable {
+ 
+-
+     IllegalStateException CLOSED = new IllegalStateException("BatchIterator is closed");
+ 
+     /**
+@@ -88,7 +86,6 @@ public interface BatchIterator<T> extends Killable {
+      */
+     T currentElement();
+ 
+-
+     /**
+      * Moves the Iterator back to the starting position.
+      *
+@@ -149,7 +146,6 @@ public interface BatchIterator<T> extends Killable {
+      */
+     boolean hasLazyResultSet();
+ 
+-
+     /**
+      * Move the batchIterator by {@code steps} utilizing {@link #moveNext()
+      *
+@@ -195,7 +191,6 @@ public interface BatchIterator<T> extends Killable {
+         }
+     }
+ 
+-
+     default <O> BatchIterator<O> map(Function<? super T, ? extends O> mapper) {
+         final BatchIterator<T> source = this;
+         return new MappedForwardingBatchIterator<T, O>() {
+@@ -212,7 +207,6 @@ public interface BatchIterator<T> extends Killable {
+         };
+     }
+ 
+-
+     /**
+      * Use {@code collector} to consume all elements from {@code it}
+      *
+@@ -225,6 +219,7 @@ public interface BatchIterator<T> extends Killable {
+         Function<A, R> finisher = collector.finisher();
+         A state = collector.supplier().get();
+         CompletableFuture<R> result = new CompletableFuture<>();
++        // Both onNext() and onFinish() can throw, but it's caught in the move() and future is completed.
+         move(Integer.MAX_VALUE, row -> accumulator.accept(state, row), err -> {
+             if (close) {
+                 close();
+diff --git a/libs/dex/src/main/java/io/crate/data/BatchIterators.java b/libs/dex/src/main/java/io/crate/data/BatchIterators.java
+index 1928b8e704..7d9514e26b 100644
+--- a/libs/dex/src/main/java/io/crate/data/BatchIterators.java
++++ b/libs/dex/src/main/java/io/crate/data/BatchIterators.java
+@@ -44,6 +44,7 @@ public class BatchIterators {
+                                                          CompletableFuture<R> resultFuture) {
+         BiConsumer<A, T> accumulator = collector.accumulator();
+         Function<A, R> finisher = collector.finisher();
++        // Both onNext() and onFinish() can throw, but it's caught in the it.move() and future is completed.
+         it.move(Integer.MAX_VALUE, row -> accumulator.accept(state, row), err -> {
+             it.close();
+             if (err == null) {
+diff --git a/server/src/main/java/io/crate/execution/MultiPhaseExecutor.java b/server/src/main/java/io/crate/execution/MultiPhaseExecutor.java
+index c8650923b7..2681325c39 100644
+--- a/server/src/main/java/io/crate/execution/MultiPhaseExecutor.java
++++ b/server/src/main/java/io/crate/execution/MultiPhaseExecutor.java
+@@ -79,10 +79,8 @@ public final class MultiPhaseExecutor {
+         }
+         return CompletableFuture
+             .allOf(dependencyFutures.toArray(new CompletableFuture[0]))
+-            .thenApply(ignored -> {
+-                ramAccounting.release();
+-                return new SubQueryResults(valueBySubQuery);
+-            });
++            .thenApply(_ -> new SubQueryResults(valueBySubQuery))
++            .whenComplete((_, _) -> ramAccounting.release());
+     }
+ 
+     public static CollectingRowConsumer<?, ?> getConsumer(SelectSymbol selectSymbol, RamAccounting ramAccounting) {
+diff --git a/server/src/main/java/io/crate/execution/engine/JobLauncher.java b/server/src/main/java/io/crate/execution/engine/JobLauncher.java
+index d9abea20b6..a7e7343d32 100644
+--- a/server/src/main/java/io/crate/execution/engine/JobLauncher.java
++++ b/server/src/main/java/io/crate/execution/engine/JobLauncher.java
+@@ -70,7 +70,6 @@ import io.crate.execution.support.NodeRequest;
+ import io.crate.metadata.TransactionContext;
+ import io.crate.profile.ProfilingContext;
+ 
+-
+ /**
+  * Creates and starts local and remote execution jobs using the provided
+  * NodeOperationTrees
+@@ -118,7 +117,7 @@ public class JobLauncher {
+     private final IndicesService indicesService;
+     private final boolean enableProfiling;
+ 
+-    JobLauncher(UUID jobId,
++    public JobLauncher(UUID jobId,
+                 ClusterService clusterService,
+                 JobSetup jobSetup,
+                 TasksService tasksService,

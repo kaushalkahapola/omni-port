@@ -1,0 +1,452 @@
+diff --git a/server/src/main/java/io/crate/replication/logical/ShardReplicationChangesTracker.java b/server/src/main/java/io/crate/replication/logical/ShardReplicationChangesTracker.java
+index 9b700bcd1d..10b1928742 100644
+--- a/server/src/main/java/io/crate/replication/logical/ShardReplicationChangesTracker.java
++++ b/server/src/main/java/io/crate/replication/logical/ShardReplicationChangesTracker.java
+@@ -82,7 +82,6 @@ public class ShardReplicationChangesTracker implements Closeable {
+     private volatile Scheduler.Cancellable cancellable;
+     private volatile boolean closed = false;
+ 
+-
+     public ShardReplicationChangesTracker(String subscriptionName,
+                                           IndexShard indexShard,
+                                           ThreadPool threadPool,
+@@ -193,7 +192,6 @@ public class ShardReplicationChangesTracker implements Closeable {
+         });
+     }
+ 
+-
+     private CompletableFuture<ReplicationResponse> replayChanges(ShardChangesAction.Response response) {
+         List<Translog.Operation> translogOps = response.changes();
+         if (translogOps.isEmpty()) {
+@@ -372,9 +370,9 @@ public class ShardReplicationChangesTracker implements Closeable {
+                                     () -> renewLeasesThenReschedule(toSeqNoReceived)
+                                 );
+                             } else if (isClosed) {
+-                                LOGGER.debug("Exception renewing retention lease. Stopping tracking (closed=true)");
++                                LOGGER.debug("Exception renewing retention lease. Stopping tracking (closed=true)", e);
+                             } else {
+-                                LOGGER.warn("Exception renewing retention lease. Stopping tracking (closed=false)");
++                                LOGGER.warn("Exception renewing retention lease. Stopping tracking (closed=false)", e);
+                             }
+                         }
+                     )
+diff --git a/server/src/main/java/io/crate/replication/logical/action/GetFileChunkAction.java b/server/src/main/java/io/crate/replication/logical/action/GetFileChunkAction.java
+index 9e450ebec1..b6654dd174 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/GetFileChunkAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/GetFileChunkAction.java
+@@ -122,7 +122,7 @@ public class GetFileChunkAction extends ActionType<GetFileChunkAction.Response>
+         @Nullable
+         @Override
+         protected ShardsIterator shards(ClusterState state, Request request) {
+-            return state.routingTable().shardRoutingTable(request.shardId()).primaryShardIt();
++            return shardRoutingTable(state, request.shardId(), request.senderVersion()).primaryShardIt();
+         }
+     }
+ 
+diff --git a/server/src/main/java/io/crate/replication/logical/action/GetStoreMetadataAction.java b/server/src/main/java/io/crate/replication/logical/action/GetStoreMetadataAction.java
+index 8bf0c94909..518cd52aaf 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/GetStoreMetadataAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/GetStoreMetadataAction.java
+@@ -113,7 +113,7 @@ public class GetStoreMetadataAction extends ActionType<GetStoreMetadataAction.Re
+         @Nullable
+         @Override
+         protected ShardsIterator shards(ClusterState state, Request request) {
+-            return state.routingTable().shardRoutingTable(request.shardId()).primaryShardIt();
++            return shardRoutingTable(state, request.shardId(), request.senderVersion()).primaryShardIt();
+         }
+     }
+ 
+diff --git a/server/src/main/java/io/crate/replication/logical/action/ReleasePublisherResourcesAction.java b/server/src/main/java/io/crate/replication/logical/action/ReleasePublisherResourcesAction.java
+index 9da70a38de..c8090462e6 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/ReleasePublisherResourcesAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/ReleasePublisherResourcesAction.java
+@@ -104,7 +104,7 @@ public class ReleasePublisherResourcesAction extends ActionType<AcknowledgedResp
+         @Nullable
+         @Override
+         protected ShardsIterator shards(ClusterState state, Request request) {
+-            return state.routingTable().shardRoutingTable(request.shardId()).primaryShardIt();
++            return shardRoutingTable(state, request.shardId(), request.senderVersion()).primaryShardIt();
+         }
+     }
+ 
+diff --git a/server/src/main/java/io/crate/replication/logical/action/RestoreShardRequest.java b/server/src/main/java/io/crate/replication/logical/action/RestoreShardRequest.java
+index dedccf4dc4..a261492696 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/RestoreShardRequest.java
++++ b/server/src/main/java/io/crate/replication/logical/action/RestoreShardRequest.java
+@@ -21,6 +21,9 @@
+ 
+ package io.crate.replication.logical.action;
+ 
++import java.io.IOException;
++
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.support.single.shard.SingleShardRequest;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
+ import org.elasticsearch.common.io.stream.StreamInput;
+@@ -28,8 +31,6 @@ import org.elasticsearch.common.io.stream.StreamOutput;
+ import org.elasticsearch.index.shard.ShardId;
+ import org.elasticsearch.transport.RemoteClusterAwareRequest;
+ 
+-import java.io.IOException;
+-
+ public class RestoreShardRequest extends SingleShardRequest
+     implements RemoteClusterAwareRequest {
+ 
+@@ -37,16 +38,18 @@ public class RestoreShardRequest extends SingleShardRequest
+     private final DiscoveryNode node;
+     private final ShardId shardId;
+     private final String subscriberClusterName;
++    private final Version senderVersion;
+ 
+     public RestoreShardRequest(String restoreUUID,
+                                DiscoveryNode node,
+                                ShardId shardId,
+                                String subscriberClusterName) {
+-        super(shardId.getIndexName());
++        super(shardId.getIndex());
+         this.restoreUUID = restoreUUID;
+         this.node = node;
+         this.shardId = shardId;
+         this.subscriberClusterName = subscriberClusterName;
++        this.senderVersion = Version.CURRENT;
+     }
+ 
+     public RestoreShardRequest(StreamInput in) throws IOException {
+@@ -55,6 +58,7 @@ public class RestoreShardRequest extends SingleShardRequest
+         this.node = new DiscoveryNode(in);
+         this.shardId = new ShardId(in);
+         this.subscriberClusterName = in.readString();
++        this.senderVersion = in.getVersion();
+     }
+ 
+     @Override
+@@ -83,6 +87,10 @@ public class RestoreShardRequest extends SingleShardRequest
+         return restoreUUID;
+     }
+ 
++    public Version senderVersion() {
++        return senderVersion;
++    }
++
+     @Override
+     public String toString() {
+         return "RestoreShardRequest{" +
+diff --git a/server/src/main/java/io/crate/replication/logical/action/ShardChangesAction.java b/server/src/main/java/io/crate/replication/logical/action/ShardChangesAction.java
+index 58c2a51115..5fb9b33a66 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/ShardChangesAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/ShardChangesAction.java
+@@ -33,6 +33,7 @@ import java.util.concurrent.TimeoutException;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.elasticsearch.ElasticsearchTimeoutException;
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionType;
+ import org.elasticsearch.action.support.single.shard.SingleShardRequest;
+@@ -226,10 +227,8 @@ public class ShardChangesAction extends ActionType<ShardChangesAction.Response>
+         @Nullable
+         @Override
+         protected ShardsIterator shards(ClusterState state, Request request) {
+-            return state.routingTable().shardRoutingTable(
+-                request.shardId().getIndexUUID(),
+-                request.shardId().id()
+-            ).activeInitializingShardsRandomIt();
++            return shardRoutingTable(state, request.shardId, request.senderVersion)
++                .activeInitializingShardsRandomIt();
+         }
+     }
+ 
+@@ -238,12 +237,14 @@ public class ShardChangesAction extends ActionType<ShardChangesAction.Response>
+         private final ShardId shardId;
+         private final long fromSeqNo;
+         private final long toSeqNo;
++        private final Version senderVersion;
+ 
+         public Request(ShardId shardId, long fromSeqNo, long toSeqNo) {
+-            super(shardId.getIndexName());
++            super(shardId.getIndex());
+             this.shardId = shardId;
+             this.fromSeqNo = fromSeqNo;
+             this.toSeqNo = toSeqNo;
++            senderVersion = Version.CURRENT;
+         }
+ 
+         public Request(StreamInput in) throws IOException {
+@@ -251,6 +252,7 @@ public class ShardChangesAction extends ActionType<ShardChangesAction.Response>
+             this.shardId = new ShardId(in);
+             this.fromSeqNo = in.readLong();
+             this.toSeqNo = in.readVLong();
++            this.senderVersion = in.getVersion();
+         }
+ 
+         @Override
+diff --git a/server/src/main/java/io/crate/replication/logical/seqno/RetentionLeaseHelper.java b/server/src/main/java/io/crate/replication/logical/seqno/RetentionLeaseHelper.java
+index 27883fe2bd..94d25a06e1 100644
+--- a/server/src/main/java/io/crate/replication/logical/seqno/RetentionLeaseHelper.java
++++ b/server/src/main/java/io/crate/replication/logical/seqno/RetentionLeaseHelper.java
+@@ -28,6 +28,7 @@ import org.elasticsearch.client.Client;
+ import org.elasticsearch.index.seqno.RetentionLeaseActions;
+ import org.elasticsearch.index.seqno.RetentionLeaseAlreadyExistsException;
+ import org.elasticsearch.index.shard.ShardId;
++import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.common.exceptions.Exceptions;
+ import io.crate.exceptions.SQLExceptions;
+@@ -43,12 +44,12 @@ public class RetentionLeaseHelper {
+         return "logical_replication:" + subscriberClusterName;
+     }
+ 
+-    private static String retentionLeaseIdForShard(String subscriberClusterName, ShardId shardId) {
++    @VisibleForTesting
++    static String retentionLeaseIdForShard(String subscriberClusterName, ShardId shardId) {
+         var retentionLeaseSource = retentionLeaseSource(subscriberClusterName);
+-        return retentionLeaseSource + ":" + shardId;
++        return retentionLeaseSource + ":" + "[" + shardId.getIndex().getName() + "][" + shardId.id() + "]";
+     }
+ 
+-
+     public static void addRetentionLease(ShardId shardId,
+                                          long seqNo,
+                                          String subscriberClusterName,
+diff --git a/server/src/main/java/org/elasticsearch/action/support/single/shard/SingleShardRequest.java b/server/src/main/java/org/elasticsearch/action/support/single/shard/SingleShardRequest.java
+index 88273ee63f..ba30a52edc 100644
+--- a/server/src/main/java/org/elasticsearch/action/support/single/shard/SingleShardRequest.java
++++ b/server/src/main/java/org/elasticsearch/action/support/single/shard/SingleShardRequest.java
+@@ -21,17 +21,17 @@ package org.elasticsearch.action.support.single.shard;
+ 
+ import java.io.IOException;
+ 
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
++import org.elasticsearch.index.Index;
+ import org.elasticsearch.index.shard.ShardId;
+ import org.elasticsearch.transport.TransportRequest;
+ 
+ public abstract class SingleShardRequest extends TransportRequest {
+ 
+-    /**
+-     * The concrete index name
+-     */
+-    protected final String index;
++    protected final Index index;
+ 
+     ShardId internalShardId;
+ 
+@@ -40,15 +40,21 @@ public abstract class SingleShardRequest extends TransportRequest {
+         if (in.readBoolean()) {
+             internalShardId = new ShardId(in);
+         }
+-        index = in.readOptionalString();
+-        // no need to pass threading over the network, they are always false when coming throw a thread pool
++        String indexName = IndexMetadata.INDEX_NAME_NA_VALUE;
++        String indexUUID = IndexMetadata.INDEX_UUID_NA_VALUE;
++        if (in.getVersion().before(Version.V_6_1_0)) {
++            indexName = in.readOptionalString();
++        } else {
++            indexUUID = in.readString();
++        }
++        index = new Index(indexName, indexUUID);
+     }
+ 
+-    protected SingleShardRequest(String index) {
++    protected SingleShardRequest(Index index) {
+         this.index = index;
+     }
+ 
+-    public String index() {
++    public Index index() {
+         return index;
+     }
+ 
+@@ -56,6 +62,10 @@ public abstract class SingleShardRequest extends TransportRequest {
+     public void writeTo(StreamOutput out) throws IOException {
+         super.writeTo(out);
+         out.writeOptionalWriteable(internalShardId);
+-        out.writeOptionalString(index);
++        if (out.getVersion().before(Version.V_6_1_0)) {
++            out.writeOptionalString(index.getName());
++        } else {
++            out.writeString(index.getUUID());
++        }
+     }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/action/support/single/shard/TransportSingleShardAction.java b/server/src/main/java/org/elasticsearch/action/support/single/shard/TransportSingleShardAction.java
+index 7458868aa2..f63d7f8d3d 100644
+--- a/server/src/main/java/org/elasticsearch/action/support/single/shard/TransportSingleShardAction.java
++++ b/server/src/main/java/org/elasticsearch/action/support/single/shard/TransportSingleShardAction.java
+@@ -24,6 +24,7 @@ import java.io.IOException;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.apache.logging.log4j.message.ParameterizedMessage;
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionListenerResponseHandler;
+ import org.elasticsearch.action.ActionRunnable;
+@@ -34,14 +35,18 @@ import org.elasticsearch.cluster.ClusterState;
+ import org.elasticsearch.cluster.block.ClusterBlockException;
+ import org.elasticsearch.cluster.block.ClusterBlockLevel;
+ import org.elasticsearch.cluster.block.ClusterBlocks;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
+ import org.elasticsearch.cluster.node.DiscoveryNodes;
++import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
+ import org.elasticsearch.cluster.routing.ShardRouting;
+ import org.elasticsearch.cluster.routing.ShardsIterator;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.Writeable;
+ import org.elasticsearch.common.logging.LoggerMessageFormat;
++import org.elasticsearch.index.Index;
++import org.elasticsearch.index.IndexNotFoundException;
+ import org.elasticsearch.index.shard.ShardId;
+ import org.elasticsearch.threadpool.ThreadPool;
+ import org.elasticsearch.transport.TransportChannel;
+@@ -125,6 +130,23 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
+     @Nullable
+     protected abstract ShardsIterator shards(ClusterState state, Request request);
+ 
++    public static IndexShardRoutingTable shardRoutingTable(ClusterState state, ShardId shardId, Version senderVersion) {
++        String indexUUID = shardId.getIndexUUID();
++
++        // Older version uses their shardId containing their local indexUUID
++        // In these cases, the local indexUUID must be resolved using the provided indexName
++        if (senderVersion.onOrBefore(Version.V_6_1_0)) {
++            String indexName = shardId.getIndexName();
++            IndexMetadata indexMetadata = state.metadata().getIndexByName(indexName);
++            if (indexMetadata == null) {
++                throw new IndexNotFoundException(shardId.getIndex());
++            }
++            indexUUID = indexMetadata.getIndex().getUUID();
++        }
++
++        return state.routingTable().shardRoutingTable(indexUUID, shardId.id());
++    }
++
+     class AsyncSingleAction {
+ 
+         private final ActionListener<Response> listener;
+@@ -147,9 +169,20 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
+                 throw blockException;
+             }
+ 
+-
+             ClusterBlocks blocks = clusterState.blocks();
+-            blockException = blocks.indexBlockedException(ClusterBlockLevel.READ, request.index());
++            Index index = request.index();
++
++            // Nodes <= 6.1.0 are sending the index name instead of the UUID while everything is based on UUID's
++            // nowadays. This we try to resolve the actually UUID by the given name.
++            if (index.getUUID().equals(IndexMetadata.INDEX_UUID_NA_VALUE)) {
++                IndexMetadata indexMetadata = clusterState.metadata().getIndexByName(index.getName());
++                if (indexMetadata == null) {
++                    throw new IndexNotFoundException(index);
++                }
++                index = indexMetadata.getIndex();
++            }
++
++            blockException = blocks.indexBlockedException(ClusterBlockLevel.READ, index.getUUID());
+             if (blockException != null) {
+                 throw blockException;
+             }
+diff --git a/server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java b/server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java
+index 7d70e2ae28..b00fc73b97 100644
+--- a/server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java
++++ b/server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java
+@@ -19,11 +19,12 @@
+ 
+ package org.elasticsearch.index;
+ 
++import java.io.IOException;
++import java.util.Locale;
++
+ import org.elasticsearch.ResourceNotFoundException;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ 
+-import java.io.IOException;
+-
+ public final class IndexNotFoundException extends ResourceNotFoundException {
+     /**
+      * Construct with a custom message.
+@@ -38,7 +39,7 @@ public final class IndexNotFoundException extends ResourceNotFoundException {
+     }
+ 
+     public IndexNotFoundException(String index, Throwable cause) {
+-        super("no such index", cause);
++        super(String.format(Locale.ENGLISH, "no such index %s", index), cause);
+         setIndex(index);
+     }
+ 
+@@ -47,7 +48,7 @@ public final class IndexNotFoundException extends ResourceNotFoundException {
+     }
+ 
+     public IndexNotFoundException(Index index, Throwable cause) {
+-        super("no such index", cause);
++        super(String.format(Locale.ENGLISH, "no such index %s", index), cause);
+         setIndex(index);
+     }
+ 
+diff --git a/server/src/main/java/org/elasticsearch/index/seqno/RetentionLeaseActions.java b/server/src/main/java/org/elasticsearch/index/seqno/RetentionLeaseActions.java
+index d6b96b6d49..0da270ac7f 100644
+--- a/server/src/main/java/org/elasticsearch/index/seqno/RetentionLeaseActions.java
++++ b/server/src/main/java/org/elasticsearch/index/seqno/RetentionLeaseActions.java
+@@ -22,6 +22,7 @@ package org.elasticsearch.index.seqno;
+ import java.io.IOException;
+ import java.util.Objects;
+ 
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionType;
+ import org.elasticsearch.action.support.single.shard.SingleShardRequest;
+@@ -77,9 +78,7 @@ public class RetentionLeaseActions {
+ 
+         @Override
+         protected ShardsIterator shards(final ClusterState state, final T request) {
+-            return state
+-                .routingTable()
+-                .shardRoutingTable(request.getShardId().getIndexUUID(), request.getShardId().id())
++            return shardRoutingTable(state, request.getShardId(), request.senderVersion())
+                 .primaryShardIt();
+         }
+ 
+@@ -181,7 +180,6 @@ public class RetentionLeaseActions {
+                     AddOrRenewRequest::new);
+             }
+ 
+-
+             @Override
+             void doRetentionLeaseAction(final IndexShard indexShard,
+                                         final AddOrRenewRequest request,
+@@ -223,7 +221,6 @@ public class RetentionLeaseActions {
+                     RemoveRequest::new);
+             }
+ 
+-
+             @Override
+             void doRetentionLeaseAction(final IndexShard indexShard, final RemoveRequest request, final ActionListener<Response> listener) {
+                 indexShard.removeRetentionLease(
+@@ -241,6 +238,7 @@ public class RetentionLeaseActions {
+     private abstract static class Request extends SingleShardRequest {
+ 
+         private final ShardId shardId;
++        private final Version senderVersion;
+ 
+         public ShardId getShardId() {
+             return shardId;
+@@ -256,12 +254,14 @@ public class RetentionLeaseActions {
+             super(in);
+             shardId = new ShardId(in);
+             id = in.readString();
++            senderVersion = in.getVersion();
+         }
+ 
+         Request(final ShardId shardId, final String id) {
+-            super(Objects.requireNonNull(shardId).getIndexUUID());
++            super(Objects.requireNonNull(shardId).getIndex());
+             this.shardId = shardId;
+             this.id = Objects.requireNonNull(id);
++            this.senderVersion = Version.CURRENT;
+         }
+ 
+         @Override

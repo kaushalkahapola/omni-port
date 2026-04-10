@@ -1,0 +1,221 @@
+{
+  "run_timestamp": "2026-04-10T16:08:57.247497",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "9879c7e2b526903252e3fb761658fc893022918c",
+  "backport_commit": "9ad6785dded889401671a1679d4c154695df85bc",
+  "description": "master \u2192 6.1",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 1.09,
+      "error": null,
+      "java_hunks": 5,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 454,
+          "end_line": 459,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 494,
+          "end_line": 500,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 521,
+          "end_line": 527,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 556,
+          "end_line": 562,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 596,
+          "end_line": 603,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.23,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch consists of adding a helper method and replacing repeated version range checks with calls to this method. The changes are localized, do not alter the structure or API, and are found mostly via exact matches with high confidence. The addition of a new test file is straightforward and does not increase complexity significantly. Overall, this is a trivial backport involving exact string replacements and minor additions, fitting TYPE_I classification.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "applied_count": 4,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 4.19,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java",
+          "old_string": "    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        out.writeLong(version);\n        if (out.getVersion().onOrAfter(Version.V_5_5_0) && out.getVersion().onOrBefore(Version.V_6_0_3)) {\n            out.writeLong(columnOID);\n        }\n        out.writeString(clusterUUID);",
+          "new_string": "    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        out.writeLong(version);\n        if (hasGlobalColumnOID(out.getVersion())) {\n            out.writeLong(columnOID);\n        }\n        out.writeString(clusterUUID);",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 314.46,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.cluster.metadata.MetadataTest.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.cluster.metadata.MetadataTest"
+        ],
+        "test_cases": {
+          "org.elasticsearch.cluster.metadata.MetadataTest#test_bwc_read_writes_with_6_1_0": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.cluster.metadata.MetadataTest": "passed"
+        },
+        "summary": {
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0,
+          "total": 1
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.cluster.metadata.MetadataTest#test_bwc_read_writes_with_6_1_0"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 1,
+        "patched_total": 1,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 6,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 1
+    },
+    "java_production_hunks": 5,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 4,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 2698,
+    "target_patch_bytes": 5836,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.cluster.metadata.MetadataTest#test_bwc_read_writes_with_6_1_0"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 1,
+      "patched_total": 1,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

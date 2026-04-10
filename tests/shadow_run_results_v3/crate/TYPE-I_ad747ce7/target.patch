@@ -1,0 +1,114 @@
+commit abd54b04256f814a3f5df17fb21d2e9826db79eb
+Author: Mathias Fussenegger <f.mathias@zignar.net>
+Date:   Mon Nov 17 10:27:44 2025 +0100
+
+    Fix stuck query on PostgreSQL client disconnect after full write buffers
+    
+    If a PostgreSQL client selected enough data for the write buffer to get
+    full, the setNextRow operation paused. If the client then disconnected the
+    setNextRow operation future failed. `thenRun` wasn't triggered, leaving
+    the operation suspended indefinitely.
+    
+    (cherry picked from commit ad747ce7703ff4a4d3522fd9d79f5c7f265147b5)
+
+diff --git a/docs/appendices/release-notes/5.10.15.rst b/docs/appendices/release-notes/5.10.15.rst
+index ba282bca9a..5c4f4ad60c 100644
+--- a/docs/appendices/release-notes/5.10.15.rst
++++ b/docs/appendices/release-notes/5.10.15.rst
+@@ -47,6 +47,9 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed a memory leak that could happen if running a query with a large result
++  set via a PostgreSQL client and then interrupting the connection.
++
+ - Fixed an issue that allowed inserting values into ``ARRAY`` columns that
+   violated the array's inner type constraints. For example it was possible to
+   insert ``['aa']`` into a column of type ``ARRAY(VARCHAR(1))``.
+diff --git a/docs/appendices/release-notes/6.0.4.rst b/docs/appendices/release-notes/6.0.4.rst
+index 7170ea62ff..71e5b16381 100644
+--- a/docs/appendices/release-notes/6.0.4.rst
++++ b/docs/appendices/release-notes/6.0.4.rst
+@@ -46,6 +46,9 @@ series.
+ Fixes
+ =====
+ 
++- Fixed a memory leak that could happen if running a query with a large result
++  set via a PostgreSQL client and then interrupting the connection.
++
+ - Fixed an issue that allowed inserting values into ``ARRAY`` columns that
+   violated the array's inner type constraints. For example it was possible to
+   insert ``['aa']`` into a column of type ``ARRAY(VARCHAR(1))``.
+diff --git a/docs/appendices/release-notes/6.1.1.rst b/docs/appendices/release-notes/6.1.1.rst
+index 2366802ced..b0a4bf2cbd 100644
+--- a/docs/appendices/release-notes/6.1.1.rst
++++ b/docs/appendices/release-notes/6.1.1.rst
+@@ -46,6 +46,9 @@ series.
+ Fixes
+ =====
+ 
++- Fixed a memory leak that could happen if running a query with a large result
++  set via a PostgreSQL client and then interrupting the connection.
++
+ - Fixed an issue that allowed inserting values into ``ARRAY`` columns that
+   violated the array's inner type constraints. For example it was possible to
+   insert ``['aa']`` into a column of type ``ARRAY(VARCHAR(1))``.
+diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+index ea991a57de..fed22cdc19 100644
+--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
++++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+@@ -89,11 +89,17 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+                     if (writeFuture != null) {
+                         LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
+                         waitingForWrite = true;
+-                        writeFuture.thenRun(() -> {
+-                            LOGGER.trace("Resume execution after {} rows", rowCount);
+-                            waitingForWrite = false;
+-                            rowCount = 0;
+-                            consumeIt(iterator);
++                        writeFuture.whenComplete((_, t) -> {
++                            if (t == null) {
++                                LOGGER.trace("Resume execution after {} rows", rowCount);
++                                waitingForWrite = false;
++                                rowCount = 0;
++                                consumeIt(iterator);
++                            } else {
++                                iterator.close();
++                                completionFuture.completeExceptionally(t);
++                                resultReceiver.fail(t);
++                            }
+                         });
+                         return;
+                     }
+diff --git a/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java b/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java
+index 7c7e2aca63..eedf8563f1 100644
+--- a/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java
++++ b/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java
+@@ -123,6 +123,27 @@ public class RowConsumerToResultReceiverTest extends ESTestCase {
+         }
+     }
+ 
++    @Test
++    public void test_consumer_aborts_if_write_future_fails() throws Exception {
++        CompletableFuture<Void> writeFuture = new CompletableFuture<>();
++        BaseResultReceiver resultReceiver = new BaseResultReceiver() {
++            @Override
++            @Nullable
++            public CompletableFuture<Void> setNextRow(Row row) {
++                return writeFuture;
++            }
++        };
++        var consumerToResultReceiver = new RowConsumerToResultReceiver(resultReceiver, 0, _ -> {});
++        consumerToResultReceiver.accept(TestingBatchIterators.range(0, 10), null);
++
++        assertThat(resultReceiver.completionFuture()).isNotDone();
++        writeFuture.completeExceptionally(new IllegalStateException("Kaputt"));
++        assertThat(resultReceiver.completionFuture()).failsWithin(1, TimeUnit.SECONDS)
++            .withThrowableThat()
++            .havingRootCause()
++            .extracting(Throwable::getMessage).isEqualTo("Kaputt");
++    }
++
+     @Test
+     public void test_does_not_suspend_consumer_on_last_row() throws Exception {
+         {

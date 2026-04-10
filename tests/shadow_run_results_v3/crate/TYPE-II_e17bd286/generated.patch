@@ -1,0 +1,31 @@
+diff --git a/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java b/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
+index d8061f0653..40db09a7f2 100644
+--- a/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
++++ b/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
+@@ -155,11 +155,11 @@ public class SqlHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest>
+         super.channelUnregistered(ctx);
+     }
+ 
+-    private void sendResponse(ChannelHandlerContext ctx,
+-                              FullHttpRequest request,
+-                              Map<String, List<String>> parameters,
+-                              ByteBuf result,
+-                              @Nullable Throwable t) {
++    void sendResponse(ChannelHandlerContext ctx,
++                      FullHttpRequest request,
++                      Map<String, List<String>> parameters,
++                      ByteBuf result,
++                      @Nullable Throwable t) {
+         final HttpVersion httpVersion = request.protocolVersion();
+         final DefaultFullHttpResponse resp;
+         final ByteBuf content;
+@@ -168,6 +168,9 @@ public class SqlHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest>
+             resp = new DefaultFullHttpResponse(httpVersion, HttpResponseStatus.OK, content);
+             resp.headers().add(HttpHeaderNames.CONTENT_TYPE, XContentType.JSON.mediaType());
+         } else {
++            // In case of partial success buffer can contain some data
++            // Clearing buffer to ensure that error is not mixed with partial result.
++            result.clear();
+             var sessionSettings = session.sessionSettings();
+             AccessControl accessControl = roles.getAccessControl(sessionSettings.authenticatedUser(), sessionSettings.sessionUser());
+             var throwable = SQLExceptions.prepareForClientTransmission(accessControl, t);

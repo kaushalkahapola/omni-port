@@ -1,0 +1,14 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+index afcc67980d..8bcccbfb52 100644
+--- a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+@@ -132,8 +132,7 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+                     translogWriter.writeFieldName(this.unknownColumnPrefix + k);
+                     translogWriter.writeValue(v);
+                     columnsToStore.put(k, v);
+-                }
+-                if (v == null) {
++                } else if (v == null) {
+                     translogWriter.writeFieldName(k);
+                     translogWriter.writeValue(null);
+                     columnsToStore.put(k, null);

@@ -1,0 +1,31 @@
+diff --git a/server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java b/server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java
+index d18a40b149..f96137dc82 100644
+--- a/server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java
++++ b/server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java
+@@ -65,6 +65,13 @@ public final class EquiJoinDetector {
+         return context.isHashJoinPossible;
+     }
+ 
++    /**
++     * Returns true if the join condition is a simple equi join condition of the form, 'col1 = col2'.
++     */
++    public static boolean isTopLevelEquiJoin(Symbol joinCondition) {
++        return joinCondition instanceof Function f && f.signature().equals(EqOperator.SIGNATURE) && isEquiJoin(joinCondition);
++    }
++
+     /**
+      * insideEqualOperand is used to mark starting point of the computation of the either sides of equality.
+      *
+diff --git a/server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java b/server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java
+index 66d46c0bde..96173b584e 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java
++++ b/server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java
+@@ -75,7 +75,7 @@ public class EquiJoinToLookupJoin implements Rule<JoinPlan> {
+             // only inner-equi-joins
+             j.joinType() == JoinType.INNER &&
+             j.joinCondition() != null &&
+-            EquiJoinDetector.isEquiJoin(j.joinCondition()) &&
++            EquiJoinDetector.isTopLevelEquiJoin(j.joinCondition()) &&
+             // no nested subqueries
+             j.lhs().relationNames().size() == 1 &&
+             j.rhs().relationNames().size() == 1

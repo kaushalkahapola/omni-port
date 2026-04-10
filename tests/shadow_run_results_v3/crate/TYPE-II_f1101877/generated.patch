@@ -1,0 +1,37 @@
+diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+index 4aac71b026..791119745c 100644
+--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
++++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+@@ -113,7 +113,6 @@ import io.crate.planner.ExecutionPlan;
+ import io.crate.planner.PlannerContext;
+ import io.crate.types.DataType;
+ 
+-
+ public class InsertFromValues implements LogicalPlan {
+ 
+     private final TableFunctionRelation tableFunctionRelation;
+@@ -131,11 +130,11 @@ public class InsertFromValues implements LogicalPlan {
+     }
+ 
+     @Override
+-    public void execute(DependencyCarrier dependencies,
+-                        PlannerContext plannerContext,
+-                        RowConsumer consumer,
+-                        Row params,
+-                        SubQueryResults subQueryResults) {
++    public void executeOrFail(DependencyCarrier dependencies,
++                              PlannerContext plannerContext,
++                              RowConsumer consumer,
++                              Row params,
++                              SubQueryResults subQueryResults) {
+         DocTableInfo tableInfo = dependencies
+             .schemas()
+             .getTableInfo(writerProjection.tableIdent());
+@@ -383,7 +382,6 @@ public class InsertFromValues implements LogicalPlan {
+             writerProjection.allTargetColumns()
+         );
+ 
+-
+         var bulkResponse = new BulkResponse(bulkParams.size());
+         IntArrayList bulkIndices = new IntArrayList();
+         CompletableFuture<BulkResponse> result = new CompletableFuture<>();

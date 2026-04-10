@@ -1,0 +1,91 @@
+diff --git a/server/src/main/java/io/crate/execution/dsl/projection/builder/InputColumns.java b/server/src/main/java/io/crate/execution/dsl/projection/builder/InputColumns.java
+index 2a341e38d5..004bbb2600 100644
+--- a/server/src/main/java/io/crate/execution/dsl/projection/builder/InputColumns.java
++++ b/server/src/main/java/io/crate/execution/dsl/projection/builder/InputColumns.java
+@@ -53,6 +53,7 @@ import io.crate.expression.symbol.WindowFunction;
+ import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.GeneratedReference;
+ import io.crate.metadata.Reference;
++import io.crate.metadata.RelationName;
+ import io.crate.types.DataType;
+ 
+ /**
+@@ -250,7 +251,7 @@ public final class InputColumns extends SymbolVisitor<InputColumns.SourceSymbols
+         }
+         InputColumn inputColumn = sourceSymbols.inputs.get(ref);
+         if (inputColumn == null) {
+-            Symbol subscriptOnRoot = tryCreateSubscriptOnRoot(ref, ref.column(), sourceSymbols.inputs);
++            Symbol subscriptOnRoot = tryCreateSubscriptOnRoot(ref.ident().tableIdent(), ref, ref.column(), sourceSymbols.inputs);
+             if (subscriptOnRoot != null) {
+                 return subscriptOnRoot;
+             }
+@@ -262,12 +263,11 @@ public final class InputColumns extends SymbolVisitor<InputColumns.SourceSymbols
+         return inputColumn;
+     }
+ 
+-
+     @Override
+     public Symbol visitField(ScopedSymbol field, SourceSymbols sourceSymbols) {
+         InputColumn inputColumn = sourceSymbols.inputs.get(field);
+         if (inputColumn == null) {
+-            Symbol subscriptOnRoot = tryCreateSubscriptOnRoot(field, field.column(), sourceSymbols.inputs);
++            Symbol subscriptOnRoot = tryCreateSubscriptOnRoot(field.relation(), field, field.column(), sourceSymbols.inputs);
+             if (subscriptOnRoot == null) {
+                 throw new IllegalArgumentException("Couldn't find " + field + " in " + sourceSymbols);
+             } else {
+@@ -297,12 +297,12 @@ public final class InputColumns extends SymbolVisitor<InputColumns.SourceSymbols
+     }
+ 
+     @Nullable
+-    private static Symbol tryCreateSubscriptOnRoot(Symbol symbol, ColumnIdent column, HashMap<Symbol, InputColumn> inputs) {
++    private static Symbol tryCreateSubscriptOnRoot(RelationName relationName, Symbol symbol, ColumnIdent column, HashMap<Symbol, InputColumn> inputs) {
+         if (column.isRoot()) {
+             return null;
+         }
+         ColumnIdent root = column.getRoot();
+-        InputColumn rootIC = lookupValueByColumn(inputs, root);
++        InputColumn rootIC = lookupValueByColumn(relationName, inputs, root);
+         if (rootIC == null) {
+             return symbol;
+         }
+diff --git a/server/src/main/java/io/crate/expression/symbol/Symbols.java b/server/src/main/java/io/crate/expression/symbol/Symbols.java
+index 2190413904..6eb3cf1ac9 100644
+--- a/server/src/main/java/io/crate/expression/symbol/Symbols.java
++++ b/server/src/main/java/io/crate/expression/symbol/Symbols.java
+@@ -41,6 +41,7 @@ import io.crate.common.collections.Lists;
+ import io.crate.expression.symbol.format.Style;
+ import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.Reference;
++import io.crate.metadata.RelationName;
+ import io.crate.types.DataType;
+ 
+ public final class Symbols {
+@@ -69,13 +70,17 @@ public final class Symbols {
+     }
+ 
+     @Nullable
+-    public static <V> V lookupValueByColumn(Map<? extends Symbol, V> valuesBySymbol, ColumnIdent column) {
++    public static <V> V lookupValueByColumn(RelationName relationName, Map<? extends Symbol, V> valuesBySymbol, ColumnIdent column) {
+         for (Map.Entry<? extends Symbol, V> entry : valuesBySymbol.entrySet()) {
+             Symbol key = entry.getKey();
+-            if (key instanceof Reference ref && ref.column().equals(column)) {
++            if (key instanceof Reference ref
++                    && ref.column().equals(column)
++                    && ref.ident().tableIdent().equals(relationName)) {
+                 return entry.getValue();
+             }
+-            if (key instanceof ScopedSymbol scopedSymbol && scopedSymbol.column().equals(column)) {
++            if (key instanceof ScopedSymbol scopedSymbol
++                    && scopedSymbol.column().equals(column)
++                    && scopedSymbol.relation().equals(relationName)) {
+                 return entry.getValue();
+             }
+         }
+@@ -145,7 +150,6 @@ public final class Symbols {
+         return in.readList(Symbol::fromStream);
+     }
+ 
+-
+     /**
+      * format symbols in simple style and use the formatted symbols as {@link String#format(Locale, String, Object...)} arguments
+      * for the given <code>messageTmpl</code>.

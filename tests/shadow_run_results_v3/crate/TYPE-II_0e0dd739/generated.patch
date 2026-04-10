@@ -1,0 +1,55 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java b/server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java
+index 57ce287151..de9ab7f16c 100644
+--- a/server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java
++++ b/server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java
+@@ -106,12 +106,8 @@ public class IndexDocumentBuilder {
+         return translogWriter;
+     }
+ 
+-    /**
+-     * @return a generated value for the given column if one exists, otherwise null
+-     */
+-    public Object getSyntheticValue(ColumnIdent columnIdent) {
+-        Input<Object> input = synthetics.get(columnIdent);
+-        return input == null ? null : input.value();
++    public Input<Object> getSynthetic(ColumnIdent columnIdent) {
++        return synthetics.get(columnIdent);
+     }
+ 
+     /**
+diff --git a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+index c328890ca0..7c9b89ab18 100644
+--- a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+@@ -102,11 +102,11 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+             String innerName = entry.getKey();
+             Child child = entry.getValue();
+             if (value.containsKey(innerName) == false) {
+-                var synth = docBuilder.getSyntheticValue(child.ident());
++                var synth = docBuilder.getSynthetic(child.ident());
+                 if (synth != null) {
+                     // directly modify the map so that containing types will see the value
+                     // if they need to write stored fields
+-                    value.put(innerName, synth);
++                    value.put(innerName, synth.value());
+                 }
+             }
+             var innerValue = value.get(innerName);
+@@ -131,6 +131,8 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+                 columnsToStore.put(k, v);
+             }
+             if (v == null) {
++                translogWriter.writeFieldName(k);
++                translogWriter.writeValue(null);
+                 columnsToStore.put(k, null);
+             }
+         });
+@@ -155,7 +157,7 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+         translogWriter.endObject();
+     }
+ 
+-    private BytesReference toBytes(Map<String, Object> v, Version version) {
++    public static BytesReference toBytes(Map<String, Object> v, Version version) {
+         try (BytesStreamOutput out = new BytesStreamOutput()) {
+             out.setVersion(version);
+             out.writeMap(v, StreamOutput::writeString, StreamOutput::writeGenericValue);

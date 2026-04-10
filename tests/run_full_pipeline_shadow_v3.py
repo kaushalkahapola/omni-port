@@ -24,6 +24,9 @@ Usage:
   # Skip validation (run agents 1-6 only, same as v2)
   python run_full_pipeline_shadow_v3.py --skip-validation
 
+  # Force re-run even if results folder already exists
+  python run_full_pipeline_shadow_v3.py --force
+
 For each patch, creates a folder under tests/shadow_run_results_v3/<project>/<TYPE>_<sha>/ with:
   mainline.patch    — original commit diff (what we're backporting FROM)
   target.patch      — actual backport commit (ground truth)
@@ -563,6 +566,7 @@ def process_patch(
     item: dict[str, Any],
     run_ts: str,
     skip_validation: bool = False,
+    force: bool = False,
 ) -> None:
     patch_type = item["type"]
     original_commit = item["original_commit"]
@@ -572,6 +576,13 @@ def process_patch(
     description = item.get("description", "")
 
     out_dir = OUTPUT_DIR / repo_name / f"{patch_type}_{original_commit[:8]}"
+
+    # Skip if results.json already exists in out_dir, unless --force is used
+    results_file = out_dir / "results.json"
+    if results_file.exists() and not force:
+        print(f"\n  [pipeline] Skipping {patch_type} | repo={repo_name} | commit={original_commit[:12]} (already processed)")
+        return
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*64}")
@@ -883,6 +894,7 @@ Examples:
   python run_full_pipeline_shadow_v3.py --count 3
   python run_full_pipeline_shadow_v3.py --project elasticsearch --commit abc123def456
   python run_full_pipeline_shadow_v3.py --skip-validation
+  python run_full_pipeline_shadow_v3.py --force
         """,
     )
     parser.add_argument("--mode", choices=["yaml", "dataset"], default="yaml",
@@ -904,6 +916,8 @@ Examples:
                         help="Limit to N patches")
     parser.add_argument("--skip-validation", action="store_true",
                         help="Run agents 1-6 only (no build/test)")
+    parser.add_argument("--force", action="store_true",
+                        help="Force re-run even if results.json exists")
     parser.add_argument("--no-notifications", action="store_true",
                         help="Disable Telegram notifications")
 
@@ -957,7 +971,7 @@ Examples:
             continue
         print(f"\n[{i}/{len(patches)}]", end="")
         try:
-            process_patch(item, run_ts, skip_validation=args.skip_validation)
+            process_patch(item, run_ts, skip_validation=args.skip_validation, force=args.force)
         except Exception:
             print(f"\n  FATAL ERROR for {item['type']}:")
             traceback.print_exc()
