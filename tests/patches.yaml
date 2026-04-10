@@ -1,0 +1,55 @@
+# Patch configuration for shadow runs and evaluation
+# This file defines all patches to test, supporting any repo, type, and count
+#
+# Structure:
+#   repos:
+#     <repo_name>:
+#       path: <local_path_to_cloned_repo>
+#       patches:
+#         - type: TYPE-I (or TYPE-II, TYPE-III, TYPE-IV, TYPE-V, CUSTOM, etc.)
+#           original_commit: <commit_sha>
+#           backport_commit: <commit_sha>
+#           description: (optional) human-readable description
+#
+# Usage:
+#   python run_full_pipeline_shadow.py --config patches.yaml
+#   python run_full_pipeline_shadow.py --config patches.yaml --repo elasticsearch --type TYPE-I
+#   python run_full_pipeline_shadow.py --config patches.yaml --count 10
+
+repos:
+  elasticsearch:
+    path: repos/elasticsearch
+    patches:
+      - type: TYPE-I
+        original_commit: da51c8ccbf0171abefb2978810efd6db0f6f743e
+        backport_commit: b25542fd147164cd0e89a803bbe49f865972abdb
+        description: "Simple transport protocol refactor - high confidence git match"
+
+      - type: TYPE-II
+        original_commit: 595251d5a10d6c4dc14ddfa7d4d7b6e2d5fab3ab
+        backport_commit: cd93409c3450fa843ed48cfc6c2042835b9e39b7
+        description: "Minor API adjustments - fuzzy text localization needed"
+
+      - type: TYPE-III
+        original_commit: 88cf2487e7deb38686870e40bf08b2b729b7d848
+        backport_commit: 223d50f0524d3d3e9a19f18a3b146212ff830042
+        description: "Namespace adaptation - imports and symbol resolution"
+
+      - type: TYPE-IV
+        original_commit: 110b2060a15dce0236c47345de094c4dae05e991
+        backport_commit: 88f07a84fc4b8519fcf8a1ed8da4dca30fc51c46
+        description: "Structural refactor - GumTree AST analysis required"
+
+      - type: TYPE-V
+        original_commit: c94c021d0e2695f571a1fc841c46ee43f2d5a3ae
+        backport_commit: e867dcdb61cafeaa590dccfec0bc595ad3aac495
+        description: "Deep API changes - embedding-based search fallback"
+
+  # Add more repos as needed:
+  # crate:
+  #   path: repos/crate
+  #   patches:
+  #     - type: TYPE-I
+  #       original_commit: abc123def456...
+  #       backport_commit: xyz789uvw012...
+  #       description: "Example CrateDB patch"
