@@ -1,5 +1,6 @@
 import subprocess
 from typing import Optional, Dict, Any
+from rapidfuzz import fuzz
 from src.core.state import LocalizationResult
 
 
@@ -75,9 +76,71 @@ def run_git_localization(repo_path: str, file_path: str, hunk: Dict[str, Any]) -
             # --name-status lines for renames look like: "R100\told_path\tnew_path"
             if len(parts) == 3 and parts[0].startswith("R"):
                 new_file_path = parts[2].strip()
+
+                # Found the renamed file. Now locate the actual position within it.
+                # Returning start_line=1 / context_snapshot=old_content (mainline) would
+                # give Agent 4 wrong context and Agent 6 a bogus expansion anchor.
+                try:
+                    with open(f"{repo_path}/{new_file_path}", "r") as nf:
+                        new_lines = nf.readlines()
+
+                    window_size = len(old_content_lines)
+
+                    # Attempt exact match first.
+                    first_line = old_content_lines[0] + "\n"
+                    candidate_starts = [i for i, l in enumerate(new_lines) if l == first_line]
+                    for start_idx in candidate_starts:
+                        if start_idx + window_size > len(new_lines):
+                            continue
+                        if all(
+                            new_lines[start_idx + j] == (old_content_lines[j] + "\n")
+                            for j in range(window_size)
+                        ):
+                            return LocalizationResult(
+                                method_used="git_exact",
+                                confidence=1.0,
+                                context_snapshot="".join(
+                                    new_lines[start_idx : start_idx + window_size]
+                                ),
+                                symbol_mappings={},
+                                file_path=new_file_path,
+                                start_line=start_idx + 1,
+                                end_line=start_idx + window_size,
+                            )
+
+                    # Exact match failed (content drifted). Run fuzzy sliding window
+                    # to find the best-matching region and return real coordinates.
+                    if window_size > 0 and len(new_lines) >= window_size:
+                        best_ratio = 0.0
+                        best_start = -1
+                        for i in range(len(new_lines) - window_size + 1):
+                            window = "".join(new_lines[i : i + window_size])
+                            ratio = fuzz.token_sort_ratio(old_content, window) / 100.0
+                            if ratio > best_ratio:
+                                best_ratio = ratio
+                                best_start = i
+
+                        if best_start >= 0 and best_ratio >= 0.6:
+                            return LocalizationResult(
+                                method_used="git_pickaxe",
+                                confidence=min(0.9, best_ratio),
+                                context_snapshot="".join(
+                                    new_lines[best_start : best_start + window_size]
+                                ),
+                                symbol_mappings={},
+                                file_path=new_file_path,
+                                start_line=best_start + 1,
+                                end_line=best_start + window_size,
+                            )
+
+                except (FileNotFoundError, IOError):
+                    pass
+
+                # Fallback: file unreadable or no fuzzy match — return with
+                # the correct new path but acknowledge we have no line range.
                 return LocalizationResult(
                     method_used="git_pickaxe",
-                    confidence=0.9,
+                    confidence=0.5,
                     context_snapshot=old_content,
                     symbol_mappings={},
                     file_path=new_file_path,

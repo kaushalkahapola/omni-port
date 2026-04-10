@@ -96,6 +96,7 @@ def _should_namespace_adapt(
 def _adapt_with_llm(
     hunk: Dict[str, Any],
     loc_result: LocalizationResult,
+    post_region_context: str = "",
 ) -> NamespaceAdaptationOutput:
     """
     Calls the Balanced LLM to rewrite imports and symbol references.
@@ -104,6 +105,15 @@ def _adapt_with_llm(
         f"  - {orig} -> {target}"
         for orig, target in loc_result.symbol_mappings.items()
     ) or "  (none detected by localization; infer from diff context)"
+
+    post_context_section = ""
+    if post_region_context.strip():
+        post_context_section = f"""
+Code immediately AFTER the replaced region in the target file (already exists — do NOT recreate):
+```java
+{post_region_context}
+```
+"""
 
     prompt = f"""You are Agent 4 (Namespace Adapter) for OmniPort, a Java patch backporting system.
 A patch hunk must be adapted to a different codebase version where symbol names and imports differ.
@@ -116,7 +126,7 @@ Original hunk — old_content (lines being replaced in the target):
 {hunk.get("old_content", "")}
 ```
 
-Original hunk — new_content (replacement to apply):
+Original hunk — new_content (lines that remain after the replacement):
 ```java
 {hunk.get("new_content", "")}
 ```
@@ -125,7 +135,7 @@ Target file context (surrounding code in the target branch):
 ```java
 {loc_result.context_snapshot}
 ```
-
+{post_context_section}
 Task:
 1. Produce adapted_old_content: the exact code that exists in the TARGET FILE that
    corresponds to what the patch removes. It MUST be found verbatim in the target.
@@ -141,6 +151,12 @@ Key rules:
 - Preserve the same logical change as the original patch (do not alter program logic).
 - If the API has changed (e.g. builder.startObject → ob.xContentObject), use the
   target-branch API style in both adapted_old_content and adapted_new_content.
+- CRITICAL: new_content shows what remains after the patch — it may contain context
+  lines (code that already existed unchanged). If new_content includes the signature
+  or start of a method/class that is already present in the "post-region" context
+  shown above, then adapted_new_content should be EMPTY (the code already exists and
+  does not need to be regenerated). Never hallucinate stub implementations for code
+  that already exists in the target file.
 
 Return adapted_old_content and adapted_new_content as valid Java code snippets.
 """
@@ -210,7 +226,17 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
         # Claim this hunk.
         processed_indices.append(i)
 
-        output = _adapt_with_llm(hunk, loc_result)
+        # Extract the lines immediately after the localized region so the LLM
+        # can see what already exists there (prevents hallucinating stubs for
+        # methods that follow the removed code).
+        post_region_context = ""
+        if file_content and loc_result.end_line > 0:
+            lines = file_content.splitlines(keepends=True)
+            post_start = loc_result.end_line  # end_line is 1-indexed; this is the next line
+            post_end = min(len(lines), post_start + 20)
+            post_region_context = "".join(lines[post_start:post_end])
+
+        output = _adapt_with_llm(hunk, loc_result, post_region_context)
 
         if output.success:
             adapted_hunks.append({

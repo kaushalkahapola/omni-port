@@ -1,0 +1,292 @@
+commit 30abc0f980778976840a80436d746fd445fd3e26
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Mon Aug 4 15:59:49 2025 +0200
+
+    Avoid OOM happening on transport layer when streaming DistributedResultRequest
+    
+    This is an alternative to https://github.com/crate/crate/pull/14114
+    
+    We can't rely on PageBucketReciever's accounting, sometimes it can be too late as we can get an OOM when reading DistributedResultRequest
+    (in particular, reading it's StreamBucket rows field)
+    
+    No change entry as we already have one in https://github.com/crate/crate/pull/18256 which is about writes and this change is about reads
+    but scenario is the same: aggregations under high memory pressure.
+
+diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
+index 89d590ea3f..d23fc94ede 100644
+--- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
++++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
+@@ -21,6 +21,8 @@
+ 
+ package io.crate.execution.engine.distribution;
+ 
++import static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;
++
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Iterator;
+@@ -49,6 +51,8 @@ import io.crate.data.Paging;
+ import io.crate.data.Row;
+ import io.crate.data.RowConsumer;
+ import io.crate.exceptions.SQLExceptions;
++import io.crate.execution.jobs.kill.KillJobsNodeRequest;
++import io.crate.execution.jobs.kill.KillResponse;
+ import io.crate.execution.support.ActionExecutor;
+ import io.crate.execution.support.NodeRequest;
+ 
+@@ -87,6 +91,8 @@ public class DistributingConsumer implements RowConsumer {
+ 
+     private volatile Throwable failure;
+ 
++    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
++    private final String localNodeId;
+ 
+     public DistributingConsumer(Executor responseExecutor,
+                                 UUID jobId,
+@@ -96,6 +102,8 @@ public class DistributingConsumer implements RowConsumer {
+                                 int bucketIdx,
+                                 Collection<String> downstreamNodeIds,
+                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
++                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
++                                String localNodeId,
+                                 int pageSize,
+                                 ThreadPool threadPool) {
+         this.threadPool = threadPool;
+@@ -107,6 +115,8 @@ public class DistributingConsumer implements RowConsumer {
+         this.inputId = inputId;
+         this.bucketIdx = bucketIdx;
+         this.distributedResultAction = distributedResultAction;
++        this.killNodeAction = killNodeAction;
++        this.localNodeId = localNodeId;
+         this.pageSize = pageSize;
+         this.buckets = new StreamBucket[downstreamNodeIds.size()];
+         this.completionFuture = new CompletableFuture<>();
+@@ -324,7 +334,11 @@ public class DistributingConsumer implements RowConsumer {
+             if (isFailureReq) {
+                 countdownAndMaybeCloseIt(numActiveRequests, it);
+             } else {
+-                countdownAndMaybeContinue(it, numActiveRequests, false);
++                String reason = "An error was encountered: " + failure;
++                broadcastKill(killNodeAction, jobId, localNodeId, reason);
++
++                it.close();
++                completionFuture.completeExceptionally(failure);
+             }
+         }
+     }
+diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
+index f8b382c636..9ca9b0383d 100644
+--- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
++++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
+@@ -37,6 +37,9 @@ import io.crate.data.breaker.RamAccounting;
+ import io.crate.execution.dsl.phases.ExecutionPhases;
+ import io.crate.execution.dsl.phases.NodeOperation;
+ import io.crate.execution.jobs.PageBucketReceiver;
++import io.crate.execution.jobs.kill.KillJobsNodeAction;
++import io.crate.execution.jobs.kill.KillJobsNodeRequest;
++import io.crate.execution.jobs.kill.KillResponse;
+ import io.crate.execution.support.ActionExecutor;
+ import io.crate.execution.support.NodeRequest;
+ import io.crate.planner.distribution.DistributionInfo;
+@@ -49,6 +52,7 @@ public class DistributingConsumerFactory {
+     private final ClusterService clusterService;
+     private final Executor responseExecutor;
+     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
++    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
+     private final ThreadPool threadPool;
+ 
+     @Inject
+@@ -58,7 +62,9 @@ public class DistributingConsumerFactory {
+         this.clusterService = clusterService;
+         this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
+         this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
++        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
+         this.threadPool = threadPool;
++
+     }
+ 
+     public DistributingConsumer create(NodeOperation nodeOperation,
+@@ -112,6 +118,8 @@ public class DistributingConsumerFactory {
+             bucketIdx,
+             nodeOperation.downstreamNodes(),
+             distributedResultAction,
++            killNodeAction,
++            clusterService.localNode().getId(),
+             pageSize,
+             threadPool
+         );
+diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
+index 561021d76e..6eb3632c12 100644
+--- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
++++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
+@@ -25,6 +25,7 @@ import java.util.Collections;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Locale;
++import java.util.UUID;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ScheduledExecutorService;
+ import java.util.concurrent.TimeUnit;
+@@ -110,10 +111,7 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
+             DistributedResultAction.NAME,
+             ThreadPool.Names.SAME, // <- we will dispatch later at the nodeOperation on non failures
+             true,
+-            // Don't trip breaker on transport layer, but instead depend on ram-accounting in PageBucketReceivers
+-            // We need to always handle requests to avoid jobs from getting stuck.
+-            // (If we receive a request, but don't handle it, a task would remain open indefinitely)
+-            false,
++            true,
+             DistributedResultRequest::new,
+             new NodeActionRequestHandler<>(nodeAction));
+     }
+@@ -200,31 +198,43 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
+             if (LOGGER.isTraceEnabled()) {
+                 LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
+             }
+-            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());
+             /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.
+              * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.
+              *
+              * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke
+              * a kill to make sure that doesn't happen.
+              */
+-            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
+-                excludedNodeIds,
+-                List.of(request.jobId()),
+-                Role.CRATE_USER.name(),
+-                "Received data for job=" + request.jobId() + " but there is no job context present. " +
+-                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load"
+-            );
+-            killNodeAction
+-                .execute(killRequest)
+-                .whenComplete((_, t) -> {
+-                    if (t != null) {
+-                        LOGGER.debug("Could not kill " + request.jobId(), t);
+-                    }
+-                });
++            String reason = "Received data for job=" + request.jobId() + " but there is no job context present. " +
++                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load";
++            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);
+             return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));
+         }
+     }
+ 
++    /**
++     * Sends KILL request to all nodes (excluding sender node).
++     */
++    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
++                                     UUID jobId,
++                                     String localNodeId,
++                                     String reason) {
++        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
++
++        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
++            excludedNodeIds,
++            List.of(jobId),
++            Role.CRATE_USER.name(),
++            reason
++        );
++        killNodeAction
++            .execute(killRequest)
++            .whenComplete((_, t) -> {
++                if (t != null) {
++                    LOGGER.debug("Could not kill " + jobId, t);
++                }
++            });
++    }
++
+     private static class SendResponsePageResultListener implements PageResultListener {
+         private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();
+ 
+diff --git a/server/src/test/java/io/crate/execution/engine/distribution/DistributingConsumerTest.java b/server/src/test/java/io/crate/execution/engine/distribution/DistributingConsumerTest.java
+index 6bf173c49a..37b42dd6ea 100644
+--- a/server/src/test/java/io/crate/execution/engine/distribution/DistributingConsumerTest.java
++++ b/server/src/test/java/io/crate/execution/engine/distribution/DistributingConsumerTest.java
+@@ -174,6 +174,10 @@ public class DistributingConsumerTest extends ESTestCase {
+             0,
+             Collections.singletonList("n1"),
+             distributedResultAction::execute,
++            // killAction and localNodeId are irrelevant for those tests,
++            // They are relevant for the test_dist_result_request_tripped_by_cb_no_stuck_jobs
++            null,
++            null,
+             pageSize,
+             mock(ThreadPool.class)
+         );
+diff --git a/server/src/test/java/io/crate/integrationtests/GroupByAggregateTest.java b/server/src/test/java/io/crate/integrationtests/GroupByAggregateTest.java
+index b3e297d2ae..a668205bd4 100644
+--- a/server/src/test/java/io/crate/integrationtests/GroupByAggregateTest.java
++++ b/server/src/test/java/io/crate/integrationtests/GroupByAggregateTest.java
+@@ -26,18 +26,28 @@ import static io.crate.protocols.postgres.PGErrorStatus.INTERNAL_ERROR;
+ import static io.crate.testing.Asserts.assertThat;
+ import static io.crate.testing.TestingHelpers.printedTable;
+ import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ import static org.assertj.core.api.Assertions.fail;
+ 
+ import java.util.Arrays;
++import java.util.Collection;
+ import java.util.List;
+ import java.util.stream.Stream;
+ 
+ import org.assertj.core.data.Percentage;
++import org.elasticsearch.common.breaker.CircuitBreakingException;
++import org.elasticsearch.plugins.Plugin;
+ import org.elasticsearch.test.IntegTestCase;
++import org.elasticsearch.test.transport.MockTransportService;
++import org.elasticsearch.transport.TransportService;
+ import org.junit.Before;
+ import org.junit.Test;
+ 
++import io.crate.common.collections.Lists;
++import io.crate.common.unit.TimeValue;
+ import io.crate.data.Paging;
++import io.crate.exceptions.JobKilledException;
++import io.crate.execution.engine.distribution.DistributedResultAction;
+ import io.crate.testing.Asserts;
+ import io.crate.testing.SQLResponse;
+ import io.crate.testing.UseJdbc;
+@@ -48,11 +58,43 @@ public class GroupByAggregateTest extends IntegTestCase {
+ 
+     private final Setup setup = new Setup(sqlExecutor);
+ 
++
+     @Before
+     public void initTestData() throws Exception {
+         setup.setUpEmployees();
+     }
+ 
++    @Override
++    protected Collection<Class<? extends Plugin>> nodePlugins() {
++        return Lists.concat(super.nodePlugins(), MockTransportService.TestPlugin.class);
++    }
++
++
++    @Test
++    @UseJdbc(value = 0) // To avoid wrapping into PSQLException
++    public void test_dist_result_request_tripped_by_cb_no_stuck_jobs() throws Exception {
++        this.setup.groupBySetup("integer");
++        for (TransportService transportService : cluster().getDataOrMasterNodeInstances(TransportService.class)) {
++            MockTransportService mockTransportService = (MockTransportService) transportService;
++            mockTransportService.addRequestHandlingBehavior(DistributedResultAction.NAME, (handler, request, channel) -> {
++                throw new CircuitBreakingException("dummy");
++            });
++        }
++
++        // Using assertBusy to avoid flakiness.
++        // Sometimes a single select doesn't throw CBE, because of non-distributed execution.
++        // Depends on data distribution and which node out of 2 is selected to be a handler.
++        assertBusy(() -> {
++            try (var session = sqlExecutor.newSession()) {
++                // Timeout defeats the purpose of this test, ensure it's not applied.
++                session.sessionSettings().statementTimeout(TimeValue.ZERO);
++                assertThatThrownBy(() ->
++                    execute("select min(age) as minage, gender from characters group by gender order by gender", session)
++                ).isInstanceOfAny(JobKilledException.class, CircuitBreakingException.class);
++            }
++        });
++    }
++
+     @Test
+     public void selectGroupByAggregateMinInteger() throws Exception {
+         this.setup.groupBySetup("integer");
