@@ -123,6 +123,7 @@ def _should_namespace_adapt(
 def _adapt_with_llm(
     hunk: Dict[str, Any],
     loc_result: LocalizationResult,
+    pre_region_context: str = "",
     post_region_context: str = "",
 ) -> NamespaceAdaptationOutput:
     """
@@ -132,6 +133,15 @@ def _adapt_with_llm(
         f"  - {orig} -> {target}"
         for orig, target in loc_result.symbol_mappings.items()
     ) or "  (none detected by localization; infer from diff context)"
+
+    pre_context_section = ""
+    if pre_region_context.strip():
+        pre_context_section = f"""
+Code immediately BEFORE the localized region in the target file (already exists — do NOT remove unless it is part of the block being replaced):
+```java
+{pre_region_context}
+```
+"""
 
     post_context_section = ""
     if post_region_context.strip():
@@ -199,15 +209,18 @@ Original hunk — new_content (context + added lines from the source branch):
 {hunk.get("new_content", "")}
 ```
 
-Target file context (surrounding code in the target branch):
+Target file context — localized region (the code found at the matching position in the target branch):
 ```java
 {loc_result.context_snapshot}
 ```
-{post_context_section}
+{pre_context_section}{post_context_section}
 Task:
 1. Produce adapted_old_content: the exact code that exists in the TARGET FILE that
    corresponds to what the patch removes (or the insertion point for pure additions).
-   It MUST be found verbatim in the target file context shown above.
+   It MUST be found verbatim in the target file. Use ALL context sections above
+   (before, localized region, after) to determine the full extent of the code to replace.
+   IMPORTANT: the localized region may only be a PARTIAL view of the block being changed —
+   check the "before" context for code that also needs to be included in adapted_old_content.
 2. Produce adapted_new_content: the replacement code in target-branch style.
    Translate the ADDED lines (see "Lines being ADDED" above) into the target API.
    For pure additions, this is adapted_old_content + the new lines.
@@ -215,7 +228,7 @@ Task:
 4. List any imports that must be added or removed from the target file.
 
 Key rules:
-- adapted_old_content MUST exist verbatim in the target file context shown above.
+- adapted_old_content MUST exist verbatim in the target file (across the before/localized/after context shown above).
 - Only remove lines that appear in "Lines being REMOVED" above — do not remove context lines.
 - Preserve the same logical change as the original patch (do not alter program logic).
 - If the API has changed (e.g. builder.startObject → ob.xContentObject), use the
@@ -295,17 +308,26 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
         # Claim this hunk.
         processed_indices.append(i)
 
-        # Extract the lines immediately after the localized region so the LLM
-        # can see what already exists there (prevents hallucinating stubs for
-        # methods that follow the removed code).
+        # Extract lines before and after the localized region so the LLM
+        # has full context. Pre-region is critical when the old block in the target
+        # is larger than what localization found (e.g. an outer setup that was
+        # structurally different between branches, so git_pickaxe only matched
+        # the inner lines and missed the surrounding code).
+        pre_region_context = ""
         post_region_context = ""
-        if file_content and loc_result.end_line > 0:
+        if file_content and loc_result.start_line > 0:
             lines = file_content.splitlines(keepends=True)
-            post_start = loc_result.end_line  # end_line is 1-indexed; this is the next line
-            post_end = min(len(lines), post_start + 20)
-            post_region_context = "".join(lines[post_start:post_end])
+            # 20 lines before the localized region (0-indexed: start_line-1 is first match line)
+            pre_start = max(0, loc_result.start_line - 21)
+            pre_end = loc_result.start_line - 1
+            pre_region_context = "".join(lines[pre_start:pre_end])
 
-        output = _adapt_with_llm(hunk, loc_result, post_region_context)
+            if loc_result.end_line > 0:
+                post_start = loc_result.end_line  # end_line is 1-indexed; next line index
+                post_end = min(len(lines), post_start + 20)
+                post_region_context = "".join(lines[post_start:post_end])
+
+        output = _adapt_with_llm(hunk, loc_result, pre_region_context, post_region_context)
 
         if output.success:
             adapted_hunks.append({
