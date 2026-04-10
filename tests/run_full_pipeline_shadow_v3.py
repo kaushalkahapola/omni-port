@@ -362,8 +362,8 @@ def update_summary_md(output_dir: Path) -> None:
         "",
         "## Per-patch detail",
         "",
-        "| Project | Type | Commit | Success | Build | Tests (f→p / newly / p→f) | Category |",
-        "| ------- | ---- | ------ | :-----: | :---: | :------------------------: | -------- |",
+        "| Project | Type | Commit | Success | Build | Tests (f→p / newly / p→f) | Details | Category |",
+        "| ------- | ---- | ------ | :-----: | :---: | :------------------------: | ------- | -------- |",
     ]
 
     for result_file in sorted(output_dir.glob("*/*/results.json")):
@@ -386,6 +386,16 @@ def update_summary_md(output_dir: Path) -> None:
         p2f = s.get("pass_to_fail_count", 0)
         cat = s.get("validation_failure_category", "")
 
+        transition = s.get("test_transition", {})
+        details = []
+        if f2p > 0:
+            details.append(f"F→P: {', '.join(transition.get('fail_to_pass', []))}")
+        if newly > 0:
+            details.append(f"Newly: {', '.join(transition.get('newly_passing', []))}")
+        if p2f > 0:
+            details.append(f"P→F: {', '.join(transition.get('pass_to_fail', []))}")
+        details_str = "<br>".join(details) if details else "-"
+
         success_icon = "✓" if success else ("✗" if success is False else "-")
         build_icon = "✓" if build_ok else ("✗" if build_ok is False else "-")
         test_icon = "✓" if test_ok else ("✗" if test_ok is False else "-")
@@ -393,7 +403,7 @@ def update_summary_md(output_dir: Path) -> None:
 
         lines.append(
             f"| {project} | {patch_type} | `{commit}` | {success_icon} | "
-            f"{build_icon} | {test_detail} | {cat} |"
+            f"{build_icon} | {test_detail} | {details_str} | {cat} |"
         )
 
     summary_path = output_dir / "SUMMARY.md"
@@ -546,7 +556,7 @@ def process_patch(
     # After the agent pipeline, fail→pass = agents correctly backported the code.
 
     if not skip_validation and developer_aux_hunks:
-        print("\n  Phase 0 (baseline):")
+        print("\n  [pipeline] Phase 0 (baseline):")
         project = os.path.basename(repo_path).strip().lower()
         changed_files_for_baseline = list({
             h.get("file_path", "") for h in all_hunks if h.get("file_path")
@@ -555,9 +565,10 @@ def process_patch(
         # Check cache first — baseline is deterministic for a given backport_commit
         cached_baseline = load_phase0_cache(project, backport_commit)
         if cached_baseline:
-            print(f"  phase0 cache: hit (mode={cached_baseline.get('mode')}) — skipping baseline run")
+            print(f"  [pipeline] phase0 cache: hit (mode={cached_baseline.get('mode')}) — skipping baseline run")
             baseline_result = cached_baseline
         else:
+            print(f"  [pipeline] phase0 cache: miss — starting baseline run for {project}")
             baseline_result = run_phase0_baseline(
                 repo_path, project, developer_aux_hunks, changed_files_for_baseline
             )
@@ -572,7 +583,7 @@ def process_patch(
         }
         state["validation_results"] = {"phase_0_baseline_test_result": baseline_result}
     else:
-        print("\n  Phase 0: skipped (no aux hunks or --skip-validation)")
+        print("\n  [pipeline] Phase 0: skipped (no aux hunks or --skip-validation)")
 
     # ── 6. Run agents 1–6 ────────────────────────────────────────────────────
 
@@ -656,6 +667,7 @@ def process_patch(
             "build_mode": (val_res.get("build") or {}).get("mode"),
             "test_success": (val_res.get("tests") or {}).get("success"),
             "test_mode": (val_res.get("tests") or {}).get("mode"),
+            "test_state": val_res.get("tests", {}).get("test_state"),
             "test_state_transition": (val_res.get("tests") or {}).get("state_transition"),
             "compile_errors": (val_res.get("build") or {}).get("compile_errors", []),
         })
@@ -679,6 +691,8 @@ def process_patch(
     # ── 8. Build summary ──────────────────────────────────────────────────────
 
     val_res = state.get("validation_results", {})
+    transition = (val_res.get("tests") or {}).get("state_transition") or {}
+
     results["summary"].update({
         "processed_hunk_indices": state.get("processed_hunk_indices", []),
         "tokens_used": state.get("tokens_used", 0),
@@ -696,19 +710,14 @@ def process_patch(
         "build_success": (val_res.get("build") or {}).get("success"),
         "test_success": (val_res.get("tests") or {}).get("success"),
         "test_mode": (val_res.get("tests") or {}).get("mode"),
-        "fail_to_pass_count": len(
-            ((val_res.get("tests") or {}).get("state_transition") or {}).get("fail_to_pass", [])
-        ),
-        "newly_passing_count": len(
-            ((val_res.get("tests") or {}).get("state_transition") or {}).get("newly_passing", [])
-        ),
-        "pass_to_fail_count": len(
-            ((val_res.get("tests") or {}).get("state_transition") or {}).get("pass_to_fail", [])
-        ),
+        "test_transition": transition,
+        "fail_to_pass_count": len(transition.get("fail_to_pass", [])),
+        "newly_passing_count": len(transition.get("newly_passing", [])),
+        "pass_to_fail_count": len(transition.get("pass_to_fail", [])),
         # Success = at least one fail→pass OR newly_passing test observed
         "backport_success": (
-            len(((val_res.get("tests") or {}).get("state_transition") or {}).get("fail_to_pass", [])) > 0
-            or len(((val_res.get("tests") or {}).get("state_transition") or {}).get("newly_passing", [])) > 0
+            len(transition.get("fail_to_pass", [])) > 0
+            or len(transition.get("newly_passing", [])) > 0
         ) if not skip_validation else None,
     })
 
@@ -736,10 +745,11 @@ def process_patch(
         print(f"  │  Validation           : {v_label}")
         print(f"  │  Build                : {'OK' if s.get('build_success') else 'FAILED'}")
         if s.get("test_mode") and s.get("test_mode") != "skip":
-            test_ok = "OK" if s.get("test_success") else "FAILED"
             f2p = s.get("fail_to_pass_count", 0)
             p2f = s.get("pass_to_fail_count", 0)
-            print(f"  │  Tests                : {test_ok} (fail→pass={f2p}, pass→fail={p2f})")
+            newly = s.get("newly_passing_count", 0)
+            runner_ok = "OK" if s.get("test_success") else "PARTIAL"
+            print(f"  │  Tests                : {runner_ok} (fail→pass={f2p}, newly={newly}, pass→fail={p2f})")
     print(f"  │  Tokens used          : {s['tokens_used']}")
     print(f"  └───────────────────────────────────────────────────────────")
 

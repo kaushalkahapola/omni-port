@@ -43,9 +43,13 @@ fi
 ${DOCKER_CMD} volume create gradle-cache-es 2>/dev/null || true
 ${DOCKER_CMD} volume create gradle-wrapper-es 2>/dev/null || true
 
-echo "--- Building Docker image: ${IMAGE_TAG} ---"
 HELPER_DIR="${TOOLKIT_DIR:-$(dirname "$0")}"
-${DOCKER_CMD} build -t "${IMAGE_TAG}" -f "${HELPER_DIR}/Dockerfile" "${HELPER_DIR}"
+if ${DOCKER_CMD} image inspect "${IMAGE_TAG}" > /dev/null 2>&1; then
+    echo "--- Docker image ${IMAGE_TAG} already exists, skipping build ---"
+else
+    echo "--- Building Docker image: ${IMAGE_TAG} ---"
+    ${DOCKER_CMD} build -t "${IMAGE_TAG}" -f "${HELPER_DIR}/Dockerfile" "${HELPER_DIR}"
+fi
 
 echo "--- Setting cache permissions ---"
 ${DOCKER_CMD} run --rm -u root \

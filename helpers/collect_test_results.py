@@ -41,11 +41,22 @@ def strip_ansi(text: str) -> str:
 
 def discover_xml_files(repo: str, project: str) -> list[str]:
     cfg = PROJECT_CONFIG.get(project, {})
-    pattern = cfg.get("report_pattern") or "**/target/surefire-reports/*.xml"
+    patterns = []
+    if "report_pattern" in cfg:
+        patterns.append(cfg["report_pattern"])
+    
+    # Common fallback patterns
+    patterns.extend([
+        "**/build/test-results/**/*.xml",
+        "**/target/surefire-reports/*.xml",
+        "**/target/failsafe-reports/*.xml",
+        "build/all-test-results/*.xml",
+    ])
 
-    paths = set(glob.glob(os.path.join(repo, pattern), recursive=True))
-    # Also include the shared aggregate location used by helper scripts.
-    paths.update(glob.glob(os.path.join(repo, "build", "all-test-results", "*.xml"), recursive=True))
+    paths: set[str] = set()
+    for pattern in patterns:
+        full_pattern = os.path.join(repo, pattern)
+        paths.update(glob.glob(full_pattern, recursive=True))
 
     return sorted(p for p in paths if p.endswith(".xml"))
 
