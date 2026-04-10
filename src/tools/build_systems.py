@@ -126,6 +126,8 @@ def _run_cmd(
     env: dict | None = None,
     timeout: int = 600,
 ) -> dict[str, Any]:
+    print(f"  [build_systems] Running command: {' '.join(cmd)}")
+    print(f"  [build_systems] Working directory: {cwd}")
     try:
         result = subprocess.run(
             cmd,
@@ -136,10 +138,13 @@ def _run_cmd(
             timeout=timeout,
         )
         output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+        print(f"  [build_systems] Command finished with return code: {result.returncode}")
         return {"success": result.returncode == 0, "returncode": result.returncode, "output": output}
     except subprocess.TimeoutExpired:
+        print(f"  [build_systems] Command timed out after {timeout} seconds")
         return {"success": False, "returncode": -1, "output": "Command timed out"}
     except Exception as e:
+        print(f"  [build_systems] Command failed with error: {str(e)}")
         return {"success": False, "returncode": -1, "output": str(e)}
 
 
@@ -160,17 +165,22 @@ def _ensure_docker_image(project: str, repo_path: str) -> tuple[str | None, str 
     env_key = f"{project.upper()}_BUILDER_IMAGE_TAG"
     tag = os.getenv(env_key, f"retrofit-{project.lower()}-builder:local")
 
+    print(f"  [build_systems] Checking for Docker image: {tag}")
     inspect = _run_cmd(["docker", "image", "inspect", tag], cwd=repo_path, timeout=15)
     if inspect["success"]:
+        print(f"  [build_systems] Docker image {tag} exists")
         return tag, None
 
+    print(f"  [build_systems] Building Docker image: {tag} from {dockerfile}")
     build = _run_cmd(
         ["docker", "build", "-t", tag, "-f", dockerfile, hdir],
         cwd=repo_path,
         timeout=600,
     )
     if not build["success"]:
+        print(f"  [build_systems] Failed to build Docker image {tag}")
         return None, f"Failed to build Docker image for {project} ({tag}): {build['output'][:500]}"
+    print(f"  [build_systems] Docker image {tag} built successfully")
     return tag, None
 
 
@@ -237,6 +247,7 @@ def _clear_junit_reports(repo_path: str) -> None:
 
 def restore_repo_state(repo_path: str) -> bool:
     """git reset --hard + git clean -fd on the given worktree."""
+    print(f"  [build_systems] Restoring repo state in {repo_path}")
     try:
         subprocess.run(
             ["git", "reset", "--hard"],
@@ -258,9 +269,10 @@ def restore_repo_state(repo_path: str) -> bool:
                 capture_output=True,
                 timeout=30,
             )
+        print("  [build_systems] Repo state restored successfully")
         return True
     except Exception as e:
-        print(f"build_systems: restore_repo_state warning: {e}")
+        print(f"  [build_systems] restore_repo_state warning: {e}")
         return False
 
 
@@ -456,9 +468,11 @@ def detect_test_targets(
       2) Infer from changed_files list (path-based heuristic)
     """
     normalized = project.strip().lower()
+    print(f"  [build_systems] Detecting test targets for project {normalized}")
     helper_script = os.path.join(_helper_dir(normalized), "get_test_targets.py")
 
     if os.path.exists(helper_script):
+        print(f"  [build_systems] Using helper script: {helper_script}")
         res = _run_cmd(
             ["python3", helper_script, "--repo", repo_path, "--worktree"],
             cwd=repo_path,
@@ -481,6 +495,7 @@ def detect_test_targets(
                             set(parsed["harness_excluded_test_targets"]) | set(skipped)
                         )
 
+                print(f"  [build_systems] Helper found {len(targets)} targets")
                 return TestTargetInfo(
                     test_targets=targets,
                     source_modules=source_modules,
@@ -488,9 +503,11 @@ def detect_test_targets(
                     raw=parsed,
                 )
             except json.JSONDecodeError:
+                print("  [build_systems] Helper returned invalid JSON")
                 pass
 
     # Path-based fallback
+    print("  [build_systems] Using path-based fallback for test target detection")
     test_targets: set[str] = set()
     source_modules: set[str] = set()
     all_modules: set[str] = set()
@@ -522,6 +539,7 @@ def detect_test_targets(
     if normalized == "elasticsearch" and targets_list:
         targets_list, _ = _filter_elasticsearch_test_targets(targets_list)
 
+    print(f"  [build_systems] Path-based detection found {len(targets_list)} targets")
     return TestTargetInfo(
         test_targets=targets_list,
         source_modules=sorted(source_modules),
@@ -540,11 +558,13 @@ def run_build(repo_path: str, project: str = "") -> BuildResult:
       3. Maven compile test-compile
     """
     normalized = project.strip().lower() or _detect_project_name(repo_path)
+    print(f"  [build_systems] Starting build for project {normalized} in {repo_path}")
 
     if _has_helper(normalized):
         hdir = _helper_dir(normalized)
         build_sh = os.path.join(hdir, "run_build.sh")
         if os.path.exists(build_sh):
+            print(f"  [build_systems] Using project helper: {build_sh}")
             image_tag, err = _ensure_docker_image(normalized, repo_path)
             if image_tag:
                 abs_repo_path = os.path.realpath(repo_path)
@@ -559,13 +579,14 @@ def run_build(repo_path: str, project: str = "") -> BuildResult:
                     "WORKTREE_MODE": "1",
                 })
                 res = _run_cmd(["bash", build_sh], cwd=abs_repo_path, env=env, timeout=3600)
+                print(f"  [build_systems] Build {'succeeded' if res['success'] else 'failed'} using {normalized}-helper")
                 return BuildResult(
                     success=res["success"],
                     output=res["output"],
                     mode=f"{normalized}-helper",
                 )
             else:
-                print(f"build_systems: Docker image unavailable for {normalized}: {err}. Falling back.")
+                print(f"  [build_systems] Docker image unavailable for {normalized}: {err}. Falling back.")
 
     env = os.environ.copy()
     java_home = _resolve_valid_java_home()
@@ -573,9 +594,11 @@ def run_build(repo_path: str, project: str = "") -> BuildResult:
         env["JAVA_HOME"] = java_home
 
     if _is_gradle_repo(repo_path):
+        print("  [build_systems] Using Gradle build")
         cmd = ["./gradlew", "classes", "testClasses", "--no-daemon", "-x", "test"]
         mode = "gradle"
     else:
+        print("  [build_systems] Using Maven build")
         cmd = [
             "mvn", "compile", "test-compile",
             "-Dmaven.javadoc.skip=true",
@@ -586,6 +609,7 @@ def run_build(repo_path: str, project: str = "") -> BuildResult:
         mode = "maven"
 
     res = _run_cmd(cmd, cwd=repo_path, env=env, timeout=600)
+    print(f"  [build_systems] Build {'succeeded' if res['success'] else 'failed'} using {mode}")
     return BuildResult(success=res["success"], output=res["output"], mode=mode)
 
 
@@ -604,6 +628,7 @@ def run_tests(
       3. Maven -Dtest=ClassName
     """
     normalized = project.strip().lower() or _detect_project_name(repo_path)
+    print(f"  [build_systems] Starting tests for project {normalized} in {repo_path}")
 
     if target_info is None:
         target_info = detect_test_targets(repo_path, normalized, changed_files)
@@ -612,6 +637,7 @@ def run_tests(
     source_modules = list(target_info.source_modules)
 
     if not test_targets and not source_modules:
+        print("  [build_systems] No relevant test targets or modules detected. Skipping tests.")
         return TestResult(
             success=True,
             compile_error=False,
@@ -627,6 +653,7 @@ def run_tests(
             },
         )
 
+    print(f"  [build_systems] Found {len(test_targets)} test targets and {len(source_modules)} source modules")
     _clear_junit_reports(repo_path)
 
     # Docker helper path
@@ -634,6 +661,7 @@ def run_tests(
         hdir = _helper_dir(normalized)
         test_sh = os.path.join(hdir, "run_tests.sh")
         if os.path.exists(test_sh):
+            print(f"  [build_systems] Using project helper: {test_sh}")
             image_tag, err = _ensure_docker_image(normalized, repo_path)
             if image_tag:
                 abs_repo_path = os.path.realpath(repo_path)
@@ -662,9 +690,11 @@ def run_tests(
                 target_classes_for_collection = [
                     t.split(":", 1)[1] if ":" in t else t for t in test_targets
                 ]
+                print(f"  [build_systems] Collecting results for {len(target_classes_for_collection)} classes")
                 test_state = collect_test_results(
                     repo_path, normalized, target_classes_for_collection, output
                 )
+                print(f"  [build_systems] Tests {'succeeded' if res['success'] else 'failed'} using {normalized}-helper")
                 return TestResult(
                     success=res["success"],
                     compile_error=is_compile_error,
@@ -674,7 +704,7 @@ def run_tests(
                     test_state=test_state,
                 )
             else:
-                print(f"build_systems: Docker image unavailable for {normalized}: {err}. Falling back.")
+                print(f"  [build_systems] Docker image unavailable for {normalized}: {err}. Falling back.")
 
     # Direct Maven/Gradle fallback
     env = os.environ.copy()
@@ -685,12 +715,14 @@ def run_tests(
     compat_args = ["-Djdk.security.manager.allow.argLine="]
 
     if _is_gradle_repo(repo_path):
+        print("  [build_systems] Using Gradle test runner")
         cmd = ["./gradlew", "test", "--no-daemon"]
         for t in test_targets:
             cls = t.split(":", 1)[1] if ":" in t else t
             cmd += ["--tests", cls]
         mode = "gradle-targeted" if test_targets else "gradle-module"
     else:
+        print("  [build_systems] Using Maven test runner")
         module_set: set[str] = set(source_modules)
         test_classes: list[str] = []
         for t in test_targets:
@@ -728,10 +760,12 @@ def run_tests(
     target_classes_for_collection = [
         t.split(":", 1)[1] if ":" in t else t for t in test_targets
     ]
+    print(f"  [build_systems] Collecting results for {len(target_classes_for_collection)} classes")
     test_state = collect_test_results(
         repo_path, normalized, target_classes_for_collection, output
     )
 
+    print(f"  [build_systems] Tests {'succeeded' if res['success'] else 'failed'} using {mode}")
     return TestResult(
         success=res["success"],
         compile_error=is_compile_error,

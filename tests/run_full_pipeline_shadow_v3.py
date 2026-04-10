@@ -414,16 +414,16 @@ def make_serializable(obj: Any) -> Any:
 def run_agent(
     label: str, fn, state: BackportState, agent_records: dict
 ) -> BackportState:
-    print(f"    {label}...", end=" ", flush=True)
+    print(f"    [pipeline] Starting Agent: {label}...", end=" ", flush=True)
     start = time.time()
     error_msg = None
     try:
         state = fn(state)
-        print(f"OK ({time.time() - start:.2f}s)")
+        print(f"DONE ({time.time() - start:.2f}s)")
     except Exception:
         error_msg = traceback.format_exc()
-        print(f"ERROR ({time.time() - start:.2f}s)")
-        print(f"      {error_msg.splitlines()[-1]}")
+        print(f"FAILED ({time.time() - start:.2f}s)")
+        print(f"      [pipeline] Agent {label} error: {error_msg.splitlines()[-1]}")
     agent_records[label] = {
         "elapsed_s": round(time.time() - start, 2),
         "error": error_msg,
@@ -449,11 +449,11 @@ def process_patch(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*64}")
-    print(f"  {patch_type}  |  repo={repo_name}  orig={original_commit[:12]}")
+    print(f"  [pipeline] Processing {patch_type} | repo={repo_name} | commit={original_commit[:12]}")
     if description:
-        print(f"  {description}")
-    print(f"  backport={backport_commit[:12]}")
-    suffix = "  [validation SKIPPED]" if skip_validation else ""
+        print(f"  [pipeline] Description: {description}")
+    print(f"  [pipeline] Backport Target: {backport_commit[:12]}")
+    suffix = "  [VALIDATION SKIPPED]" if skip_validation else ""
     print(f"{'='*64}{suffix}")
 
     results: dict[str, Any] = {
@@ -470,24 +470,25 @@ def process_patch(
 
     # ── 1. Capture reference patches ─────────────────────────────────────────
 
+    print(f"  [pipeline] Capturing reference patches for {original_commit}")
     mainline_patch = git_show(repo_path, original_commit)
     if not mainline_patch:
-        print(f"  ERROR: Cannot retrieve commit {original_commit}")
+        print(f"  [pipeline] ERROR: Cannot retrieve commit {original_commit}")
         return
     (out_dir / "mainline.patch").write_text(mainline_patch, encoding="utf-8")
-    print(f"  mainline.patch written ({len(mainline_patch)} bytes)")
+    print(f"  [pipeline] mainline.patch saved to {out_dir}")
 
     target_patch = git_show(repo_path, backport_commit)
     if target_patch:
         (out_dir / "target.patch").write_text(target_patch, encoding="utf-8")
-        print(f"  target.patch written  ({len(target_patch)} bytes)")
+        print(f"  [pipeline] target.patch saved to {out_dir}")
     else:
         target_patch = ""
-        print(f"  WARNING: Could not retrieve backport commit {backport_commit}")
+        print(f"  [pipeline] WARNING: Could not retrieve backport commit {backport_commit}")
 
     # ── 2. Checkout repo to the state just before the backport ───────────────
 
-    print(f"  Checking out {backport_commit}~1 ...")
+    print(f"  [pipeline] Preparing worktree: checking out {backport_commit}~1")
     git_checkout(repo_path, f"{backport_commit}~1")
 
     # ── 3. Parse hunks ───────────────────────────────────────────────────────
