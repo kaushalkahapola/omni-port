@@ -228,6 +228,10 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
             break
 
         loc_result = loc_results[i]
+        # Skip hunks where localization found no file at all — Agent 5 needs at
+        # least a file path and context snapshot to reason about structure.
+        if loc_result.method_used == "failed" or not loc_result.file_path:
+            continue
         if not _should_structural_refactor(loc_result):
             continue
 

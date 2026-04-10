@@ -1,0 +1,97 @@
+commit 3a7f35461c9b68648bd42d9ce9f8ce8d3b567058
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Wed Sep 17 21:49:07 2025 -0400
+
+    Fix IndexOutOfBoundsException when updating generated col referencing PK col
+    
+    (cherry picked from commit 68e693a5030ae906ff80ab11903e6e8711f9b893)
+    
+    # Conflicts:
+    #       docs/appendices/release-notes/6.0.1.rst
+
+diff --git a/docs/appendices/release-notes/5.10.12.rst b/docs/appendices/release-notes/5.10.12.rst
+index 2f18babc23..2346b5d611 100644
+--- a/docs/appendices/release-notes/5.10.12.rst
++++ b/docs/appendices/release-notes/5.10.12.rst
+@@ -92,6 +92,9 @@ Fixes
+ - Fixed an issue that caused a ``NullPointerException`` when inserting ``NULL``
+   to an object column with a non-deterministic sub-column.
+ 
++- Fixed an issue that caused an ``IndexOutOfBoundsException`` when updating
++  a ``generated column`` that references a ``PRIMARY KEY`` column.
++
+ - Fixed the usage of the ``FORCE_MERGE`` thread pool to support parallel shard
+   operations per node when increasing the pools size. As the default size is
+   ``1``, this change does not affect existing installations.
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index 36f7de4234..ba17e8cb96 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -188,9 +188,18 @@ public class Indexer {
+             }
+             int pkIndex = table.primaryKey().indexOf(column);
+             if (pkIndex > -1) {
+-                return NestableCollectExpression.forFunction(item ->
+-                    ref.valueType().implicitCast(item.pkValues().get(pkIndex))
+-                );
++                return NestableCollectExpression.forFunction(item -> {
++                    // create table t (a int generated always as c+1, b int, c int primary key);
++                    // insert into t(c) values (0);
++                    // update t set b=-1;
++                    // when replicating the UPDATE query, 'a' needs to resolve 'c' which is PK and is not available in
++                    // item.pkValues(), fall back to search targetColumns.
++                    if (pkIndex < item.pkValues().size()) {
++                        return ref.valueType().implicitCast(item.pkValues().get(pkIndex));
++                    } else {
++                        return item.insertValues()[targetColumns.indexOf(ref)];
++                    }
++                });
+             }
+             int index = targetColumns.indexOf(ref);
+             if (index > -1) {
+diff --git a/server/src/test/java/io/crate/execution/dml/IndexerTest.java b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+index d0d009a3da..847d79857e 100644
+--- a/server/src/test/java/io/crate/execution/dml/IndexerTest.java
++++ b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+@@ -33,6 +33,7 @@ import static io.crate.types.GeoShapeType.Names.TREE_QUADTREE;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ import static org.elasticsearch.cluster.metadata.Metadata.COLUMN_OID_UNASSIGNED;
+ 
++import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.HashMap;
+@@ -1554,6 +1555,33 @@ public class IndexerTest extends CrateDummyClusterServiceUnitTest {
+         assertThat(storedField.binaryValue().utf8ToString()).isEqualTo("{\"1\":[{\"2\":[{\"3\":1}]}]}");
+     }
+ 
++    @Test
++    public void test_replica_indexer_for_update_on_generated_column_referencing_pk_column() throws IOException {
++        SQLExecutor executor = SQLExecutor.of(clusterService)
++            .addTable("""
++                create table t (
++                a int generated always as c+1,
++                b int,
++                c int primary key
++            )
++            """
++            );
++        DocTableInfo table = executor.resolveTableInfo("t");
++
++        // captures the indexer state and the item when `update t set b=-1` is streamed to a replica indexer
++        Indexer indexer = new Indexer(
++            table.ident().indexNameOrAlias(),
++            table,
++            Version.CURRENT,
++            new CoordinatorTxnCtx(executor.getSessionSettings()),
++            executor.nodeCtx,
++            new ArrayList<>(List.of(table.getReference(ColumnIdent.of("b")), table.getReference(ColumnIdent.of("c")))),
++            null, null
++        );
++        var item = new IndexItem.StaticItem("0", List.of(), new Object[]{-1, 0}, 0L, 0L);
++        indexer.collectSchemaUpdates(item); // checks that it does not throw any IndexOutOfBoundsExceptions
++    }
++
+     public static void assertTranslogParses(ParsedDocument doc, DocTableInfo info) {
+         assertTranslogParses(doc, info, Version.CURRENT);
+     }

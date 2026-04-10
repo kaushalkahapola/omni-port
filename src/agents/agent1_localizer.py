@@ -8,6 +8,37 @@ from src.localization.stage3_gumtree import run_gumtree_localization
 from src.localization.stage4_javaparser import run_javaparser_localization
 from src.localization.stage5_embedding import run_embedding_localization
 
+def _is_false_license_header_match(
+    repo_path: str, canonical_file: str, res: LocalizationResult, hunk: Dict[str, Any]
+) -> bool:
+    """
+    Returns True when a localization result landed on lines 1–N of a Java file
+    that starts with a license comment block, but the hunk's old_content does not
+    reference that license text.
+
+    This false positive occurs when a localization stage (typically javaparser)
+    can't find a distinctive anchor for a pure-addition hunk and falls back to
+    the beginning of the file.  The result is useless and actively harmful:
+    Agent 4 will embed new Java code inside the license comment.
+
+    We read the first line of the target file directly to check.
+    """
+    if res.start_line != 1 or res.end_line > 30:
+        return False
+    old_content = hunk.get("old_content", "").lstrip()
+    # If old_content itself starts with a license comment, this is legitimate.
+    if old_content.startswith("/*"):
+        return False
+    # Read the first line of the actual target file to check for a license header.
+    try:
+        target_path = f"{repo_path}/{canonical_file}"
+        with open(target_path, "r") as f:
+            first_line = f.readline().lstrip()
+        return first_line.startswith("/*")
+    except (FileNotFoundError, IOError):
+        return False
+
+
 def localizer_pipeline(repo_path: str, file_path: str, hunk: Dict[str, Any]) -> LocalizationResult:
     """
     The 5-stage hybrid code localization pipeline.
@@ -21,25 +52,28 @@ def localizer_pipeline(repo_path: str, file_path: str, hunk: Dict[str, Any]) -> 
     # if Java microservice is unavailable or no redirect is needed)
     canonical_file = run_hierarchy_file_redirect(repo_path, file_path, hunk) or file_path
 
+    def _accept(r: LocalizationResult) -> bool:
+        return r is not None and not _is_false_license_header_match(repo_path, canonical_file, r, hunk)
+
     # Stage 1
     res = run_git_localization(repo_path, canonical_file, hunk)
-    if res: return res
+    if _accept(res): return res
 
     # Stage 2
     res = run_fuzzy_localization(repo_path, canonical_file, hunk)
-    if res: return res
+    if _accept(res): return res
 
     # Stage 3
     res = run_gumtree_localization(repo_path, canonical_file, hunk)
-    if res: return res
+    if _accept(res): return res
 
     # Stage 4
     res = run_javaparser_localization(repo_path, canonical_file, hunk)
-    if res: return res
+    if _accept(res): return res
 
     # Stage 5
     res = run_embedding_localization(repo_path, canonical_file, hunk)
-    if res: return res
+    if _accept(res): return res
 
     # Fallback failure
     return LocalizationResult(
