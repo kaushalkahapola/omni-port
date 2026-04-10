@@ -114,6 +114,7 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
     Try git apply → git apply --ignore-whitespace → GNU patch, in order.
     Returns {"success": bool, "output": str, "strategy": str}.
     """
+    print(f"  [agent7] Applying patch to {repo_path}")
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -129,23 +130,28 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
         ]
         errors: list[str] = []
         for name, cmd in strategies:
+            print(f"  [agent7] Trying strategy: {name}")
             r = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_path)
             if r.returncode == 0:
+                print(f"  [agent7] Strategy {name} succeeded")
                 return {"success": True, "output": r.stdout or f"Applied via {name}.", "strategy": name}
             errors.append(f"[{name}] {(r.stderr or r.stdout or '').strip()}")
 
         # GNU patch fallback
+        print("  [agent7] Trying strategy: gnu-patch")
         patch_cmd = ["patch", "-p1", "--batch", "--forward", "--reject-file=-",
                      "--ignore-whitespace", "-i", tmp_path]
         dry = subprocess.run(patch_cmd + ["--dry-run"], capture_output=True, text=True, cwd=repo_path)
         if dry.returncode == 0:
             apply = subprocess.run(patch_cmd, capture_output=True, text=True, cwd=repo_path)
             if apply.returncode == 0:
+                print("  [agent7] Strategy gnu-patch succeeded")
                 return {"success": True, "output": apply.stdout or "Applied via gnu-patch.", "strategy": "gnu-patch"}
             errors.append(f"[gnu-patch] {(apply.stderr or apply.stdout or '').strip()}")
         else:
             errors.append(f"[gnu-patch-dry-run] {(dry.stderr or dry.stdout or '').strip()}")
 
+        print("  [agent7] All patch application strategies failed")
         return {"success": False, "output": "\n".join(errors), "strategy": "all-failed"}
     finally:
         if tmp_path:
@@ -162,11 +168,13 @@ def _apply_synthesized_hunks(
     Apply CLAW-verified synthesized hunks (old_string → new_string replacement) to disk.
     Returns {"success": bool, "output": str, "applied_files": list[str]}.
     """
+    print(f"  [agent7] Applying {len(synthesized_hunks)} synthesized hunks via CLAW")
     applied_files: list[str] = []
     errors: list[str] = []
 
     for hunk in synthesized_hunks:
         if not hunk.get("verified", True):
+            print(f"  [agent7] Skipping unverified hunk for {hunk.get('file_path', '?')}")
             errors.append(
                 f"{hunk.get('file_path', '?')}: skipped unverified synthesized hunk"
             )
@@ -177,11 +185,13 @@ def _apply_synthesized_hunks(
         new_string = hunk.get("new_string", "")
 
         if not file_path or not old_string:
+            print(f"  [agent7] Hunk missing file_path or old_string: {hunk}")
             errors.append(f"synthesized hunk missing file_path or old_string: {hunk}")
             continue
 
         abs_path = os.path.join(repo_path, file_path)
         if not os.path.exists(abs_path):
+            print(f"  [agent7] File not found: {file_path}")
             errors.append(f"{file_path}: file not found in worktree")
             continue
 
@@ -189,12 +199,14 @@ def _apply_synthesized_hunks(
             with open(abs_path, "r", encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
+            print(f"  [agent7] Read error for {file_path}: {e}")
             errors.append(f"{file_path}: read error — {e}")
             continue
 
         applier = CLAWHunkApplier(content)
         success, new_content = applier.find_and_replace(old_string, new_string)
         if not success:
+            print(f"  [agent7] CLAW find_and_replace failed for {file_path}")
             errors.append(
                 f"{file_path}: CLAW exact-string not found — old_string may have drifted"
             )
@@ -204,6 +216,7 @@ def _apply_synthesized_hunks(
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
         except Exception as e:
+            print(f"  [agent7] Write error for {file_path}: {e}")
             errors.append(f"{file_path}: write error — {e}")
             continue
 
@@ -211,8 +224,10 @@ def _apply_synthesized_hunks(
             applied_files.append(file_path)
 
     if errors and not applied_files:
+        print("  [agent7] Failed to apply any synthesized hunks")
         return {"success": False, "output": "\n".join(errors), "applied_files": []}
 
+    print(f"  [agent7] Applied synthesized hunks to {len(applied_files)} files")
     output = "Synthesized hunks applied."
     if errors:
         output += "\nWarnings:\n" + "\n".join(errors)
@@ -280,20 +295,26 @@ def _apply_developer_aux_hunks(
     if not developer_aux_hunks:
         return {"success": True, "output": "No developer aux hunks to apply.", "applied_files": []}
 
+    print(f"  [agent7] Applying {len(developer_aux_hunks)} developer aux hunks")
+
     # Fast path: if ALL hunks carry raw_patch (verbatim from target_patch), apply
     # them directly without reconstruction — this preserves real line numbers.
     if all(h.get("raw_patch") for h in developer_aux_hunks):
+        print("  [agent7] Using raw_patch mode for aux hunks")
         applied_files: list[str] = []
         all_errors: list[str] = []
         for h in developer_aux_hunks:
-            result = _apply_patch_with_fallbacks(repo_path, h["raw_patch"])
             fp = h.get("file_path", "unknown")
+            print(f"  [agent7] Applying raw patch for {fp}")
+            result = _apply_patch_with_fallbacks(repo_path, h["raw_patch"])
             if result["success"]:
                 applied_files.append(fp)
             else:
+                print(f"  [agent7] Raw patch apply failed for {fp}")
                 all_errors.append(f"aux patch apply failed for {fp}: {result['output'][:500]}")
                 restore_repo_state(repo_path)
                 return {"success": False, "output": "\n".join(all_errors), "applied_files": []}
+        print(f"  [agent7] Applied {len(applied_files)} raw aux patches")
         return {
             "success": True,
             "output": "Developer aux hunks applied (raw_patch mode)." + (
@@ -411,38 +432,37 @@ def run_phase0_baseline(
     changed_files: list[str],
 ) -> dict[str, Any]:
     """
-    Apply developer_aux_hunks (test/non-Java/auto-gen from the actual developer
-    backport) to the repo at backport_commit~1, run targeted tests, then restore.
+    Apply ONLY test-related hunks from developer_aux_hunks (test files only)
+    to the repo at backport_commit~1, run targeted tests, then restore.
 
-    This baseline captures the test state WITH aux changes but WITHOUT the Java
-    code changes that the agent pipeline will produce. Tests that reference new
+    This baseline captures the test state WITH test changes but WITHOUT the Java
+    production code changes or non-Java aux changes. Tests that reference new
     APIs/methods introduced by the patch will fail here; after the agents apply
-    those code changes they should pass → that is the fail→pass signal.
+    those code changes they should pass.
 
     Returns a dict compatible with evaluate_test_transition(baseline=...).
     """
-    print("  phase0: applying aux hunks for baseline test run...")
-    aux_result = _apply_developer_aux_hunks(repo_path, developer_aux_hunks)
+    from src.agents.agent1_localizer import _is_test_file
+
+    test_hunks = [h for h in developer_aux_hunks if _is_test_file(h.get("file_path", ""))]
+    if not test_hunks:
+        print("  [agent7] phase0: no test hunks found, skipping baseline run")
+        return {"test_state": {}, "mode": "baseline-no-tests", "skipped": True}
+
+    print(f"  [agent7] phase0: applying {len(test_hunks)} test hunks for baseline...")
+    aux_result = _apply_developer_aux_hunks(repo_path, test_hunks)
     if not aux_result["success"]:
-        print(f"  phase0: aux apply failed, skipping baseline: {aux_result['output'][:200]}")
+        print(f"  [agent7] phase0: test hunk apply failed, skipping baseline: {aux_result['output'][:200]}")
         restore_repo_state(repo_path)
         return {"test_state": {}, "mode": "baseline-apply-failed", "skipped": True}
 
-    # Build first — if aux changes don't compile we can't run meaningful tests.
-    print("  phase0: building for baseline...")
-    build_res = run_build(repo_path, project)
-    if not build_res.success:
-        print("  phase0: baseline build failed, skipping baseline tests.")
-        restore_repo_state(repo_path)
-        return {"test_state": {}, "mode": "baseline-build-failed", "skipped": True}
-
     # Detect targets from the changed files (same as agent7 will use later).
     target_info = detect_test_targets(repo_path, project, changed_files)
-    print(f"  phase0: running baseline tests ({len(target_info.test_targets)} targets)...")
+    print(f"  [agent7] phase0: running baseline tests ({len(target_info.test_targets)} targets) directly...")
     test_res = run_tests(repo_path, project, target_info=target_info, changed_files=changed_files)
 
     restore_repo_state(repo_path)
-    print(f"  phase0: baseline done — mode={test_res.mode}, success={test_res.success}")
+    print(f"  [agent7] phase0: baseline done — mode={test_res.mode}, success={test_res.success}")
     return {
         "test_state": test_res.test_state,
         "mode": f"baseline-{test_res.mode}",

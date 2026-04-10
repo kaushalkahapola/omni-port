@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T10:24:28.059092",
+  "run_timestamp": "2026-04-10T12:45:39.112992",
   "repo": "elasticsearch",
   "patch_type": "TYPE-I",
   "original_commit": "da51c8ccbf0171abefb2978810efd6db0f6f743e",
@@ -8,10 +8,10 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.22,
+      "elapsed_s": 0.31,
       "error": null,
       "java_hunks": 13,
-      "aux_hunks": 4,
+      "aux_hunks": 2,
       "localization_results": [
         {
           "hunk_index": 0,
@@ -133,12 +133,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.8,
+      "elapsed_s": 5.69,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch involves multiple non-trivial changes across several Java classes related to the transport pipeline, including changes in method signatures, control flow restructuring, and resource management (reference counting). It replaces try-with-resources with explicit try-finally blocks, changes method parameter types, refactors internal logic for handling bytes and fragments, and modifies test code accordingly. These changes indicate structural modifications rather than simple string replacements or formatting adjustments. The localization evidence shows all hunks were found exactly, indicating the patch applies cleanly but involves structural changes. Therefore, the patch is best classified as TYPE_III (structural changes). The confidence is high due to exact localization and clear structural modifications. The token budget estimate is moderate to high due to the complexity and number of files affected.",
+        "reasoning": "The patch involves multiple non-trivial changes across several Java classes related to the transport pipeline, including changes in method signatures, control flow restructuring, and resource management (ref-counting). The changes are not simple string replacements or whitespace fixes, but involve structural modifications such as replacing a MessageToMessageDecoder with a ChannelInboundHandlerAdapter, changing how fragments are handled and forwarded, and modifying resource retention and release patterns. These indicate structural changes rather than just formatting or trivial edits. The localization evidence shows all hunks were found exactly, supporting a high confidence in the patch's applicability. The complexity is beyond TYPE_II but does not reach deep refactoring or complete redesign, so TYPE_III is appropriate. The token budget estimate reflects the moderate complexity and multiple files involved.",
         "is_auto_generated": false
       }
     },
@@ -233,32 +233,67 @@
       "synthesized_hunks": []
     },
     "agent7_validator": {
-      "elapsed_s": 1.03,
+      "elapsed_s": 727.22,
       "error": null,
-      "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Aux hunk application failed: aux patch apply failed for server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java: [git-strict] error: patch failed: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java:1\nerror: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java:1\nerror: server/src/test/java/org/elasticsearc",
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": null,
-      "build_mode": null,
-      "test_success": null,
-      "test_mode": null,
-      "test_state_transition": null,
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": false,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.transport.InboundPipelineTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.transport.InboundDecoderTests",
+          "org.elasticsearch.transport.InboundPipelineTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated": "passed",
+          "org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased": "passed",
+          "org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.transport.InboundPipelineTests": "passed"
+        },
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0,
+          "total": 3
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated",
+          "org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased",
+          "org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling"
+        ],
+        "baseline_total": 0,
+        "patched_total": 3,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
       "compile_errors": []
     }
   },
   "summary": {
     "total_hunks_in_patch": 17,
-    "developer_aux_hunks_from_target": 4,
+    "developer_aux_hunks_from_target": 2,
     "phase0_baseline": {
-      "mode": "baseline-apply-failed",
-      "skipped": true,
-      "cached": false,
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 13,
-    "developer_aux_hunks": 4,
+    "developer_aux_hunks": 2,
     "processed_hunk_indices": [
       0,
       1,
@@ -279,25 +314,31 @@
     "applied_on_disk_ag3": 13,
     "synthesized_count": 0,
     "failed_hunks_total": 0,
-    "retry_contexts": [
-      {
-        "error_type": "context_mismatch",
-        "error_message": "aux patch apply failed for server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java: [git-strict] error: patch failed: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java:1\nerror: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java:1\nerror: server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java: patch does not apply\n[gnu-patch-dry-run] The next patch would create the file server/src/test",
-        "attempt_count": 1,
-        "suggested_action": "re-localize"
-      }
-    ],
+    "retry_contexts": [],
     "failed_hunks": [],
     "generated_patch_bytes": 16649,
     "target_patch_bytes": 21413,
-    "validation_passed": false,
-    "validation_failure_category": "context_mismatch",
-    "build_success": null,
-    "test_success": null,
-    "test_mode": null,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated",
+        "org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased",
+        "org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling"
+      ],
+      "baseline_total": 0,
+      "patched_total": 3,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 3,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

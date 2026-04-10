@@ -370,34 +370,44 @@ def collect_test_results(
             except Exception:
                 pass
 
+        abs_repo_path = os.path.abspath(repo_path)
         cmd = [
             "python3",
             helper_script,
             "--project", project,
-            "--repo", repo_path,
+            "--repo", abs_repo_path,
             "--target-classes", ",".join(sorted(set(target_classes))),
         ]
         if console_file:
             cmd += ["--console-file", console_file]
 
-        res = _run_cmd(cmd, cwd=repo_path, timeout=60)
-        if console_file:
-            try:
-                os.unlink(console_file)
-            except Exception:
-                pass
-
-        if res["success"]:
-            try:
-                return json.loads(res["output"])
-            except json.JSONDecodeError:
-                pass  # fall through to inline parser
+        try:
+            proc = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=60,
+            )
+            stdout_only = (proc.stdout or "").strip()
+            if proc.returncode == 0 and stdout_only:
+                return json.loads(stdout_only)
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
+            pass
+        finally:
+            if console_file:
+                try:
+                    os.unlink(console_file)
+                except Exception:
+                    pass
 
     # Inline fallback: scan common JUnit XML locations
     patterns = [
         os.path.join(repo_path, "**", "surefire-reports", "TEST-*.xml"),
         os.path.join(repo_path, "**", "build", "test-results", "**", "TEST-*.xml"),
         os.path.join(repo_path, "build", "all-test-results", "TEST-*.xml"),
+        os.path.join(repo_path, "**/target/surefire-reports/*.xml"),
+        os.path.join(repo_path, "**/JTwork/**/*.xml"),
     ]
     xml_paths: set[str] = set()
     for pat in patterns:
@@ -474,7 +484,7 @@ def detect_test_targets(
     if os.path.exists(helper_script):
         print(f"  [build_systems] Using helper script: {helper_script}")
         res = _run_cmd(
-            ["python3", helper_script, "--repo", repo_path, "--worktree"],
+            ["python3", helper_script, "--repo", os.path.abspath(repo_path), "--worktree"],
             cwd=repo_path,
             timeout=60,
         )
