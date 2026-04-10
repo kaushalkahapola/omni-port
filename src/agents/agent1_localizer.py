@@ -1,3 +1,5 @@
+import os
+import re
 from typing import List, Dict, Any
 from collections import Counter
 from src.core.state import BackportState, LocalizationResult
@@ -7,6 +9,134 @@ from src.localization.stage2_fuzzy import run_fuzzy_localization
 from src.localization.stage3_gumtree import run_gumtree_localization
 from src.localization.stage4_javaparser import run_javaparser_localization
 from src.localization.stage5_embedding import run_embedding_localization
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Hunk Segregation
+# ──────────────────────────────────────────────────────────────────────────────
+
+_TEST_SOURCE_DIRS = (
+    "/src/test/java/",
+    "/src/internalClusterTest/java/",
+    "/src/javaRestTest/java/",
+    "/src/yamlRestTest/java/",
+    "/src/integTest/java/",
+    "/src/integrationTest/java/",
+)
+
+_AUTOGEN_PATTERNS = [
+    r"lexer\.java$",
+    r"parser\.java$",
+    r"baselistener\.java$",
+    r"listener\.java$",
+    r"basevisitor\.java$",
+    r"visitor\.java$",
+    r"outerclass\.java$",
+    r"pb\.java$",
+    r"pborbuilder\.java$",
+    r"grpc\.java$",
+]
+
+
+def _is_test_file(file_path: str) -> bool:
+    p = (file_path or "").replace("\\", "/").lower()
+    # Path-based detection
+    if any(d in p for d in (d.lower() for d in _TEST_SOURCE_DIRS)):
+        return True
+    # File-name based: TestFoo.java or FooTest.java / FooTests.java / FooIT.java
+    filename = os.path.basename(p)
+    return (
+        filename.endswith(("test.java", "tests.java", "it.java", "testcase.java"))
+        or filename.startswith("test") and filename.endswith(".java")
+    )
+
+
+def _is_auto_generated_java_file(file_path: str) -> bool:
+    normalized = (file_path or "").replace("\\", "/").lower()
+    for pattern in _AUTOGEN_PATTERNS:
+        if re.search(pattern, normalized):
+            return True
+    return False
+
+
+def _is_auxiliary_hunk(hunk: Dict[str, Any]) -> bool:
+    """
+    Returns True if this hunk should bypass the LLM pipeline and go directly
+    to the validation stage:
+      - Non-Java files (config, XML, build files, etc.)
+      - Test Java files
+      - Auto-generated Java files (ANTLR, Protobuf, gRPC, etc.)
+    """
+    file_path = (hunk.get("file_path") or "").replace("\\", "/")
+    if not file_path.lower().endswith(".java"):
+        return True
+    if _is_test_file(file_path):
+        return True
+    if _is_auto_generated_java_file(file_path):
+        return True
+    return False
+
+
+def segregate_hunks(
+    hunks: List[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Splits hunks into:
+      - java_code_hunks: non-test, non-auto-generated Java source files → LLM pipeline
+      - developer_aux_hunks: test files, non-Java files, auto-generated Java → direct apply
+
+    Each auxiliary hunk gets a `hunk_text` field built from its raw unified diff
+    lines (required for git-apply during validation), plus `file_operation` and
+    `insertion_line` fields that the validator needs.
+    """
+    java_code_hunks: List[Dict[str, Any]] = []
+    developer_aux_hunks: List[Dict[str, Any]] = []
+
+    for hunk in hunks:
+        if _is_auxiliary_hunk(hunk):
+            aux = dict(hunk)
+            # Build hunk_text for git-apply if not already present
+            if not aux.get("hunk_text"):
+                aux["hunk_text"] = _build_hunk_text(hunk)
+            if not aux.get("file_operation"):
+                aux["file_operation"] = "MODIFIED"
+            if not aux.get("insertion_line"):
+                aux["insertion_line"] = 0
+            aux["intent_verified"] = True
+            developer_aux_hunks.append(aux)
+        else:
+            java_code_hunks.append(hunk)
+
+    return java_code_hunks, developer_aux_hunks
+
+
+def _build_hunk_text(hunk: Dict[str, Any]) -> str:
+    """
+    Reconstruct a minimal unified diff hunk text from old_content / new_content
+    fields when raw hunk_text is not already stored.
+    """
+    old_lines = (hunk.get("old_content") or "").splitlines(keepends=True)
+    new_lines = (hunk.get("new_content") or "").splitlines(keepends=True)
+
+    # Compute a simple diff: lines only in old → removed, only in new → added,
+    # shared prefix/suffix lines → context.  For simple hunks this is accurate.
+    old_set = set(old_lines)
+    new_set = set(new_lines)
+
+    body_lines = []
+    for line in old_lines:
+        if line not in new_set:
+            body_lines.append(f"-{line}" if line.endswith("\n") else f"-{line}\n")
+        else:
+            body_lines.append(f" {line}" if line.endswith("\n") else f" {line}\n")
+    for line in new_lines:
+        if line not in old_set:
+            body_lines.append(f"+{line}" if line.endswith("\n") else f"+{line}\n")
+
+    src_count = sum(1 for l in body_lines if l.startswith(("-", " ")))
+    tgt_count = sum(1 for l in body_lines if l.startswith(("+", " ")))
+    header = f"@@ -1,{src_count} +1,{tgt_count} @@\n"
+    return header + "".join(body_lines)
 
 def _is_false_license_header_match(
     repo_path: str, canonical_file: str, res: LocalizationResult, hunk: Dict[str, Any]
@@ -157,15 +287,29 @@ def _apply_inter_hunk_consistency(
 def localize_hunks(state: BackportState) -> BackportState:
     """
     Agent 1: Code Localizer
-    Executes the 5-stage hybrid localization per-hunk, per-file, then applies
-    an inter-hunk consistency check to correct outlier file assignments when
-    multiple hunks from the same source file disagree on the target file.
+
+    Step 0: Filter mainline hunks to Java-code-only (strip test/non-Java/auto-gen).
+      developer_aux_hunks is pre-populated by the caller from the target patch
+      (the actual developer backport). Agent 1 must NOT overwrite it — those aux
+      hunks must apply verbatim against the target branch, so they come from the
+      developer's real backport, not from the mainline patch.
+
+    Step 1: Execute the 5-stage hybrid localization per-hunk, per-file.
+
+    Step 2: Apply an inter-hunk consistency check to correct outlier file
+    assignments when multiple hunks from the same source file disagree.
     """
     repo_path = state["target_repo_path"]
-    hunks = state.get("hunks", [])
+    all_hunks = state.get("hunks", [])
+
+    # Step 0: Filter mainline hunks — keep only Java production code hunks for the
+    # LLM pipeline. developer_aux_hunks (from target_patch) are left untouched.
+    java_code_hunks, _ = segregate_hunks(all_hunks)
+    state["hunks"] = java_code_hunks
+    # developer_aux_hunks pre-populated by caller; do NOT overwrite
 
     results: List[LocalizationResult] = []
-    for hunk in hunks:
+    for hunk in java_code_hunks:
         file_path = hunk.get("file_path", "")
         if file_path:
             loc_result = localizer_pipeline(repo_path, file_path, hunk)
@@ -180,7 +324,7 @@ def localize_hunks(state: BackportState) -> BackportState:
                 end_line=0,
             ))
 
-    results = _apply_inter_hunk_consistency(repo_path, hunks, results)
+    results = _apply_inter_hunk_consistency(repo_path, java_code_hunks, results)
 
     state["localization_results"] = results
     return state

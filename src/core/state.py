@@ -84,6 +84,14 @@ class BackportState(TypedDict):
     # renames) — Agent 5 picks these up regardless of localization confidence/method.
     structural_escalation_indices: List[int]
 
+    # Developer auxiliary hunks: hunks from the original developer patch that bypass
+    # the LLM pipeline and are applied directly during validation. Includes:
+    #   - Test file hunks (src/test/java/, src/internalClusterTest/java/, etc.)
+    #   - Non-Java file hunks (config, XML, build files, etc.)
+    #   - Auto-generated Java file hunks (ANTLR, Protobuf, gRPC, etc.)
+    # Populated by Agent 1 during hunk segregation before localization.
+    developer_aux_hunks: List[Dict[str, Any]]
+
     # Retry and Validation
     retry_contexts: List[PatchRetryContext]
     current_attempt: int
@@ -94,6 +102,14 @@ class BackportState(TypedDict):
 
     # HunkRouter decision: "fast_apply" | "namespace_adapter" | "structural_refactor"
     routing_decision: str
+
+    # Validation outcome (Agent 7)
+    validation_passed: bool
+    validation_attempts: int
+    validation_error_context: str
+    validation_failure_category: str  # "context_mismatch" | "api_mismatch" | "test_failure" | "infrastructure" | ""
+    validation_retry_files: List[str]  # files to re-localize on retry
+    validation_results: Dict[str, Any]  # detailed per-step results
 
     # Metrics
     tokens_used: int
