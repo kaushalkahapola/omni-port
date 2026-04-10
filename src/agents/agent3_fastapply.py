@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 from src.backport_claw.apply_hunk import CLAWHunkApplier, CLAWHunkError
+from src.tools.import_cleanup import cleanup_java_imports
 
 # High-confidence git methods: always claim the hunk even if exact match fails.
 _FAST_APPLY_METHODS = {"git_exact", "git_pickaxe"}
@@ -114,6 +115,9 @@ class FastApplyAgent:
         if not success:
             return {"applied": False, "file_path": file_path, "error": error}
 
+        if file_path.endswith(".java"):
+            modified_content = cleanup_java_imports(modified_content)
+
         write_ok = self.write_target_file(file_path, modified_content)
         if not write_ok:
             return {
@@ -164,26 +168,16 @@ def fast_apply_agent(state: BackportState) -> BackportState:
         file_content = agent.read_target_file(loc_result.file_path)
         can_exact_match = file_content is not None and old_string in file_content
 
-        if not can_exact_match and not agent.is_high_confidence_git(loc_result):
-            # Exact string not in file and localization is imprecise →
-            # leave unclaimed so Agent 4 (namespace) can adapt it.
+        if not can_exact_match:
+            # Exact string not in file → leave unclaimed so Agent 4/5/6 can adapt it.
+            # This applies even for high-confidence git localization: the file is right
+            # but the content has drifted, so downstream LLM agents must handle it.
             continue
 
-        # Claim this hunk.
+        # Claim only when we have a confirmed verbatim match.
         processed_indices.append(i)
 
-        if can_exact_match:
-            result = agent.process_hunk(hunk, loc_result)
-        else:
-            # High-confidence git but exact string missing → content has genuinely changed.
-            result = {
-                "applied": False,
-                "file_path": loc_result.file_path,
-                "error": (
-                    f"Exact match not found in {loc_result.file_path} despite "
-                    f"high-confidence {loc_result.method_used} localization"
-                ),
-            }
+        result = agent.process_hunk(hunk, loc_result)
 
         if result["applied"]:
             applied_hunks.append(result)

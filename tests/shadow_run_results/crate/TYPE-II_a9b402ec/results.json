@@ -1,0 +1,161 @@
+{
+  "run_timestamp": "2026-04-10T06:35:00.468236",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "a9b402ecedd96c3db5a4945937b7d90ae03457a3",
+  "backport_commit": "f87b356d106bbe897b577dfabc996bf8821d7c46",
+  "description": "Example CrateDB patch",
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.96,
+      "error": null,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 31,
+          "end_line": 38,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 40,
+          "end_line": 45,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 53,
+          "end_line": 67,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 77,
+          "end_line": 82,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 105,
+          "end_line": 110,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 135,
+          "end_line": 138,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.51,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.95,
+        "reasoning": "The patch introduces new imports, adds a new dependency injection parameter (ClusterService), modifies constructor signatures, and adds new methods to handle snapshots in progress. It also modifies existing methods to integrate the new functionality. These changes involve structural modifications to the class, including new method definitions and changes to class state, indicating structural changes rather than simple string replacements or formatting fixes. The localization evidence shows most hunks found via 'git_exact' with high confidence, but one hunk found via 'git_pickaxe' with slightly lower confidence, supporting the classification as TYPE_III. The patch is not trivial but does not represent deep refactoring or complete redesign, so TYPE_III is appropriate. The estimated token budget is moderate due to the complexity of understanding and integrating the new snapshot handling logic and constructor changes.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 5,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 4.05,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
+          "old_string": "import org.elasticsearch.snapshots.SnapshotInfo;\nimport org.elasticsearch.snapshots.SnapshotShardFailure;\nimport org.elasticsearch.snapshots.SnapshotState;\n\nimport org.jetbrains.annotations.VisibleForTesting;\nimport io.crate.common.collections.Lists;",
+          "new_string": "import org.elasticsearch.snapshots.SnapshotInfo;\nimport org.elasticsearch.snapshots.SnapshotShardFailure;\nimport org.elasticsearch.snapshots.SnapshotState;\nimport org.elasticsearch.snapshots.SnapshotsService;\nimport org.jetbrains.annotations.Nullable;\nimport org.jetbrains.annotations.VisibleForTesting;\nimport io.crate.common.collections.Lists;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 12,
+    "java_production_hunks": 6,
+    "synthesized_apply_errors": [],
+    "processed_hunk_indices": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      1
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk": 5,
+    "synthesized_applied": 1,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 5390,
+    "target_patch_bytes": 12329
+  }
+}

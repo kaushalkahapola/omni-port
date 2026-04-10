@@ -1,0 +1,119 @@
+{
+  "run_timestamp": "2026-04-10T08:50:17.535533",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "e046b311fc71b35e8a1c52f53eabd35af3d09e24",
+  "backport_commit": "c9177d67b9b875475a7e1e6af204ab21385d4c6c",
+  "description": "",
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 1.69,
+      "error": null,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 22,
+          "end_line": 27,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.897,
+          "start_line": 261,
+          "end_line": 267,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.753,
+          "start_line": 736,
+          "end_line": 763,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.05,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch involves a small refactor of a method by removing a conditional branch and simplifying the return logic, as well as adding a test case. The changes are mostly whitespace and minor code restructuring without altering the overall structure or API. The localization evidence shows the hunks were found via 'git_exact' and 'git_pickaxe' with high confidence, indicating minor differences and some fuzzy matching. Therefore, this patch fits TYPE_II complexity, requiring fuzzy matching due to minor code changes and formatting adjustments.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 17.28,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 33.23,
+      "error": null,
+      "refactored_count": 1
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 2,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "old_string": "        leafNamesByOid = new HashMap<>();\n        Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n            .filter(r -> r.oid() != Metadata.COLUMN_OID_UNASSIGNED)\n            .forEach(r -> leafNamesByOid.put(Long.toString(r.oid()), r.column().leafName()));\n        this.analyzers = analyzers;\n        this.ident = ident;\n        this.pkConstraintName = pkConstraintName;",
+          "new_string": "        leafNamesByOid = new HashMap<>();\n        Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n            .filter(r -> r.oid() != COLUMN_OID_UNASSIGNED)\n            .forEach(r -> leafNamesByOid.put(Long.toString(r.oid()), r.column().leafName()));\n        this.analyzers = analyzers;\n        this.ident = ident;\n        this.pkConstraintName = pkConstraintName;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "old_string": "        return notNullColumns;\n    }\n\n    /**\n     * Starting from 5.5 column OID-s are used as source keys.\n     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n     * <ul>\n     *  <li>OBJECT (IGNORED) sub-columns</li>\n     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n     * </ul>\n     */\n    public UnaryOperator<String> lookupNameBySourceKey() {\n        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n            return oidOrName -> {\n                String name = leafNamesByOid.get(oidOrName);\n                if (name == null) {\n                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                    }\n                    return oidOrName;\n                }\n                return name;\n            };\n        } else {\n            return UnaryOperator.identity();\n        }\n    }",
+          "new_string": "        return notNullColumns;\n    }\n\n    /**\n     * Starting from 5.5 column OID-s are used as source keys.\n     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n     * <ul>\n     *  <li>OBJECT (IGNORED) sub-columns</li>\n     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n     * </ul>\n     */\n    public UnaryOperator<String> lookupNameBySourceKey() {\n        return oidOrName -> {\n            String name = leafNamesByOid.get(oidOrName);\n            if (name == null) {\n                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                }\n                return oidOrName;\n            }\n            return name;\n        };\n    }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "java_production_hunks": 3,
+    "synthesized_apply_errors": [],
+    "processed_hunk_indices": [
+      0,
+      1,
+      2
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk": 1,
+    "synthesized_applied": 2,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 3225,
+    "target_patch_bytes": 5277
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "run_timestamp": "2026-04-10T09:07:03.327579",
+  "repo": "crate",
+  "patch_type": "TYPE-III",
+  "original_commit": "d150a2e57f8a6da80bacf146f934d8e0cd87466b",
+  "backport_commit": "007682aa53eebc124e6406977dd03a50d3433630",
+  "description": "",
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 23.1,
+      "error": null,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.85,
+          "start_line": 62,
+          "end_line": 73,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 122,
+          "end_line": 132,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 5.78,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.9,
+        "reasoning": "The patch involves adding a new validation check when adding a sub-column to an OBJECT(IGNORED) column if the table is not empty. The changes include adding logic to check existing data conditions and throwing an exception, updating release notes, and adding integration tests. The localization evidence shows the main code changes were found via 'git_pickaxe' with high confidence, indicating some fuzzy matching due to code context changes. The patch does not involve deep structural refactoring or redesign but requires understanding of existing code structure and some fuzzy matching to apply correctly, classifying it as TYPE_II complexity.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 9.22,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "old_string": "import io.crate.execution.support.ChainableActions;\nimport io.crate.metadata.GeneratedReference;\nimport io.crate.metadata.PartitionName;\nimport io.crate.metadata.RelationName;\nimport io.crate.metadata.table.TableInfo;\nimport io.crate.replication.logical.LogicalReplicationService;\nimport io.crate.replication.logical.metadata.Publication;\n\n@Singleton\npublic class AlterTableOperation {",
+          "new_string": "import io.crate.execution.support.ChainableActions;\nimport io.crate.metadata.GeneratedReference;\nimport io.crate.metadata.PartitionName;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.RelationName;\nimport io.crate.metadata.table.TableInfo;\nimport io.crate.replication.logical.LogicalReplicationService;\nimport io.crate.replication.logical.metadata.Publication;\nimport io.crate.sql.tree.ColumnPolicy;\n\n@Singleton\npublic class AlterTableOperation {",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "java_production_hunks": 2,
+    "synthesized_apply_errors": [],
+    "processed_hunk_indices": [
+      1,
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk": 1,
+    "synthesized_applied": 1,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1875,
+    "target_patch_bytes": 5591
+  }
+}

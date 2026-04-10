@@ -1,23 +1,15 @@
 from typing import Optional, Dict, Any
 from src.core.state import LocalizationResult
-from src.tools.java_client import get_java_client
+from src.tools.java_http_client import gumtree_diff
 
 def run_gumtree_localization(repo_path: str, file_path: str, hunk: Dict[str, Any]) -> Optional[LocalizationResult]:
     """
     Stage 3: AST structural matching via GumTree (~2-5s per file)
-    Calls the Java Microservice API using JSON over stdin/stdout.
+    Calls the Java microservice via HTTP (Spring Boot on port 8080).
     """
-    client = get_java_client()
     old_content = hunk.get("old_content", "")
-    
-    # Request the AST Diff from GumTree via Java
-    payload = {
-        "repo_path": repo_path,
-        "file_path": file_path,
-        "old_content": old_content
-    }
-    
-    response = client.send_request("gumtree_diff", payload)
+
+    response = gumtree_diff(repo_path, file_path, old_content)
     
     if response.get("status") == "ok":
         # Require explicit start_line from the microservice — if the Java side
