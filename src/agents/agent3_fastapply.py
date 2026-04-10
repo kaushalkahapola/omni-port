@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 from src.backport_claw.apply_hunk import CLAWHunkApplier, CLAWHunkError
+from src.tools.import_cleanup import cleanup_java_imports
 
 # High-confidence git methods: always claim the hunk even if exact match fails.
 _FAST_APPLY_METHODS = {"git_exact", "git_pickaxe"}
@@ -113,6 +114,9 @@ class FastApplyAgent:
         )
         if not success:
             return {"applied": False, "file_path": file_path, "error": error}
+
+        if file_path.endswith(".java"):
+            modified_content = cleanup_java_imports(modified_content)
 
         write_ok = self.write_target_file(file_path, modified_content)
         if not write_ok:

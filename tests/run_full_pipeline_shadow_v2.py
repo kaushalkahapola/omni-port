@@ -20,10 +20,13 @@ Usage:
   # Filter by specific repo and type
   python run_full_pipeline_shadow_v2.py --repo elasticsearch --type TYPE-II
 
+  # Run selected commit only (mainline commit)
+  python run_full_pipeline_shadow_v2.py --project elasticsearch --commit abc123def456
+
   # Limit to N patches total
   python run_full_pipeline_shadow_v2.py --count 5
 
-For each patch, creates a folder under tests/shadow_run_results/<TYPE>_<sha>/ with:
+For each patch, creates a folder under tests/shadow_run_results/<project>/<TYPE>_<sha>/ with:
   mainline.patch  — the original commit diff (what we're backporting FROM)
   target.patch    — the actual backport commit (ground truth to compare against)
   generated.patch — the diff we produced by running the full pipeline
@@ -46,6 +49,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.core.state import BackportState
 from src.tools.patch_parser import parse_unified_diff
+from src.tools.import_cleanup import cleanup_java_file
 from src.agents.agent1_localizer import localize_hunks
 from src.agents.agent2_classifier import classify_patch
 from src.agents.agent3_fastapply import fast_apply_agent
@@ -74,15 +78,27 @@ def get_patches_from_config(
     repo_filter: Optional[str] = None,
     type_filter: Optional[str] = None,
     count_limit: Optional[int] = None,
+    project_filter: Optional[str] = None,
+    commit_filter: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Extract patches from config, with optional filters.
     Returns list of dicts with keys: type, original_commit, backport_commit, repo_path, description
+
+    Args:
+        config: YAML config dict
+        repo_filter: Filter by repository name
+        type_filter: Filter by patch type
+        count_limit: Limit number of patches
+        project_filter: Filter by project name (when using --project)
+        commit_filter: Filter by original commit SHA (when using --commit)
     """
     patches = []
 
     for repo_name, repo_config in config.get("repos", {}).items():
         if repo_filter and repo_name != repo_filter:
+            continue
+        if project_filter and repo_name != project_filter:
             continue
 
         repo_path = repo_config.get("path")
@@ -90,11 +106,15 @@ def get_patches_from_config(
             if type_filter and patch.get("type") != type_filter:
                 continue
 
+            original_commit = patch.get("original_commit", "")
+            if commit_filter and original_commit != commit_filter:
+                continue
+
             patches.append({
                 "repo": repo_name,
                 "repo_path": repo_path,
                 "type": patch.get("type", "UNKNOWN"),
-                "original_commit": patch.get("original_commit"),
+                "original_commit": original_commit,
                 "backport_commit": patch.get("backport_commit"),
                 "description": patch.get("description", ""),
             })
@@ -175,9 +195,13 @@ def run_agent(label: str, fn, state: BackportState, agent_records: dict) -> Back
 def apply_synthesized_hunks(repo_path: str, synthesized_hunks: list) -> list:
     """
     Applies Agent 6 synthesized hunks (old_string → new_string) to disk.
+    After all hunks for a given Java file are applied, runs import deduplication
+    to remove any duplicate import lines introduced by the namespace adapter.
     Returns a list of error messages for hunks that could not be applied.
     """
     errors = []
+    modified_java_files: set = set()
+
     for sh in synthesized_hunks:
         file_path = sh.get("file_path", "")
         old_str = sh.get("old_string", "")
@@ -192,8 +216,15 @@ def apply_synthesized_hunks(repo_path: str, synthesized_hunks: list) -> list:
         content = target.read_text(encoding="utf-8")
         if old_str in content:
             target.write_text(content.replace(old_str, new_str, 1), encoding="utf-8")
+            if file_path.endswith(".java"):
+                modified_java_files.add(str(target))
         else:
             errors.append(f"old_string not found in {file_path} (len={len(old_str)})")
+
+    # Import cleanup: run once per modified Java file after all hunks are applied.
+    for java_file in modified_java_files:
+        cleanup_java_file(java_file)
+
     return errors
 
 
@@ -207,7 +238,8 @@ def process_patch(item: dict, run_ts: str) -> None:
     repo_name = item["repo"]
     description = item.get("description", "")
 
-    out_dir = OUTPUT_DIR / f"{patch_type}_{original_commit[:8]}"
+    # Create separate folder per project
+    out_dir = OUTPUT_DIR / repo_name / f"{patch_type}_{original_commit[:8]}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*64}")
@@ -278,6 +310,7 @@ def process_patch(item: dict, run_ts: str) -> None:
         current_attempt=1,
         max_retries=3,
         synthesis_status="",
+        routing_decision="",
         tokens_used=0,
         wall_clock_time=0.0,
         status="started",
@@ -389,6 +422,7 @@ Examples:
   python run_full_pipeline_shadow_v2.py --config patches.yaml
   python run_full_pipeline_shadow_v2.py --repo elasticsearch --type TYPE-I
   python run_full_pipeline_shadow_v2.py --count 5
+  python run_full_pipeline_shadow_v2.py --project elasticsearch --commit abc123def456
         """
     )
     parser.add_argument(
@@ -404,10 +438,22 @@ Examples:
         help="Filter by repository name (e.g., elasticsearch, crate)",
     )
     parser.add_argument(
+        "--project",
+        type=str,
+        default=None,
+        help="Filter by project name (mainline project only)",
+    )
+    parser.add_argument(
         "--type",
         type=str,
         default=None,
         help="Filter by patch type (e.g., TYPE-I, TYPE-II, TYPE-III)",
+    )
+    parser.add_argument(
+        "--commit",
+        type=str,
+        default=None,
+        help="Filter by original commit SHA (mainline commit)",
     )
     parser.add_argument(
         "--count",
@@ -432,7 +478,9 @@ Examples:
     patches = get_patches_from_config(
         config,
         repo_filter=args.repo,
+        project_filter=args.project,
         type_filter=args.type,
+        commit_filter=args.commit,
         count_limit=args.count,
     )
 

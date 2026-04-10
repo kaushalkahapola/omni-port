@@ -6,19 +6,26 @@ from src.core.state import LocalizationResult
 def run_git_localization(repo_path: str, file_path: str, hunk: Dict[str, Any]) -> Optional[LocalizationResult]:
     """
     Stage 1: Git-native localization (Free, <100ms)
-    Uses direct file read for exact-string match, then git pickaxe for renames.
+    Two sub-methods in order:
+      1. Direct exact-string match against current file content
+      2. File rename detection (git log --follow --diff-filter=R)
+
     Resolves 100% of TYPE I patches.
 
     Returns ONLY exact-match results (no strip-comparison).
     Whitespace-drifted matches are left for Stage 2 (fuzzy).
+
+    NOTE: git log -S pickaxe search was trialled here but removed because
+    it returns line numbers from historical diffs (stale), not the current
+    file state. Hunks not found exactly here correctly fall through to
+    Stage 2 (fuzzy) which finds the current location reliably.
     """
     old_content = hunk.get("old_content", "")
     old_content_lines = old_content.splitlines()
     if not old_content_lines:
         return None
 
-    # Attempt 1: Direct file read — find all occurrences of the first line exactly,
-    # then verify the full block matches exactly (no strip).
+    # ── Attempt 1: Direct file read — exact-string match ─────────────────────
     try:
         with open(f"{repo_path}/{file_path}", "r") as f:
             lines = f.readlines()
@@ -50,7 +57,8 @@ def run_git_localization(repo_path: str, file_path: str, hunk: Dict[str, Any]) -
     except FileNotFoundError:
         pass
 
-    # Attempt 2: Rename detection — follow renames for THIS specific file path.
+    # ── Attempt 2: Rename detection ───────────────────────────────────────────
+    # Follow renames for THIS specific file path to find its new location.
     # Uses --follow --diff-filter=R so we only get renames of the exact file,
     # not unrelated renames from a global content search.
     try:

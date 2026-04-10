@@ -1,8 +1,10 @@
 {
-  "run_timestamp": "2026-04-10T03:18:41.402517",
+  "run_timestamp": "2026-04-10T04:38:28.794552",
+  "repo": "elasticsearch",
   "patch_type": "TYPE-IV",
   "original_commit": "110b2060a15dce0236c47345de094c4dae05e991",
   "backport_commit": "88f07a84fc4b8519fcf8a1ed8da4dca30fc51c46",
+  "description": "Structural refactor - GumTree AST analysis required",
   "agents": {
     "agent1_localizer": {
       "elapsed_s": 6.13,
@@ -65,12 +67,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.3,
+      "elapsed_s": 5.15,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.95,
-        "reasoning": "The patch involves adding a new deprecation check method and modifying existing lists of checks. The changes include adding a new method in NodeDeprecationChecks.java, removing an old method in IndexDeprecationChecks.java, and updating test cases accordingly. The localization evidence shows most hunks are found via 'git_exact' with high confidence, but some are found via 'fuzzy' matching with confidence around 0.93-0.99, indicating some formatting or minor structural drift. There are no deep structural refactorings or API redesigns, so the patch complexity is best classified as TYPE_II, involving whitespace/formatting drift and minor structural changes requiring fuzzy matching. The token budget estimate is moderate due to the size and number of files affected and the need to carefully adapt the new method and tests.",
+        "reasoning": "The patch involves adding a new deprecation check method and modifying existing lists of checks. The changes include adding a new method in NodeDeprecationChecks.java and updating DeprecationChecks.java to include this new check. The patch also removes an old check method from IndexDeprecationChecks.java. The localization evidence shows that most hunks are found via 'git_exact' or 'fuzzy' with high confidence, indicating that the patch applies with minor differences such as whitespace or slight code shifts. There are no structural or API redesigns, so the patch complexity is best classified as TYPE_II (whitespace/formatting drift requiring fuzzy matching). The token budget estimate is moderate due to the size and number of files changed but no deep structural refactoring is involved.",
         "is_auto_generated": false
       }
     },
@@ -97,7 +99,7 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 15.7,
+      "elapsed_s": 16.62,
       "error": null,
       "adapted_count": 3
     },
@@ -115,18 +117,18 @@
       "synthesized_hunks": [
         {
           "file_path": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
-          "old_string": "import org.elasticsearch.index.IndexVersion;\nimport org.elasticsearch.index.IndexVersions;\nimport org.elasticsearch.index.engine.frozen.FrozenEngine;\nimport org.elasticsearch.index.mapper.SourceFieldMapper;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;",
-          "new_string": "import org.elasticsearch.index.IndexVersion;\nimport org.elasticsearch.index.IndexVersions;\nimport org.elasticsearch.index.engine.frozen.FrozenEngine;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;",
+          "old_string": "import org.elasticsearch.common.time.LegacyFormatNames;\nimport org.elasticsearch.index.IndexModule;\nimport org.elasticsearch.index.IndexSettings;\nimport org.elasticsearch.index.IndexVersion;\nimport org.elasticsearch.index.IndexVersions;\nimport org.elasticsearch.index.engine.frozen.FrozenEngine;\nimport org.elasticsearch.index.mapper.SourceFieldMapper;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;\n\nimport java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.List;\n",
+          "new_string": "import org.elasticsearch.common.time.LegacyFormatNames;\nimport org.elasticsearch.index.IndexModule;\nimport org.elasticsearch.index.IndexSettings;\nimport org.elasticsearch.index.IndexVersion;\nimport org.elasticsearch.index.IndexVersions;\nimport org.elasticsearch.index.engine.frozen.FrozenEngine;\nimport org.elasticsearch.index.IndexSettings;\nimport org.elasticsearch.index.IndexVersion;\nimport org.elasticsearch.index.engine.frozen.FrozenEngine;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;\nimport org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;\nimport org.elasticsearch.xpack.core.deprecation.DeprecationIssue;\n\nimport java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.List;\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
           "file_path": "x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java",
-          "old_string": "    static DeprecationIssue checkSourceModeInMapping(IndexMetadata indexMetadata, ClusterState clusterState) {\n        if (indexMetadata.getCreationVersion().onOrAfter(IndexVersions.DEPRECATE_SOURCE_MODE_MAPPER)) {\n            boolean[] useSourceMode = { false };\n            fieldLevelMappingIssue(indexMetadata, ((mappingMetadata, sourceAsMap) -> {\n                Object source = sourceAsMap.get(\"_source\");\n                if (source instanceof Map<?, ?> sourceMap) {\n                    if (sourceMap.containsKey(\"mode\")) {\n                        useSourceMode[0] = true;\n                    }\n                }\n            }));\n            if (useSourceMode[0]) {\n                return new DeprecationIssue(\n                    DeprecationIssue.Level.CRITICAL,\n                    SourceFieldMapper.DEPRECATION_WARNING,\n                    \"https://github.com/elastic/elasticsearch/pull/117172\",\n                    SourceFieldMapper.DEPRECATION_WARNING,\n                    false,\n                    null\n                );\n            }\n        }\n        return null;\n    }",
-          "new_string": "    static DeprecationIssue deprecatedCamelCasePattern(IndexMetadata indexMetadata, ClusterState clusterState) {\n        List<String> fields = new ArrayList<>();\n        fieldLevelMappingIssue(indexMetadata, (mappingMetadata, sourceAsMap) -> {\n            // Implementation continues here...\n        });",
+          "old_string": "            }\n        }\n\n        return issues;\n    }\n\n    static DeprecationIssue checkSourceModeInMapping(IndexMetadata indexMetadata, ClusterState clusterState) {\n        if (indexMetadata.getCreationVersion().onOrAfter(IndexVersions.DEPRECATE_SOURCE_MODE_MAPPER)) {\n            boolean[] useSourceMode = { false };\n            fieldLevelMappingIssue(indexMetadata, ((mappingMetadata, sourceAsMap) -> {\n                Object source = sourceAsMap.get(\"_source\");\n                if (source instanceof Map<?, ?> sourceMap) {\n                    if (sourceMap.containsKey(\"mode\")) {\n                        useSourceMode[0] = true;\n                    }\n                }\n            }));\n            if (useSourceMode[0]) {\n                return new DeprecationIssue(\n                    DeprecationIssue.Level.CRITICAL,\n                    SourceFieldMapper.DEPRECATION_WARNING,\n                    \"https://github.com/elastic/elasticsearch/pull/117172\",\n                    SourceFieldMapper.DEPRECATION_WARNING,\n                    false,\n                    null\n                );\n            }\n        }\n        return null;\n    }\n\n    static DeprecationIssue deprecatedCamelCasePattern(IndexMetadata indexMetadata, ClusterState clusterState) {\n        List<String> fields = new ArrayList<>();\n        fieldLevelMappingIssue(\n            indexMetadata,\n            ((mappingMetadata, sourceAsMap) -> fields.addAll(\n                findInPropertiesRecursively(\n",
+          "new_string": "            }\n        }\n\n        return issues;\n    }\n\n    static DeprecationIssue checkSourceModeInMapping(IndexMetadata indexMetadata, ClusterState clusterState) {\n        if (indexMetadata.getCreationVersion().onOrAfter(IndexVersions.DEPRECATE_SOURCE_MODE_MAPPER)) {\n            boolean[] useSourceMode = { false };\n            fieldLevelMappingIssue(indexMetadata, ((mappingMetadata, sourceAsMap) -> {\n                Object source = sourceAsMap.get(\"_source\");\n                if (source instanceof Map<?, ?> sourceMap) {\n                    if (sourceMap.containsKey(\"mode\")) {\n                        useSourceMode[0] = true;\n                    }\n                }\n            }));\n            if (useSourceMode[0]) {\n                return new DeprecationIssue(\n                    DeprecationIssue.Level.CRITICAL,\n                    SourceFieldMapper.DEPRECATION_WARNING,\n                    \"https://github.com/elastic/elasticsearch/pull/117172\",\n                    SourceFieldMapper.DEPRECATION_WARNING,\n                    false,\n                    null\n                );\n            }\n        }\n        return null;\n    }\n    static DeprecationIssue deprecatedCamelCasePattern(IndexMetadata indexMetadata, ClusterState clusterState) {\n        List<String> fields = new ArrayList<>();\n        fieldLevelMappingIssue(\n            indexMetadata,\n            ((mappingMetadata, sourceAsMap) -> fields.addAll(\n                findInPropertiesRecursively(\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
@@ -159,7 +161,7 @@
     "failed_hunks_total": 0,
     "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 7354,
+    "generated_patch_bytes": 5974,
     "target_patch_bytes": 14420
   }
 }

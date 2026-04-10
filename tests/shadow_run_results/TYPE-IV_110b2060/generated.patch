@@ -23,7 +23,7 @@ index e62ffbb2ab7..898367ca706 100644
  
      static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(
 diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
-index f09f783cab0..3c0ea1f9176 100644
+index f09f783cab0..6cb4796add0 100644
 --- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
 +++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
 @@ -16,7 +16,6 @@ import org.elasticsearch.index.IndexSettings;
@@ -34,42 +34,14 @@ index f09f783cab0..3c0ea1f9176 100644
  import org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;
  import org.elasticsearch.xpack.core.deprecation.DeprecationIssue;
  
-@@ -204,30 +203,11 @@ public class IndexDeprecationChecks {
-         return issues;
+@@ -228,7 +227,6 @@ public class IndexDeprecationChecks {
+         }
+         return null;
      }
- 
--    static DeprecationIssue checkSourceModeInMapping(IndexMetadata indexMetadata, ClusterState clusterState) {
--        if (indexMetadata.getCreationVersion().onOrAfter(IndexVersions.DEPRECATE_SOURCE_MODE_MAPPER)) {
--            boolean[] useSourceMode = { false };
--            fieldLevelMappingIssue(indexMetadata, ((mappingMetadata, sourceAsMap) -> {
--                Object source = sourceAsMap.get("_source");
--                if (source instanceof Map<?, ?> sourceMap) {
--                    if (sourceMap.containsKey("mode")) {
--                        useSourceMode[0] = true;
--                    }
--                }
--            }));
--            if (useSourceMode[0]) {
--                return new DeprecationIssue(
--                    DeprecationIssue.Level.CRITICAL,
--                    SourceFieldMapper.DEPRECATION_WARNING,
--                    "https://github.com/elastic/elasticsearch/pull/117172",
--                    SourceFieldMapper.DEPRECATION_WARNING,
--                    false,
--                    null
--                );
--            }
--        }
--        return null;
--    }
-+    static DeprecationIssue deprecatedCamelCasePattern(IndexMetadata indexMetadata, ClusterState clusterState) {
-+        List<String> fields = new ArrayList<>();
-+        fieldLevelMappingIssue(indexMetadata, (mappingMetadata, sourceAsMap) -> {
-+            // Implementation continues here...
-+        });
- 
+-
      static DeprecationIssue deprecatedCamelCasePattern(IndexMetadata indexMetadata, ClusterState clusterState) {
          List<String> fields = new ArrayList<>();
+         fieldLevelMappingIssue(
 diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java
 index 0d5863e42be..ac20d90590a 100644
 --- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java

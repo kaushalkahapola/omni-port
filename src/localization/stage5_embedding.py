@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 import faiss
 from transformers import RobertaTokenizer, RobertaModel
 from typing import Optional, Dict, Any

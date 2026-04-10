@@ -88,6 +88,9 @@ class BackportState(TypedDict):
     # Synthesis outcome
     synthesis_status: str  # "success" | "partial" | "failed"
 
+    # HunkRouter decision: "fast_apply" | "namespace_adapter" | "structural_refactor"
+    routing_decision: str
+
     # Metrics
     tokens_used: int
     wall_clock_time: float
