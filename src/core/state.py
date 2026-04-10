@@ -69,10 +69,24 @@ class BackportState(TypedDict):
     localization_results: List[LocalizationResult]
     hunks: List[Dict[str, Any]]
 
+    # Per-agent hunk outputs
+    applied_hunks: List[Dict[str, Any]]      # Agent 3: already written to disk
+    adapted_hunks: List[Dict[str, Any]]      # Agent 4: namespace-adapted, awaiting synthesis
+    refactored_hunks: List[Dict[str, Any]]   # Agent 5: structurally refactored, awaiting synthesis
+    synthesized_hunks: List[Dict[str, Any]]  # Agent 6: CLAW-verified, ready to apply
+    failed_hunks: List[Dict[str, Any]]       # Hunks that failed all processing
+
+    # Tracks which hunk indices (into state["hunks"]) have been claimed by an agent.
+    # Subsequent agents skip claimed indices so hunks aren't double-processed.
+    processed_hunk_indices: List[int]
+
     # Retry and Validation
     retry_contexts: List[PatchRetryContext]
     current_attempt: int
     max_retries: int
+
+    # Synthesis outcome
+    synthesis_status: str  # "success" | "partial" | "failed"
 
     # Metrics
     tokens_used: int

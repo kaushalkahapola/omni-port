@@ -1,21 +1,28 @@
 """
 Agent 5: Structural Refactor (Reasoning LLM)
 
-For TYPE IV/V patches. Handles deep structural changes where code
-has been refactored between versions. Uses GumTree edit scripts,
-japicmp reports, and call graphs to achieve semantic equivalence.
+Routed when:
+  - localization method is 'gumtree_ast', OR
+  - localization confidence < 0.6
 
-Uses Claude Opus for extended reasoning on complex refactorings.
+Uses the Reasoning-tier LLM with GumTree edit scripts, japicmp API change
+reports, and target context to achieve semantic equivalence across structurally
+divergent codebases.
 """
 
 from typing import Dict, List, Any, Optional
 from enum import Enum
 from pydantic import BaseModel, Field
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
+from src.core.llm_router import get_default_router, LLMTier
 
+_STRUCTURAL_METHODS = {"gumtree_ast"}
+_LOW_CONFIDENCE_THRESHOLD = 0.6
+
+
+# ── Data models ───────────────────────────────────────────────────────────────
 
 class EditType(str, Enum):
-    """GumTree edit operation types."""
     INSERT = "Insert"
     DELETE = "Delete"
     UPDATE = "Update"
@@ -23,312 +30,238 @@ class EditType(str, Enum):
 
 
 class GumTreeEdit(BaseModel):
-    """Represents a single GumTree edit operation."""
-    operation: EditType = Field(description="Type of edit")
-    node_type: str = Field(description="AST node type (e.g., MethodDeclaration)")
-    old_code: Optional[str] = Field(default=None, description="Original code snippet")
-    new_code: Optional[str] = Field(default=None, description="New code snippet")
-    old_line: Optional[int] = Field(default=None, description="Line in original file")
-    new_line: Optional[int] = Field(default=None, description="Line in target file")
+    operation: EditType
+    node_type: str
+    old_code: Optional[str] = None
+    new_code: Optional[str] = None
+    old_line: Optional[int] = None
+    new_line: Optional[int] = None
 
 
-class StructuralRefactorOutput(BaseModel):
-    """Output from structural refactoring."""
-    refactored_code: str = Field(description="The refactored code")
-    semantic_equivalence: float = Field(description="Confidence in semantic equivalence (0-1)")
-    edit_summary: str = Field(description="Summary of structural changes made")
+class StructuralAdaptationOutput(BaseModel):
+    """Structured output from the Reasoning LLM."""
+    refactored_code: str = Field(
+        description="The adapted Java code that achieves semantic equivalence in the target codebase"
+    )
+    confidence: float = Field(
+        description="Confidence in semantic equivalence (0.0–1.0)"
+    )
+    explanation: str = Field(
+        description="Brief explanation of the structural changes made"
+    )
     success: bool = Field(description="Whether refactoring succeeded")
-    error_message: Optional[str] = Field(description="Error if refactoring failed")
+    error_message: Optional[str] = Field(default=None)
 
+
+# ── Core class ────────────────────────────────────────────────────────────────
 
 class StructuralRefactor:
-    """
-    Handles deep structural refactoring for TYPE IV/V patches.
-    Uses reasoning-tier LLM for complex code transformations.
-    """
-
     def __init__(self, repo_path: str, llm_client=None):
         self.repo_path = repo_path
         self.llm_client = llm_client
 
+    # ── GumTree helpers ───────────────────────────────────────────────────────
+
     def parse_gumtree_edits(self, edit_script: str) -> List[GumTreeEdit]:
-        """
-        Parses GumTree edit script into structured edits.
-
-        GumTree edit script format:
-        Insert parent_id node_type attributes
-        Delete node_id
-        Update node_id property value
-        Move node_id old_parent_id new_parent_id
-
-        Returns:
-            List of GumTreeEdit objects
-        """
         edits = []
         for line in edit_script.strip().splitlines():
             parts = line.split()
             if not parts:
                 continue
-
             op = parts[0]
             if op == "Insert":
-                # Insert parent_id node_type ...
-                edits.append(
-                    GumTreeEdit(
-                        operation=EditType.INSERT,
-                        node_type=parts[2] if len(parts) > 2 else "Unknown",
-                        old_code=None,
-                        new_code=" ".join(parts[3:]) if len(parts) > 3 else None
-                    )
-                )
+                edits.append(GumTreeEdit(
+                    operation=EditType.INSERT,
+                    node_type=parts[2] if len(parts) > 2 else "Unknown",
+                    new_code=" ".join(parts[3:]) if len(parts) > 3 else None,
+                ))
             elif op == "Delete":
-                edits.append(
-                    GumTreeEdit(
-                        operation=EditType.DELETE,
-                        node_type="Unknown",
-                        old_code=" ".join(parts[1:]) if len(parts) > 1 else None,
-                        new_code=None
-                    )
-                )
+                edits.append(GumTreeEdit(
+                    operation=EditType.DELETE,
+                    node_type="Unknown",
+                    old_code=" ".join(parts[1:]) if len(parts) > 1 else None,
+                ))
             elif op == "Update":
-                edits.append(
-                    GumTreeEdit(
-                        operation=EditType.UPDATE,
-                        node_type="Unknown",
-                        old_code=parts[2] if len(parts) > 2 else None,
-                        new_code=parts[3] if len(parts) > 3 else None
-                    )
-                )
+                edits.append(GumTreeEdit(
+                    operation=EditType.UPDATE,
+                    node_type="Unknown",
+                    old_code=parts[2] if len(parts) > 2 else None,
+                    new_code=parts[3] if len(parts) > 3 else None,
+                ))
             elif op == "Move":
-                edits.append(
-                    GumTreeEdit(
-                        operation=EditType.MOVE,
-                        node_type="Unknown",
-                        old_code=" ".join(parts[1:3]) if len(parts) > 2 else None,
-                        new_code=" ".join(parts[3:]) if len(parts) > 3 else None
-                    )
-                )
-
+                edits.append(GumTreeEdit(
+                    operation=EditType.MOVE,
+                    node_type="Unknown",
+                    old_code=" ".join(parts[1:3]) if len(parts) > 2 else None,
+                    new_code=" ".join(parts[3:]) if len(parts) > 3 else None,
+                ))
         return edits
 
-    def summarize_structural_changes(self, edits: List[GumTreeEdit]) -> str:
-        """
-        Creates a human-readable summary of structural changes.
-        """
-        inserts = sum(1 for e in edits if e.operation == EditType.INSERT)
-        deletes = sum(1 for e in edits if e.operation == EditType.DELETE)
-        updates = sum(1 for e in edits if e.operation == EditType.UPDATE)
-        moves = sum(1 for e in edits if e.operation == EditType.MOVE)
+    def _format_edits(self, edits: List[GumTreeEdit]) -> str:
+        if not edits:
+            return "No GumTree edits available."
+        return "\n".join(
+            f"- {e.operation.value}: {e.node_type}"
+            + (f" ({e.old_code} -> {e.new_code})" if e.old_code and e.new_code else "")
+            for e in edits
+        )
 
-        summary = f"Inserts: {inserts}, Deletes: {deletes}, Updates: {updates}, Moves: {moves}"
-        return summary
+    def _format_api_changes(self, api_changes: Optional[Dict[str, str]]) -> str:
+        if not api_changes:
+            return "None detected."
+        return "\n".join(f"- {old} -> {new}" for old, new in api_changes.items())
+
+    # ── LLM call ──────────────────────────────────────────────────────────────
 
     def refactor_with_llm(
         self,
         original_code: str,
         target_context: str,
         edits: List[GumTreeEdit],
-        api_changes: Optional[Dict[str, str]] = None
-    ) -> StructuralRefactorOutput:
-        """
-        Uses LLM (Reasoning tier) to refactor code for structural differences.
-
-        Args:
-            original_code: Code from the original (source) patch
-            target_context: Context from target codebase
-            edits: GumTree edit operations describing structural changes
-            api_changes: Optional API change mappings (from japicmp)
-
-        Returns:
-            StructuralRefactorOutput with refactored code or error
-        """
+        api_changes: Optional[Dict[str, str]] = None,
+    ) -> StructuralAdaptationOutput:
         if not self.llm_client:
-            # Fallback: return with low confidence
-            return StructuralRefactorOutput(
+            return StructuralAdaptationOutput(
                 refactored_code=original_code,
-                semantic_equivalence=0.0,
-                edit_summary=self.summarize_structural_changes(edits),
+                confidence=0.0,
+                explanation="",
                 success=False,
-                error_message="LLM client not configured"
+                error_message="LLM client not configured for Structural Refactor agent.",
             )
 
-        # Build prompt for LLM
-        edit_summary = self.summarize_structural_changes(edits)
-        prompt = self._build_refactor_prompt(
-            original_code, target_context, edits, api_changes
-        )
+        prompt = f"""You are Agent 5 (Structural Refactor) for OmniPort, a Java patch backporting system.
+The patch code below must be adapted to a target codebase that has undergone structural changes.
 
-        try:
-            # Call LLM with extended thinking
-            # This is a placeholder; actual implementation would call LLM
-            response = self._call_llm_with_reasoning(prompt)
-
-            refactored = response.get("refactored_code", original_code)
-            confidence = response.get("confidence", 0.5)
-
-            return StructuralRefactorOutput(
-                refactored_code=refactored,
-                semantic_equivalence=confidence,
-                edit_summary=edit_summary,
-                success=True,
-                error_message=None
-            )
-        except Exception as e:
-            return StructuralRefactorOutput(
-                refactored_code=original_code,
-                semantic_equivalence=0.0,
-                edit_summary=edit_summary,
-                success=False,
-                error_message=str(e)
-            )
-
-    def _build_refactor_prompt(
-        self,
-        original_code: str,
-        target_context: str,
-        edits: List[GumTreeEdit],
-        api_changes: Optional[Dict[str, str]]
-    ) -> str:
-        """
-        Builds the prompt for the reasoning LLM.
-        """
-        prompt = f"""
-You are a Java code refactoring expert. Your task is to adapt the following patch
-to work with a structurally different version of the codebase.
-
-Original Code (from patch):
+Original code (from patch, may not compile in target as-is):
 ```java
 {original_code}
 ```
 
-Target Context (from target codebase):
+Target codebase context (surrounding code at the localized position):
 ```java
 {target_context}
 ```
 
-Structural Changes (GumTree edits):
+Structural changes detected by GumTree:
 {self._format_edits(edits)}
 
-API Changes:
-{self._format_api_changes(api_changes) if api_changes else "None detected"}
+API changes detected by japicmp:
+{self._format_api_changes(api_changes)}
 
-Your task:
-1. Analyze the structural differences between the original and target
-2. Adapt the original code to work with the target structure
-3. Maintain semantic equivalence with the original logic
-4. Handle any API changes indicated above
+Task:
+1. Analyze how the original code must change to achieve the same semantic effect in the target.
+2. Produce refactored_code that compiles and behaves equivalently in the target codebase.
+3. Preserve the original logic and intent exactly — only adapt structure and API calls.
+4. Assign a confidence score (0.0–1.0) reflecting how certain you are of semantic equivalence.
 
-Return ONLY valid Java code that achieves semantic equivalence.
+Return ONLY valid Java code in refactored_code.
 """
-        return prompt
 
-    def _format_edits(self, edits: List[GumTreeEdit]) -> str:
-        """Formats edits for prompt."""
-        lines = []
-        for edit in edits:
-            lines.append(f"- {edit.operation.value}: {edit.node_type}")
-        return "\n".join(lines) if lines else "No edits"
-
-    def _format_api_changes(self, api_changes: Dict[str, str]) -> str:
-        """Formats API changes for prompt."""
-        lines = []
-        for old, new in api_changes.items():
-            lines.append(f"- {old} -> {new}")
-        return "\n".join(lines) if lines else "None"
-
-    def _call_llm_with_reasoning(self, prompt: str) -> Dict[str, Any]:
-        """
-        Calls LLM with extended reasoning (placeholder).
-        In real implementation, this would use Claude Opus with extended thinking.
-        """
-        # Placeholder return
-        return {
-            "refactored_code": "// Placeholder refactored code",
-            "confidence": 0.5
-        }
+        structured_llm = self.llm_client.with_structured_output(StructuralAdaptationOutput)
+        try:
+            result: StructuralAdaptationOutput = structured_llm.invoke(prompt)
+            return result
+        except Exception as e:
+            return StructuralAdaptationOutput(
+                refactored_code=original_code,
+                confidence=0.0,
+                explanation="",
+                success=False,
+                error_message=str(e),
+            )
 
     def refactor_hunk(
         self,
         hunk: Dict[str, Any],
         loc_result: LocalizationResult,
-        edit_script: Optional[str] = None
-    ) -> StructuralRefactorOutput:
-        """
-        Refactors a hunk for structural differences.
-
-        Args:
-            hunk: The hunk to refactor
-            loc_result: Localization result with context
-            edit_script: Optional GumTree edit script
-
-        Returns:
-            StructuralRefactorOutput with refactored code or error
-        """
+        edit_script: Optional[str] = None,
+    ) -> StructuralAdaptationOutput:
         original_code = hunk.get("old_content", "")
         target_context = loc_result.context_snapshot
 
-        edits = []
-        if edit_script:
-            edits = self.parse_gumtree_edits(edit_script)
+        edits = self.parse_gumtree_edits(edit_script) if edit_script else []
 
         return self.refactor_with_llm(
             original_code,
             target_context,
             edits,
-            loc_result.symbol_mappings if loc_result.symbol_mappings else None
+            loc_result.symbol_mappings if loc_result.symbol_mappings else None,
         )
+
+
+# ── LangGraph node ────────────────────────────────────────────────────────────
+
+def _should_structural_refactor(loc_result: LocalizationResult) -> bool:
+    return (
+        loc_result.method_used in _STRUCTURAL_METHODS
+        or loc_result.confidence < _LOW_CONFIDENCE_THRESHOLD
+    )
 
 
 def structural_refactor_agent(state: BackportState) -> BackportState:
     """
     LangGraph node: Structural Refactor.
 
-    Processes hunks that require deep structural refactoring (TYPE IV/V).
-    Uses reasoning-tier LLM for complex transformations.
+    Processes hunks requiring deep structural adaptation (gumtree_ast method or
+    confidence < 0.6). Skips hunks already claimed by Agents 3 or 4.
+    Passes refactored hunks to Agent 6 (Hunk Synthesizer) for CLAW verification.
     """
     repo_path = state["target_repo_path"]
-    refactor = StructuralRefactor(repo_path)
+
+    # Inject the Reasoning-tier LLM client.
+    router = get_default_router()
+    llm_client = router.get_model(LLMTier.REASONING)
+    refactor = StructuralRefactor(repo_path, llm_client)
 
     hunks = state.get("hunks", [])
     loc_results = state.get("localization_results", [])
-    refactored_hunks = []
-    failed_hunks = []
-    retry_contexts = state.get("retry_contexts", [])
+    processed_indices: List[int] = list(state.get("processed_hunk_indices", []))
+    refactored_hunks: List[Dict[str, Any]] = list(state.get("refactored_hunks", []))
+    failed_hunks: List[Dict[str, Any]] = list(state.get("failed_hunks", []))
+    retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
+    tokens_used: int = state.get("tokens_used", 0)
 
     for i, hunk in enumerate(hunks):
+        if i in processed_indices:
+            continue
         if i >= len(loc_results):
             break
 
         loc_result = loc_results[i]
-
-        # Check if this hunk needs structural refactoring
-        # (low confidence or gumtree method indicates complex changes)
-        if not (loc_result.confidence < 0.6 or loc_result.method_used == "gumtree_ast"):
+        if not _should_structural_refactor(loc_result):
             continue
 
-        # Attempt refactoring
+        # Claim this hunk.
+        processed_indices.append(i)
+
         output = refactor.refactor_hunk(hunk, loc_result)
 
-        if output.success and output.semantic_equivalence > 0.5:
-            refactored_hunk = {
+        if output.success and output.confidence > 0.5:
+            refactored_hunks.append({
                 **hunk,
                 "new_content": output.refactored_code,
-                "refactored": True
-            }
-            refactored_hunks.append(refactored_hunk)
+                "refactored": True,
+                "semantic_confidence": output.confidence,
+                "loc_index": i,
+            })
         else:
-            failed_hunks.append(hunk)
+            failed_hunks.append({
+                **hunk,
+                "error": output.error_message or f"Low semantic confidence: {output.confidence:.2f}",
+            })
             retry_contexts.append(
                 PatchRetryContext(
                     error_type="structural_refactor_failed",
-                    error_message=output.error_message or "Low semantic equivalence",
+                    error_message=output.error_message or f"confidence={output.confidence:.2f}",
                     attempt_count=state.get("current_attempt", 1),
-                    suggested_action="manual_review"
+                    suggested_action="manual_review",
                 )
             )
 
     state["refactored_hunks"] = refactored_hunks
+    state["failed_hunks"] = failed_hunks
+    state["processed_hunk_indices"] = processed_indices
     state["retry_contexts"] = retry_contexts
+    state["tokens_used"] = tokens_used
     state["current_attempt"] = state.get("current_attempt", 1) + 1
-
     return state

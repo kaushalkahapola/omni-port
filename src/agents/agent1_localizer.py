@@ -43,7 +43,7 @@ def localizer_pipeline(repo_path: str, file_path: str, hunk: Dict[str, Any]) -> 
 
 def localize_hunks(state: BackportState) -> BackportState:
     """
-    Agent 2: Code Localizer
+    Agent 1: Code Localizer
     Executes the 5-stage hybrid localization per-hunk, per-file.
     Outputs LocalizationResult.
     """

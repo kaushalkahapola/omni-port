@@ -2,10 +2,16 @@
 Agent 6: Hunk Synthesizer (Balanced LLM)
 
 Produces CLAW-compatible exact-string old_string/new_string pairs.
-Verifies old_string exists verbatim in target file.
-If verification fails, expands context (±5 lines) and retries.
+Verifies old_string exists verbatim in the target file.
+If verification fails, expands context (±3/5/7/10 lines) and retries.
 
-This is a critical safety gate before hunk application.
+Input sources:
+  - adapted_hunks  (from Agent 4 — namespace-adapted, not yet on disk)
+  - refactored_hunks (from Agent 5 — structurally refactored, not yet on disk)
+  - unprocessed raw hunks (indices NOT in processed_hunk_indices, as a fallback)
+
+NOTE: applied_hunks from Agent 3 are already written to disk and must NOT be
+re-synthesized or re-applied here.
 """
 
 from typing import Dict, List, Any, Optional, Tuple
@@ -14,39 +20,34 @@ from pydantic import BaseModel, Field
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 
 
+# ── Data models ───────────────────────────────────────────────────────────────
+
 class SynthesizedHunk(BaseModel):
-    """A CLAW-compatible hunk with exact-string pairs."""
-    file_path: str = Field(description="Target file path")
-    old_string: str = Field(description="Exact string to find (with context)")
-    new_string: str = Field(description="Exact replacement string (with context)")
-    confidence: float = Field(description="Confidence in exact match (0-1)")
-    context_lines_included: int = Field(description="Number of context lines on each side")
-    verified: bool = Field(description="Whether old_string was verified in target")
+    file_path: str
+    old_string: str = Field(description="Exact string to find (verified present in target file)")
+    new_string: str = Field(description="Exact replacement string")
+    confidence: float
+    context_lines_included: int
+    verified: bool
 
 
 class SynthesizerOutput(BaseModel):
-    """Output from hunk synthesis."""
-    synthesized_hunks: List[SynthesizedHunk] = Field(description="Generated CLAW hunks")
-    failed_hunks: List[Dict[str, Any]] = Field(description="Hunks that couldn't be synthesized")
-    success: bool = Field(description="Overall synthesis success")
-    error_message: Optional[str] = Field(description="Error if synthesis failed")
+    synthesized_hunks: List[SynthesizedHunk]
+    failed_hunks: List[Dict[str, Any]]
+    success: bool
+    error_message: Optional[str]
 
+
+# ── Core class ────────────────────────────────────────────────────────────────
 
 class HunkSynthesizer:
-    """
-    Synthesizes CLAW-compatible exact-string hunks.
-    Verifies they exist in the target before application.
-    """
-
     def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path)
 
     def read_file(self, file_path: str) -> Optional[str]:
-        """Reads file content from target repo."""
         target = self.repo_path / file_path
         if not target.exists():
             return None
-
         try:
             return target.read_text(encoding="utf-8")
         except (IOError, UnicodeDecodeError):
@@ -57,73 +58,49 @@ class HunkSynthesizer:
         file_content: str,
         start_line: int,
         end_line: int,
-        context_lines: int = 5
+        context_lines: int = 5,
     ) -> str:
         """
-        Extracts lines with surrounding context.
-
-        Args:
-            file_content: Full file content
-            start_line: Start line (1-indexed)
-            end_line: End line (1-indexed)
-            context_lines: Number of lines to include before/after
-
-        Returns:
-            String with context
+        Extracts [start_line..end_line] (1-indexed) plus context_lines on each side
+        from file_content. Returns the slice as a string.
         """
         lines = file_content.splitlines(keepends=True)
-
-        # Convert to 0-indexed
         start = max(0, start_line - 1 - context_lines)
         end = min(len(lines), end_line + context_lines)
-
         return "".join(lines[start:end])
 
     def verify_old_string_exists(
         self,
         file_content: str,
-        old_string: str
+        old_string: str,
     ) -> Tuple[bool, float]:
         """
-        Verifies that old_string exists in the file.
         Returns (exists, confidence).
-
-        Confidence factors:
-        - 1.0: Exact match, unique in file
-        - 0.9: Exact match, but not unique
-        - 0.5: Fuzzy match
-        - 0.0: Not found
+        1.0 → unique exact match; 0.9 → exact match but not unique; 0.0 → not found.
         """
         if not old_string:
             return False, 0.0
-
-        # Check exact match
         if old_string in file_content:
             count = file_content.count(old_string)
-            if count == 1:
-                return True, 1.0
-            else:
-                return True, 0.9
-
-        # No exact match
+            return True, 1.0 if count == 1 else 0.9
         return False, 0.0
 
     def synthesize_hunk(
         self,
         hunk: Dict[str, Any],
         loc_result: LocalizationResult,
-        file_content: Optional[str] = None
+        file_content: Optional[str] = None,
     ) -> SynthesizedHunk:
         """
-        Synthesizes a CLAW hunk from adapted/refactored hunk and localization result.
+        Synthesizes a CLAW hunk pair and verifies old_string exists in the target file.
 
-        Args:
-            hunk: The hunk (possibly adapted/refactored)
-            loc_result: Localization result with target location info
-            file_content: Optional pre-read file content (for testing)
-
-        Returns:
-            SynthesizedHunk with verification status
+        Context expansion strategy:
+          - Try the raw old_content first (0 extra context lines).
+          - If not found, expand the WINDOW that is read from the TARGET FILE
+            around the localized position, keeping new_string unchanged.
+            (Adding file context to old_string makes it unique; new_string stays
+            as the pure replacement — the surrounding context is re-inserted
+            verbatim by CLAW when it replaces old_string with new_string.)
         """
         file_path = loc_result.file_path
         old_string = hunk.get("old_content", "").rstrip("\n")
@@ -139,12 +116,11 @@ class HunkSynthesizer:
                 new_string="",
                 confidence=0.0,
                 context_lines_included=0,
-                verified=False
+                verified=False,
             )
 
-        # Try exact match first
+        # Attempt 0: raw old_string.
         verified, confidence = self.verify_old_string_exists(file_content, old_string)
-
         if verified:
             return SynthesizedHunk(
                 file_path=file_path,
@@ -152,30 +128,35 @@ class HunkSynthesizer:
                 new_string=new_string,
                 confidence=confidence,
                 context_lines_included=0,
-                verified=True
+                verified=True,
             )
 
-        # If exact match failed, try with expanded context
+        # Attempts 1-4: expand context from the TARGET FILE around the localized region.
+        # new_string does NOT change — CLAW replaces only the old_string portion.
         for context_lines in [3, 5, 7, 10]:
             expanded_old = self.extract_lines_with_context(
                 file_content,
                 loc_result.start_line,
                 loc_result.end_line,
-                context_lines
+                context_lines,
             )
-
-            verified, confidence = self.verify_old_string_exists(
-                file_content, expanded_old
-            )
-
+            verified, confidence = self.verify_old_string_exists(file_content, expanded_old)
             if verified:
-                # Also expand new_string to match context
-                expanded_new = self.extract_lines_with_context(
-                    new_string,
-                    0,
-                    len(new_string.splitlines()),
-                    context_lines
+                # Build the expanded new_string: same surrounding context lines
+                # from the file, but with the core replacement swapped in.
+                context_before = self.extract_lines_with_context(
+                    file_content,
+                    loc_result.start_line,
+                    loc_result.start_line - 1,  # yields only the prefix lines
+                    context_lines,
                 )
+                context_after = self.extract_lines_with_context(
+                    file_content,
+                    loc_result.end_line + 1,
+                    loc_result.end_line,  # yields only the suffix lines
+                    context_lines,
+                )
+                expanded_new = context_before + new_string + "\n" + context_after
 
                 return SynthesizedHunk(
                     file_path=file_path,
@@ -183,47 +164,44 @@ class HunkSynthesizer:
                     new_string=expanded_new,
                     confidence=confidence,
                     context_lines_included=context_lines,
-                    verified=True
+                    verified=True,
                 )
 
-        # All attempts failed
         return SynthesizedHunk(
             file_path=file_path,
             old_string=old_string,
             new_string=new_string,
             confidence=0.0,
             context_lines_included=0,
-            verified=False
+            verified=False,
         )
 
     def synthesize_batch(
         self,
         hunks: List[Dict[str, Any]],
-        loc_results: List[LocalizationResult]
+        loc_results: List[LocalizationResult],
+        loc_index_override: Optional[List[int]] = None,
     ) -> SynthesizerOutput:
         """
-        Synthesizes multiple hunks.
+        Synthesizes a list of hunks.
 
-        Args:
-            hunks: List of hunks to synthesize
-            loc_results: Corresponding localization results
-
-        Returns:
-            SynthesizerOutput with synthesized and failed hunks
+        loc_index_override: when set, hunk[k] maps to loc_results[loc_index_override[k]].
+        Otherwise, assumes 1-to-1 correspondence.
         """
         synthesized = []
         failed = []
 
-        for i, hunk in enumerate(hunks):
-            if i >= len(loc_results):
+        for k, hunk in enumerate(hunks):
+            loc_idx = loc_index_override[k] if loc_index_override else k
+            if loc_idx >= len(loc_results):
                 failed.append(hunk)
                 continue
 
-            loc_result = loc_results[i]
-            synthesized_hunk = self.synthesize_hunk(hunk, loc_result)
+            loc_result = loc_results[loc_idx]
+            result = self.synthesize_hunk(hunk, loc_result)
 
-            if synthesized_hunk.verified:
-                synthesized.append(synthesized_hunk)
+            if result.verified:
+                synthesized.append(result)
             else:
                 failed.append(hunk)
 
@@ -231,53 +209,84 @@ class HunkSynthesizer:
             synthesized_hunks=synthesized,
             failed_hunks=failed,
             success=len(failed) == 0,
-            error_message=None if len(failed) == 0 else f"{len(failed)} hunks failed synthesis"
+            error_message=None if not failed else f"{len(failed)} hunk(s) failed verification",
         )
 
+
+# ── LangGraph node ────────────────────────────────────────────────────────────
 
 def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     """
     LangGraph node: Hunk Synthesizer.
 
-    Takes hunks that have been adapted/refactored and produces
-    CLAW-compatible exact-string pairs with verification.
-    This is the final safety gate before application.
+    Synthesizes CLAW-compatible exact-string pairs for:
+      - adapted_hunks   (Agent 4 output)
+      - refactored_hunks (Agent 5 output)
+      - unprocessed raw hunks (fallback for hunks that no specialist claimed)
+
+    applied_hunks (Agent 3 output) are already on disk and are excluded.
     """
     repo_path = state["target_repo_path"]
     synthesizer = HunkSynthesizer(repo_path)
 
-    # Collect all processed hunks
-    all_hunks = []
-    all_hunks.extend(state.get("applied_hunks", []))  # From fast-apply
-    all_hunks.extend(state.get("adapted_hunks", []))   # From namespace adapter
-    all_hunks.extend(state.get("refactored_hunks", [])) # From structural refactor
-
-    # Use original hunks if nothing was processed
-    if not all_hunks:
-        all_hunks = state.get("hunks", [])
-
+    hunks = state.get("hunks", [])
     loc_results = state.get("localization_results", [])
+    processed_indices = set(state.get("processed_hunk_indices", []))
+    retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
 
-    # Synthesize all hunks
-    output = synthesizer.synthesize_batch(all_hunks, loc_results)
+    # ── Build synthesis batches ───────────────────────────────────────────────
 
-    synthesized_hunks = [h.model_dump() for h in output.synthesized_hunks]
-    retry_contexts = state.get("retry_contexts", [])
+    # 1. Adapted hunks (Agent 4).
+    adapted = state.get("adapted_hunks", [])
+    adapted_loc_indices = [h.get("loc_index", i) for i, h in enumerate(adapted)]
 
-    # Add retry contexts for failed hunks
-    for failed_hunk in output.failed_hunks:
+    # 2. Refactored hunks (Agent 5).
+    refactored = state.get("refactored_hunks", [])
+    refactored_loc_indices = [h.get("loc_index", i) for i, h in enumerate(refactored)]
+
+    # 3. Unprocessed raw hunks: indices not claimed by any prior agent.
+    passthrough = [
+        (i, h) for i, h in enumerate(hunks)
+        if i not in processed_indices and i < len(loc_results)
+    ]
+    passthrough_hunks = [h for _, h in passthrough]
+    passthrough_loc_indices = [i for i, _ in passthrough]
+
+    # ── Synthesize each batch ─────────────────────────────────────────────────
+
+    all_synthesized: List[Dict[str, Any]] = []
+    all_failed: List[Dict[str, Any]] = []
+
+    for batch, loc_idx_list, label in [
+        (adapted, adapted_loc_indices, "adapted"),
+        (refactored, refactored_loc_indices, "refactored"),
+        (passthrough_hunks, passthrough_loc_indices, "passthrough"),
+    ]:
+        if not batch:
+            continue
+        output = synthesizer.synthesize_batch(batch, loc_results, loc_index_override=loc_idx_list)
+        all_synthesized.extend(h.model_dump() for h in output.synthesized_hunks)
+        all_failed.extend(output.failed_hunks)
+
+    # ── Retry contexts for failures ───────────────────────────────────────────
+    for _ in all_failed:
         retry_contexts.append(
             PatchRetryContext(
                 error_type="synthesis_failed_no_match",
-                error_message="Could not find exact string in target file",
+                error_message="Could not verify exact string in target file",
                 attempt_count=state.get("current_attempt", 1),
-                suggested_action="relocalize"
+                suggested_action="relocalize",
             )
         )
 
-    state["synthesized_hunks"] = synthesized_hunks
-    state["synthesis_status"] = "success" if output.success else "partial"
+    synthesis_status = (
+        "success" if not all_failed
+        else ("partial" if all_synthesized else "failed")
+    )
+
+    state["synthesized_hunks"] = all_synthesized
+    state["failed_hunks"] = list(state.get("failed_hunks", [])) + all_failed
+    state["synthesis_status"] = synthesis_status
     state["retry_contexts"] = retry_contexts
     state["current_attempt"] = state.get("current_attempt", 1) + 1
-
     return state

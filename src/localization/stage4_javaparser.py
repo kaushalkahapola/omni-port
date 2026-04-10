@@ -23,14 +23,20 @@ def run_javaparser_localization(repo_path: str, file_path: str, hunk: Dict[str, 
     response = client.send_request("javaparser_resolve", payload)
     
     if response.get("status") == "ok":
+        symbol_mappings = response.get("symbol_mappings", {})
+        start_line = response.get("start_line", 1)
+        end_line = response.get("end_line", max(1, len(old_content.splitlines())))
+        context_snapshot = response.get("context_snapshot", old_content)
+        confidence = float(response.get("confidence", 0.80))
+
         return LocalizationResult(
             method_used="javaparser",
-            confidence=0.80,
-            context_snapshot=old_content,
-            symbol_mappings={"ResolvedType": "TargetType"}, 
+            confidence=confidence,
+            context_snapshot=context_snapshot,
+            symbol_mappings=symbol_mappings,
             file_path=file_path,
-            start_line=1,
-            end_line=max(1, len(old_content.splitlines()))
+            start_line=start_line,
+            end_line=end_line,
         )
         
     return None

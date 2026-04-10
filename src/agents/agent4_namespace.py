@@ -1,219 +1,193 @@
 """
 Agent 4: Namespace Adapter (Balanced LLM)
 
-For TYPE III patches. Uses JavaParser ImportDeclaration manipulation
-and symbol mapping to rewrite imports/method references.
-Handles API renames and namespace changes between versions.
+Routed when import/namespace changes are detected in localization evidence:
+  - method_used is 'javaparser' or 'gumtree_ast' AND symbol_mappings is non-empty, OR
+  - the hunk itself contains differing import statements.
+
+Uses the Balanced LLM to rewrite imports and symbol references, guided by
+symbol_mappings from the localization stage.
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
+from src.core.llm_router import get_default_router, LLMTier
 
 
-class SymbolMapping(BaseModel):
-    """Represents a symbol rename between source and target."""
-    original_symbol: str = Field(description="Original fully qualified symbol")
-    target_symbol: str = Field(description="Target fully qualified symbol")
-    symbol_type: str = Field(description="Type: class, method, constant, interface, etc.")
+# ── Output model ──────────────────────────────────────────────────────────────
 
-
-class NamespaceAdapterOutput(BaseModel):
-    """Output from namespace adaptation."""
-    adapted_hunk: Dict[str, Any] = Field(description="Modified hunk with updated imports")
-    symbol_mappings: List[SymbolMapping] = Field(description="Applied symbol mappings")
-    imports_added: List[str] = Field(description="New imports added")
-    imports_removed: List[str] = Field(description="Imports removed")
+class NamespaceAdaptationOutput(BaseModel):
+    adapted_old_content: str = Field(
+        description="old_content with symbol renames and import fixes applied"
+    )
+    adapted_new_content: str = Field(
+        description="new_content with symbol renames and import fixes applied"
+    )
+    imports_added: List[str] = Field(
+        description="Fully-qualified import statements to add to the target file"
+    )
+    imports_removed: List[str] = Field(
+        description="Fully-qualified import statements to remove from the target file"
+    )
+    notes: str = Field(description="Brief explanation of adaptations made")
     success: bool = Field(description="Whether adaptation succeeded")
-    error_message: Optional[str] = Field(description="Error if adaptation failed")
+    error_message: Optional[str] = Field(default=None)
 
 
-class NamespaceAdapter:
+# ── Routing helpers ───────────────────────────────────────────────────────────
+
+# Methods whose localization evidence may carry symbol_mappings.
+_NAMESPACE_METHODS = {"javaparser", "gumtree_ast"}
+
+
+def _has_import_changes(hunk: Dict[str, Any]) -> bool:
+    """Returns True when the hunk itself changes import statements."""
+    old_imports = {
+        l.strip()
+        for l in hunk.get("old_content", "").splitlines()
+        if l.strip().startswith("import ")
+    }
+    new_imports = {
+        l.strip()
+        for l in hunk.get("new_content", "").splitlines()
+        if l.strip().startswith("import ")
+    }
+    return old_imports != new_imports
+
+
+def _should_namespace_adapt(hunk: Dict[str, Any], loc_result: LocalizationResult) -> bool:
     """
-    Adapts patches for namespace/import changes (TYPE III).
-    Uses symbol mapping to rewrite imports and method references.
+    True when the hunk needs namespace/import adaptation:
+      - Localization found symbol renames via javaparser/gumtree_ast, OR
+      - The hunk diff itself contains differing import statements.
     """
+    has_symbol_mappings = bool(loc_result.symbol_mappings)
+    method_with_mappings = loc_result.method_used in _NAMESPACE_METHODS and has_symbol_mappings
+    return method_with_mappings or _has_import_changes(hunk)
 
-    def __init__(self, repo_path: str):
-        self.repo_path = repo_path
 
-    def extract_import_statements(self, file_content: str) -> List[str]:
-        """
-        Extracts all import statements from Java file content.
-        Returns list of import statements (with 'import' prefix).
-        """
-        imports = []
-        for line in file_content.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("import ") and stripped.endswith(";"):
-                imports.append(stripped)
-        return imports
+# ── LLM-backed adaptation ─────────────────────────────────────────────────────
 
-    def replace_import_statement(
-        self,
-        file_content: str,
-        old_import: str,
-        new_import: str
-    ) -> Tuple[bool, str]:
-        """
-        Replaces an import statement in the file.
+def _adapt_with_llm(
+    hunk: Dict[str, Any],
+    loc_result: LocalizationResult,
+) -> NamespaceAdaptationOutput:
+    """
+    Calls the Balanced LLM to rewrite imports and symbol references.
+    """
+    mappings_text = "\n".join(
+        f"  - {orig} -> {target}"
+        for orig, target in loc_result.symbol_mappings.items()
+    ) or "  (none detected by localization; infer from diff context)"
 
-        Returns:
-            Tuple of (success, modified_content)
-        """
-        if old_import not in file_content:
-            return False, file_content
+    prompt = f"""You are Agent 4 (Namespace Adapter) for OmniPort, a Java patch backporting system.
+A patch hunk must be adapted to a different codebase version where symbol names and imports differ.
 
-        new_content = file_content.replace(old_import, new_import)
-        return True, new_content
+Known symbol renames from localization analysis:
+{mappings_text}
 
-    def rewrite_symbol_references(
-        self,
-        file_content: str,
-        mappings: List[Dict[str, str]]
-    ) -> Tuple[bool, str]:
-        """
-        Rewrites symbol references in file content based on mappings.
+Original hunk — old_content (lines being replaced in the target):
+```java
+{hunk.get("old_content", "")}
+```
 
-        Args:
-            file_content: Source file content
-            mappings: List of dicts with 'old' and 'new' symbol names
+Original hunk — new_content (replacement to apply):
+```java
+{hunk.get("new_content", "")}
+```
 
-        Returns:
-            Tuple of (success, modified_content)
-        """
-        modified = file_content
-        successful_rewrites = 0
+Target file context (surrounding code in the target branch):
+```java
+{loc_result.context_snapshot}
+```
 
-        for mapping in mappings:
-            old_sym = mapping.get("old", "")
-            new_sym = mapping.get("new", "")
+Task:
+1. Apply the known symbol renames to both old_content and new_content.
+2. Fix any import statements so they match the target codebase.
+3. List any imports that must be added or removed from the target file.
+4. Do NOT change logic — only rename symbols and fix namespacing.
 
-            if not old_sym or not new_sym:
-                continue
+Return adapted_old_content and adapted_new_content as valid Java code snippets.
+"""
 
-            # Simple string replacement (in real usage, would use AST-based rewriting)
-            if old_sym in modified:
-                modified = modified.replace(old_sym, new_sym)
-                successful_rewrites += 1
+    router = get_default_router()
+    balanced_model = router.get_model(LLMTier.BALANCED)
+    structured_llm = balanced_model.with_structured_output(NamespaceAdaptationOutput)
 
-        return successful_rewrites > 0, modified
-
-    def adapt_hunk(
-        self,
-        hunk: Dict[str, Any],
-        loc_result: LocalizationResult,
-        symbol_mappings: List[Dict[str, str]] = None
-    ) -> NamespaceAdapterOutput:
-        """
-        Adapts a hunk for namespace changes.
-
-        Args:
-            hunk: The hunk to adapt
-            loc_result: Localization result with symbol_mappings
-            symbol_mappings: Optional override for symbol mappings
-
-        Returns:
-            NamespaceAdapterOutput with adapted hunk or error
-        """
-        if symbol_mappings is None:
-            symbol_mappings = []
-
-        # Extract from localization result if available
-        if loc_result.symbol_mappings:
-            for orig, target in loc_result.symbol_mappings.items():
-                symbol_mappings.append({"old": orig, "new": target})
-
-        if not symbol_mappings:
-            # No symbol mappings; return original hunk
-            return NamespaceAdapterOutput(
-                adapted_hunk=hunk,
-                symbol_mappings=[],
-                imports_added=[],
-                imports_removed=[],
-                success=True,
-                error_message=None
-            )
-
-        # Apply symbol rewrites to hunk content
-        old_content = hunk.get("old_content", "")
-        new_content = hunk.get("new_content", "")
-
-        success, adapted_old = self.rewrite_symbol_references(old_content, symbol_mappings)
-        success, adapted_new = self.rewrite_symbol_references(new_content, symbol_mappings)
-
-        adapted_hunk = {
-            **hunk,
-            "old_content": adapted_old,
-            "new_content": adapted_new,
-            "adapted": True
-        }
-
-        # Create symbol mapping models for output
-        symbol_model_list = [
-            SymbolMapping(
-                original_symbol=m.get("old", ""),
-                target_symbol=m.get("new", ""),
-                symbol_type="method"  # Default; would infer from context
-            )
-            for m in symbol_mappings
-        ]
-
-        return NamespaceAdapterOutput(
-            adapted_hunk=adapted_hunk,
-            symbol_mappings=symbol_model_list,
+    try:
+        result: NamespaceAdaptationOutput = structured_llm.invoke(prompt)
+        return result
+    except Exception as e:
+        return NamespaceAdaptationOutput(
+            adapted_old_content=hunk.get("old_content", ""),
+            adapted_new_content=hunk.get("new_content", ""),
             imports_added=[],
             imports_removed=[],
-            success=True,
-            error_message=None
+            notes="",
+            success=False,
+            error_message=str(e),
         )
 
+
+# ── LangGraph node ────────────────────────────────────────────────────────────
 
 def namespace_adapter_agent(state: BackportState) -> BackportState:
     """
     LangGraph node: Namespace Adapter.
 
-    Processes hunks that require namespace/import adaptation.
-    Marks hunks for which adaptation failed for structural refactor.
+    Processes hunks that require import/namespace adaptation.
+    Skips hunks already claimed by Agent 3.
+    Records adapted hunks for Agent 6 (Hunk Synthesizer) to verify and apply.
     """
-    repo_path = state["target_repo_path"]
-    adapter = NamespaceAdapter(repo_path)
-
     hunks = state.get("hunks", [])
     loc_results = state.get("localization_results", [])
-    adapted_hunks = []
-    failed_hunks = []
-    retry_contexts = state.get("retry_contexts", [])
+    processed_indices: List[int] = list(state.get("processed_hunk_indices", []))
+    adapted_hunks: List[Dict[str, Any]] = list(state.get("adapted_hunks", []))
+    failed_hunks: List[Dict[str, Any]] = list(state.get("failed_hunks", []))
+    retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
+    tokens_used: int = state.get("tokens_used", 0)
 
     for i, hunk in enumerate(hunks):
+        if i in processed_indices:
+            continue
         if i >= len(loc_results):
             break
 
         loc_result = loc_results[i]
-
-        # Check if this hunk needs namespace adaptation
-        # (has symbol_mappings in localization result)
-        if not loc_result.symbol_mappings:
+        if not _should_namespace_adapt(hunk, loc_result):
             continue
 
-        # Attempt adaptation
-        output = adapter.adapt_hunk(hunk, loc_result)
+        # Claim this hunk.
+        processed_indices.append(i)
+
+        output = _adapt_with_llm(hunk, loc_result)
 
         if output.success:
-            adapted_hunks.append(output.adapted_hunk)
+            adapted_hunks.append({
+                **hunk,
+                "old_content": output.adapted_old_content,
+                "new_content": output.adapted_new_content,
+                "imports_added": output.imports_added,
+                "imports_removed": output.imports_removed,
+                "adapted": True,
+                "loc_index": i,
+            })
         else:
-            failed_hunks.append(hunk)
+            failed_hunks.append({**hunk, "error": output.error_message})
             retry_contexts.append(
                 PatchRetryContext(
                     error_type="namespace_adaptation_failed",
-                    error_message=output.error_message or "Unknown error",
+                    error_message=output.error_message or "LLM adaptation failed",
                     attempt_count=state.get("current_attempt", 1),
-                    suggested_action="structural_refactor"
+                    suggested_action="structural_refactor",
                 )
             )
 
     state["adapted_hunks"] = adapted_hunks
+    state["failed_hunks"] = failed_hunks
+    state["processed_hunk_indices"] = processed_indices
     state["retry_contexts"] = retry_contexts
+    state["tokens_used"] = tokens_used
     state["current_attempt"] = state.get("current_attempt", 1) + 1
-
     return state

@@ -20,16 +20,21 @@ def run_gumtree_localization(repo_path: str, file_path: str, hunk: Dict[str, Any
     response = client.send_request("gumtree_diff", payload)
     
     if response.get("status") == "ok":
-        # Simulate a successfully mapped context
-        # (This relies on the Java microservice returning real GumTree edit scripts in Phase 2)
+        # Use real values from the microservice response when available.
+        symbol_mappings = response.get("symbol_mappings", {})
+        start_line = response.get("start_line", 1)
+        end_line = response.get("end_line", max(1, len(old_content.splitlines())))
+        context_snapshot = response.get("context_snapshot", old_content)
+        confidence = float(response.get("confidence", 0.85))
+
         return LocalizationResult(
-            method_used="gumtree",
-            confidence=0.85,
-            context_snapshot=old_content,
-            symbol_mappings={"oldMethod": "newMethod"}, # Placeholder for actual structural AST renames
+            method_used="gumtree_ast",
+            confidence=confidence,
+            context_snapshot=context_snapshot,
+            symbol_mappings=symbol_mappings,
             file_path=file_path,
-            start_line=1,
-            end_line=max(1, len(old_content.splitlines()))
+            start_line=start_line,
+            end_line=end_line,
         )
         
     return None
