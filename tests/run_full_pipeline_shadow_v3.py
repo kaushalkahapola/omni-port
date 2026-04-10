@@ -31,6 +31,7 @@ For each patch, creates a folder under tests/shadow_run_results_v3/<project>/<TY
   results.json      — per-agent timing, hunk counts, build/test results
 """
 
+import csv
 import os
 import sys
 import json
@@ -60,11 +61,20 @@ from src.agents.agent4_namespace import namespace_adapter_agent
 from src.agents.agent5_structural import structural_refactor_agent
 from src.agents.agent6_synthesizer import hunk_synthesizer_agent
 from src.agents.agent7_validator import run_validation, run_phase0_baseline
+from src.tools.notification_service import TelegramNotifier
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 DEFAULT_CONFIG = Path(__file__).parent / "patches.yaml"
+DEFAULT_DATASET = Path(__file__).parent.parent / "dataset" / "all_projects_final.csv"
 OUTPUT_DIR = Path(__file__).parent / "shadow_run_results_v3"
+
+# Maps project names in the CSV to repo paths relative to the project root.
+# Add entries here as new repos are cloned under repos/.
+REPO_PATH_MAP: dict[str, str] = {
+    "elasticsearch": "repos/elasticsearch",
+    "crate": "repos/crate",
+}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -107,6 +117,67 @@ def get_patches_from_config(
             })
             if count_limit and len(patches) >= count_limit:
                 return patches
+    return patches
+
+
+def get_patches_from_csv(
+    csv_path: Path,
+    repo_filter: str | None = None,
+    type_filter: str | None = None,
+    count_limit: int | None = None,
+    project_filter: str | None = None,
+    commit_filter: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Load patches from dataset/all_projects_final.csv.
+
+    CSV columns:
+      Project, Original Version, Original Commit,
+      Backport Version, Backport Commit, Backport Date, Type
+
+    Skips projects that have no entry in REPO_PATH_MAP or whose repo
+    directory does not exist on disk.
+    """
+    project_root = Path(__file__).parent.parent
+    patches: list[dict[str, Any]] = []
+
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            project = (row.get("Project") or "").strip().lower()
+            original_commit = (row.get("Original Commit") or "").strip()
+            backport_commit = (row.get("Backport Commit") or "").strip()
+            patch_type = (row.get("Type") or "").strip()
+
+            if not project or not original_commit or not backport_commit:
+                continue
+            if repo_filter and project != repo_filter:
+                continue
+            if project_filter and project != project_filter:
+                continue
+            if type_filter and patch_type != type_filter:
+                continue
+            if commit_filter and original_commit != commit_filter:
+                continue
+
+            rel_path = REPO_PATH_MAP.get(project)
+            if rel_path is None:
+                continue  # project not configured
+            repo_path = str(project_root / rel_path)
+            if not os.path.isdir(repo_path):
+                continue  # repo not cloned
+
+            patches.append({
+                "repo": project,
+                "repo_path": repo_path,
+                "type": patch_type,
+                "original_commit": original_commit,
+                "backport_commit": backport_commit,
+                "description": f"{row.get('Original Version','')} → {row.get('Backport Version','')}",
+            })
+            if count_limit and len(patches) >= count_limit:
+                break
+
     return patches
 
 
@@ -270,7 +341,7 @@ def _build_aux_hunks_from_target_patch(target_patch: str) -> list[dict]:
     return result
 
 
-def update_summary_md(output_dir: Path) -> None:
+def update_summary_md(output_dir: Path, no_notifications: bool = False) -> None:
     """
     Scan all results.json files under output_dir and regenerate SUMMARY.md.
 
@@ -366,6 +437,8 @@ def update_summary_md(output_dir: Path) -> None:
         "| ------- | ---- | ------ | :-----: | :---: | :------------------------: | ------- | -------- |",
     ]
 
+    inconclusive: list[dict[str, str]] = []
+
     for result_file in sorted(output_dir.glob("*/*/results.json")):
         try:
             with open(result_file, "r", encoding="utf-8") as f:
@@ -398,7 +471,6 @@ def update_summary_md(output_dir: Path) -> None:
 
         success_icon = "✓" if success else ("✗" if success is False else "-")
         build_icon = "✓" if build_ok else ("✗" if build_ok is False else "-")
-        test_icon = "✓" if test_ok else ("✗" if test_ok is False else "-")
         test_detail = f"{f2p} / {newly} / {p2f}" if (test_ok is not None) else "-"
 
         lines.append(
@@ -406,9 +478,53 @@ def update_summary_md(output_dir: Path) -> None:
             f"{build_icon} | {test_detail} | {details_str} | {cat} |"
         )
 
+        # Collect patches where test reports were never found (inconclusive signal).
+        reason = transition.get("reason", "")
+        if not transition.get("valid_backport_signal") and "Inconclusive" in reason:
+            inconclusive.append({
+                "project": project,
+                "type": patch_type,
+                "original_commit": r.get("original_commit", "?"),
+                "backport_commit": r.get("backport_commit", "?"),
+                "reason": reason,
+                "result_dir": str(result_file.parent.relative_to(output_dir)),
+            })
+
+    if inconclusive:
+        lines += [
+            "",
+            "---",
+            "",
+            "## Inconclusive — no test reports found (retry candidates)",
+            "",
+            "> These patches ran but no XML reports were produced for the target test classes.",
+            "> Re-run after fixing test-task selection or infrastructure issues.",
+            "",
+            "| Project | Type | Original Commit | Backport Commit | Reason | Result dir |",
+            "| ------- | ---- | --------------- | --------------- | ------ | ---------- |",
+        ]
+        for inc in inconclusive:
+            orig = inc["original_commit"][:10]
+            bkpt = inc["backport_commit"][:10]
+            reason = inc["reason"].replace("|", "\\|")
+            lines.append(
+                f"| {inc['project']} | {inc['type']} | `{orig}` | `{bkpt}` "
+                f"| {reason} | `{inc['result_dir']}` |"
+            )
+
     summary_path = output_dir / "SUMMARY.md"
     summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"  SUMMARY.md updated → {summary_path}")
+
+    # Send update to Telegram
+    if not no_notifications:
+        try:
+            notifier = TelegramNotifier()
+            if notifier.bot_token and notifier.chat_id:
+                print(f"  [pipeline] Sending updated SUMMARY.md to Telegram...")
+                notifier.send_markdown_file(summary_path)
+        except Exception as e:
+            print(f"  [pipeline] Failed to send Telegram notification: {e}")
 
 
 def make_serializable(obj: Any) -> Any:
@@ -761,13 +877,21 @@ def main() -> None:
         epilog="""
 Examples:
   python run_full_pipeline_shadow_v3.py
+  python run_full_pipeline_shadow_v3.py --mode dataset --repo elasticsearch --type TYPE-I
+  python run_full_pipeline_shadow_v3.py --mode dataset --count 10
   python run_full_pipeline_shadow_v3.py --repo elasticsearch --type TYPE-I
   python run_full_pipeline_shadow_v3.py --count 3
   python run_full_pipeline_shadow_v3.py --project elasticsearch --commit abc123def456
   python run_full_pipeline_shadow_v3.py --skip-validation
         """,
     )
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--mode", choices=["yaml", "dataset"], default="yaml",
+                        help="Patch source: 'yaml' (patches.yaml, default) or 'dataset' "
+                             "(dataset/all_projects_final.csv)")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG,
+                        help="Path to patches.yaml (only used in yaml mode)")
+    parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET,
+                        help="Path to CSV dataset (only used in dataset mode)")
     parser.add_argument("--repo", type=str, default=None,
                         help="Filter by repository name")
     parser.add_argument("--project", type=str, default=None,
@@ -780,29 +904,43 @@ Examples:
                         help="Limit to N patches")
     parser.add_argument("--skip-validation", action="store_true",
                         help="Run agents 1-6 only (no build/test)")
+    parser.add_argument("--no-notifications", action="store_true",
+                        help="Disable Telegram notifications")
 
     args = parser.parse_args()
 
-    try:
-        config = load_config(args.config)
-    except FileNotFoundError as e:
-        print(f"ERROR: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"ERROR parsing config: {e}")
-        sys.exit(1)
-
-    patches = get_patches_from_config(
-        config,
-        repo_filter=args.repo,
-        project_filter=args.project,
-        type_filter=args.type,
-        commit_filter=args.commit,
-        count_limit=args.count,
-    )
+    if args.mode == "dataset":
+        if not args.dataset.exists():
+            print(f"ERROR: Dataset file not found: {args.dataset}")
+            sys.exit(1)
+        patches = get_patches_from_csv(
+            args.dataset,
+            repo_filter=args.repo,
+            project_filter=args.project,
+            type_filter=args.type,
+            commit_filter=args.commit,
+            count_limit=args.count,
+        )
+    else:
+        try:
+            config = load_config(args.config)
+        except FileNotFoundError as e:
+            print(f"ERROR: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"ERROR parsing config: {e}")
+            sys.exit(1)
+        patches = get_patches_from_config(
+            config,
+            repo_filter=args.repo,
+            project_filter=args.project,
+            type_filter=args.type,
+            commit_filter=args.commit,
+            count_limit=args.count,
+        )
 
     if not patches:
-        print(f"No patches found (repo={args.repo}, type={args.type}, count={args.count})")
+        print(f"No patches found (mode={args.mode}, repo={args.repo}, type={args.type}, count={args.count})")
         sys.exit(0)
 
     run_ts = datetime.now().isoformat()
@@ -825,7 +963,7 @@ Examples:
             traceback.print_exc()
         finally:
             git_checkout(repo_path, "main")
-        update_summary_md(OUTPUT_DIR)
+        update_summary_md(OUTPUT_DIR, no_notifications=args.no_notifications)
 
     print(f"\n{'='*64}")
     print(f"Shadow v3 run complete. Results in {OUTPUT_DIR.resolve()}/")

@@ -1,0 +1,250 @@
+commit a9b402ecedd96c3db5a4945937b7d90ae03457a3
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Sat Jun 29 09:06:58 2024 +0200
+
+    Show in progress snapshots in sys.snapshots
+
+diff --git a/docs/appendices/release-notes/5.7.3.rst b/docs/appendices/release-notes/5.7.3.rst
+index ac6d8fbf88..a9d763a1af 100644
+--- a/docs/appendices/release-notes/5.7.3.rst
++++ b/docs/appendices/release-notes/5.7.3.rst
+@@ -48,6 +48,9 @@ See the :ref:`version_5.7.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that caused snapshots in progress to not be shown in the
++  ``sys.snapshots`` table.
++
+ - Fixed an issue that caused queries to incorrectly filter out rows when the
+   ``WHERE`` clause contained :ref:`scalar-format_type` function under ``NOT`` or
+   ``!=`` operators.
+diff --git a/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java b/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java
+index afd4547c69..eddcc0acf7 100644
+--- a/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java
++++ b/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java
+@@ -31,8 +31,11 @@ import java.util.function.Supplier;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.elasticsearch.Version;
++import org.elasticsearch.cluster.SnapshotsInProgress;
++import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.inject.Inject;
+ import org.elasticsearch.common.inject.Singleton;
++import org.elasticsearch.repositories.IndexId;
+ import org.elasticsearch.repositories.RepositoriesService;
+ import org.elasticsearch.repositories.Repository;
+ import org.elasticsearch.snapshots.SnapshotException;
+@@ -40,6 +43,8 @@ import org.elasticsearch.snapshots.SnapshotId;
+ import org.elasticsearch.snapshots.SnapshotInfo;
+ import org.elasticsearch.snapshots.SnapshotShardFailure;
+ import org.elasticsearch.snapshots.SnapshotState;
++import org.elasticsearch.snapshots.SnapshotsService;
++import org.jetbrains.annotations.Nullable;
+ import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.common.collections.Lists;
+@@ -53,15 +58,17 @@ public class SysSnapshots {
+ 
+     private static final Logger LOGGER = LogManager.getLogger(SysSnapshots.class);
+     private final Supplier<Collection<Repository>> getRepositories;
++    private final ClusterService clusterService;
+ 
+     @Inject
+-    public SysSnapshots(RepositoriesService repositoriesService) {
+-        this(repositoriesService::getRepositoriesList);
++    public SysSnapshots(RepositoriesService repositoriesService, ClusterService clusterService) {
++        this(repositoriesService::getRepositoriesList, clusterService);
+     }
+ 
+     @VisibleForTesting
+-    SysSnapshots(Supplier<Collection<Repository>> getRepositories) {
++    SysSnapshots(Supplier<Collection<Repository>> getRepositories, ClusterService clusterService) {
+         this.getRepositories = getRepositories;
++        this.clusterService = clusterService;
+     }
+ 
+     public CompletableFuture<Iterable<SysSnapshot>> currentSnapshots() {
+@@ -77,6 +84,11 @@ public class SysSnapshots {
+                     return CompletableFutures.allSuccessfulAsList(snapshots);
+                 });
+             sysSnapshots.add(futureSnapshots);
++
++            // Add snapshots in progress in this repository.
++            final SnapshotsInProgress snapshotsInProgress = clusterService.state().custom(SnapshotsInProgress.TYPE);
++            List<SysSnapshot> inProgressSnapshots = snapshotsInProgress(snapshotsInProgress, repository.getMetadata().name());
++            sysSnapshots.add(CompletableFuture.completedFuture(inProgressSnapshots));
+         }
+         return CompletableFutures.allSuccessfulAsList(sysSnapshots).thenApply(data -> {
+             ArrayList<SysSnapshot> result = new ArrayList<>();
+@@ -105,6 +117,22 @@ public class SysSnapshots {
+         );
+     }
+ 
++    private static SysSnapshot toSysSnapshot(String repositoryName,
++                                             SnapshotsInProgress.Entry entry,
++                                             List<String> partedTables) {
++        return new SysSnapshot(
++            entry.snapshot().getSnapshotId().getName(),
++            repositoryName,
++            entry.indices().stream().map(IndexId::getName).toList(),
++            partedTables,
++            entry.startTime(),
++            0L,
++            Version.CURRENT.toString(),
++            SnapshotState.IN_PROGRESS.name(),
++            Collections.emptyList()
++        );
++    }
++
+     private static CompletableFuture<SysSnapshot> createSysSnapshot(Repository repository, SnapshotId snapshotId) {
+         return repository.getSnapshotGlobalMetadata(snapshotId).thenCombine(
+             repository.getSnapshotInfo(snapshotId),
+@@ -135,4 +163,26 @@ public class SysSnapshots {
+                 throw Exceptions.toRuntimeException(err);
+             });
+     }
++
++    /**
++     * Returns a list of currently running snapshots from repository sorted by snapshot creation date
++     *
++     * @param snapshotsInProgress snapshots in progress in the cluster state
++     * @param repositoryName repository to check running snapshots
++     * @return list of snapshots
++     */
++    public static List<SysSnapshot> snapshotsInProgress(@Nullable SnapshotsInProgress snapshotsInProgress,
++                                                        String repositoryName) {
++        List<SysSnapshot> sysSnapshots = new ArrayList<>();
++        List<SnapshotsInProgress.Entry> entries =
++            SnapshotsService.currentSnapshots(snapshotsInProgress, repositoryName, Collections.emptyList());
++        for (SnapshotsInProgress.Entry entry : entries) {
++            List<String> partedTables = new ArrayList<>();
++            for (var template : entry.templates()) {
++                partedTables.add(RelationName.fqnFromIndexName(template));
++            }
++            sysSnapshots.add(SysSnapshots.toSysSnapshot(repositoryName, entry, partedTables));
++        }
++        return sysSnapshots;
++    }
+ }
+diff --git a/server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java b/server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java
+index 8f9c25792b..492373cdff 100644
+--- a/server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java
++++ b/server/src/test/java/io/crate/expression/reference/sys/snapshot/SysSnapshotsTest.java
+@@ -26,6 +26,7 @@ import static org.mockito.Mockito.doReturn;
+ import static org.mockito.Mockito.mock;
+ import static org.mockito.Mockito.when;
+ 
++import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.HashMap;
+ import java.util.List;
+@@ -37,8 +38,11 @@ import java.util.stream.Collectors;
+ import java.util.stream.Stream;
+ import java.util.stream.StreamSupport;
+ 
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.SnapshotsInProgress;
+ import org.elasticsearch.cluster.metadata.Metadata;
+ import org.elasticsearch.cluster.metadata.RepositoryMetadata;
++import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.UUIDs;
+ import org.elasticsearch.common.collect.ImmutableOpenMap;
+ import org.elasticsearch.common.settings.Settings;
+@@ -46,14 +50,18 @@ import org.elasticsearch.repositories.IndexMetaDataGenerations;
+ import org.elasticsearch.repositories.Repository;
+ import org.elasticsearch.repositories.RepositoryData;
+ import org.elasticsearch.repositories.ShardGenerations;
++import org.elasticsearch.snapshots.Snapshot;
+ import org.elasticsearch.snapshots.SnapshotException;
+ import org.elasticsearch.snapshots.SnapshotId;
+ import org.elasticsearch.snapshots.SnapshotInfo;
+ import org.elasticsearch.snapshots.SnapshotState;
+ import org.elasticsearch.test.ESTestCase;
+ import org.junit.Test;
++import org.mockito.Answers;
+ import org.mockito.Mockito;
+ 
++import io.crate.metadata.PartitionName;
++
+ public class SysSnapshotsTest extends ESTestCase {
+ 
+     @Test
+@@ -102,7 +110,9 @@ public class SysSnapshotsTest extends ESTestCase {
+             .when(r1)
+             .getSnapshotInfo(s3);
+ 
+-        SysSnapshots sysSnapshots = new SysSnapshots(() -> Collections.singletonList(r1));
++        ClusterService clusterService = mock(ClusterService.class, Answers.RETURNS_DEEP_STUBS);
++        when(clusterService.state().custom(SnapshotsInProgress.TYPE)).thenReturn(null);
++        SysSnapshots sysSnapshots = new SysSnapshots(() -> Collections.singletonList(r1), clusterService);
+         Stream<SysSnapshot> currentSnapshots = StreamSupport.stream(
+             Spliterators.spliteratorUnknownSize(sysSnapshots.currentSnapshots().get().iterator(), Spliterator.ORDERED),
+             false
+@@ -113,14 +123,65 @@ public class SysSnapshotsTest extends ESTestCase {
+ 
+     @Test
+     public void test_current_snapshot_does_not_fail_if_get_repository_data_returns_failed_future() throws Exception {
+-        Repository r1 = mock(Repository.class);
++        Repository r1 = mock(Repository.class, Answers.RETURNS_DEEP_STUBS);
+         Mockito
+             .doReturn(CompletableFuture.failedFuture(new IllegalStateException("some error")))
+             .when(r1).getRepositoryData();
++        when(r1.getMetadata().name()).thenReturn(null); // Not important for this test, avoiding NPE.
+ 
+-        SysSnapshots sysSnapshots = new SysSnapshots(() -> List.of(r1));
++        ClusterService clusterService = mock(ClusterService.class, Answers.RETURNS_DEEP_STUBS);
++        when(clusterService.state().custom(SnapshotsInProgress.TYPE)).thenReturn(null);
++        SysSnapshots sysSnapshots = new SysSnapshots(() -> List.of(r1), clusterService);
+         CompletableFuture<Iterable<SysSnapshot>> currentSnapshots = sysSnapshots.currentSnapshots();
+         Iterable<SysSnapshot> iterable = currentSnapshots.get(5, TimeUnit.SECONDS);
+         assertThat(iterable.iterator().hasNext()).isFalse();
+     }
++
++    @Test
++    public void test_snapshot_in_progress_shown_in_sys_snapshots() throws Exception {
++        RepositoryData repositoryData = new RepositoryData(
++            1,
++            Collections.emptyMap(), // No completed snapshots
++            Collections.emptyMap(),
++            Collections.emptyMap(),
++            Collections.emptyMap(),
++            ShardGenerations.EMPTY,
++            IndexMetaDataGenerations.EMPTY
++        );
++
++        Repository r1 = mock(Repository.class);
++        doReturn(CompletableFuture.completedFuture(repositoryData))
++            .when(r1)
++            .getRepositoryData();
++
++        String repositoryName = "repo";
++        String snapshot = "snapshot";
++        when(r1.getMetadata()).thenReturn(new RepositoryMetadata(repositoryName, "fs", Settings.EMPTY));
++
++        SnapshotId snapshotId = new SnapshotId(snapshot, UUIDs.randomBase64UUID());
++        String template = PartitionName.templateName("my_schema", "empty_parted_table");
++        SnapshotsInProgress.Entry entry = SnapshotsInProgress.startedEntry(
++            new Snapshot(repositoryName, snapshotId),
++            true,
++            true,
++            List.of(),
++            List.of(template),
++            123L,
++            1L,
++            ImmutableOpenMap.of(),
++            Version.CURRENT
++        );
++        ClusterService clusterService = mock(ClusterService.class, Answers.RETURNS_DEEP_STUBS);
++        when(clusterService.state().custom(SnapshotsInProgress.TYPE)).thenReturn(SnapshotsInProgress.of(List.of(entry)));
++        List<String> names = new ArrayList<>();
++        List<List<String>> tables = new ArrayList<>();
++        SysSnapshots sysSnapshots = new SysSnapshots(() -> Collections.singletonList(r1), clusterService);
++        sysSnapshots.currentSnapshots().get().forEach(sysSnapshot -> {
++            names.add(sysSnapshot.name());
++            tables.add(sysSnapshot.tables());
++        });
++        assertThat(names).containsExactlyInAnyOrder("snapshot");
++        assertThat(tables).hasSize(1);
++        assertThat(tables.get(0)).containsExactlyInAnyOrder("my_schema.empty_parted_table");
++    }
+ }

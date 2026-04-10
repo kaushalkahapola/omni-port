@@ -1,0 +1,28 @@
+diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
+index 4f6f01847f..e1f9b9d95a 100644
+--- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
++++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
+@@ -159,14 +159,9 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+ 
+     @Override
+     public Long terminatePartial(RamAccounting ramAccounting, HllState state) {
+-        if (state.isInitialized()) {
+-            return state.value();
+-        }
+-        return null;
++        return state.isInitialized() ? state.value() : 0L;
+     }
+ 
+-
+-
+     @Nullable
+     @Override
+     public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,
+@@ -454,7 +449,6 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+             return (HyperLogLogDistinctAggregation.HllState) value;
+         }
+ 
+-
+         @Override
+         public int compare(HyperLogLogDistinctAggregation.HllState val1, HyperLogLogDistinctAggregation.HllState val2) {
+             if (val1 == null) {
