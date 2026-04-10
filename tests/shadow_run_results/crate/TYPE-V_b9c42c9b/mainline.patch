@@ -1,0 +1,475 @@
+commit b9c42c9bbc08a39b51c7205a98da6972b56ce612
+Author: Mathias Fussenegger <f.mathias@zignar.net>
+Date:   Wed Jul 30 13:24:59 2025 +0200
+
+    Fix stuck SELECT via pg if maxRows=numRows using batch execution
+    
+    A portal got suspended if `maxRows` set by the client matched the number
+    of rows returned.
+    
+    This resulted in a `portalSuspended` message that a client might ignore,
+    moving onto executing the next statement and leaving the portal in
+    suspended state.
+    
+    Two issues here:
+    
+    - The portal should complete instead of suspend if it is on the last row.
+    - Suspended portals should get cleaned up if the client doesn't continue
+      using them.
+
+diff --git a/docs/appendices/release-notes/5.10.12.rst b/docs/appendices/release-notes/5.10.12.rst
+index 9c6f83085f..053dae6209 100644
+--- a/docs/appendices/release-notes/5.10.12.rst
++++ b/docs/appendices/release-notes/5.10.12.rst
+@@ -47,5 +47,9 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that could cause ``SELECT`` statements to get stuck if executed
++  via a PostgreSQL client that set the ``maxRow`` option as part of an
++  ``EXECUTE`` message and it matched the number of result rows exactly.
++
+ - Fixed an issue that prevented users to change the value of the
+   :ref:`indices.recovery.max_concurrent_file_chunks` setting.
+diff --git a/docs/appendices/release-notes/6.0.1.rst b/docs/appendices/release-notes/6.0.1.rst
+index 4f5faeb983..a2a1a311f0 100644
+--- a/docs/appendices/release-notes/6.0.1.rst
++++ b/docs/appendices/release-notes/6.0.1.rst
+@@ -47,6 +47,10 @@ series.
+ Fixes
+ =====
+ 
++- Fixed an issue that could cause ``SELECT`` statements to get stuck if executed
++  via a PostgreSQL client that set the ``maxRow`` option as part of an
++  ``EXECUTE`` message and it matched the number of result rows exactly.
++
+ - Fixed a regression introduced in 6.0.0 that could cause ``INSERT INTO``
+   statements to get stuck during a network partition.
+ 
+diff --git a/server/src/main/java/io/crate/protocols/postgres/Portal.java b/server/src/main/java/io/crate/protocols/postgres/Portal.java
+index 8dcba13cda..c4bf4f630a 100644
+--- a/server/src/main/java/io/crate/protocols/postgres/Portal.java
++++ b/server/src/main/java/io/crate/protocols/postgres/Portal.java
+@@ -25,9 +25,9 @@ import java.util.List;
+ 
+ import org.jetbrains.annotations.Nullable;
+ 
++import io.crate.analyze.AnalyzedStatement;
+ import io.crate.session.PreparedStmt;
+ import io.crate.session.RowConsumerToResultReceiver;
+-import io.crate.analyze.AnalyzedStatement;
+ 
+ public final class Portal {
+ 
+@@ -91,6 +91,7 @@ public final class Portal {
+         return "Portal{" +
+                "portalName=" + portalName +
+                ", preparedStmt=" + preparedStmt.rawStatement() +
++               ", consumer=" + consumer +
+                '}';
+     }
+ }
+diff --git a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+index 6ecea107b3..9c4fda3d25 100644
+--- a/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
++++ b/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java
+@@ -45,12 +45,12 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+      * Reset per suspend/execute
+      */
+     private int rowCount = 0;
+-    private BatchIterator<Row> activeIt;
++    private CompletableFuture<BatchIterator<Row>> suspendedIt = new CompletableFuture<>();
+ 
+     public RowConsumerToResultReceiver(ResultReceiver<?> resultReceiver, int maxRows, Consumer<Throwable> onCompletion) {
+         this.resultReceiver = resultReceiver;
+         this.maxRows = maxRows;
+-        completionFuture.whenComplete((res, err) -> {
++        completionFuture.whenComplete((_, err) -> {
+             onCompletion.accept(err);
+         });
+     }
+@@ -77,23 +77,24 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+         while (true) {
+             try {
+                 while (iterator.moveNext()) {
++                    if (rowCount > 0 && maxRows > 0 && rowCount % maxRows == 0) {
++                        suspendedIt.complete(iterator);
++                        resultReceiver.batchFinished();
++                        return; // resumed via postgres protocol, close is done later
++                    }
+                     rowCount++;
+                     CompletableFuture<Void> writeFuture = resultReceiver.setNextRow(iterator.currentElement());
+                     if (writeFuture != null) {
+                         LOGGER.trace("Suspended execution after {} rows as the receiver is not writable anymore", rowCount);
+-                        activeIt = iterator;
++                        suspendedIt.complete(iterator);
+                         writeFuture.thenRun(() -> {
+                             LOGGER.trace("Resume execution after {} rows", rowCount);
+-                            resume();
++                            suspendedIt = new CompletableFuture<>();
++                            rowCount = 0;
++                            consumeIt(iterator);
+                         });
+                         return;
+                     }
+-
+-                    if (maxRows > 0 && rowCount % maxRows == 0) {
+-                        activeIt = iterator;
+-                        resultReceiver.batchFinished();
+-                        return; // resumed via postgres protocol, close is done later
+-                    }
+                 }
+                 if (iterator.allLoaded()) {
+                     completionFuture.complete(null);
+@@ -109,7 +110,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+                         }
+                         continue;
+                     }
+-                    nextBatch.whenComplete((r, f) -> {
++                    nextBatch.whenComplete((_, f) -> {
+                         if (f == null) {
+                             consumeIt(iterator);
+                         } else {
+@@ -135,17 +136,17 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+      * and finish the ResultReceiver
+      */
+     public void closeAndFinishIfSuspended() {
+-        if (activeIt != null) {
+-            activeIt.close();
++        suspendedIt.whenComplete((it, _) -> {
++            it.close();
+             completionFuture.complete(null);
+             // resultReceiver is left untouched:
+             // - A previous .batchCompleted() call already flushed out pending messages
+             // - Calling failure/allFinished would lead to extra messages, including  sentCommandComplete, to the client, which can lead to issues on the client.
+-        }
++        });
+     }
+ 
+     public boolean suspended() {
+-        return activeIt != null;
++        return suspendedIt.isDone();
+     }
+ 
+     public void replaceResultReceiver(ResultReceiver<?> resultReceiver, int maxRows) {
+@@ -159,10 +160,20 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+     }
+ 
+     public void resume() {
+-        assert activeIt != null : "resume must only be called if suspended() returned true and activeIt is not null";
+-        BatchIterator<Row> iterator = this.activeIt;
+-        this.activeIt = null;
+-        consumeIt(iterator);
++        assert suspended() : "resume must only be called if suspended() returned true";
++        BatchIterator<Row> it = null;
++        try {
++            it = suspendedIt.join();
++            suspendedIt = new CompletableFuture<>();
++            resultReceiver.setNextRow(it.currentElement());
++            consumeIt(it);
++        } catch (Throwable t) {
++            if (it != null) {
++                it.close();
++            }
++            completionFuture.completeExceptionally(t);
++            resultReceiver.fail(t);
++        }
+     }
+ 
+     @Override
+@@ -171,7 +182,7 @@ public class RowConsumerToResultReceiver implements RowConsumer {
+                "resultReceiver=" + resultReceiver +
+                ", maxRows=" + maxRows +
+                ", rowCount=" + rowCount +
+-               ", activeIt=" + activeIt +
++               ", activeIt=" + suspendedIt +
+                '}';
+     }
+ }
+diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
+index 0e89e41585..06f387547a 100644
+--- a/server/src/main/java/io/crate/session/Session.java
++++ b/server/src/main/java/io/crate/session/Session.java
+@@ -630,6 +630,7 @@ public class Session implements AutoCloseable {
+         if (activeExecution == null) {
+             return triggerDeferredExecutions(forceBulk);
+         } else {
++            LOGGER.debug("method=sync activeExecution={}", activeExecution);
+             var result = activeExecution;
+             activeExecution = null;
+             return result;
+@@ -679,9 +680,10 @@ public class Session implements AutoCloseable {
+     }
+ 
+     private CompletableFuture<?> triggerDeferredExecutions(boolean forceBulk) {
+-        switch (deferredExecutionsByStmt.size()) {
++        int numDeferred = deferredExecutionsByStmt.size();
++        LOGGER.debug("method=sync deferredExecutions={}", numDeferred);
++        switch (numDeferred) {
+             case 0:
+-                LOGGER.debug("method=sync deferredExecutions=0");
+                 return CompletableFuture.completedFuture(null);
+             case 1: {
+                 var deferredExecutions = deferredExecutionsByStmt.values().iterator().next();
+@@ -689,7 +691,7 @@ public class Session implements AutoCloseable {
+                 return exec(deferredExecutions, forceBulk);
+             }
+             default: {
+-                // Mix of different defered execution is PG specific.
++                // Mix of different deferred execution is PG specific.
+                 // HTTP sync-s at the end of both single/bulk requests, and it's always one statement.
+                 // sequentiallize execution to ensure client receives row counts in correct order
+                 CompletableFuture<?> allCompleted = null;
+diff --git a/server/src/test/java/io/crate/integrationtests/PostgresITest.java b/server/src/test/java/io/crate/integrationtests/PostgresITest.java
+index db93384dc2..0d87ea916b 100644
+--- a/server/src/test/java/io/crate/integrationtests/PostgresITest.java
++++ b/server/src/test/java/io/crate/integrationtests/PostgresITest.java
+@@ -969,6 +969,22 @@ public class PostgresITest extends IntegTestCase {
+         }
+     }
+ 
++    @Test
++    public void testExecuteBatchDoesNotLeakSysJobsLog() throws Exception {
++        try (Connection conn = DriverManager.getConnection(url(RW), properties)) {
++            PreparedStatement stmt = conn.prepareStatement("SELECT ?");
++            for (int i = 1; i <= 3; i++) {
++                stmt.setInt(1, i);
++                stmt.addBatch();
++            }
++            stmt.executeBatch();
++        }
++        for (JobsLogService jobsLogService : cluster().getDataNodeInstances(JobsLogService.class)) {
++            assertBusy(() -> assertThat(jobsLogService.get().activeJobs()).isEmpty());
++        }
++    }
++
++
+     @Test
+     public void test_insert_with_on_conflict_do_nothing_batch_error_resp_is_0_for_conflicting_items() throws Exception {
+         try (Connection conn = DriverManager.getConnection(url(RW), properties)) {
+diff --git a/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java b/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java
+index bc004a0580..8fee570994 100644
+--- a/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java
++++ b/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java
+@@ -21,7 +21,7 @@
+ 
+ package io.crate.session;
+ 
+-import static io.crate.testing.Asserts.assertThat;
++import static org.assertj.core.api.Assertions.assertThat;
+ 
+ import java.util.ArrayList;
+ import java.util.List;
+@@ -30,15 +30,17 @@ import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.atomic.AtomicReference;
+ import java.util.stream.IntStream;
+ 
++import org.elasticsearch.test.ESTestCase;
+ import org.jetbrains.annotations.Nullable;
+ import org.junit.Test;
+ 
++import io.crate.data.BatchIterator;
+ import io.crate.data.Row;
+ import io.crate.data.testing.BatchSimulatingIterator;
+ import io.crate.data.testing.FailingBatchIterator;
+ import io.crate.data.testing.TestingBatchIterators;
+ 
+-public class RowConsumerToResultReceiverTest {
++public class RowConsumerToResultReceiverTest extends ESTestCase {
+ 
+     @Test
+     public void testBatchedIteratorConsumption() throws Exception {
+@@ -101,7 +103,7 @@ public class RowConsumerToResultReceiverTest {
+             }
+         };
+         RowConsumerToResultReceiver batchConsumer =
+-            new RowConsumerToResultReceiver(resultReceiver, 0, t -> {});
++            new RowConsumerToResultReceiver(resultReceiver, 1, t -> {});
+ 
+         batchConsumer.accept(batchSimulatingIterator, null);
+ 
+@@ -114,4 +116,29 @@ public class RowConsumerToResultReceiverTest {
+         assertThat(batchConsumer.suspended()).isFalse();
+         assertThat(rowCount[0]).isEqualTo(10);
+     }
++
++    @Test
++    public void test_does_not_suspend_consumer_on_last_row() throws Exception {
++        {
++            int numRows = randomIntBetween(1, 10);
++            BatchIterator<Row> batchIterator = TestingBatchIterators.range(0, numRows);
++            BaseResultReceiver resultReceiver = new BaseResultReceiver();
++            var consumer = new RowConsumerToResultReceiver(resultReceiver, numRows, _ -> {});
++
++            consumer.accept(batchIterator, null);
++            assertThat(consumer.suspended()).isFalse();
++            assertThat(consumer.completionFuture()).isDone();
++        }
++        {
++            int numRows = randomIntBetween(2, 10);
++            BatchIterator<Row> numbers = TestingBatchIterators.range(0, numRows);
++            var batchIterator = new BatchSimulatingIterator<>(numbers, numRows - 1, 1, null);
++            BaseResultReceiver resultReceiver = new BaseResultReceiver();
++            var consumer = new RowConsumerToResultReceiver(resultReceiver, numRows, _ -> {});
++
++            consumer.accept(batchIterator, null);
++            assertThat(consumer.completionFuture()).succeedsWithin(5, TimeUnit.SECONDS);
++            assertThat(consumer.suspended()).isFalse();
++        }
++    }
+ }
+diff --git a/server/src/test/java/io/crate/session/SessionTest.java b/server/src/test/java/io/crate/session/SessionTest.java
+index d8a94752d4..70d89c05ef 100644
+--- a/server/src/test/java/io/crate/session/SessionTest.java
++++ b/server/src/test/java/io/crate/session/SessionTest.java
+@@ -24,6 +24,7 @@ package io.crate.session;
+ import static io.crate.session.Session.UNNAMED;
+ import static io.crate.testing.Asserts.assertThat;
+ import static java.util.concurrent.CompletableFuture.completedFuture;
++import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ import static org.mockito.ArgumentMatchers.any;
+ import static org.mockito.ArgumentMatchers.anyInt;
+@@ -43,6 +44,7 @@ import java.util.concurrent.ScheduledExecutorService;
+ import java.util.concurrent.ScheduledFuture;
+ import java.util.concurrent.ScheduledThreadPoolExecutor;
+ import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicReference;
+ 
+ import org.elasticsearch.client.Client;
+ import org.elasticsearch.threadpool.ThreadPool;
+@@ -59,6 +61,7 @@ import io.crate.common.unit.TimeValue;
+ import io.crate.data.InMemoryBatchIterator;
+ import io.crate.data.Row;
+ import io.crate.data.RowConsumer;
++import io.crate.data.testing.TestingBatchIterators;
+ import io.crate.exceptions.JobKilledException;
+ import io.crate.execution.dml.BulkResponse;
+ import io.crate.execution.engine.collect.stats.QueueSink;
+@@ -69,6 +72,7 @@ import io.crate.planner.Plan;
+ import io.crate.planner.Planner;
+ import io.crate.planner.PlannerContext;
+ import io.crate.planner.operators.SubQueryResults;
++import io.crate.protocols.postgres.FormatCodes.FormatCode;
+ import io.crate.protocols.postgres.Portal;
+ import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
+ import io.crate.testing.SQLExecutor;
+@@ -398,35 +402,34 @@ public class SessionTest extends CrateDummyClusterServiceUnitTest {
+     @Test
+     public void test_statement_timeout_schedule_is_removed_for_finished_jobs() throws Exception {
+         Planner planner = mock(Planner.class, Answers.RETURNS_MOCKS);
++        Plan plan = new Plan() {
++            @Override
++            public StatementType type() {
++                return StatementType.INSERT;
++            }
++
++            @Override
++            public void executeOrFail(DependencyCarrier dependencies,
++                                      PlannerContext plannerContext,
++                                      RowConsumer consumer,
++                                      Row params,
++                                      SubQueryResults subQueryResults) throws Exception {
++                consumer.accept(InMemoryBatchIterator.empty(null), null);
++            }
++
++            @Override
++            public CompletableFuture<BulkResponse> executeBulk(DependencyCarrier executor,
++                                                               PlannerContext plannerContext,
++                                                               List<Row> bulkParams,
++                                                               SubQueryResults subQueryResults) {
++                return new CompletableFuture<>();
++            }
++        };
++        when(planner.plan(any(AnalyzedStatement.class), any(PlannerContext.class)))
++            .thenReturn(plan);
+         SQLExecutor sqlExecutor = SQLExecutor.builder(clusterService)
+             .setPlanner(planner)
+             .build();
+-        when(planner.plan(any(AnalyzedStatement.class), any(PlannerContext.class)))
+-            .thenReturn(
+-                new Plan() {
+-                    @Override
+-                    public StatementType type() {
+-                        return StatementType.INSERT;
+-                    }
+-
+-                    @Override
+-                    public void executeOrFail(DependencyCarrier dependencies,
+-                                              PlannerContext plannerContext,
+-                                              RowConsumer consumer,
+-                                              Row params,
+-                                              SubQueryResults subQueryResults) throws Exception {
+-                        consumer.accept(InMemoryBatchIterator.empty(null), null);
+-                    }
+-
+-                    @Override
+-                    public CompletableFuture<BulkResponse> executeBulk(DependencyCarrier executor,
+-                                                                       PlannerContext plannerContext,
+-                                                                       List<Row> bulkParams,
+-                                                                       SubQueryResults subQueryResults) {
+-                        return new CompletableFuture<>();
+-                    }
+-                }
+-            );
+ 
+         DependencyCarrier dependencies = sqlExecutor.dependencyMock;
+         when(dependencies.scheduler()).thenReturn(THREAD_POOL.scheduler());
+@@ -512,6 +515,57 @@ public class SessionTest extends CrateDummyClusterServiceUnitTest {
+         }
+     }
+ 
++    @Test
++    public void test_binding_portal_again_closes_suspended_consumers_eventually() throws Exception {
++        Planner planner = mock(Planner.class, Answers.RETURNS_MOCKS);
++        AtomicReference<RowConsumer> consumerRef = new AtomicReference<>();
++        Plan plan = new Plan() {
++            @Override
++            public StatementType type() {
++                return StatementType.INSERT;
++            }
++
++            @Override
++            public void executeOrFail(DependencyCarrier dependencies,
++                                      PlannerContext plannerContext,
++                                      RowConsumer consumer,
++                                      Row params,
++                                      SubQueryResults subQueryResults) throws Exception {
++                consumerRef.set(consumer);
++            }
++
++            @Override
++            public CompletableFuture<BulkResponse> executeBulk(DependencyCarrier executor,
++                                                               PlannerContext plannerContext,
++                                                               List<Row> bulkParams,
++                                                               SubQueryResults subQueryResults) {
++                return new CompletableFuture<>();
++            }
++        };
++        when(planner.plan(any(AnalyzedStatement.class), any(PlannerContext.class)))
++            .thenReturn(plan);
++        SQLExecutor sqlExecutor = SQLExecutor.builder(clusterService)
++            .setPlanner(planner)
++            .build();
++        try (Session session = sqlExecutor.createSession()) {
++            session.parse("S1", "SELECT 1", Collections.emptyList());
++            session.bind("", "S1", List.of(), new FormatCode[0]);
++            BaseResultReceiver baseResultReceiver = new BaseResultReceiver();
++            session.execute("", 5, baseResultReceiver);
++
++            assertThat(baseResultReceiver.completionFuture()).isNotDone();
++            Portal portal = session.portals.get("");
++            assertThat(portal.activeConsumer()).isNotNull();
++            assertThat(portal.activeConsumer().suspended()).isFalse();
++
++            session.bind("", "S1", List.of(), new FormatCode[0]);
++            assertThat(portal.activeConsumer().suspended()).isFalse();
++            consumerRef.get().accept(TestingBatchIterators.range(0, 10), null);
++            assertThat(portal.activeConsumer().completionFuture()).succeedsWithin(1, TimeUnit.SECONDS);
++        }
++
++    }
++
+     @Test
+     public void test_simple_query_parse_failure_is_logged() throws Exception {
+         // https://github.com/crate/crate/issues/17651
