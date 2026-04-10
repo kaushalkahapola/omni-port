@@ -50,34 +50,32 @@ def run_git_localization(repo_path: str, file_path: str, hunk: Dict[str, Any]) -
     except FileNotFoundError:
         pass
 
-    # Attempt 2: Pickaxe search — handles file renames.
+    # Attempt 2: Rename detection — follow renames for THIS specific file path.
+    # Uses --follow --diff-filter=R so we only get renames of the exact file,
+    # not unrelated renames from a global content search.
     try:
-        search_term = old_content_lines[0].strip()
-        if not search_term:
-            return None
-
         cmd = [
             "git", "-C", repo_path,
-            "log", "-n", "5", "-S", search_term,
-            "--name-status", "--oneline",
+            "log", "-n", "10", "--diff-filter=R",
+            "--name-status", "--oneline", "--follow", "--", file_path,
         ]
         output = subprocess.check_output(
-            cmd, stderr=subprocess.DEVNULL, text=True, timeout=1.0
+            cmd, stderr=subprocess.DEVNULL, text=True, timeout=2.0
         )
-        if output:
-            for line in output.splitlines():
-                parts = line.split()
-                if len(parts) >= 3 and parts[1].startswith("R"):
-                    new_file_path = parts[2]
-                    return LocalizationResult(
-                        method_used="git_pickaxe",
-                        confidence=0.9,
-                        context_snapshot=old_content,
-                        symbol_mappings={},
-                        file_path=new_file_path,
-                        start_line=1,
-                        end_line=len(old_content_lines),
-                    )
+        for line in output.splitlines():
+            parts = line.split("\t")
+            # --name-status lines for renames look like: "R100\told_path\tnew_path"
+            if len(parts) == 3 and parts[0].startswith("R"):
+                new_file_path = parts[2].strip()
+                return LocalizationResult(
+                    method_used="git_pickaxe",
+                    confidence=0.9,
+                    context_snapshot=old_content,
+                    symbol_mappings={},
+                    file_path=new_file_path,
+                    start_line=1,
+                    end_line=len(old_content_lines),
+                )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         pass
 

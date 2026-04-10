@@ -1,0 +1,137 @@
+diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java
+index e62ffbb2ab7..898367ca706 100644
+--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java
++++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java
+@@ -89,7 +89,8 @@ public class DeprecationChecks {
+                 NodeDeprecationChecks::checkEqlEnabledSetting,
+                 NodeDeprecationChecks::checkNodeAttrData,
+                 NodeDeprecationChecks::checkWatcherBulkConcurrentRequestsSetting,
+-                NodeDeprecationChecks::checkTracingApmSettings
++                NodeDeprecationChecks::checkTracingApmSettings,
++                NodeDeprecationChecks::checkSourceModeInComponentTemplates
+             );
+ 
+     static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(
+@@ -98,8 +99,7 @@ public class DeprecationChecks {
+         IndexDeprecationChecks::checkIndexDataPath,
+         IndexDeprecationChecks::storeTypeSettingCheck,
+         IndexDeprecationChecks::frozenIndexSettingCheck,
+-        IndexDeprecationChecks::deprecatedCamelCasePattern,
+-        IndexDeprecationChecks::checkSourceModeInMapping
++        IndexDeprecationChecks::deprecatedCamelCasePattern
+     );
+ 
+     static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(
+diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
+index f09f783cab0..3c0ea1f9176 100644
+--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
++++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/IndexDeprecationChecks.java
+@@ -16,7 +16,6 @@ import org.elasticsearch.index.IndexSettings;
+ import org.elasticsearch.index.IndexVersion;
+ import org.elasticsearch.index.IndexVersions;
+ import org.elasticsearch.index.engine.frozen.FrozenEngine;
+-import org.elasticsearch.index.mapper.SourceFieldMapper;
+ import org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;
+ import org.elasticsearch.xpack.core.deprecation.DeprecationIssue;
+ 
+@@ -204,30 +203,11 @@ public class IndexDeprecationChecks {
+         return issues;
+     }
+ 
+-    static DeprecationIssue checkSourceModeInMapping(IndexMetadata indexMetadata, ClusterState clusterState) {
+-        if (indexMetadata.getCreationVersion().onOrAfter(IndexVersions.DEPRECATE_SOURCE_MODE_MAPPER)) {
+-            boolean[] useSourceMode = { false };
+-            fieldLevelMappingIssue(indexMetadata, ((mappingMetadata, sourceAsMap) -> {
+-                Object source = sourceAsMap.get("_source");
+-                if (source instanceof Map<?, ?> sourceMap) {
+-                    if (sourceMap.containsKey("mode")) {
+-                        useSourceMode[0] = true;
+-                    }
+-                }
+-            }));
+-            if (useSourceMode[0]) {
+-                return new DeprecationIssue(
+-                    DeprecationIssue.Level.CRITICAL,
+-                    SourceFieldMapper.DEPRECATION_WARNING,
+-                    "https://github.com/elastic/elasticsearch/pull/117172",
+-                    SourceFieldMapper.DEPRECATION_WARNING,
+-                    false,
+-                    null
+-                );
+-            }
+-        }
+-        return null;
+-    }
++    static DeprecationIssue deprecatedCamelCasePattern(IndexMetadata indexMetadata, ClusterState clusterState) {
++        List<String> fields = new ArrayList<>();
++        fieldLevelMappingIssue(indexMetadata, (mappingMetadata, sourceAsMap) -> {
++            // Implementation continues here...
++        });
+ 
+     static DeprecationIssue deprecatedCamelCasePattern(IndexMetadata indexMetadata, ClusterState clusterState) {
+         List<String> fields = new ArrayList<>();
+diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java
+index 0d5863e42be..ac20d90590a 100644
+--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java
++++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/NodeDeprecationChecks.java
+@@ -9,13 +9,16 @@ package org.elasticsearch.xpack.deprecation;
+ 
+ import org.elasticsearch.action.admin.cluster.node.info.PluginsAndModules;
+ import org.elasticsearch.cluster.ClusterState;
++import org.elasticsearch.cluster.metadata.ComponentTemplate;
+ import org.elasticsearch.cluster.routing.allocation.DataTier;
+ import org.elasticsearch.cluster.routing.allocation.decider.DiskThresholdDecider;
+ import org.elasticsearch.common.settings.SecureSetting;
+ import org.elasticsearch.common.settings.Setting;
+ import org.elasticsearch.common.settings.Settings;
++import org.elasticsearch.common.xcontent.XContentHelper;
+ import org.elasticsearch.core.TimeValue;
+ import org.elasticsearch.env.Environment;
++import org.elasticsearch.index.mapper.SourceFieldMapper;
+ import org.elasticsearch.license.XPackLicenseState;
+ import org.elasticsearch.script.ScriptService;
+ import org.elasticsearch.xpack.core.deprecation.DeprecationIssue;
+@@ -1035,4 +1038,43 @@ public class NodeDeprecationChecks {
+             DeprecationIssue.Level.CRITICAL
+         );
+     }
++
++    static DeprecationIssue checkSourceModeInComponentTemplates(
++        final Settings settings,
++        final PluginsAndModules pluginsAndModules,
++        final ClusterState clusterState,
++        final XPackLicenseState licenseState
++    ) {
++        List<String> templates = new ArrayList<>();
++        var templateNames = clusterState.metadata().componentTemplates().keySet();
++        for (String templateName : templateNames) {
++            ComponentTemplate template = clusterState.metadata().componentTemplates().get(templateName);
++            if (template.template().mappings() != null) {
++                var sourceAsMap = (Map<?, ?>) XContentHelper.convertToMap(template.template().mappings().uncompressed(), true)
++                    .v2()
++                    .get("_doc");
++                if (sourceAsMap != null) {
++                    Object source = sourceAsMap.get("_source");
++                    if (source instanceof Map<?, ?> sourceMap) {
++                        if (sourceMap.containsKey("mode")) {
++                            templates.add(templateName);
++                        }
++                    }
++                }
++            }
++
++        }
++        if (templates.isEmpty()) {
++            return null;
++        }
++        Collections.sort(templates);
++        return new DeprecationIssue(
++            DeprecationIssue.Level.CRITICAL,
++            SourceFieldMapper.DEPRECATION_WARNING,
++            "https://github.com/elastic/elasticsearch/pull/117172",
++            SourceFieldMapper.DEPRECATION_WARNING + " Affected component templates: [" + String.join(", ", templates) + "]",
++            false,
++            null
++        );
++    }
+ }

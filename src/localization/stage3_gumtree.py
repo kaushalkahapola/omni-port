@@ -20,10 +20,15 @@ def run_gumtree_localization(repo_path: str, file_path: str, hunk: Dict[str, Any
     response = client.send_request("gumtree_diff", payload)
     
     if response.get("status") == "ok":
-        # Use real values from the microservice response when available.
+        # Require explicit start_line from the microservice — if the Java side
+        # couldn't locate the hunk in the target file it won't include this key,
+        # and we should fall through to Stage 4 rather than use a garbage default.
+        if "start_line" not in response:
+            return None
+
         symbol_mappings = response.get("symbol_mappings", {})
-        start_line = response.get("start_line", 1)
-        end_line = response.get("end_line", max(1, len(old_content.splitlines())))
+        start_line = int(response["start_line"])
+        end_line = int(response.get("end_line", start_line + max(1, len(old_content.splitlines())) - 1))
         context_snapshot = response.get("context_snapshot", old_content)
         confidence = float(response.get("confidence", 0.85))
 
@@ -36,5 +41,5 @@ def run_gumtree_localization(repo_path: str, file_path: str, hunk: Dict[str, Any
             start_line=start_line,
             end_line=end_line,
         )
-        
+
     return None

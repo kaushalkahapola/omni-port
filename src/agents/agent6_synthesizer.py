@@ -17,6 +17,7 @@ re-synthesized or re-applied here.
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from pydantic import BaseModel, Field
+from rapidfuzz import fuzz
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 
 
@@ -68,6 +69,43 @@ class HunkSynthesizer:
         start = max(0, start_line - 1 - context_lines)
         end = min(len(lines), end_line + context_lines)
         return "".join(lines[start:end])
+
+    def fuzzy_find_in_file(
+        self,
+        file_content: str,
+        old_string: str,
+        threshold: float = 0.85,
+    ) -> Optional[str]:
+        """
+        Sliding-window fuzzy search through file_content for the best match to
+        old_string. Returns the matched text slice if ratio >= threshold, else None.
+
+        Used as a last-resort fallback when the localized line numbers are wrong
+        (e.g. GumTree returned stub coordinates) and context expansion failed.
+        """
+        old_lines = old_string.splitlines()
+        window_size = len(old_lines)
+        if window_size == 0:
+            return None
+
+        file_lines = file_content.splitlines(keepends=True)
+        if window_size > len(file_lines):
+            return None
+
+        best_ratio = 0.0
+        best_start = -1
+
+        for i in range(len(file_lines) - window_size + 1):
+            window = "".join(file_lines[i : i + window_size])
+            ratio = fuzz.token_sort_ratio(old_string, window) / 100.0
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_start = i
+
+        if best_ratio >= threshold and best_start >= 0:
+            return "".join(file_lines[best_start : best_start + window_size])
+
+        return None
 
     def verify_old_string_exists(
         self,
@@ -167,6 +205,12 @@ class HunkSynthesizer:
                     verified=True,
                 )
 
+        # Do NOT attempt fuzzy fallback for code hunks. If localization failed to find
+        # an exact match via git/context expansion, fuzzy search often finds the WRONG
+        # location in a diverged codebase (e.g. different API versions), leading to
+        # corrupted synthesis. Better to fail cleanly and let retry logic handle it.
+        # (Fuzzy is only safe for trivial hunks like test additions or docs.)
+
         return SynthesizedHunk(
             file_path=file_path,
             old_string=old_string,
@@ -236,6 +280,10 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
 
     # ── Build synthesis batches ───────────────────────────────────────────────
 
+    # Initialize accumulator lists.
+    all_synthesized: List[Dict[str, Any]] = []
+    all_failed: List[Dict[str, Any]] = []
+
     # 1. Adapted hunks (Agent 4).
     adapted = state.get("adapted_hunks", [])
     adapted_loc_indices = [h.get("loc_index", i) for i, h in enumerate(adapted)]
@@ -245,17 +293,32 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     refactored_loc_indices = [h.get("loc_index", i) for i, h in enumerate(refactored)]
 
     # 3. Unprocessed raw hunks: indices not claimed by any prior agent.
-    passthrough = [
-        (i, h) for i, h in enumerate(hunks)
-        if i not in processed_indices and i < len(loc_results)
-    ]
+    # Attempt synthesis for ALL unclaimed hunks with a valid file location.
+    # Agent 3 already tried exact-match for every hunk — if a hunk reaches here
+    # unclaimed it means Agent 3/4/5 didn't pick it up. Try synthesis anyway;
+    # if old_string doesn't exist in file, synthesize_hunk will return verified=False
+    # and we'll fail cleanly rather than silently dropping the hunk.
+    passthrough = []
+    for i, h in enumerate(hunks):
+        if i not in processed_indices and i < len(loc_results):
+            loc_result = loc_results[i]
+            if loc_result.method_used != "failed" and loc_result.file_path:
+                passthrough.append((i, h))
+            else:
+                all_failed.append(h)
+                retry_contexts.append(
+                    PatchRetryContext(
+                        error_type="synthesis_skipped_no_localization",
+                        error_message=f"Hunk unclaimed; localization failed entirely",
+                        attempt_count=state.get("current_attempt", 1),
+                        suggested_action="manual_review",
+                    )
+                )
+
     passthrough_hunks = [h for _, h in passthrough]
     passthrough_loc_indices = [i for i, _ in passthrough]
 
     # ── Synthesize each batch ─────────────────────────────────────────────────
-
-    all_synthesized: List[Dict[str, Any]] = []
-    all_failed: List[Dict[str, Any]] = []
 
     for batch, loc_idx_list, label in [
         (adapted, adapted_loc_indices, "adapted"),

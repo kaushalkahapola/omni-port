@@ -1,15 +1,20 @@
 """
 Agent 4: Namespace Adapter (Balanced LLM)
 
-Routed when import/namespace changes are detected in localization evidence:
-  - method_used is 'javaparser' or 'gumtree_ast' AND symbol_mappings is non-empty, OR
-  - the hunk itself contains differing import statements.
+Handles unclaimed hunks where the old_content is NOT found verbatim in the target file
+(API drift between branches) or where import statements differ between versions.
 
-Uses the Balanced LLM to rewrite imports and symbol references, guided by
-symbol_mappings from the localization stage.
+Routing conditions (any one is sufficient):
+  - javaparser/gumtree_ast localization with symbol_mappings detected
+  - Hunk diff contains differing import statements
+  - old_content does not exist verbatim in target file (API name / method signature drift)
+
+Agent 3 already tried exact-string match for every hunk and only skipped those that
+don't match. So reaching Agent 4 means the content has genuinely drifted.
 """
 
 from typing import Dict, List, Any, Optional
+from pathlib import Path
 from pydantic import BaseModel, Field
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 from src.core.llm_router import get_default_router, LLMTier
@@ -56,15 +61,34 @@ def _has_import_changes(hunk: Dict[str, Any]) -> bool:
     return old_imports != new_imports
 
 
-def _should_namespace_adapt(hunk: Dict[str, Any], loc_result: LocalizationResult) -> bool:
+def _should_namespace_adapt(
+    hunk: Dict[str, Any],
+    loc_result: LocalizationResult,
+    file_content: Optional[str] = None,
+) -> bool:
     """
     True when the hunk needs namespace/import adaptation:
       - Localization found symbol renames via javaparser/gumtree_ast, OR
-      - The hunk diff itself contains differing import statements.
+      - The hunk diff itself contains differing import statements, OR
+      - old_content is not found verbatim in target file (API / method name drift).
+
+    The third condition is the key addition: Agent 3 already verified verbatim
+    existence for every localized hunk, so an unclaimed hunk with no exact match
+    has drifted and needs LLM-based adaptation regardless of localization method.
     """
     has_symbol_mappings = bool(loc_result.symbol_mappings)
     method_with_mappings = loc_result.method_used in _NAMESPACE_METHODS and has_symbol_mappings
-    return method_with_mappings or _has_import_changes(hunk)
+
+    if method_with_mappings or _has_import_changes(hunk):
+        return True
+
+    # API drift: old_content not found verbatim in target file.
+    if file_content is not None:
+        old_content = hunk.get("old_content", "").rstrip("\n")
+        if old_content and old_content not in file_content:
+            return True
+
+    return False
 
 
 # ── LLM-backed adaptation ─────────────────────────────────────────────────────
@@ -103,10 +127,20 @@ Target file context (surrounding code in the target branch):
 ```
 
 Task:
-1. Apply the known symbol renames to both old_content and new_content.
-2. Fix any import statements so they match the target codebase.
-3. List any imports that must be added or removed from the target file.
-4. Do NOT change logic — only rename symbols and fix namespacing.
+1. Produce adapted_old_content: the exact code that exists in the TARGET FILE that
+   corresponds to what the patch removes. It MUST be found verbatim in the target.
+   Use the target file context to find the equivalent code (method names, API style,
+   indentation may differ from the original hunk).
+2. Produce adapted_new_content: the replacement code in target-branch style.
+   Translate the intent of new_content (what the patch adds) into the target API.
+3. Fix any import statements so they match the target codebase.
+4. List any imports that must be added or removed from the target file.
+
+Key rules:
+- adapted_old_content MUST exist verbatim in the target file context shown above.
+- Preserve the same logical change as the original patch (do not alter program logic).
+- If the API has changed (e.g. builder.startObject → ob.xContentObject), use the
+  target-branch API style in both adapted_old_content and adapted_new_content.
 
 Return adapted_old_content and adapted_new_content as valid Java code snippets.
 """
@@ -136,10 +170,11 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
     """
     LangGraph node: Namespace Adapter.
 
-    Processes hunks that require import/namespace adaptation.
-    Skips hunks already claimed by Agent 3.
-    Records adapted hunks for Agent 6 (Hunk Synthesizer) to verify and apply.
+    Processes unclaimed hunks where the removed code has drifted in the target
+    branch (import changes, symbol renames, API changes). Skips hunks already
+    claimed by Agent 3. Records adapted hunks for Agent 6 to verify and apply.
     """
+    repo_path = state["target_repo_path"]
     hunks = state.get("hunks", [])
     loc_results = state.get("localization_results", [])
     processed_indices: List[int] = list(state.get("processed_hunk_indices", []))
@@ -155,7 +190,21 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
             break
 
         loc_result = loc_results[i]
-        if not _should_namespace_adapt(hunk, loc_result):
+
+        # Skip only completely failed localization (no file found at all).
+        if loc_result.method_used == "failed" or not loc_result.file_path:
+            continue
+
+        # Read target file for exact-match check and context.
+        file_content: Optional[str] = None
+        target_path = Path(repo_path) / loc_result.file_path
+        if target_path.exists():
+            try:
+                file_content = target_path.read_text(encoding="utf-8")
+            except (IOError, UnicodeDecodeError):
+                pass
+
+        if not _should_namespace_adapt(hunk, loc_result, file_content):
             continue
 
         # Claim this hunk.

@@ -136,8 +136,8 @@ class TestFastApplyAgent:
             java_file.write_text("public class TestClass {\n    public void method1() {}\n}\n")
             yield repo_path
 
-    def test_should_route_to_fast_apply_true(self):
-        """Test routing decision for git_exact with high confidence."""
+    def test_is_high_confidence_git_true(self):
+        """Test high-confidence git detection for git_exact with high confidence."""
         agent = FastApplyAgent("/dummy/path")
         loc_result = LocalizationResult(
             method_used="git_exact",
@@ -148,10 +148,10 @@ class TestFastApplyAgent:
             end_line=5
         )
 
-        assert agent.should_route_to_fast_apply(loc_result)
+        assert agent.is_high_confidence_git(loc_result)
 
-    def test_should_route_to_fast_apply_low_confidence(self):
-        """Test routing decision rejects low confidence."""
+    def test_is_high_confidence_git_low_confidence(self):
+        """Test that low confidence git_exact is not considered high-confidence."""
         agent = FastApplyAgent("/dummy/path")
         loc_result = LocalizationResult(
             method_used="git_exact",
@@ -162,10 +162,10 @@ class TestFastApplyAgent:
             end_line=5
         )
 
-        assert not agent.should_route_to_fast_apply(loc_result)
+        assert not agent.is_high_confidence_git(loc_result)
 
-    def test_should_route_to_fast_apply_wrong_method(self):
-        """Test routing decision rejects non-git_exact methods."""
+    def test_is_high_confidence_git_other_method(self):
+        """Test that non-git methods are not high-confidence-git."""
         agent = FastApplyAgent("/dummy/path")
         loc_result = LocalizationResult(
             method_used="gumtree_ast",
@@ -176,7 +176,7 @@ class TestFastApplyAgent:
             end_line=5
         )
 
-        assert not agent.should_route_to_fast_apply(loc_result)
+        assert not agent.is_high_confidence_git(loc_result)
 
     def test_read_target_file_exists(self, temp_repo):
         """Test reading an existing file."""
@@ -350,8 +350,8 @@ class TestFastApplyAgentNode:
         assert len(result_state["applied_hunks"]) == 1
         assert result_state["applied_hunks"][0]["applied"]
 
-    def test_fast_apply_agent_node_skips_low_confidence(self, temp_repo):
-        """Test that low confidence hunks are skipped."""
+    def test_fast_apply_agent_node_applies_any_method_when_exact_match(self, temp_repo):
+        """Test that any localization method succeeds when old_content matches verbatim."""
         state: BackportState = {
             "patch_content": "",
             "target_repo_path": str(temp_repo),
@@ -361,8 +361,8 @@ class TestFastApplyAgentNode:
             "classification": None,
             "localization_results": [
                 LocalizationResult(
-                    method_used="git_exact",
-                    confidence=0.3,  # Too low
+                    method_used="fuzzy",  # Not git_exact, but exact match exists in file
+                    confidence=0.88,
                     context_snapshot="",
                     file_path="Test.java",
                     start_line=2,
@@ -386,11 +386,11 @@ class TestFastApplyAgentNode:
 
         result_state = fast_apply_agent(state)
 
-        # Should skip this hunk (low confidence, not git_exact qualified)
-        assert len(result_state.get("applied_hunks", [])) == 0
+        # Should apply because old_content exists verbatim — method doesn't matter
+        assert len(result_state.get("applied_hunks", [])) == 1
 
-    def test_fast_apply_agent_node_skips_non_git_exact(self, temp_repo):
-        """Test that non-git_exact methods are skipped."""
+    def test_fast_apply_agent_node_skips_when_no_exact_match_and_not_git(self, temp_repo):
+        """Test that non-git methods are NOT claimed when old_content is absent from file."""
         state: BackportState = {
             "patch_content": "",
             "target_repo_path": str(temp_repo),
@@ -411,8 +411,8 @@ class TestFastApplyAgentNode:
             "hunks": [
                 {
                     "file_path": "Test.java",
-                    "old_content": "    public void test() {}",
-                    "new_content": "    public void test() {\n        modified;\n    }"
+                    "old_content": "this code does not exist in Test.java at all",
+                    "new_content": "replacement"
                 }
             ],
             "retry_contexts": [],
@@ -425,8 +425,10 @@ class TestFastApplyAgentNode:
 
         result_state = fast_apply_agent(state)
 
-        # Should skip this hunk (not git_exact method)
+        # No exact match AND not high-confidence git → should NOT claim (let agent4 handle)
         assert len(result_state.get("applied_hunks", [])) == 0
+        assert len(result_state.get("failed_hunks", [])) == 0
+        assert len(result_state.get("processed_hunk_indices", [])) == 0
 
     def test_fast_apply_agent_node_handles_failure(self, temp_repo):
         """Test that failures create retry contexts."""

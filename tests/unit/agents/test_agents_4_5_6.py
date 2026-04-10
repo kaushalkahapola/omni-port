@@ -9,11 +9,9 @@ import pytest
 import tempfile
 from pathlib import Path
 from src.agents.agent4_namespace import (
-    NamespaceAdapter, namespace_adapter_agent, SymbolMapping
+    namespace_adapter_agent, _has_import_changes, _should_namespace_adapt,
 )
-from src.agents.agent5_structural import (
-    StructuralRefactor, structural_refactor_agent, EditType, GumTreeEdit
-)
+from src.agents.agent5_structural import structural_refactor_agent
 from src.agents.agent6_synthesizer import (
     HunkSynthesizer, hunk_synthesizer_agent, SynthesizedHunk
 )
@@ -21,131 +19,67 @@ from src.core.state import BackportState, LocalizationResult
 
 
 # ============================================================================
-# Tests for Agent 4: Namespace Adapter
+# Tests for Agent 4: Namespace Adapter routing helpers
 # ============================================================================
 
 
-class TestNamespaceAdapter:
-    """Tests for the Namespace Adapter agent."""
+class TestNamespaceAdapterRouting:
+    """Tests for the namespace adapter routing logic."""
 
-    def test_extract_import_statements(self):
-        """Test extracting import statements from file content."""
-        content = """
-package com.example;
-import java.util.List;
-import java.util.Map;
-import org.springframework.beans.factory.annotation.Autowired;
-
-public class TestClass {
-    // class content
-}
-"""
-        adapter = NamespaceAdapter("/dummy/path")
-        imports = adapter.extract_import_statements(content)
-
-        assert len(imports) == 3
-        assert "import java.util.List;" in imports
-        assert "import java.util.Map;" in imports
-        assert "import org.springframework.beans.factory.annotation.Autowired;" in imports
-
-    def test_replace_import_statement(self):
-        """Test replacing an import statement."""
-        content = """
-import java.util.List;
-import java.util.Map;
-"""
-        adapter = NamespaceAdapter("/dummy/path")
-
-        success, result = adapter.replace_import_statement(
-            content,
-            "import java.util.List;",
-            "import java.util.ArrayList;"
-        )
-
-        assert success
-        assert "import java.util.ArrayList;" in result
-        assert "import java.util.List;" not in result
-
-    def test_replace_import_not_found(self):
-        """Test replacing a non-existent import."""
-        content = "import java.util.List;"
-        adapter = NamespaceAdapter("/dummy/path")
-
-        success, result = adapter.replace_import_statement(
-            content,
-            "import java.util.Map;",
-            "import java.util.HashMap;"
-        )
-
-        assert not success
-        assert result == content
-
-    def test_rewrite_symbol_references(self):
-        """Test rewriting symbol references in code."""
-        content = "ActionListener listener = ActionListener.wrap(() -> {});"
-        adapter = NamespaceAdapter("/dummy/path")
-
-        mappings = [
-            {"old": "ActionListener.wrap", "new": "ActionListener.toBiConsumer"}
-        ]
-
-        success, result = adapter.rewrite_symbol_references(content, mappings)
-
-        assert success
-        assert "ActionListener.toBiConsumer" in result
-        assert "ActionListener.wrap" not in result
-
-    def test_adapt_hunk_with_mappings(self):
-        """Test adapting a hunk with symbol mappings."""
-        adapter = NamespaceAdapter("/dummy/path")
-
+    def test_has_import_changes_detects_addition(self):
+        """Test that a new import is detected."""
         hunk = {
-            "file_path": "Test.java",
-            "old_content": "    ActionListener listener = ActionListener.wrap(() -> {});",
-            "new_content": "    ActionListener listener = ActionListener.wrap(() -> System.out.println());"
+            "old_content": "import java.util.List;\n",
+            "new_content": "import java.util.List;\nimport java.util.Map;\n",
         }
+        assert _has_import_changes(hunk)
 
-        loc_result = LocalizationResult(
-            method_used="gumtree_ast",
-            confidence=0.8,
-            context_snapshot="",
-            file_path="Test.java",
-            start_line=10,
-            end_line=10,
-            symbol_mappings={
-                "ActionListener.wrap": "ActionListener.toBiConsumer"
-            }
-        )
-
-        output = adapter.adapt_hunk(hunk, loc_result)
-
-        assert output.success
-        assert "toBiConsumer" in output.adapted_hunk["old_content"]
-
-    def test_adapt_hunk_without_mappings(self):
-        """Test adapting a hunk with no symbol mappings."""
-        adapter = NamespaceAdapter("/dummy/path")
-
+    def test_has_import_changes_no_change(self):
+        """Test that identical imports return False."""
         hunk = {
-            "file_path": "Test.java",
-            "old_content": "    return new ArrayList<>();",
-            "new_content": "    return Collections.unmodifiableList(new ArrayList<>());"
+            "old_content": "import java.util.List;\nreturn value;\n",
+            "new_content": "import java.util.List;\nreturn other;\n",
         }
+        assert not _has_import_changes(hunk)
 
-        loc_result = LocalizationResult(
-            method_used="git_exact",
-            confidence=0.95,
-            context_snapshot="",
-            file_path="Test.java",
-            start_line=5,
-            end_line=5
+    def test_should_namespace_adapt_import_change(self):
+        """Test routing when import changes detected."""
+        hunk = {
+            "old_content": "import java.util.List;\n",
+            "new_content": "import java.util.List;\nimport java.util.Map;\n",
+        }
+        loc = LocalizationResult(
+            method_used="fuzzy", confidence=0.88, context_snapshot="",
+            file_path="Test.java", start_line=1, end_line=1,
         )
+        assert _should_namespace_adapt(hunk, loc)
 
-        output = adapter.adapt_hunk(hunk, loc_result)
+    def test_should_namespace_adapt_api_drift(self):
+        """Test routing when old_content not found in target file (API drift)."""
+        hunk = {
+            "old_content": "builder.startObject(COMPILATIONS_HISTORY);",
+            "new_content": "builder.startObject(CACHE_EVICTIONS_HISTORY);",
+        }
+        loc = LocalizationResult(
+            method_used="fuzzy", confidence=0.88, context_snapshot="",
+            file_path="Test.java", start_line=10, end_line=10,
+        )
+        # file_content uses different API than old_content
+        file_content = "ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n"
+        assert _should_namespace_adapt(hunk, loc, file_content)
 
-        # Should pass through unchanged
-        assert output.success
-        assert output.adapted_hunk == hunk
+    def test_should_namespace_adapt_exact_match_no_import(self):
+        """Test NOT routing when old_content found verbatim and no import changes."""
+        hunk = {
+            "old_content": "return value;",
+            "new_content": "return processValue(value);",
+        }
+        loc = LocalizationResult(
+            method_used="fuzzy", confidence=0.88, context_snapshot="",
+            file_path="Test.java", start_line=5, end_line=5,
+        )
+        file_content = "public void method() {\n    return value;\n}\n"
+        assert not _should_namespace_adapt(hunk, loc, file_content)
 
 
 class TestNamespaceAdapterNode:

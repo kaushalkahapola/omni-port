@@ -44,7 +44,8 @@ class LLMRouter:
         elif tier == LLMTier.BALANCED:
             return self._create_model(self.balanced_model_name, 0.2)
         elif tier == LLMTier.REASONING:
-            return self._create_model(self.reasoning_model_name, 0.5)
+            # o1/o3 reasoning models only support temperature=1 (the default).
+            return self._create_model(self.reasoning_model_name, 1)
         else:
             raise ValueError(f"Unknown tier: {tier}")
 

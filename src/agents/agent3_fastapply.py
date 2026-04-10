@@ -1,10 +1,13 @@
 """
 Agent 3: Fast-Apply Agent (No LLM)
 
-Routed when localization method is 'git_exact' or 'git_pickaxe' and confidence > 0.85.
-Uses deterministic CLAW exact-string replacement.
-Performs no LLM-based reasoning.
-If CLAW pre-validation fails, marks hunk for re-localization via retry context.
+Strategy: for EVERY localized hunk, attempt exact-string match first.
+- If old_content exists verbatim in the target file → apply directly, claim hunk.
+- If not found and localization was high-confidence git → claim as failed (file changed).
+- If not found and other method → do NOT claim; let Agent 4/5 handle adaptation.
+
+This way, even fuzzy/embedding-localized hunks get fast-applied when the removed lines
+are still present verbatim in the target (simple textual backport, no API drift).
 """
 
 from typing import List, Dict, Any, Tuple, Optional
@@ -12,21 +15,22 @@ from pathlib import Path
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 from src.backport_claw.apply_hunk import CLAWHunkApplier, CLAWHunkError
 
-# Methods that qualify for deterministic fast-apply.
+# High-confidence git methods: always claim the hunk even if exact match fails.
 _FAST_APPLY_METHODS = {"git_exact", "git_pickaxe"}
 _FAST_APPLY_MIN_CONFIDENCE = 0.85
 
 
 class FastApplyAgent:
     """
-    Applies patches with git_exact/git_pickaxe localization and high confidence.
-    Deterministic, no LLM reasoning.
+    Applies patches using deterministic exact-string replacement.
+    Tries ALL hunks with a valid file location; claims only those where the
+    match succeeds (or where high-confidence git localization found the file).
     """
 
     def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path)
 
-    def should_route_to_fast_apply(self, loc_result: LocalizationResult) -> bool:
+    def is_high_confidence_git(self, loc_result: LocalizationResult) -> bool:
         return (
             loc_result.method_used in _FAST_APPLY_METHODS
             and loc_result.confidence >= _FAST_APPLY_MIN_CONFIDENCE
@@ -125,9 +129,10 @@ def fast_apply_agent(state: BackportState) -> BackportState:
     """
     LangGraph node: Fast-Apply Agent.
 
-    Processes hunks whose localization method is git_exact or git_pickaxe with
-    confidence >= 0.85. Writes them directly to disk (no LLM, no synthesis step
-    needed). Records their indices in processed_hunk_indices so later agents skip them.
+    For every localized hunk, checks if old_content exists verbatim in the target file.
+    - Match found → claim, apply directly to disk (no LLM needed).
+    - No match, high-confidence git → claim as failed (location correct but content changed).
+    - No match, other method → skip (Agent 4/5 will handle adaptation).
     """
     repo_path = state["target_repo_path"]
     agent = FastApplyAgent(repo_path)
@@ -146,13 +151,40 @@ def fast_apply_agent(state: BackportState) -> BackportState:
             break
 
         loc_result = loc_results[i]
-        if not agent.should_route_to_fast_apply(loc_result):
+
+        # Skip hunks with no file location at all.
+        if not loc_result.file_path or loc_result.method_used == "failed":
             continue
 
-        # Claim this hunk regardless of success so no other agent tries it.
+        old_string, new_string = agent.build_claw_strings(hunk, loc_result)
+        if not old_string:
+            continue
+
+        # Check verbatim existence before claiming.
+        file_content = agent.read_target_file(loc_result.file_path)
+        can_exact_match = file_content is not None and old_string in file_content
+
+        if not can_exact_match and not agent.is_high_confidence_git(loc_result):
+            # Exact string not in file and localization is imprecise →
+            # leave unclaimed so Agent 4 (namespace) can adapt it.
+            continue
+
+        # Claim this hunk.
         processed_indices.append(i)
 
-        result = agent.process_hunk(hunk, loc_result)
+        if can_exact_match:
+            result = agent.process_hunk(hunk, loc_result)
+        else:
+            # High-confidence git but exact string missing → content has genuinely changed.
+            result = {
+                "applied": False,
+                "file_path": loc_result.file_path,
+                "error": (
+                    f"Exact match not found in {loc_result.file_path} despite "
+                    f"high-confidence {loc_result.method_used} localization"
+                ),
+            }
+
         if result["applied"]:
             applied_hunks.append(result)
         else:

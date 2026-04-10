@@ -1,0 +1,101 @@
+{
+  "run_timestamp": "2026-04-10T03:18:41.402517",
+  "patch_type": "TYPE-III",
+  "original_commit": "88cf2487e7deb38686870e40bf08b2b729b7d848",
+  "backport_commit": "223d50f0524d3d3e9a19f18a3b146212ff830042",
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 8.74,
+      "error": null,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+          "method_used": "fuzzy",
+          "confidence": 0.889,
+          "start_line": 25,
+          "end_line": 30,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+          "method_used": "embedding",
+          "confidence": 0.8,
+          "start_line": 201,
+          "end_line": 210,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.73,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch involves a small fix in the serialization code of ScriptStats.java, changing a field name from COMPILATIONS_HISTORY to CACHE_EVICTIONS_HISTORY. This is a straightforward string replacement but requires fuzzy matching due to slight context differences. The addition of a new test method in ScriptStatsTests.java adds some complexity but is still relatively simple. The localization evidence shows the main hunk was found via fuzzy matching with high confidence, and the test addition was found via embedding with moderate confidence, indicating some minor structural differences but no deep refactoring or redesign. Overall, the patch is a minor fix with some formatting and context drift, fitting TYPE_II complexity.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 6.47,
+      "error": null,
+      "adapted_count": 2
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 2,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+          "old_string": "import java.util.Map;\nimport java.util.Objects;\n\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;",
+          "new_string": "import java.util.Map;\nimport java.util.Objects;\n\nimport static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+          "old_string": "            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);\n            }",
+          "new_string": "            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);\n            }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "java_production_hunks": 2,
+    "synthesized_apply_errors": [],
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk": 0,
+    "synthesized_applied": 2,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1232,
+    "target_patch_bytes": 3775
+  }
+}
