@@ -136,17 +136,10 @@ def run_git_localization(repo_path: str, file_path: str, hunk: Dict[str, Any]) -
                 except (FileNotFoundError, IOError):
                     pass
 
-                # Fallback: file unreadable or no fuzzy match — return with
-                # the correct new path but acknowledge we have no line range.
-                return LocalizationResult(
-                    method_used="git_pickaxe",
-                    confidence=0.5,
-                    context_snapshot=old_content,
-                    symbol_mappings={},
-                    file_path=new_file_path,
-                    start_line=1,
-                    end_line=len(old_content_lines),
-                )
+                # Fallback: file unreadable or no fuzzy match above threshold.
+                # Return None to let Stage 2+ (fuzzy, hierarchy) try; a 0.5-confidence
+                # result with bogus line-1 coordinates would block all downstream stages.
+                return None
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         pass
 

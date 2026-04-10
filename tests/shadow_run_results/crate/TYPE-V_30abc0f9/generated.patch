@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..4f670b9250 100644
+index 12171a4a54..ba4a6aa1c9 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 @@ -21,6 +21,8 @@
@@ -20,26 +20,20 @@ index 12171a4a54..4f670b9250 100644
  import io.crate.execution.support.ActionExecutor;
  import io.crate.execution.support.NodeRequest;
  
-@@ -75,6 +79,9 @@ public class DistributingConsumer implements RowConsumer {
- 
-     private volatile Throwable failure;
- 
-+    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
-+    private final String localNodeId;
-+
-     public DistributingConsumer(Executor responseExecutor,
+@@ -79,11 +83,7 @@ public class DistributingConsumer implements RowConsumer {
                                  UUID jobId,
                                  MultiBucketBuilder multiBucketBuilder,
-@@ -83,6 +90,8 @@ public class DistributingConsumer implements RowConsumer {
-                                 int bucketIdx,
-                                 Collection<String> downstreamNodeIds,
-                                 ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
-+                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                String localNodeId,
-                                 int pageSize) {
+                                 int targetPhaseId,
+-                                byte inputId,
+-                                int bucketIdx,
+-                                Collection<String> downstreamNodeIds,
+-                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,
+-                                int pageSize) {
++
          this.traceEnabled = LOGGER.isTraceEnabled();
          this.responseExecutor = responseExecutor;
-@@ -92,6 +101,8 @@ public class DistributingConsumer implements RowConsumer {
+         this.jobId = jobId;
+@@ -92,6 +92,8 @@ public class DistributingConsumer implements RowConsumer {
          this.inputId = inputId;
          this.bucketIdx = bucketIdx;
          this.distributedResultAction = distributedResultAction;
@@ -48,7 +42,7 @@ index 12171a4a54..4f670b9250 100644
          this.pageSize = pageSize;
          this.buckets = new StreamBucket[downstreamNodeIds.size()];
          this.completionFuture = new CompletableFuture<>();
-@@ -229,7 +240,15 @@ public class DistributingConsumer implements RowConsumer {
+@@ -229,7 +231,15 @@ public class DistributingConsumer implements RowConsumer {
                              );
                              failure = t;
                              downstream.needsMoreData = false;
@@ -105,7 +99,7 @@ index 3dc1921a76..ee47d15116 100644
          );
      }
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-index 4d64814dd5..fa0bd3c78c 100644
+index 4d64814dd5..1e7071f336 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
 @@ -25,6 +25,7 @@ import java.util.Collections;
@@ -136,7 +130,7 @@ index 4d64814dd5..fa0bd3c78c 100644
              DistributedResultRequest::new,
              new NodeActionRequestHandler<>(nodeAction));
      }
-@@ -204,33 +201,45 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
+@@ -204,29 +201,15 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
              if (LOGGER.isTraceEnabled()) {
                  LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
              }
@@ -169,33 +163,3 @@ index 4d64814dd5..fa0bd3c78c 100644
              return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));
          }
      }
- 
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,
-+                                     UUID jobId,
-+                                     String localNodeId,
-+                                     String reason) {
-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
-+        }
-+    }
-+
-     private static class SendResponsePageResultListener implements PageResultListener {
-         private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();
- 

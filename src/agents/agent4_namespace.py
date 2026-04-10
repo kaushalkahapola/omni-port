@@ -20,6 +20,33 @@ from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 from src.core.llm_router import get_default_router, LLMTier
 
 
+def _compute_hunk_diff(hunk: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Compute which lines are added, removed, and unchanged between old_content and
+    new_content. Returns a dict with:
+      - lines_removed: list of lines only in old_content
+      - lines_added:   list of lines only in new_content
+      - is_pure_add:   True when nothing is removed
+      - is_pure_remove: True when nothing is added
+      - imports_removed: import lines being removed
+      - imports_added:   import lines being added
+    """
+    old_lines = [l for l in hunk.get("old_content", "").splitlines() if l.strip()]
+    new_lines = [l for l in hunk.get("new_content", "").splitlines() if l.strip()]
+    old_set = set(old_lines)
+    new_set = set(new_lines)
+    removed = [l for l in old_lines if l not in new_set]
+    added = [l for l in new_lines if l not in old_set]
+    return {
+        "lines_removed": removed,
+        "lines_added": added,
+        "is_pure_add": len(removed) == 0 and len(added) > 0,
+        "is_pure_remove": len(added) == 0 and len(removed) > 0,
+        "imports_removed": [l.strip() for l in removed if l.strip().startswith("import ")],
+        "imports_added": [l.strip() for l in added if l.strip().startswith("import ")],
+    }
+
+
 # ── Output model ──────────────────────────────────────────────────────────────
 
 class NamespaceAdaptationOutput(BaseModel):
@@ -115,18 +142,59 @@ Code immediately AFTER the replaced region in the target file (already exists �
 ```
 """
 
+    # Precompute what is actually added/removed so the LLM cannot confuse context
+    # lines with removed lines (a common failure for pure-add hunks).
+    diff = _compute_hunk_diff(hunk)
+    if diff["is_pure_add"]:
+        hunk_type = "PURE ADDITION (nothing is removed; lines are only inserted)"
+    elif diff["is_pure_remove"]:
+        hunk_type = "PURE REMOVAL (nothing is added; lines are only deleted)"
+    else:
+        hunk_type = "REPLACEMENT (some lines removed AND some lines added)"
+
+    removed_summary = "\n".join(f"  - {l}" for l in diff["lines_removed"]) or "  (none)"
+    added_summary = "\n".join(f"  + {l}" for l in diff["lines_added"]) or "  (none)"
+    imports_removed_summary = "\n".join(f"  - {l}" for l in diff["imports_removed"]) or "  (none)"
+    imports_added_summary = "\n".join(f"  + {l}" for l in diff["imports_added"]) or "  (none)"
+
+    pure_add_note = ""
+    if diff["is_pure_add"]:
+        pure_add_note = """
+IMPORTANT — THIS IS A PURE ADDITION:
+- adapted_old_content must be a MINIMAL string that marks the insertion point —
+  typically the one or two lines immediately BEFORE where the new code is inserted.
+  It must exist verbatim in the target file.
+- adapted_new_content must be adapted_old_content PLUS the new lines being added
+  (translated to target-branch API style if needed).
+- Do NOT remove or omit any existing code; nothing is deleted by this hunk.
+"""
+
     prompt = f"""You are Agent 4 (Namespace Adapter) for OmniPort, a Java patch backporting system.
 A patch hunk must be adapted to a different codebase version where symbol names and imports differ.
 
 Known symbol renames from localization analysis:
 {mappings_text}
 
-Original hunk — old_content (lines being replaced in the target):
+─── Hunk change analysis ────────────────────────────────────────────────────────
+Hunk type: {hunk_type}
+
+Lines being REMOVED (not in new_content):
+{removed_summary}
+
+Lines being ADDED (not in old_content):
+{added_summary}
+
+Import changes:
+  Imports removed: {imports_removed_summary}
+  Imports added:   {imports_added_summary}
+─────────────────────────────────────────────────────────────────────────────────
+{pure_add_note}
+Original hunk — old_content (context + removed lines from the source branch):
 ```java
 {hunk.get("old_content", "")}
 ```
 
-Original hunk — new_content (lines that remain after the replacement):
+Original hunk — new_content (context + added lines from the source branch):
 ```java
 {hunk.get("new_content", "")}
 ```
@@ -138,16 +206,17 @@ Target file context (surrounding code in the target branch):
 {post_context_section}
 Task:
 1. Produce adapted_old_content: the exact code that exists in the TARGET FILE that
-   corresponds to what the patch removes. It MUST be found verbatim in the target.
-   Use the target file context to find the equivalent code (method names, API style,
-   indentation may differ from the original hunk).
+   corresponds to what the patch removes (or the insertion point for pure additions).
+   It MUST be found verbatim in the target file context shown above.
 2. Produce adapted_new_content: the replacement code in target-branch style.
-   Translate the intent of new_content (what the patch adds) into the target API.
+   Translate the ADDED lines (see "Lines being ADDED" above) into the target API.
+   For pure additions, this is adapted_old_content + the new lines.
 3. Fix any import statements so they match the target codebase.
 4. List any imports that must be added or removed from the target file.
 
 Key rules:
 - adapted_old_content MUST exist verbatim in the target file context shown above.
+- Only remove lines that appear in "Lines being REMOVED" above — do not remove context lines.
 - Preserve the same logical change as the original patch (do not alter program logic).
 - If the API has changed (e.g. builder.startObject → ob.xContentObject), use the
   target-branch API style in both adapted_old_content and adapted_new_content.

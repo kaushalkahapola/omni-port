@@ -48,6 +48,16 @@ def javaparser_resolve(repo_path: str, file_path: str, symbols_to_resolve: list)
     })
 
 
+def javaparser_find_method(
+    repo_path: str, source_file_path: str, method_names: list
+) -> dict:
+    return _post("/api/javaparser/find-method", {
+        "repo_path": repo_path,
+        "source_file_path": source_file_path,
+        "method_names": method_names,
+    })
+
+
 def japicmp_compare(old_jar_path: str, new_jar_path: str) -> dict:
     return _post("/api/japicmp/compare", {
         "old_jar_path": old_jar_path,

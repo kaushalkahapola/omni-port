@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T05:13:41.634406",
+  "run_timestamp": "2026-04-10T06:20:32.943383",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "30abc0f980778976840a80436d746fd445fd3e26",
@@ -7,7 +7,7 @@
   "description": "",
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 7.25,
+      "elapsed_s": 7.8,
       "error": null,
       "localization_results": [
         {
@@ -130,12 +130,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 5.42,
+      "elapsed_s": 5.31,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.9,
-        "reasoning": "The patch introduces new logic to handle out-of-memory (OOM) errors by broadcasting kill requests to other nodes when certain failures occur during distributed result streaming. The changes involve adding new imports, fields, constructor parameters, and method calls, as well as a new static method for broadcasting kill requests. The patch is not a trivial string replacement (TYPE_I) but mostly involves adding error handling and coordination logic without deep structural refactoring or redesign. The localization evidence shows most hunks were found via 'git_pickaxe' with high confidence, indicating some code changes but no major structural changes like renames or API redesigns. Therefore, the patch complexity fits TYPE_II (whitespace/formatting drift and minor logic additions requiring fuzzy matching). The confidence is high due to the clear mapping of changes and the token budget estimate reflects the moderate size and complexity of the patch.",
+        "reasoning": "The patch introduces additional logic to handle out-of-memory (OOM) situations by broadcasting kill requests to other nodes when failures occur during distributed result streaming. The changes involve adding new imports, fields, constructor parameters, and method calls, but the overall structure and flow of the existing classes remain largely unchanged. The patch was localized mostly via 'git_pickaxe' with high confidence and some 'git_exact' matches, indicating minor code additions and modifications rather than structural refactoring or redesign. Therefore, the patch complexity aligns with TYPE_II, involving whitespace/formatting drift and minor logic additions requiring fuzzy matching rather than deep structural changes.",
         "is_auto_generated": false
       }
     },
@@ -172,7 +172,7 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 39.46,
+      "elapsed_s": 35.37,
       "error": null,
       "adapted_count": 8
     },
@@ -190,24 +190,24 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "old_string": "\npackage io.crate.execution.engine.distribution;\n\nimport java.util.ArrayList;\nimport java.util.Collection;\nimport java.util.List;",
-          "new_string": "\npackage io.crate.execution.engine.distribution;\n\nimport static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;\n\nimport java.util.ArrayList;\nimport java.util.Collection;\nimport java.util.List;",
+          "old_string": "package io.crate.execution.engine.distribution;\n\nimport java.util.ArrayList;\nimport java.util.Collection;\nimport java.util.List;",
+          "new_string": "package io.crate.execution.engine.distribution;\n\nimport static io.crate.execution.engine.distribution.TransportDistributedResultAction.broadcastKill;\n\nimport java.util.ArrayList;\nimport java.util.Collection;\nimport java.util.List;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "old_string": "    private volatile Throwable failure;\n\n    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,\n                                MultiBucketBuilder multiBucketBuilder,",
-          "new_string": "    private volatile Throwable failure;\n\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final String localNodeId;\n\n    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,\n                                MultiBucketBuilder multiBucketBuilder,",
+          "old_string": "    @VisibleForTesting\n    final long maxBytes;\n\n    @VisibleForTesting\n    final MultiBucketBuilder multiBucketBuilder;\n\n    private volatile Throwable failure;\n\n    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,\n                                MultiBucketBuilder multiBucketBuilder,\n                                int targetPhaseId,\n",
+          "new_string": "    @VisibleForTesting\n    final long maxBytes;\n\n    @VisibleForTesting\n    final MultiBucketBuilder multiBucketBuilder;\n\n\n    private volatile Throwable failure;\n\n    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,\n                                MultiBucketBuilder multiBucketBuilder,\n                                int targetPhaseId,\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "old_string": "                                byte inputId,\n                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();",
-          "new_string": "                                byte inputId,\n                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();",
+          "old_string": "                                byte inputId,\n                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {",
+          "new_string": "",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -247,7 +247,7 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
           "old_string": "            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n             *\n             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n             * a kill to make sure that doesn't happen.\n             */\n            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n                excludedNodeIds,\n                List.of(request.jobId()),\n                Role.CRATE_USER.name(),\n                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n            );\n            killNodeAction\n                .execute(killRequest)\n                .whenComplete(\n                    (resp, t) -> {\n                        if (t != null) {\n                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n                        }\n                    }\n                );\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));",
-          "new_string": "            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n             *\n             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n             * a kill to make sure that doesn't happen.\n             */\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));\n        }\n    }\n\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }",
+          "new_string": "            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n             *\n             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n             * a kill to make sure that doesn't happen.\n             */\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -281,7 +281,7 @@
     "failed_hunks_total": 0,
     "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 10606,
+    "generated_patch_bytes": 9191,
     "target_patch_bytes": 15919
   }
 }

@@ -30,6 +30,15 @@ public class JavaParserController {
         return getService().resolveSymbols(repoPath, filePath, symbols);
     }
 
+    @PostMapping("/find-method")
+    public Map<String, Object> findMethod(@RequestBody Map<String, Object> request) {
+        String repoPath = (String) request.get("repo_path");
+        String sourceFilePath = (String) request.get("source_file_path");
+        @SuppressWarnings("unchecked")
+        List<String> methodNames = (List<String>) request.get("method_names");
+        return getService().findMethodDefinitions(repoPath, sourceFilePath, methodNames);
+    }
+
     @GetMapping("/health")
     public Map<String, String> health() {
         return Map.of("status", "ok", "service", "javaparser");
