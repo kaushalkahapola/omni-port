@@ -127,13 +127,11 @@ def _apply_inter_hunk_consistency(
         if majority_count <= successful_count / 2:
             continue
 
-        # Re-localize any outlier hunks using the majority file.
+        # Re-localize outlier hunks AND entirely-failed hunks using the majority file.
         for i in indices:
             r = results[i]
-            if r.file_path == majority_file:
+            if r.file_path == majority_file and r.method_used != "failed":
                 continue  # already correct
-            if r.method_used == "failed":
-                continue  # failed entirely — don't guess
 
             hunk = hunks[i]
             new_result = localizer_pipeline(repo_path, majority_file, hunk)

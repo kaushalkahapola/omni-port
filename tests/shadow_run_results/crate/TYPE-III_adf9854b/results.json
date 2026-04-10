@@ -1,0 +1,189 @@
+{
+  "run_timestamp": "2026-04-10T09:12:33.409548",
+  "repo": "crate",
+  "patch_type": "TYPE-III",
+  "original_commit": "adf9854bdb9cbf08dde206c0a1e005a5ea3379c9",
+  "backport_commit": "b92b08dc1f9d9ffd4c84a68d21ccb08dfe85a1c8",
+  "description": "",
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 21.18,
+      "error": null,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 96,
+          "end_line": 102,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 139,
+          "end_line": 145,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 171,
+          "end_line": 177,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 201,
+          "end_line": 207,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 184,
+          "end_line": 191,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "method_used": "failed",
+          "confidence": 0.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.613,
+          "start_line": 238,
+          "end_line": 251,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.51,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch consists primarily of exact string replacements and minor method signature changes that are localized within existing methods and classes. Most hunks were found via 'git_exact' with high confidence, indicating the patch applies cleanly and directly to the target branch without structural or API changes. One hunk was found with lower confidence via 'git_pickaxe', but it still represents a straightforward update rather than a deep refactor. There are no indications of structural or API redesign, so the patch is best classified as TYPE_I with high confidence. The token budget estimate reflects the moderate size of the patch and the need to carefully apply multiple small changes consistently across several files.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 5,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 4.1,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 1,
+      "synthesis_status": "partial",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "old_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n        }",
+          "new_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), role.with(grantedRoles));\n        }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 13,
+    "java_production_hunks": 7,
+    "synthesized_apply_errors": [],
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "partial",
+    "applied_on_disk": 5,
+    "synthesized_applied": 1,
+    "failed_hunks_total": 1,
+    "retry_contexts": [
+      {
+        "error_type": "synthesis_skipped_no_localization",
+        "error_message": "Hunk unclaimed; localization failed entirely",
+        "attempt_count": 4,
+        "suggested_action": "manual_review"
+      },
+      {
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/io/crate/role/Role.java",
+        "old_content": "                password,\n                jwtProperties,\n                sessionSettings),\n            false\n        );\n    }\n\n",
+        "new_content": "                password,\n                jwtProperties,\n                sessionSettings),\n            isSuperUser\n        );\n    }\n\n"
+      }
+    ],
+    "generated_patch_bytes": 3446,
+    "target_patch_bytes": 8988
+  }
+}

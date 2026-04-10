@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T08:45:54.916720",
+  "run_timestamp": "2026-04-10T09:08:33.467800",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "a5b58411425101903763df8df41237801652ca8b",
@@ -7,7 +7,7 @@
   "description": "",
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 3.0,
+      "elapsed_s": 3.11,
       "error": null,
       "localization_results": [
         {
@@ -40,12 +40,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.96,
+      "elapsed_s": 4.79,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.85,
-        "reasoning": "The patch modifies the ExplainProfilePlan.java file by adding and adjusting ram accounting logic to fix a memory leak issue. The changes involve adding a new ramAccounting variable and adjusting method parameters and logic accordingly. The localization evidence shows the hunks were found via 'git_pickaxe' with confidence around 0.74 to 0.85, indicating some minor code drift but no major structural changes or API redesign. The patch also includes additions to release notes and a new integration test, which are straightforward additions. Overall, the patch requires fuzzy matching due to some code drift and parameter changes but no deep structural refactoring or redesign, fitting TYPE_II classification.",
+        "reasoning": "The patch modifies the ExplainProfilePlan.java file by adding and adjusting ram accounting logic to fix a memory leak issue. The changes involve adding a new ramAccounting variable and modifying method parameters and calls accordingly. The localization evidence shows the hunks were found via 'git_pickaxe' with confidence around 0.74 to 0.85, indicating some differences but not major structural changes. The patch also updates release notes and adds a test case, which are straightforward additions. Overall, the patch requires fuzzy matching due to parameter changes and added logic but does not involve structural refactoring or redesign, fitting TYPE_II classification.",
         "is_auto_generated": false
       }
     },
@@ -62,12 +62,12 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 7.73,
+      "elapsed_s": 11.07,
       "error": null,
       "adapted_count": 2
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.06,
       "error": null,
       "refactored_count": 0
     },
@@ -80,18 +80,18 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
-          "old_string": "    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {",
-          "new_string": "    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n            \"multi-phase\",\n            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n        );\n        consumer.completionFuture().whenComplete((__, ___) -> ramAccounting.close());",
+          "old_string": "        return StatementType.MANAGEMENT;\n    }\n\n    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        if (context != null) {\n            assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n            LogicalPlan plan = (LogicalPlan) subPlan;\n",
+          "new_string": "        return StatementType.MANAGEMENT;\n    }\n\n    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n@Override\npublic void executeOrFail(DependencyCarrier dependencies,\n                          PlannerContext plannerContext,\n                          RowConsumer consumer,\n                          Row params,\n                          SubQueryResults subQueryResults) {\n    var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n        \"multi-phase\",\n        dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n        plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n    );\n    consumer.completionFuture().whenComplete((__, ___) -> ramAccounting.close());\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        if (context != null) {\n            assert subPlan instanceof LogicalPlan : \"subPlan must be a LogicalPlan\";\n            LogicalPlan plan = (LogicalPlan) subPlan;\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
-          "old_string": "            executePlan(\n                plan,\n                dependencies,\n                plannerContext,\n                consumer,\n                params,\n                subQueryResults,\n                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                null,\n                null\n            );\n        } else {\n",
-          "new_string": "            executePlan(\n                plan,\n                dependencies,\n                plannerContext,\n                consumer,\n                params,\n            subQueryResults,\n            new IdentityHashMap<>(),\n            new ArrayList<>(plan.dependencies().size()),\n            ramAccounting,\n            null\n        );\n                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                null,\n                null\n            );\n        } else {\n",
+          "old_string": "                null,",
+          "new_string": "                ramAccounting,",
           "confidence": 1.0,
-          "context_lines_included": 3,
+          "context_lines_included": 0,
           "verified": true
         }
       ]
@@ -113,7 +113,7 @@
     "failed_hunks_total": 0,
     "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 3438,
+    "generated_patch_bytes": 3477,
     "target_patch_bytes": 4854
   }
 }

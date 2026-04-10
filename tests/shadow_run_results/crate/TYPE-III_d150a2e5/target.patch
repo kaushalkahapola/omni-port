@@ -1,0 +1,116 @@
+commit 007682aa53eebc124e6406977dd03a50d3433630
+Author: Sebastian Utz <su@rtme.net>
+Date:   Fri Nov 1 15:03:54 2024 +0100
+
+    Forbid adding a sub-column to an object(ignored) if table isn't empty
+    
+    If the table is not empty it may already contain data for the
+    explicit added new column. The data may be of a different type,
+    which then breaks collecting and streaming the data.
+    Thus this may break querying the data or running `ANALYZE`.
+    
+    As we do not know which data the table already has without processing
+    each row, we simply throw an exception if we detect that the table
+    isn't empty.
+    
+    (cherry picked from commit d150a2e57f8a6da80bacf146f934d8e0cd87466b)
+
+diff --git a/docs/appendices/release-notes/5.9.3.rst b/docs/appendices/release-notes/5.9.3.rst
+index 9a864a193a..ea25e72cb6 100644
+--- a/docs/appendices/release-notes/5.9.3.rst
++++ b/docs/appendices/release-notes/5.9.3.rst
+@@ -71,3 +71,14 @@ Fixes
+       |       1.0 |
+       +-----------+
+ 
++- Fixed an issue which can cause the data of a table to not be queried anymore and the
++  :ref:`analyze` to fail, if a sub column is added to an object column with
++  column policy ``IGNORED`` when the table is not empty and the new column's
++  data type is different from the existing column's values.
++  This is not allowed anymore and results in an error. For example::
++
++    CREATE TABLE t (o OBJECT(IGNORED));
++    INSERT INTO t (o) VALUES ({x=1});
++    ALTER TABLE t ADD COLUMN o['x'] AS TEXT; <--- this is not allowed anymore
++    INSERT INTO t (o) VALUES ({x='foo'});
++    ANALYZE; <--- this will fail without the fix
+diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
+index 61c17be1a7..23b92d9393 100644
+--- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
++++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
+@@ -53,8 +53,6 @@ import org.jetbrains.annotations.Nullable;
+ import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.action.FutureActionListener;
+-import io.crate.session.CollectingResultReceiver;
+-import io.crate.session.Sessions;
+ import io.crate.analyze.AnalyzedAlterTableRenameTable;
+ import io.crate.analyze.BoundAlterTable;
+ import io.crate.data.Row;
+@@ -64,10 +62,14 @@ import io.crate.execution.support.ChainableAction;
+ import io.crate.execution.support.ChainableActions;
+ import io.crate.metadata.GeneratedReference;
+ import io.crate.metadata.PartitionName;
++import io.crate.metadata.Reference;
+ import io.crate.metadata.RelationName;
+ import io.crate.metadata.table.TableInfo;
+ import io.crate.replication.logical.LogicalReplicationService;
+ import io.crate.replication.logical.metadata.Publication;
++import io.crate.session.CollectingResultReceiver;
++import io.crate.session.Sessions;
++import io.crate.sql.tree.ColumnPolicy;
+ 
+ @Singleton
+ public class AlterTableOperation {
+@@ -122,11 +124,20 @@ public class AlterTableOperation {
+     }
+ 
+     public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {
++        var newReferences = addColumnRequest.references();
+         String subject = null;
+         if (addColumnRequest.pKeyIndices().isEmpty() == false) {
+             subject = "primary key";
+         } else if (addColumnRequest.references().stream().anyMatch(ref -> ref instanceof GeneratedReference)) {
+             subject = "generated";
++        } else {
++            for (Reference newRef : newReferences) {
++                if (newReferences.stream().anyMatch(r -> r.column().isChildOf(newRef.column()))
++                    && newRef.columnPolicy().equals(ColumnPolicy.IGNORED)) {
++                    subject = "sub column to an OBJECT(IGNORED) parent";
++                    break;
++                }
++            }
+         }
+         if (subject != null) {
+             String finalSubject = subject;
+diff --git a/server/src/test/java/io/crate/integrationtests/AlterTableIntegrationTest.java b/server/src/test/java/io/crate/integrationtests/AlterTableIntegrationTest.java
+index fd28a0bb12..882f2bd6fc 100644
+--- a/server/src/test/java/io/crate/integrationtests/AlterTableIntegrationTest.java
++++ b/server/src/test/java/io/crate/integrationtests/AlterTableIntegrationTest.java
+@@ -340,4 +340,26 @@ public class AlterTableIntegrationTest extends IntegTestCase {
+         execute("select column_name from information_schema.columns where table_name = 't'");
+         assertThat(response).hasRows("a2", "o2", "o2['a22']", "o2['b']", "c");
+     }
++
++    @Test
++    public void test_cannot_add_sub_column_to_ignored_parent_if_table_is_not_empty() {
++        execute("CREATE TABLE t1 (obj object(ignored))");
++        execute("INSERT INTO t1 (obj) VALUES ({a={b=21, c=22}})");
++        execute("refresh table t1");
++
++        Asserts.assertSQLError(() -> execute("ALTER TABLE t1 ADD COLUMN obj['a'] text"))
++            .hasPGError(INTERNAL_ERROR)
++            .hasHTTPError(BAD_REQUEST, 4004)
++            .hasMessageContaining("Cannot add a sub column to an OBJECT(IGNORED) parent column to a table that isn't empty");
++    }
++
++    @Test
++    public void test_can_add_sub_column_to_ignored_parent_if_table_is_empty() {
++        execute("CREATE TABLE t1 (obj object(ignored))");
++        execute("ALTER TABLE t1 ADD COLUMN obj['a'] text");
++        execute("INSERT INTO t1 (obj) VALUES ({a='bar'})");
++        execute("refresh table t1");
++        execute("SELECT obj['a'] FROM t1");
++        assertThat(response).hasRows("bar");
++    }
+ }

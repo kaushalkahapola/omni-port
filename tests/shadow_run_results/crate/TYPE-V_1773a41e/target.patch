@@ -1,0 +1,884 @@
+commit 980d38ada0286f56ad3dd9594c1019081ee14c5d
+Author: Sebastian Utz <su@rtme.net>
+Date:   Wed Jan 22 10:17:14 2025 +0100
+
+    Fixes a handshake issue between different major versions
+    
+    To support rolling upgrades between different major versions
+    which in general can have a different `minimumCompatibilityVersion`
+    (lower compatibility bound), the handshake logic must also take
+    the version into account (upper compatibility bound).
+    
+    Additionally, this changes the channel version responded as
+    the agreed-on-version to be the maximum version both versions
+    are supporting instead of always using the defined lower bound.
+    
+    (cherry picked from commit 1773a41e1d9171fe62e1a5e0aed7cbb3754eea99)
+    
+    # Conflicts:
+    #       docs/appendices/release-notes/6.0.0.rst
+    #       server/src/main/java/org/elasticsearch/Version.java
+    #       server/src/test/java/org/elasticsearch/VersionTest.java
+    #       server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java
+
+diff --git a/docs/appendices/release-notes/5.10.1.rst b/docs/appendices/release-notes/5.10.1.rst
+index 37e8ce83d6..b599d27fef 100644
+--- a/docs/appendices/release-notes/5.10.1.rst
++++ b/docs/appendices/release-notes/5.10.1.rst
+@@ -58,3 +58,7 @@ Fixes
+ 
+     SELECT * FROM tbl WHERE pk_col = ? OR pk_col = ?
+     -- Bind the same value to both query parameters
++
++- Fixed a handshake version compatibility issue that causes a node with a
++  higher major version (e.g. ``6.x``) to fail to join a cluster of version
++  < :ref:`version_5.10.1` (rolling upgrade scenario).
+diff --git a/server/src/main/java/io/crate/protocols/postgres/PgClient.java b/server/src/main/java/io/crate/protocols/postgres/PgClient.java
+index d7a2af0253..7a08865095 100644
+--- a/server/src/main/java/io/crate/protocols/postgres/PgClient.java
++++ b/server/src/main/java/io/crate/protocols/postgres/PgClient.java
+@@ -597,7 +597,6 @@ public class PgClient extends AbstractClient {
+                 action,
+                 request,
+                 options,
+-                version,
+                 connectionProfile.getCompressionEnabled(),
+                 false // isHandshake
+             );
+diff --git a/server/src/main/java/org/elasticsearch/Version.java b/server/src/main/java/org/elasticsearch/Version.java
+index a283224e47..4507a62a37 100644
+--- a/server/src/main/java/org/elasticsearch/Version.java
++++ b/server/src/main/java/org/elasticsearch/Version.java
+@@ -424,6 +424,10 @@ public class Version implements Comparable<Version> {
+     public final byte build;
+     public final org.apache.lucene.util.Version luceneVersion;
+ 
++    // lazy initialized because we don't yet have the declared versions ready when instantiating the cached Version
++    // instances
++    private Version minCompatVersion;
++
+     Version(int internalId, boolean isSnapshot, org.apache.lucene.util.Version luceneVersion) {
+         this(internalId, internalId - INTERNAL_OFFSET, isSnapshot, luceneVersion);
+     }
+@@ -494,7 +498,6 @@ public class Version implements Comparable<Version> {
+         static final List<Version> DECLARED_VERSIONS = Collections.unmodifiableList(getDeclaredVersions(Version.class));
+     }
+ 
+-
+     /**
+      * Returns the minimum compatible version based on the current
+      * version. Ie a node needs to have at least the return version in order
+@@ -503,7 +506,34 @@ public class Version implements Comparable<Version> {
+      * is a beta or RC release then the version itself is returned.
+      */
+     public Version minimumCompatibilityVersion() {
+-        return V_4_0_0;
++        Version res = minCompatVersion;
++        if (res == null) {
++            res = computeMinCompatVersion();
++            minCompatVersion = res;
++        }
++        return res;
++    }
++
++    private Version computeMinCompatVersion() {
++        int crateDBMajor = major - (INTERNAL_OFFSET / 1_00_00_00);
++        assert crateDBMajor >= 2 : "only CrateDB 2.x and later versions are supported";
++
++        if (crateDBMajor == 2) {
++            return Version.fromString("1.1.0");
++        } else if (crateDBMajor == 3) {
++            return Version.fromString("2.3.0");
++        } else if (crateDBMajor == 4) {
++            if (minor >= 1) {
++                // CrateDB >= 4.1 is only compatible with CrateDB 4.0, while 4.0 is compatible with 3.x (default)
++                return Version.V_4_0_0;
++            }
++        } else if (crateDBMajor == 6) {
++            // CrateDB 6 is only compatible with CrateDB 5.10.1 onwards due to a handshake compatibility issue
++            return Version.V_5_10_1;
++        }
++
++        // By default, CrateDB is always compatible with the previous major initial (x.0.0) version release
++        return Version.fromId((major - 1) * 1000000 + 99);
+     }
+ 
+     /**
+@@ -521,7 +551,11 @@ public class Version implements Comparable<Version> {
+      * Returns <code>true</code> iff both version are compatible. Otherwise <code>false</code>
+      */
+     public boolean isCompatible(Version version) {
+-        boolean compatible = onOrAfter(version.minimumCompatibilityVersion())
++        return isCompatible(version, version.minimumCompatibilityVersion());
++    }
++
++    public boolean isCompatible(Version version, Version minimumCompatibilityVersion) {
++        boolean compatible = onOrAfter(minimumCompatibilityVersion)
+             && version.onOrAfter(minimumCompatibilityVersion());
+ 
+         assert compatible == false || Math.max(major, version.major) - Math.min(major, version.major) <= 1;
+diff --git a/server/src/main/java/org/elasticsearch/transport/InboundDecoder.java b/server/src/main/java/org/elasticsearch/transport/InboundDecoder.java
+index aec4811432..922057247d 100644
+--- a/server/src/main/java/org/elasticsearch/transport/InboundDecoder.java
++++ b/server/src/main/java/org/elasticsearch/transport/InboundDecoder.java
+@@ -19,17 +19,18 @@
+ 
+ package org.elasticsearch.transport;
+ 
+-import org.jetbrains.annotations.VisibleForTesting;
+-import io.crate.common.io.IOUtils;
++import java.io.IOException;
++import java.util.function.Consumer;
++
+ import org.elasticsearch.Version;
+ import org.elasticsearch.common.bytes.BytesReference;
+ import org.elasticsearch.common.bytes.ReleasableBytesReference;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.lease.Releasable;
+ import org.elasticsearch.common.util.PageCacheRecycler;
++import org.jetbrains.annotations.VisibleForTesting;
+ 
+-import java.io.IOException;
+-import java.util.function.Consumer;
++import io.crate.common.io.IOUtils;
+ 
+ public class InboundDecoder implements Releasable {
+ 
+@@ -73,7 +74,7 @@ public class InboundDecoder implements Releasable {
+                 } else {
+                     totalNetworkSize = messageLength + TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE;
+ 
+-                    Header header = readHeader(version, messageLength, reference);
++                    Header header = readHeader(messageLength, reference);
+                     bytesConsumed += headerBytesToRead;
+                     if (header.isCompressed()) {
+                         decompressor = new TransportDecompressor(recycler);
+@@ -168,23 +169,20 @@ public class InboundDecoder implements Releasable {
+     }
+ 
+     @VisibleForTesting
+-    static Header readHeader(Version version, int networkMessageSize, BytesReference bytesReference) throws IOException {
++    static Header readHeader(int networkMessageSize, BytesReference bytesReference) throws IOException {
+         try (StreamInput streamInput = bytesReference.streamInput()) {
+             streamInput.skip(TcpHeader.BYTES_REQUIRED_FOR_MESSAGE_SIZE);
+             long requestId = streamInput.readLong();
+             byte status = streamInput.readByte();
+             Version remoteVersion = Version.fromId(streamInput.readInt());
+             Header header = new Header(networkMessageSize, requestId, status, remoteVersion);
+-            final IllegalStateException invalidVersion = ensureVersionCompatibility(remoteVersion, version, header.isHandshake());
+-            if (invalidVersion != null) {
+-                throw invalidVersion;
+-            } else {
+-                if (remoteVersion.onOrAfter(TcpHeader.VERSION_WITH_HEADER_SIZE)) {
+-                    // Skip since we already have ensured enough data available
+-                    streamInput.readInt();
+-                    header.finishParsingHeader(streamInput);
+-                }
++
++            if (remoteVersion.onOrAfter(TcpHeader.VERSION_WITH_HEADER_SIZE)) {
++                // Skip since we already have ensured enough data available
++                streamInput.readInt();
++                header.finishParsingHeader(streamInput);
+             }
++
+             return header;
+         }
+     }
+@@ -198,18 +196,4 @@ public class InboundDecoder implements Releasable {
+             throw new IllegalStateException("Decoder is already closed");
+         }
+     }
+-
+-    static IllegalStateException ensureVersionCompatibility(Version remoteVersion, Version currentVersion, boolean isHandshake) {
+-        // for handshakes we are compatible with N-2 since otherwise we can't figure out our initial version
+-        // since we are compatible with N-1 and N+1 so we always send our minCompatVersion as the initial version in the
+-        // handshake. This looks odd but it's required to establish the connection correctly we check for real compatibility
+-        // once the connection is established
+-        final Version compatibilityVersion = isHandshake ? currentVersion.minimumCompatibilityVersion() : currentVersion;
+-        if (remoteVersion.isCompatible(compatibilityVersion) == false) {
+-            final Version minCompatibilityVersion = isHandshake ? compatibilityVersion : compatibilityVersion.minimumCompatibilityVersion();
+-            String msg = "Received " + (isHandshake ? "handshake " : "") + "message from unsupported version: [";
+-            return new IllegalStateException(msg + remoteVersion + "] minimal compatible version is: [" + minCompatibilityVersion + "]");
+-        }
+-        return null;
+-    }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/transport/OutboundHandler.java b/server/src/main/java/org/elasticsearch/transport/OutboundHandler.java
+index 662059c201..452884d8b7 100644
+--- a/server/src/main/java/org/elasticsearch/transport/OutboundHandler.java
++++ b/server/src/main/java/org/elasticsearch/transport/OutboundHandler.java
+@@ -89,10 +89,9 @@ public final class OutboundHandler {
+                             final String action,
+                             final TransportRequest request,
+                             final TransportRequestOptions options,
+-                            final Version channelVersion,
+                             final boolean compressRequest,
+                             final boolean isHandshake) throws IOException, TransportException {
+-        Version version = Version.min(this.version, channelVersion);
++        Version version = this.version;
+         OutboundMessage.Request message = new OutboundMessage.Request(
+             request,
+             version,
+@@ -110,14 +109,13 @@ public final class OutboundHandler {
+      * objects back to the caller.
+      *
+      */
+-    void sendResponse(final Version nodeVersion,
+-                      final CloseableChannel channel,
++    void sendResponse(final CloseableChannel channel,
+                       final long requestId,
+                       final String action,
+                       final TransportResponse response,
+                       final boolean compress,
+                       final boolean isHandshake) throws IOException {
+-        Version version = Version.min(this.version, nodeVersion);
++        Version version = this.version;
+         OutboundMessage.Response message = new OutboundMessage.Response(
+             response,
+             version,
+@@ -132,12 +130,11 @@ public final class OutboundHandler {
+     /**
+      * Sends back an error response to the caller via the given channel
+      */
+-    void sendErrorResponse(final Version nodeVersion,
+-                           final CloseableChannel channel,
++    void sendErrorResponse(final CloseableChannel channel,
+                            final long requestId,
+                            final String action,
+                            final Exception error) throws IOException {
+-        Version version = Version.min(this.version, nodeVersion);
++        Version version = this.version;
+         TransportAddress address = new TransportAddress(channel.getLocalAddress());
+         RemoteTransportException tx = new RemoteTransportException(nodeName, address, action, error);
+         OutboundMessage.Response message = new OutboundMessage.Response(
+diff --git a/server/src/main/java/org/elasticsearch/transport/TcpTransport.java b/server/src/main/java/org/elasticsearch/transport/TcpTransport.java
+index 55204191c3..75983b4547 100644
+--- a/server/src/main/java/org/elasticsearch/transport/TcpTransport.java
++++ b/server/src/main/java/org/elasticsearch/transport/TcpTransport.java
+@@ -145,7 +145,7 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
+         this.handshaker = new TransportHandshaker(version, threadPool,
+             (node, channel, requestId, v) -> outboundHandler.sendRequest(node, channel, requestId,
+                 TransportHandshaker.HANDSHAKE_ACTION_NAME, new TransportHandshaker.HandshakeRequest(version),
+-                TransportRequestOptions.EMPTY, v, false, true));
++                TransportRequestOptions.EMPTY, false, true));
+         this.keepAlive = new TransportKeepAlive(threadPool, this.outboundHandler::sendBytes);
+         this.inboundHandler = new InboundHandler(threadPool, outboundHandler, namedWriteableRegistry, handshaker, keepAlive,
+             requestHandlers, responseHandlers);
+@@ -246,7 +246,7 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
+                 throw new NodeNotConnectedException(node, "connection already closed");
+             }
+             CloseableChannel channel = channel(options.type());
+-            outboundHandler.sendRequest(node, channel, requestId, action, request, options, getVersion(), compress, false);
++            outboundHandler.sendRequest(node, channel, requestId, action, request, options, compress, false);
+         }
+ 
+         @Override
+diff --git a/server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java b/server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java
+index 3f92b66b6b..8636e18473 100644
+--- a/server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java
++++ b/server/src/main/java/org/elasticsearch/transport/TcpTransportChannel.java
+@@ -59,7 +59,7 @@ public final class TcpTransportChannel implements TransportChannel {
+     @Override
+     public void sendResponse(TransportResponse response) throws IOException {
+         try {
+-            outboundHandler.sendResponse(version, channel, requestId, action, response, compressResponse, isHandshake);
++            outboundHandler.sendResponse(channel, requestId, action, response, compressResponse, isHandshake);
+         } finally {
+             release(false);
+         }
+@@ -68,7 +68,7 @@ public final class TcpTransportChannel implements TransportChannel {
+     @Override
+     public void sendResponse(Exception exception) throws IOException {
+         try {
+-            outboundHandler.sendErrorResponse(version, channel, requestId, action, exception);
++            outboundHandler.sendErrorResponse(channel, requestId, action, exception);
+         } finally {
+             release(true);
+         }
+diff --git a/server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java b/server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java
+index d31ed34917..2b4bfb60a1 100644
+--- a/server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java
++++ b/server/src/main/java/org/elasticsearch/transport/TransportHandshaker.java
+@@ -35,6 +35,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
+ import org.elasticsearch.common.metrics.CounterMetric;
+ import org.elasticsearch.common.network.CloseableChannel;
+ import org.elasticsearch.threadpool.ThreadPool;
++import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.common.unit.TimeValue;
+ 
+@@ -66,11 +67,7 @@ final class TransportHandshaker {
+             () -> handler.handleLocalException(new TransportException("handshake failed because connection reset"))));
+         boolean success = false;
+         try {
+-            // for the request we use the minCompatVersion since we don't know what's the version of the node we talk to
+-            // we also have no payload on the request but the response will contain the actual version of the node we talk
+-            // to as the payload.
+-            final Version minCompatVersion = version.minimumCompatibilityVersion();
+-            handshakeRequestSender.sendRequest(node, channel, requestId, minCompatVersion);
++            handshakeRequestSender.sendRequest(node, channel, requestId, version);
+ 
+             threadPool.schedule(
+                 () -> handler.handleLocalException(new ConnectTransportException(node, "handshake_timeout[" + timeout + "]")),
+@@ -89,8 +86,17 @@ final class TransportHandshaker {
+     }
+ 
+     void handleHandshake(TransportChannel channel, long requestId, StreamInput stream) throws IOException {
+-        // Must read the handshake request to exhaust the stream
+-        new HandshakeRequest(stream);
++        HandshakeRequest request = new HandshakeRequest(stream);
++
++        if (stream.getVersion().equals(version) == false) {
++            if (version.isCompatible(stream.getVersion(), request.minimumCompatibilityVersion) == false) {
++                IllegalStateException invalidVersion = new IllegalStateException(
++                    "Received handshake message from unsupported version: [" + stream.getVersion()
++                    + "] minimal compatible version is: [" + version.minimumCompatibilityVersion() + "]");
++                channel.sendResponse(invalidVersion);
++                throw invalidVersion;
++            }
++        }
+ 
+         final int nextByte = stream.read();
+         if (nextByte != -1) {
+@@ -133,8 +139,9 @@ final class TransportHandshaker {
+         @Override
+         public void handleResponse(HandshakeResponse response) {
+             if (isDone.compareAndSet(false, true)) {
+-                Version version = response.responseVersion;
+-                if (currentVersion.isCompatible(version) == false) {
++                Version remoteVersion = response.getResponseVersion();
++                Version remoteMinimalCompatibleVersion = response.responseMinimalCompatibleVersion();
++                if (currentVersion.isCompatible(remoteVersion, remoteMinimalCompatibleVersion) == false) {
+                     listener.onFailure(new IllegalStateException("Received message from unsupported version: [" + version
+                         + "] minimal compatible version is: [" + currentVersion.minimumCompatibilityVersion() + "]"));
+                 } else {
+@@ -165,10 +172,10 @@ final class TransportHandshaker {
+ 
+     static final class HandshakeRequest extends TransportRequest {
+ 
+-        private final Version version;
++        private final Version minimumCompatibilityVersion;
+ 
+         HandshakeRequest(Version version) {
+-            this.version = version;
++            this.minimumCompatibilityVersion = version.minimumCompatibilityVersion();
+         }
+ 
+         HandshakeRequest(StreamInput streamInput) throws IOException {
+@@ -180,10 +187,10 @@ final class TransportHandshaker {
+                 remainingMessage = null;
+             }
+             if (remainingMessage == null) {
+-                version = null;
++                minimumCompatibilityVersion = null;
+             } else {
+                 try (StreamInput messageStreamInput = remainingMessage.streamInput()) {
+-                    this.version = Version.readVersion(messageStreamInput);
++                    this.minimumCompatibilityVersion = Version.readVersion(messageStreamInput);
+                 }
+             }
+         }
+@@ -191,9 +198,9 @@ final class TransportHandshaker {
+         @Override
+         public void writeTo(StreamOutput streamOutput) throws IOException {
+             super.writeTo(streamOutput);
+-            assert version != null;
++            assert minimumCompatibilityVersion != null;
+             try (BytesStreamOutput messageStreamOutput = new BytesStreamOutput(4)) {
+-                Version.writeVersion(version, messageStreamOutput);
++                Version.writeVersion(minimumCompatibilityVersion, messageStreamOutput);
+                 BytesReference reference = messageStreamOutput.bytes();
+                 streamOutput.writeBytesReference(reference);
+             }
+@@ -203,24 +210,33 @@ final class TransportHandshaker {
+     static final class HandshakeResponse extends TransportResponse {
+ 
+         private final Version responseVersion;
++        private final Version responseMinimalCompatibleVersion;
+ 
+         HandshakeResponse(Version version) {
+             this.responseVersion = version;
++            this.responseMinimalCompatibleVersion = version.minimumCompatibilityVersion();
+         }
+ 
+-        private HandshakeResponse(StreamInput in) throws IOException {
+-            responseVersion = Version.readVersion(in);
++        @VisibleForTesting
++        HandshakeResponse(StreamInput in) throws IOException {
++            responseVersion = in.getVersion();
++            responseMinimalCompatibleVersion = Version.readVersion(in);
+         }
+ 
+         @Override
+         public void writeTo(StreamOutput out) throws IOException {
+-            assert responseVersion != null;
+-            Version.writeVersion(responseVersion, out);
++            // Only write the minimal compatible version, the response version is already written into the header
++            assert responseMinimalCompatibleVersion != null;
++            Version.writeVersion(responseMinimalCompatibleVersion, out);
+         }
+ 
+         Version getResponseVersion() {
+             return responseVersion;
+         }
++
++        Version responseMinimalCompatibleVersion() {
++            return responseMinimalCompatibleVersion;
++        }
+     }
+ 
+     @FunctionalInterface
+diff --git a/server/src/test/java/org/elasticsearch/VersionTest.java b/server/src/test/java/org/elasticsearch/VersionTest.java
+index 87af4a686e..27f3a76dc0 100644
+--- a/server/src/test/java/org/elasticsearch/VersionTest.java
++++ b/server/src/test/java/org/elasticsearch/VersionTest.java
+@@ -37,6 +37,24 @@ public class VersionTest {
+         assertThat(Version.CURRENT.minimumCompatibilityVersion()).isEqualTo(Version.V_4_0_0);
+     }
+ 
++    @Test
++    public void test_compatible_current_version() {
++        assertThat(Version.CURRENT.isCompatible(Version.fromString("3.3.0"))).isFalse();
++        assertThat(Version.CURRENT.isCompatible(Version.V_4_0_0)).isTrue();
++    }
++
++    @Test
++    public void test_version_minimum_compatibility() {
++        assertThat(Version.fromString("2.0.0").minimumCompatibilityVersion()).isEqualTo(Version.fromString("1.1.0"));
++        assertThat(Version.fromString("3.0.0").minimumCompatibilityVersion()).isEqualTo(Version.fromString("2.3.0"));
++
++        assertThat(Version.V_4_0_0.minimumCompatibilityVersion()).isEqualTo(Version.fromString("3.0.0"));
++        assertThat(Version.V_4_1_0.minimumCompatibilityVersion()).isEqualTo(Version.V_4_0_0);
++
++        assertThat(Version.V_5_0_0.minimumCompatibilityVersion()).isEqualTo(Version.V_4_0_0);
++        assertThat(Version.V_5_10_1.minimumCompatibilityVersion()).isEqualTo(Version.V_4_0_0);
++    }
++
+     @Test
+     public void test_can_parse_next_patch_release_version() {
+         int internalId = Version.CURRENT.internalId + 100;
+diff --git a/server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java b/server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java
+index 4fc712c359..0ac68b717e 100644
+--- a/server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java
++++ b/server/src/test/java/org/elasticsearch/transport/InboundDecoderTests.java
+@@ -20,7 +20,6 @@
+ package org.elasticsearch.transport;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
+@@ -31,7 +30,6 @@ import org.elasticsearch.common.bytes.ReleasableBytesReference;
+ import org.elasticsearch.common.io.stream.BytesStreamOutput;
+ import org.elasticsearch.common.util.PageCacheRecycler;
+ import org.elasticsearch.test.ESTestCase;
+-import org.elasticsearch.test.VersionUtils;
+ 
+ public class InboundDecoderTests extends ESTestCase {
+ 
+@@ -132,7 +130,7 @@ public class InboundDecoderTests extends ESTestCase {
+     public void testDecodeHandshakeCompatibility() throws IOException {
+         String action = "test-request";
+         long requestId = randomNonNegativeLong();
+-        Version handshakeCompat = Version.CURRENT.minimumCompatibilityVersion().minimumCompatibilityVersion();
++        Version handshakeCompat = Version.CURRENT.minimumCompatibilityVersion();
+         OutboundMessage message = new OutboundMessage.Request(new TestRequest(randomAlphaOfLength(100)),
+             handshakeCompat, action, requestId, true, false);
+ 
+@@ -217,7 +215,7 @@ public class InboundDecoderTests extends ESTestCase {
+     public void testCompressedDecodeHandshakeCompatibility() throws IOException {
+         String action = "test-request";
+         long requestId = randomNonNegativeLong();
+-        Version handshakeCompat = Version.CURRENT.minimumCompatibilityVersion().minimumCompatibilityVersion();
++        Version handshakeCompat = Version.CURRENT.minimumCompatibilityVersion();
+         OutboundMessage message = new OutboundMessage.Request(new TestRequest(randomAlphaOfLength(100)),
+             handshakeCompat, action, requestId, true, true);
+ 
+@@ -241,36 +239,4 @@ public class InboundDecoderTests extends ESTestCase {
+         assertThat(header.needsToReadVariableHeader()).isTrue();
+         fragments.clear();
+     }
+-
+-    public void testVersionIncompatibilityDecodeException() throws IOException {
+-        String action = "test-request";
+-        long requestId = randomNonNegativeLong();
+-        Version incompatibleVersion = Version.fromString("3.2.0");
+-        OutboundMessage message = new OutboundMessage.Request(new TestRequest(randomAlphaOfLength(100)),
+-            incompatibleVersion, action, requestId, false, true);
+-
+-        final BytesReference bytes = message.serialize(new BytesStreamOutput());
+-
+-        InboundDecoder decoder = new InboundDecoder(Version.CURRENT, PageCacheRecycler.NON_RECYCLING_INSTANCE);
+-        final ArrayList<Object> fragments = new ArrayList<>();
+-        final ReleasableBytesReference releasable1 = ReleasableBytesReference.wrap(bytes);
+-        assertThatThrownBy(() -> decoder.decode(releasable1, fragments::add))
+-            .isExactlyInstanceOf(IllegalStateException.class);
+-        // No bytes are retained
+-        assertThat(releasable1.refCount()).isEqualTo(1);
+-    }
+-
+-    public void testEnsureVersionCompatibility() throws IOException {
+-        IllegalStateException ise = InboundDecoder.ensureVersionCompatibility(VersionUtils.randomVersionBetween(random(),
+-            Version.CURRENT.minimumCompatibilityVersion(), Version.CURRENT), Version.CURRENT, randomBoolean());
+-        assertThat(ise).isNull();
+-
+-        final Version version = Version.fromString("4.0.0");
+-        ise = InboundDecoder.ensureVersionCompatibility(Version.fromString("4.0.0"), version, true);
+-        assertThat(ise).isNull();
+-
+-        ise = InboundDecoder.ensureVersionCompatibility(Version.fromString("3.0.0"), version, false);
+-        assertThat(ise.getMessage()).isEqualTo("Received message from unsupported version: [3.0.0] minimal compatible version is: ["
+-            + version.minimumCompatibilityVersion() + "]");
+-    }
+ }
+diff --git a/server/src/test/java/org/elasticsearch/transport/InboundHandlerTests.java b/server/src/test/java/org/elasticsearch/transport/InboundHandlerTests.java
+index 3a403015fe..985f5afac4 100644
+--- a/server/src/test/java/org/elasticsearch/transport/InboundHandlerTests.java
++++ b/server/src/test/java/org/elasticsearch/transport/InboundHandlerTests.java
+@@ -232,7 +232,7 @@ public class InboundHandlerTests extends ESTestCase {
+ 
+         ByteBuf msg = (ByteBuf) embeddedChannel.outboundMessages().poll();
+         final BytesReference responseBytesReference = Netty4Utils.toBytesReference(msg);
+-        final Header responseHeader = InboundDecoder.readHeader(remoteVersion, responseBytesReference.length(), responseBytesReference);
++        final Header responseHeader = InboundDecoder.readHeader(responseBytesReference.length(), responseBytesReference);
+         assertThat(responseHeader.isResponse()).isTrue();
+         assertThat(responseHeader.isError()).isTrue();
+     }
+@@ -261,7 +261,7 @@ public class InboundHandlerTests extends ESTestCase {
+             final AtomicBoolean isClosed = new AtomicBoolean();
+             channel.addCloseListener(ActionListener.wrap(() -> assertThat(isClosed.compareAndSet(false, true)).isTrue()));
+ 
+-            final Version remoteVersion = Version.fromId(randomIntBetween(0, version.minimumCompatibilityVersion().internalId - 1));
++            final Version remoteVersion = Version.fromId(randomIntBetween(5_00_00_00, version.minimumCompatibilityVersion().internalId - 1));
+             final long requestId = randomNonNegativeLong();
+             final Header requestHeader = new Header(between(0, 100), requestId,
+                 TransportStatus.setRequest(TransportStatus.setHandshake((byte) 0)), remoteVersion);
+@@ -279,6 +279,130 @@ public class InboundHandlerTests extends ESTestCase {
+         }
+     }
+ 
++    @Test
++    public void test_handshake_precedes_stream_version_for_compatibility() throws Exception {
++        Version remoteVersion = Version.V_4_0_0;
++        int headerSize = TcpHeader.headerSize(remoteVersion);
++
++        final long requestId = randomNonNegativeLong();
++        final Header requestHeader = new Header(between(0, 100), requestId,
++            TransportStatus.setRequest(TransportStatus.setHandshake((byte) 0)), remoteVersion);
++        OutboundMessage.Request request = new OutboundMessage.Request(
++            new TransportHandshaker.HandshakeRequest(remoteVersion),
++            remoteVersion,
++            TransportHandshaker.HANDSHAKE_ACTION_NAME,
++            requestId,
++            true,
++            false
++        );
++
++        BytesReference fullRequestBytes = request.serialize(new BytesStreamOutput());
++        BytesReference requestContent = fullRequestBytes.slice(headerSize, fullRequestBytes.length() - headerSize);
++        InboundMessage requestMessage = new InboundMessage(requestHeader, ReleasableBytesReference.wrap(requestContent), () -> {});
++        requestHeader.finishParsingHeader(requestMessage.openOrGetStreamInput());
++        handler.inboundMessage(channel, requestMessage);
++
++        int responseHeaderSize = TcpHeader.headerSize(Version.V_5_10_1);
++        ByteBuf fullResponse = (ByteBuf) embeddedChannel.outboundMessages().poll();
++        BytesReference fullResponseBytes = Netty4Utils.toBytesReference(fullResponse);
++        BytesReference responseContent = fullResponseBytes.slice(responseHeaderSize + 2, fullResponseBytes.length() - responseHeaderSize - 2);
++        Header responseHeader = InboundDecoder.readHeader(fullResponseBytes.length(), fullResponseBytes);
++        InboundMessage responseMessage = new InboundMessage(responseHeader, ReleasableBytesReference.wrap(responseContent), () -> {});
++
++        TransportHandshaker.HandshakeResponse response = new TransportHandshaker.HandshakeResponse(responseMessage.openOrGetStreamInput());
++        assertThat(response.getResponseVersion()).isEqualTo(Version.V_5_10_1);
++    }
++
++    /**
++     * Tests a handshake initiated by a newer node to an older node while the newer nodes minimum compatible version matches.
++     * <p/>
++     *  5.0.0 -> send handshake request -> 4.1.0       (4.1.0 accepts this as the minimum compatible version sent is 4.0.0)
++     *  4.1.0 -> send handshake response -> 5.0.0      (5.0.0 accepts this as the minimum compatible version defined is 4.0.0)
++     *
++     */
++    @Test
++    public void test_handshake_checks_minimum_compatible_version_if_normal_version_is_not_compatible() throws Exception {
++        Version localVersion = Version.V_4_1_0;
++        NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(Collections.emptyList());
++        TransportHandshaker handshaker = new TransportHandshaker(localVersion, threadPool, (n, c, r, v) -> {});
++        TransportKeepAlive keepAlive = new TransportKeepAlive(threadPool, (c, b) -> channel.writeAndFlush(Unpooled.wrappedBuffer(b)));
++        OutboundHandler outboundHandler = new OutboundHandler("node", localVersion, new StatsTracker(), threadPool,
++            BigArrays.NON_RECYCLING_INSTANCE);
++        InboundHandler handler = new InboundHandler(threadPool, outboundHandler, namedWriteableRegistry, handshaker, keepAlive, requestHandlers,
++            responseHandlers);
++
++
++        int headerSize = TcpHeader.headerSize(localVersion);
++
++        final long requestId = randomNonNegativeLong();
++        final Header requestHeader = new Header(between(0, 100), requestId,
++            TransportStatus.setRequest(TransportStatus.setHandshake((byte) 0)), Version.V_5_0_0);
++        OutboundMessage.Request request = new OutboundMessage.Request(
++            new TransportHandshaker.HandshakeRequest(Version.V_5_0_0),
++            Version.V_5_0_0,
++            TransportHandshaker.HANDSHAKE_ACTION_NAME,
++            requestId,
++            true,
++            false
++        );
++
++        BytesReference fullRequestBytes = request.serialize(new BytesStreamOutput());
++        BytesReference requestContent = fullRequestBytes.slice(headerSize, fullRequestBytes.length() - headerSize);
++        InboundMessage requestMessage = new InboundMessage(requestHeader, ReleasableBytesReference.wrap(requestContent), () -> {});
++        requestHeader.finishParsingHeader(requestMessage.openOrGetStreamInput());
++        handler.inboundMessage(channel, requestMessage);
++
++        int responseHeaderSize = TcpHeader.headerSize(localVersion);
++        ByteBuf fullResponse = (ByteBuf) embeddedChannel.outboundMessages().poll();
++        BytesReference fullResponseBytes = Netty4Utils.toBytesReference(fullResponse);
++        BytesReference responseContent = fullResponseBytes.slice(responseHeaderSize + 2, fullResponseBytes.length() - responseHeaderSize - 2);
++        Header responseHeader = InboundDecoder.readHeader(fullResponseBytes.length(), fullResponseBytes);
++        InboundMessage responseMessage = new InboundMessage(responseHeader, ReleasableBytesReference.wrap(responseContent), () -> {});
++
++        TransportHandshaker.HandshakeResponse response = new TransportHandshaker.HandshakeResponse(responseMessage.openOrGetStreamInput());
++
++        assertThat(response.getResponseVersion()).isEqualTo(Version.V_4_1_0);
++    }
++
++    @Test
++    public void test_handshake_error_if_version_and_minimum_compatible_version_is_not_compatible() throws Exception {
++        Version remoteVersion = Version.fromString("3.3.0");
++        int headerSize = TcpHeader.headerSize(remoteVersion);
++
++        final long requestId = randomNonNegativeLong();
++        final Header requestHeader = new Header(between(0, 100), requestId,
++            TransportStatus.setRequest(TransportStatus.setHandshake((byte) 0)), remoteVersion);
++        OutboundMessage.Request request = new OutboundMessage.Request(
++            new TransportHandshaker.HandshakeRequest(remoteVersion),
++            remoteVersion,
++            TransportHandshaker.HANDSHAKE_ACTION_NAME,
++            requestId,
++            true,
++            false
++        );
++
++        BytesReference fullRequestBytes = request.serialize(new BytesStreamOutput());
++        BytesReference requestContent = fullRequestBytes.slice(headerSize, fullRequestBytes.length() - headerSize);
++        InboundMessage requestMessage = new InboundMessage(requestHeader, ReleasableBytesReference.wrap(requestContent), () -> {});
++        requestHeader.finishParsingHeader(requestMessage.openOrGetStreamInput());
++        handler.inboundMessage(channel, requestMessage);
++
++        int responseHeaderSize = TcpHeader.headerSize(Version.V_5_0_0);
++        ByteBuf fullResponse = (ByteBuf) embeddedChannel.outboundMessages().poll();
++        BytesReference fullResponseBytes = Netty4Utils.toBytesReference(fullResponse);
++        BytesReference responseContent = fullResponseBytes.slice(responseHeaderSize + 2, fullResponseBytes.length() - responseHeaderSize - 2);
++        Header responseHeader = InboundDecoder.readHeader(fullResponseBytes.length(), fullResponseBytes);
++        assertThat(responseHeader.isError()).isTrue();
++
++        InboundMessage responseMessage = new InboundMessage(responseHeader, ReleasableBytesReference.wrap(responseContent), () -> {});
++        Exception exception = responseMessage.openOrGetStreamInput().readException();
++        assertThat(exception).isInstanceOf(RemoteTransportException.class);
++        assertThat(exception.getCause()).isInstanceOf(IllegalStateException.class);
++        assertThat(exception.getCause().getMessage()).isEqualTo(
++            "Received handshake message from unsupported version: [3.3.0] minimal compatible version is: [4.0.0]");
++    }
++
++    @Test
+     public void testLogsSlowInboundProcessing() throws Exception {
+         final MockLogAppender mockAppender = new MockLogAppender();
+         mockAppender.start();
+diff --git a/server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java b/server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java
+index 35014941d2..95fb730dad 100644
+--- a/server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java
++++ b/server/src/test/java/org/elasticsearch/transport/InboundPipelineTests.java
+@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ 
+ import java.io.IOException;
++import java.io.StreamCorruptedException;
+ import java.util.ArrayList;
+ import java.util.List;
+ import java.util.Objects;
+@@ -187,25 +188,11 @@ public class InboundPipelineTests extends ESTestCase {
+         final InboundPipeline pipeline = new InboundPipeline(statsTracker, millisSupplier, decoder, aggregator, messageHandler);
+ 
+         try (BytesStreamOutput streamOutput = new BytesStreamOutput()) {
+-            String actionName = "actionName";
+-            final Version invalidVersion = Version.fromString("3.2.0");
+-            final String value = randomAlphaOfLength(1000);
+-            final boolean isRequest = randomBoolean();
+-            final long requestId = randomNonNegativeLong();
+-
+-            OutboundMessage message;
+-            if (isRequest) {
+-                message = new OutboundMessage.Request(new TestRequest(value),
+-                    invalidVersion, actionName, requestId, false, false);
+-            } else {
+-                message = new OutboundMessage.Response(new TestResponse(value),
+-                    invalidVersion, requestId, false, false);
+-            }
+-
+-            final BytesReference reference = message.serialize(streamOutput);
++            streamOutput.writeString("broken header");
++            BytesReference reference = streamOutput.bytes();
+             try (ReleasableBytesReference releasable = ReleasableBytesReference.wrap(reference)) {
+                 assertThatThrownBy(() -> pipeline.handleBytes(fakeChannel(), releasable))
+-                    .isExactlyInstanceOf(IllegalStateException.class);
++                    .isExactlyInstanceOf(StreamCorruptedException.class);
+             }
+ 
+             // Pipeline cannot be reused after uncaught exception
+diff --git a/server/src/test/java/org/elasticsearch/transport/OutboundHandlerTests.java b/server/src/test/java/org/elasticsearch/transport/OutboundHandlerTests.java
+index 8e5e511168..8efc9ad926 100644
+--- a/server/src/test/java/org/elasticsearch/transport/OutboundHandlerTests.java
++++ b/server/src/test/java/org/elasticsearch/transport/OutboundHandlerTests.java
+@@ -126,7 +126,7 @@ public class OutboundHandlerTests extends ESTestCase {
+ 
+     @Test
+     public void testSendRequest() throws IOException {
+-        Version version = randomFrom(Version.CURRENT, Version.CURRENT.minimumCompatibilityVersion());
++        Version version = Version.CURRENT;
+         String action = "handshake";
+         long requestId = randomLongBetween(0, 300);
+         boolean isHandshake = randomBoolean();
+@@ -148,7 +148,7 @@ public class OutboundHandlerTests extends ESTestCase {
+                 requestRef.set(request);
+             }
+         });
+-        handler.sendRequest(node, channel, requestId, action, request, options, version, compress, isHandshake);
++        handler.sendRequest(node, channel, requestId, action, request, options, compress, isHandshake);
+ 
+         ByteBuf msg = (ByteBuf) embeddedChannel.outboundMessages().poll();
+         BytesReference reference = Netty4Utils.toBytesReference(msg);
+@@ -182,7 +182,7 @@ public class OutboundHandlerTests extends ESTestCase {
+ 
+     @Test
+     public void testSendResponse() throws IOException {
+-        Version version = randomFrom(Version.CURRENT, Version.CURRENT.minimumCompatibilityVersion());
++        Version version = Version.CURRENT;
+         String action = "handshake";
+         long requestId = randomLongBetween(0, 300);
+         boolean isHandshake = randomBoolean();
+@@ -201,7 +201,7 @@ public class OutboundHandlerTests extends ESTestCase {
+                 responseRef.set(response);
+             }
+         });
+-        handler.sendResponse(version, channel, requestId, action, response, compress, isHandshake);
++        handler.sendResponse(channel, requestId, action, response, compress, isHandshake);
+ 
+         ByteBuf msg = (ByteBuf) embeddedChannel.outboundMessages().poll();
+         BytesReference reference = Netty4Utils.toBytesReference(msg);
+@@ -236,7 +236,7 @@ public class OutboundHandlerTests extends ESTestCase {
+ 
+     @Test
+     public void testErrorResponse() throws IOException {
+-        Version version = randomFrom(Version.CURRENT, Version.CURRENT.minimumCompatibilityVersion());
++        Version version = Version.CURRENT;
+         String action = "handshake";
+         long requestId = randomLongBetween(0, 300);
+         ElasticsearchException error = new ElasticsearchException("boom");
+@@ -252,7 +252,7 @@ public class OutboundHandlerTests extends ESTestCase {
+                 responseRef.set(error);
+             }
+         });
+-        handler.sendErrorResponse(version, channel, requestId, action, error);
++        handler.sendErrorResponse(channel, requestId, action, error);
+ 
+         ByteBuf msg = (ByteBuf) embeddedChannel.outboundMessages().poll();
+         BytesReference reference = Netty4Utils.toBytesReference(msg);
+diff --git a/server/src/test/java/org/elasticsearch/transport/TransportActionProxyTests.java b/server/src/test/java/org/elasticsearch/transport/TransportActionProxyTests.java
+index d27cd7bf6f..344a6e54b2 100644
+--- a/server/src/test/java/org/elasticsearch/transport/TransportActionProxyTests.java
++++ b/server/src/test/java/org/elasticsearch/transport/TransportActionProxyTests.java
+@@ -46,13 +46,13 @@ import io.crate.netty.NettyBootstrap;
+ public class TransportActionProxyTests extends ESTestCase {
+     protected ThreadPool threadPool;
+     // we use always a non-alpha or beta version here otherwise minimumCompatibilityVersion will be different for the two used versions
+-    private static final Version CURRENT_VERSION = Version.fromString(String.valueOf(Version.CURRENT.major) + ".0.0");
++    private static final Version CURRENT_VERSION = Version.fromId(Version.CURRENT.major * 1000000 + 99);
+     protected static final Version version0 = CURRENT_VERSION.minimumCompatibilityVersion();
+ 
+     protected DiscoveryNode nodeA;
+     protected MockTransportService serviceA;
+ 
+-    protected static final Version version1 = Version.fromId(CURRENT_VERSION.externalId + 1);
++    protected static final Version version1 = Version.fromId(CURRENT_VERSION.major * 1000000 + 199);
+     protected DiscoveryNode nodeB;
+     protected MockTransportService serviceB;
+ 
+diff --git a/server/src/test/java/org/elasticsearch/transport/TransportHandshakerTests.java b/server/src/test/java/org/elasticsearch/transport/TransportHandshakerTests.java
+index 3d1e707287..ad35c37ba9 100644
+--- a/server/src/test/java/org/elasticsearch/transport/TransportHandshakerTests.java
++++ b/server/src/test/java/org/elasticsearch/transport/TransportHandshakerTests.java
+@@ -75,7 +75,7 @@ public class TransportHandshakerTests extends ESTestCase {
+         long reqId = randomLongBetween(1, 10);
+         handshaker.sendHandshake(reqId, node, channel, new TimeValue(30, TimeUnit.SECONDS), versionFuture);
+ 
+-        verify(requestSender).sendRequest(node, channel, reqId, Version.CURRENT.minimumCompatibilityVersion());
++        verify(requestSender).sendRequest(node, channel, reqId, Version.CURRENT);
+ 
+         assertThat(versionFuture.isDone()).isFalse();
+ 
+@@ -94,12 +94,26 @@ public class TransportHandshakerTests extends ESTestCase {
+         assertThat(versionFuture.get()).isEqualTo(Version.CURRENT);
+     }
+ 
++    @Test
++    public void test_handshake_request_includes_minimumCompatibilityVersion() throws Exception {
++        TransportHandshaker.HandshakeRequest handshakeRequest = new TransportHandshaker.HandshakeRequest(Version.CURRENT);
++        BytesStreamOutput bytesStreamOutput = new BytesStreamOutput();
++        handshakeRequest.writeTo(bytesStreamOutput);
++        StreamInput streamInput = bytesStreamOutput.bytes().streamInput();
++        TaskId.readFromStream(streamInput);
++
++        try (StreamInput messageInput = streamInput.readBytesReference().streamInput()) {
++            Version minimumCompatibilityVersion = Version.fromId(messageInput.readVInt());
++            assertThat(minimumCompatibilityVersion).isEqualTo(Version.CURRENT.minimumCompatibilityVersion());
++        }
++    }
++
+     @Test
+     public void testHandshakeRequestFutureVersionsCompatibility() throws Exception {
+         long reqId = randomLongBetween(1, 10);
+         handshaker.sendHandshake(reqId, node, channel, new TimeValue(30, TimeUnit.SECONDS), new FutureActionListener<>());
+ 
+-        verify(requestSender).sendRequest(node, channel, reqId, Version.CURRENT.minimumCompatibilityVersion());
++        verify(requestSender).sendRequest(node, channel, reqId, Version.CURRENT);
+ 
+         TransportHandshaker.HandshakeRequest handshakeRequest = new TransportHandshaker.HandshakeRequest(Version.CURRENT);
+         BytesStreamOutput currentHandshakeBytes = new BytesStreamOutput();
+@@ -110,7 +124,7 @@ public class TransportHandshakerTests extends ESTestCase {
+         TaskId.EMPTY_TASK_ID.writeTo(lengthCheckingHandshake);
+         TaskId.EMPTY_TASK_ID.writeTo(futureHandshake);
+         try (BytesStreamOutput internalMessage = new BytesStreamOutput()) {
+-            Version.writeVersion(Version.CURRENT, internalMessage);
++            Version.writeVersion(Version.CURRENT.minimumCompatibilityVersion(), internalMessage);
+             lengthCheckingHandshake.writeBytesReference(internalMessage.bytes());
+             internalMessage.write(new byte[1024]);
+             futureHandshake.writeBytesReference(internalMessage.bytes());
+@@ -136,7 +150,7 @@ public class TransportHandshakerTests extends ESTestCase {
+         long reqId = randomLongBetween(1, 10);
+         handshaker.sendHandshake(reqId, node, channel, new TimeValue(30, TimeUnit.SECONDS), versionFuture);
+ 
+-        verify(requestSender).sendRequest(node, channel, reqId, Version.CURRENT.minimumCompatibilityVersion());
++        verify(requestSender).sendRequest(node, channel, reqId, Version.CURRENT);
+ 
+         assertThat(versionFuture.isDone()).isFalse();
+ 
+@@ -154,8 +168,7 @@ public class TransportHandshakerTests extends ESTestCase {
+     public void testSendRequestThrowsException() throws IOException {
+         FutureActionListener<Version> versionFuture = new FutureActionListener<>();
+         long reqId = randomLongBetween(1, 10);
+-        Version compatibilityVersion = Version.CURRENT.minimumCompatibilityVersion();
+-        doThrow(new IOException("boom")).when(requestSender).sendRequest(node, channel, reqId, compatibilityVersion);
++        doThrow(new IOException("boom")).when(requestSender).sendRequest(node, channel, reqId, Version.CURRENT);
+ 
+         handshaker.sendHandshake(reqId, node, channel, new TimeValue(30, TimeUnit.SECONDS), versionFuture);
+ 
+@@ -173,7 +186,7 @@ public class TransportHandshakerTests extends ESTestCase {
+         long reqId = randomLongBetween(1, 10);
+         handshaker.sendHandshake(reqId, node, channel, new TimeValue(100, TimeUnit.MILLISECONDS), versionFuture);
+ 
+-        verify(requestSender).sendRequest(node, channel, reqId, Version.CURRENT.minimumCompatibilityVersion());
++        verify(requestSender).sendRequest(node, channel, reqId, Version.CURRENT);
+ 
+         assertThatThrownBy(versionFuture::get)
+             .cause()
