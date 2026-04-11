@@ -1,5 +1,7 @@
 package com.omniport.ast;
 
+import com.github.javaparser.ParseProblemException;
+import com.github.javaparser.Problem;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Modifier;
@@ -322,6 +324,90 @@ public class JavaParserService {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
+        return result;
+    }
+
+    /**
+     * Check whether the given Java source string is syntactically parseable.
+     *
+     * This performs a purely in-memory parse — no classpath or symbol resolution
+     * is involved, so classpath/import errors are intentionally ignored. Only
+     * structural syntax errors (missing braces, unclosed blocks, etc.) are reported.
+     *
+     * Request parameters:
+     *   file_content  — Java source as a string
+     *   context_path  — filename hint for error messages (e.g. "MyClass.java")
+     *
+     * Response:
+     *   parseable → true if the source parsed without syntax errors
+     *   errors    → list of {line, column, message} for each problem found
+     */
+    public Map<String, Object> parseCheck(String fileContent) {
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> errors = new ArrayList<>();
+
+        // Use a fresh parser configuration without a symbol resolver so that
+        // unresolved imports do not cause parse failures.
+        // BLEEDING_EDGE language level accepts all cutting-edge Java syntax including
+        // unnamed variables/patterns (e.g. `_ ->` lambdas, Java 21+ preview / Java 22+).
+        com.github.javaparser.ParserConfiguration cfg =
+                new com.github.javaparser.ParserConfiguration()
+                        .setLanguageLevel(com.github.javaparser.ParserConfiguration.LanguageLevel.BLEEDING_EDGE);
+        com.github.javaparser.JavaParser parser = new com.github.javaparser.JavaParser(cfg);
+
+        try {
+            com.github.javaparser.ParseResult<CompilationUnit> parseResult =
+                    parser.parse(fileContent);
+
+            if (parseResult.isSuccessful()) {
+                result.put("parseable", true);
+                result.put("errors", errors);
+            } else {
+                for (Problem problem : parseResult.getProblems()) {
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("message", problem.getMessage());
+                    // Extract line/column from the token range when available.
+                    int line = 0;
+                    int column = 0;
+                    if (problem.getLocation().isPresent()) {
+                        com.github.javaparser.ast.NodeList<?> dummy = null; // unused
+                        try {
+                            var tokenRange = problem.getLocation().get();
+                            var range = tokenRange.getBegin().getRange();
+                            if (range.isPresent()) {
+                                line   = range.get().begin.line;
+                                column = range.get().begin.column;
+                            }
+                        } catch (Exception ignored) { /* best-effort */ }
+                    }
+                    err.put("line",   line);
+                    err.put("column", column);
+                    errors.add(err);
+                }
+                result.put("parseable", false);
+                result.put("errors", errors);
+            }
+        } catch (ParseProblemException e) {
+            // Thrown by older overloads — extract problems directly.
+            for (Problem problem : e.getProblems()) {
+                Map<String, Object> err = new HashMap<>();
+                err.put("message", problem.getMessage());
+                err.put("line",   0);
+                err.put("column", 0);
+                errors.add(err);
+            }
+            result.put("parseable", false);
+            result.put("errors", errors);
+        } catch (Exception e) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("message", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            err.put("line",   0);
+            err.put("column", 0);
+            errors.add(err);
+            result.put("parseable", false);
+            result.put("errors", errors);
+        }
+
         return result;
     }
 

@@ -289,31 +289,48 @@ def parse_compile_errors(output: str) -> list[CompilerErrorDetail]:
     Extract structured compiler error locations from Maven/Gradle/javac output.
 
     Handles:
-      - Maven:  [ERROR] /path/to/File.java:[line,col] error message
-      - Gradle: /path/to/File.java:line: error:
-      - javac:   File.java:line: error:
+      - Maven javac:      [ERROR] /path/to/File.java:[line,col] error message
+      - Gradle / javac:   /path/to/File.java:line: error:
+      - Checkstyle:       [ERROR] /path/to/File.java:line:col: message [RuleName]
+      - Maven checkstyle: [ERROR] /repo/path/File.java:line:col: message [RuleName]
     """
     errors: list[CompilerErrorDetail] = []
     seen: set[tuple[str, int]] = set()
 
-    pattern = re.compile(
+    # Primary: javac-style  File.java:[line,col]: or File.java:line:
+    javac_pattern = re.compile(
         r"([^:\s]+\.java):(?:\[(\d+),\d+\][ ]?:?|(\d+):)\s*(.*)"
     )
+    # Secondary: checkstyle-style  [ERROR] /path/File.java:line:col: message [Rule]
+    checkstyle_pattern = re.compile(
+        r"\[ERROR\]\s+([^:\s]+\.java):(\d+):\d+:\s+(.*)"
+    )
+
     for line in (output or "").splitlines():
-        if "error:" not in line.lower():
+        m = javac_pattern.search(line)
+        if m and "error:" in line.lower():
+            fp = m.group(1).replace("\\", "/")
+            if fp.startswith("/repo/"):
+                fp = fp[len("/repo/"):]
+            lineno = int(m.group(2) or m.group(3) or 0)
+            msg = m.group(4).strip()
+            key = (fp, lineno)
+            if key not in seen:
+                seen.add(key)
+                errors.append(CompilerErrorDetail(file_path=fp, line=lineno, message=msg))
             continue
-        m = pattern.search(line)
-        if not m:
-            continue
-        fp = m.group(1).replace("\\", "/")
-        if fp.startswith("/repo/"):
-            fp = fp[len("/repo/"):]
-        lineno = int(m.group(2) or m.group(3) or 0)
-        msg = m.group(4).strip()
-        key = (fp, lineno)
-        if key not in seen:
-            seen.add(key)
-            errors.append(CompilerErrorDetail(file_path=fp, line=lineno, message=msg))
+
+        m2 = checkstyle_pattern.match(line.strip())
+        if m2:
+            fp = m2.group(1).replace("\\", "/")
+            if fp.startswith("/repo/"):
+                fp = fp[len("/repo/"):]
+            lineno = int(m2.group(2))
+            msg = m2.group(3).strip()
+            key = (fp, lineno)
+            if key not in seen:
+                seen.add(key)
+                errors.append(CompilerErrorDetail(file_path=fp, line=lineno, message=msg))
 
     return errors
 

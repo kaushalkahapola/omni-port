@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T11:04:45.673276",
+  "run_timestamp": "2026-04-11T15:46:45.394643",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "e6e749ebf12d618322696d0b45f86211efbfed17",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 13.77,
+      "elapsed_s": 14.95,
       "error": null,
       "java_hunks": 3,
       "aux_hunks": 2,
@@ -43,12 +43,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.22,
+      "elapsed_s": 4.84,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_II",
-        "confidence": 0.85,
-        "reasoning": "The patch modifies the NumericType.java file by adding version checks and conditional logic around reading and writing the scale of BigDecimal values. The changes involve adding imports and adjusting serialization/deserialization logic with version awareness. The localization evidence shows that some hunks were found via 'git_pickaxe' with moderate confidence and others via 'embedding' with lower confidence, indicating some fuzzy matching is needed. The patch does not involve structural or API changes but requires careful matching due to version-dependent logic and conditional branches, typical of TYPE_II complexity (whitespace/formatting drift and minor logic adjustments). The confidence is high due to clear version checks and minor code changes, and the token budget is moderate to handle the conditional logic and version checks in the backport.",
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.75,
+        "reasoning": "The patch modifies the NumericType.java file by adding version checks and conditional logic around reading and writing scale values for BigDecimal streaming. This involves structural changes to the serialization logic, including the introduction of version-dependent behavior and conditional branches. The patch is not a simple string replacement or whitespace fix, nor is it a deep refactoring or complete redesign. The presence of version checks and conditional logic indicates structural changes to the method implementations, consistent with TYPE_III complexity. The localization evidence shows mixed confidence and methods, with some hunks found via embedding (which often indicates structural changes) and one via git_pickaxe. Overall, the patch complexity aligns best with TYPE_III.",
         "is_auto_generated": false
       }
     },
@@ -59,34 +59,26 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 11.79,
+      "elapsed_s": 13.39,
       "error": null,
       "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 46.28,
+      "elapsed_s": 151.32,
       "error": null,
       "refactored_count": 2
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 24.69,
       "error": null,
-      "synthesized_count": 3,
-      "failed_count": 0,
-      "synthesis_status": "success",
+      "synthesized_count": 2,
+      "failed_count": 1,
+      "synthesis_status": "partial",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
           "old_string": "\nimport org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
           "new_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-          "old_string": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);",
-          "new_string": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {\n                if (scale == null) {\n                    out.writeBoolean(true);\n                    out.writeVInt(v.scale());\n                } else {\n                    out.writeBoolean(false);\n                }\n            }\n        } else {\n            out.writeBoolean(false);",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -101,20 +93,174 @@
         }
       ]
     },
-    "agent7_validator": {
-      "elapsed_s": 108.91,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.02,
       "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
       "validation_passed": false,
       "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.52s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.29s), 0 error(s).\n[INFO] Scanned 79 class file(s) for forbidden API invocations (in 0.10s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.07s), 0 error(s).\n[INFO] Scanned 68 class file(s) for forbidden API invocations (in 0.15s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/types/IntegerType.java:28: Unused import - org.elasticsearch.Version. [UnusedImports]",
       "validation_attempts": 1,
-      "retry_files": [],
+      "retry_files": [
+        "server/src/main/java/io/crate/types/IntegerType.java"
+      ],
       "build_success": false,
       "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
       "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/types/IntegerType.java",
+          "line": 28,
+          "message": "Unused import - org.elasticsearch.Version. [UnusedImports]"
+        }
+      ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "failed",
+      "fallback_attempts": 1,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
+          "what_changed": "Added an import for Elasticsearch Version class to the imports list.",
+          "where_in_code": "IntegerType class, import section",
+          "intent": "To enable version-aware logic by importing the Version class from Elasticsearch.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Version"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+          "what_changed": "Modified the readValueFrom method to conditionally read the scale based on the stream version, only reading scale if the input stream version is 5.9.0 or newer.",
+          "where_in_code": "NumericType class, readValueFrom(StreamInput) method",
+          "intent": "To maintain backward compatibility by reading the scale only for newer stream versions, ensuring correct deserialization of BigDecimal values with scale information when supported.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "readValueFrom",
+            "Version.V_5_9_0"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+          "what_changed": "Updated the writeValueTo method to write the scale information conditionally based on the output stream version, only writing scale if the stream version is 5.9.0 or newer.",
+          "where_in_code": "NumericType class, writeValueTo(StreamOutput, BigDecimal) method",
+          "intent": "To ensure backward compatibility by writing scale information only for newer stream versions, preventing older versions from receiving unsupported data.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "writeValueTo",
+            "Version.V_5_9_0"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 2,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": false,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.protocols.postgres.types.NumericTypeTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.types.NumericTypeTest.xml"
+        ],
+        "target_classes": [
+          "NumericTypeTest"
+        ],
+        "test_cases": {
+          "io.crate.protocols.postgres.types.NumericTypeTest#test_read_and_write_numeric_binary_value": "passed",
+          "io.crate.protocols.postgres.types.NumericTypeTest#test_read_and_write_numeric_text_value": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_null_value": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_to_itself": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_unscaled_numeric": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision_and_scale": "passed",
+          "io.crate.types.NumericTypeTest#test_numeric_value_streaming": "passed",
+          "io.crate.types.NumericTypeTest#test_cast_array_to_numeric_throws_exception": "passed",
+          "io.crate.types.NumericTypeTest#test_numeric_null_value_streaming": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision_and_scale": "passed",
+          "io.crate.types.NumericTypeTest#test_numeric_with_precision_and_scale_serialization_round_trip": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision_and_scale": "passed",
+          "io.crate.types.NumericTypeTest#test_cast_object_to_smallint_throws_exception": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_to_unscaled_numeric": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_unscaled_numeric": "passed",
+          "io.crate.types.NumericTypeTest#test_cast_row_to_numeric_throws_exception": "passed",
+          "io.crate.types.NumericTypeTest#test_unscaled_numeric_serialization_round_trip": "passed",
+          "io.crate.types.NumericTypeTest#test_sanitize_numeric_value": "passed",
+          "io.crate.types.NumericTypeTest#test_numeric_value_streaming_does_not_loose_scale": "failed",
+          "io.crate.types.NumericTypeTest#test_cast_boolean_to_smallint_throws_exception": "passed"
+        },
+        "classes": {
+          "io.crate.protocols.postgres.types.NumericTypeTest": "passed",
+          "io.crate.types.NumericTypeTest": "failed"
+        },
+        "summary": {
+          "passed": 22,
+          "failed": 1,
+          "skipped": 0,
+          "total": 23
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.protocols.postgres.types.NumericTypeTest#test_read_and_write_numeric_binary_value",
+          "io.crate.protocols.postgres.types.NumericTypeTest#test_read_and_write_numeric_text_value",
+          "io.crate.types.NumericTypeTest#test_cast_array_to_numeric_throws_exception",
+          "io.crate.types.NumericTypeTest#test_cast_boolean_to_smallint_throws_exception",
+          "io.crate.types.NumericTypeTest#test_cast_object_to_smallint_throws_exception",
+          "io.crate.types.NumericTypeTest#test_cast_row_to_numeric_throws_exception",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision_and_scale",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_unscaled_numeric",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision_and_scale",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_unscaled_numeric",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_null_value",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_to_unscaled_numeric",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision_and_scale",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_to_itself",
+          "io.crate.types.NumericTypeTest#test_numeric_null_value_streaming",
+          "io.crate.types.NumericTypeTest#test_numeric_value_streaming",
+          "io.crate.types.NumericTypeTest#test_numeric_with_precision_and_scale_serialization_round_trip",
+          "io.crate.types.NumericTypeTest#test_sanitize_numeric_value",
+          "io.crate.types.NumericTypeTest#test_unscaled_numeric_serialization_round_trip"
+        ],
+        "baseline_total": 0,
+        "patched_total": 23,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
       "compile_errors": []
     }
   },
@@ -134,12 +280,21 @@
       1,
       2
     ],
-    "tokens_used": 0,
-    "synthesis_status": "success",
+    "tokens_used": 1149,
+    "synthesis_status": "partial",
     "applied_on_disk_ag3": 0,
-    "synthesized_count": 3,
-    "failed_hunks_total": 0,
+    "synthesized_count": 0,
+    "failed_hunks_total": 1,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 1,
     "retry_contexts": [
+      {
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      },
       {
         "error_type": "unknown",
         "error_message": "[ERROR] /repo/server/src/main/java/io/crate/types/IntegerType.java:28:8: Unused import - org.elasticsearch.Version. [UnusedImports]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:check (validate) on project crate-server: Failed during checkstyle execution: There is 1 error reported by Checkstyle 10.17.0 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
@@ -147,18 +302,61 @@
         "suggested_action": "inspect_and_retry"
       }
     ],
-    "failed_hunks": [],
-    "generated_patch_bytes": 1488,
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+        "old_content": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);\n",
+        "new_content": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {\n                // Stream per-value scale only when the type itself does not define a fixed scale.\n                if (scale == null) {\n                    out.writeBoolean(true);\n                    out.writeVInt(v.scale());\n                } else {\n                    out.writeBoolean(false);\n                }\n            }\n        } else {\n            out.writeBoolean(false);\n        }\n    }",
+        "is_new_file": false,
+        "is_del_file": false,
+        "file_operation": "MODIFIED",
+        "refactored": true,
+        "semantic_confidence": 0.64,
+        "loc_index": 1
+      }
+    ],
+    "generated_patch_bytes": 615,
     "target_patch_bytes": 7207,
-    "validation_passed": false,
-    "validation_failure_category": "unknown",
-    "build_success": false,
-    "test_success": null,
-    "test_mode": null,
-    "test_transition": {},
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.protocols.postgres.types.NumericTypeTest#test_read_and_write_numeric_binary_value",
+        "io.crate.protocols.postgres.types.NumericTypeTest#test_read_and_write_numeric_text_value",
+        "io.crate.types.NumericTypeTest#test_cast_array_to_numeric_throws_exception",
+        "io.crate.types.NumericTypeTest#test_cast_boolean_to_smallint_throws_exception",
+        "io.crate.types.NumericTypeTest#test_cast_object_to_smallint_throws_exception",
+        "io.crate.types.NumericTypeTest#test_cast_row_to_numeric_throws_exception",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision_and_scale",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_unscaled_numeric",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision_and_scale",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_unscaled_numeric",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_null_value",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_text_to_unscaled_numeric",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision_and_scale",
+        "io.crate.types.NumericTypeTest#test_implicit_cast_to_itself",
+        "io.crate.types.NumericTypeTest#test_numeric_null_value_streaming",
+        "io.crate.types.NumericTypeTest#test_numeric_value_streaming",
+        "io.crate.types.NumericTypeTest#test_numeric_with_precision_and_scale_serialization_round_trip",
+        "io.crate.types.NumericTypeTest#test_sanitize_numeric_value",
+        "io.crate.types.NumericTypeTest#test_unscaled_numeric_serialization_round_trip"
+      ],
+      "baseline_total": 0,
+      "patched_total": 23,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 22,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

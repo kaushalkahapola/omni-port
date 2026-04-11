@@ -90,6 +90,40 @@ def javaparser_method_modifiers(
     })
 
 
+def javaparser_parse_check(file_content: str, context_path: str = "") -> dict:
+    """
+    Check whether the given Java source string is syntactically parseable.
+
+    The check is purely in-memory — no classpath resolution is performed, so
+    import/symbol errors are intentionally ignored. Only structural syntax
+    errors (missing braces, unclosed blocks, etc.) are reported.
+
+    Response on success:
+      {
+        "parseable": true | false,
+        "errors": [
+          {"line": <int>, "column": <int>, "message": "<str>"},
+          ...
+        ]
+      }
+
+    Returns {"parseable": false, "errors": [...]} with a connectivity error
+    message when the service is unreachable.  Callers should fall back to a
+    local brace-balance heuristic in that case.
+    """
+    result = _post("/api/javaparser/parse-check", {
+        "file_content": file_content,
+        "context_path": context_path,
+    })
+    # Normalise connectivity-error responses to the expected schema.
+    if result.get("status") == "error":
+        return {
+            "parseable": False,
+            "errors": [{"line": 0, "column": 0, "message": result.get("message", "service unavailable")}],
+        }
+    return result
+
+
 def japicmp_compare(old_jar_path: str, new_jar_path: str) -> dict:
     return _post("/api/japicmp/compare", {
         "old_jar_path": old_jar_path,

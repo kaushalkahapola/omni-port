@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T11:04:45.673276",
+  "run_timestamp": "2026-04-11T14:52:55.348803",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "d4357207c043d54e9caa7ee075ef00cbe8dae0c0",
@@ -25,12 +25,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.31,
+      "elapsed_s": 2.87,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
-        "confidence": 0.9,
-        "reasoning": "The patch involves a small change in the Java source code where a nullable feature flag is removed from a function signature, along with additions to a test file and documentation. The main code hunk was found via fuzzy matching with high confidence (0.89), indicating minor formatting or feature flag adjustments rather than structural changes. The test addition and documentation update are straightforward. Overall, the patch does not involve structural or API changes but requires some fuzzy matching to apply correctly, fitting the TYPE_II classification.",
+        "confidence": 0.85,
+        "reasoning": "The patch involves a small change in the Java source code where a nullable feature flag is removed from a function definition, indicating a minor behavioral fix. The change is localized and does not involve structural or API changes, but requires fuzzy matching due to slight code differences. The test addition and documentation update are straightforward. The localization evidence confirms a fuzzy match with high confidence. Overall, this is a whitespace/formatting drift or minor logic fix, fitting TYPE_II complexity.",
         "is_auto_generated": false
       }
     },
@@ -41,12 +41,12 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 3.48,
+      "elapsed_s": 3.0,
       "error": null,
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 14.05,
+      "elapsed_s": 20.34,
       "error": null,
       "refactored_count": 1
     },
@@ -67,13 +67,68 @@
         }
       ]
     },
-    "agent7_validator": {
-      "elapsed_s": 287.01,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.09,
       "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "CLAW application failed: server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java: CLAW exact-string not found \u2014 old_string may have drifted",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": null,
+      "build_mode": null,
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "applied",
+      "fallback_attempts": 1,
+      "synthesized_count": 1,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java",
+          "what_changed": "Removed the NULLABLE feature from the function signature features, leaving only the DETERMINISTIC feature.",
+          "where_in_code": "FormatTypeFunction class, function registration or constructor context",
+          "intent": "To correct or refine the function's feature flags by removing the NULLABLE attribute, possibly to reflect that the function is deterministic but not nullable.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "Feature.DETERMINISTIC",
+            "Feature.NULLABLE",
+            "FormatTypeFunction"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry1": {
       "validation_passed": true,
       "validation_failure_category": "",
       "validation_error_context": "",
-      "validation_attempts": 1,
+      "validation_attempts": 2,
       "retry_files": [],
       "build_success": true,
       "build_mode": "crate-helper",
@@ -87,20 +142,20 @@
           "ThreeValuedLogicQueryBuilderTest"
         ],
         "test_cases": {
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNullIsReplacedWithFalseToCreateOptimizedQuery": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_partkeydef": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_with_three_valued_logic": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_format_type_with_three_valued_logic": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_current_setting": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_nullif": "passed",
           "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_encoding_to_char": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_ws_with_three_valued_logic": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWith3vl": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWithout3vl": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_and_three_value_query": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_or": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testComplexOperatorTreeWith3vlAndIgnore3vl": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_format_type_with_three_valued_logic": "passed",
           "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_function_result": "passed",
-          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_nullif": "passed"
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_or": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_partkeydef": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_ws_with_three_valued_logic": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_current_setting": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNullIsReplacedWithFalseToCreateOptimizedQuery": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWithout3vl": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_with_three_valued_logic": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testComplexOperatorTreeWith3vlAndIgnore3vl": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_and_three_value_query": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWith3vl": "passed"
         },
         "classes": {
           "io.crate.lucene.ThreeValuedLogicQueryBuilderTest": "passed"
@@ -113,13 +168,28 @@
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
-        "baseline_total": 14,
+        "newly_passing": [
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testComplexOperatorTreeWith3vlAndIgnore3vl",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWith3vl",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWithout3vl",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNullIsReplacedWithFalseToCreateOptimizedQuery",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_and_three_value_query",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_with_three_valued_logic",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_ws_with_three_valued_logic",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_format_type_with_three_valued_logic",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_or",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_current_setting",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_encoding_to_char",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_function_result",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_partkeydef",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_nullif"
+        ],
+        "baseline_total": 0,
         "patched_total": 14,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -138,12 +208,22 @@
     "processed_hunk_indices": [
       0
     ],
-    "tokens_used": 0,
+    "tokens_used": 452,
     "synthesis_status": "success",
     "applied_on_disk_ag3": 0,
     "synthesized_count": 1,
     "failed_hunks_total": 0,
-    "retry_contexts": [],
+    "syntax_repair_status": "clean",
+    "fallback_status": "applied",
+    "fallback_attempts": 1,
+    "retry_contexts": [
+      {
+        "error_type": "context_mismatch",
+        "error_message": "server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java: CLAW exact-string not found \u2014 old_string may have drifted",
+        "attempt_count": 1,
+        "suggested_action": "re-localize"
+      }
+    ],
     "failed_hunks": [],
     "generated_patch_bytes": 828,
     "target_patch_bytes": 3274,
@@ -153,17 +233,32 @@
     "test_success": true,
     "test_mode": "crate-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
-      "baseline_total": 14,
+      "newly_passing": [
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testComplexOperatorTreeWith3vlAndIgnore3vl",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWith3vl",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWithout3vl",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNullIsReplacedWithFalseToCreateOptimizedQuery",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_and_three_value_query",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_with_three_valued_logic",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_ws_with_three_valued_logic",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_format_type_with_three_valued_logic",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_or",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_current_setting",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_encoding_to_char",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_function_result",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_partkeydef",
+        "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_nullif"
+      ],
+      "baseline_total": 0,
       "patched_total": 14,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 14,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

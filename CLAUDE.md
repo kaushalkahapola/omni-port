@@ -4,6 +4,10 @@
 
 **Model:** Recommended Haiku 4.5 for fast iteration on classifier/router logic, Sonnet 4.6 for agents requiring domain reasoning.
 
+1. ALWAYS Query the knowledge graph first before doing any work.
+2. Only read raw files when necessary to look the code.
+3. use graphify-out/graph.json.
+
 ---
 
 ## Project Overview

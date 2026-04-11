@@ -61,6 +61,23 @@ public class JavaParserController {
         return getService().getMethodModifiers(repoPath, filePath, methodNames);
     }
 
+    /**
+     * Check whether the given Java source string is syntactically parseable.
+     *
+     * Request body:
+     *   file_content  — Java source as a string
+     *   context_path  — filename hint for error messages (optional, e.g. "MyClass.java")
+     *
+     * Response body:
+     *   parseable → true if no syntax errors were found
+     *   errors    → list of {line, column, message} objects
+     */
+    @PostMapping("/parse-check")
+    public Map<String, Object> parseCheck(@RequestBody Map<String, Object> request) {
+        String fileContent = (String) request.getOrDefault("file_content", "");
+        return getService().parseCheck(fileContent);
+    }
+
     @GetMapping("/health")
     public Map<String, String> health() {
         return Map.of("status", "ok", "service", "javaparser");

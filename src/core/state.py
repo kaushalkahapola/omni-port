@@ -111,6 +111,28 @@ class BackportState(TypedDict):
     validation_retry_files: List[str]  # files to re-localize on retry
     validation_results: Dict[str, Any]  # detailed per-step results
 
+    # Set to True by the pipeline harness after it pre-applies synthesized_hunks to disk
+    # and captures generated.patch. The validator skips CLAW re-application on attempt 0
+    # when this flag is True (the hunks are already on disk).
+    synthesized_hunks_pre_applied: bool
+
+    # Agent 8: Syntax Repair
+    # "clean"   — all files parsed without errors; no repair needed
+    # "repaired" — one or more hunks were fixed by the LLM
+    # "failed"  — repair was attempted but syntax errors persist (validator will surface them)
+    # "skipped" — no synthesized_hunks to check (nothing to repair)
+    syntax_repair_status: str
+    syntax_repair_attempts: int           # repair iterations tried per file (max 2)
+    syntax_repair_log: List[Dict[str, Any]]  # [{file_path, errors, attempts, outcome}, ...]
+
+    # Agent 9: Fallback
+    # "not_run"  — fallback has not been triggered yet
+    # "applied"  — fallback generated new synthesized_hunks and returned to validator
+    # "failed"   — fallback could not produce valid CLAW pairs
+    fallback_status: str
+    fallback_attempts: int                # number of completed fallback runs (max 2)
+    hunk_descriptions: List[Dict[str, Any]]  # HunkDescription objects from Phase 1
+
     # Metrics
     tokens_used: int
     wall_clock_time: float

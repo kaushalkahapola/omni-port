@@ -132,6 +132,111 @@ def _extract_error_tail(log: str, max_chars: int = 3000) -> str:
     return log[-max_chars:] if len(log) > max_chars else log
 
 
+# ── Unused-import stripper ────────────────────────────────────────────────────
+
+_JAVA_IMPORT_RE = re.compile(
+    r"^import\s+(?:static\s+)?([\w.]+);\s*$"
+)
+
+def _strip_unused_java_imports(repo_path: str, file_paths: list[str]) -> dict[str, int]:
+    """
+    For each .java file in file_paths, remove any import whose simple class name
+    (the last token after the last '.') does not appear anywhere in the file body
+    (lines after the import block).
+
+    Returns a dict mapping file_path → number of imports removed.
+
+    This is a deterministic pre-build fix for checkstyle UnusedImports failures
+    that arise when an import is added to the wrong file by the localizer.
+    """
+    removed: dict[str, int] = {}
+
+    for rel_path in file_paths:
+        if not rel_path.endswith(".java"):
+            continue
+        abs_path = os.path.join(repo_path, rel_path)
+        if not os.path.isfile(abs_path):
+            continue
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+                lines = fh.readlines()
+        except Exception:
+            continue
+
+        # Separate the import block from the rest.
+        import_indices: list[int] = []
+        body_lines: list[str] = []
+        in_imports = False
+        package_done = False
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("package "):
+                package_done = True
+                body_lines.append(line)
+                continue
+            if package_done and _JAVA_IMPORT_RE.match(stripped):
+                in_imports = True
+                import_indices.append(i)
+                continue
+            if in_imports and not stripped:
+                # blank line inside the import block — keep tracking
+                import_indices.append(i)
+                continue
+            # Once we hit a non-import, non-blank line after imports, stop
+            if in_imports and stripped:
+                in_imports = False
+            body_lines.append(line)
+
+        if not import_indices:
+            continue
+
+        # Build a set of all tokens that appear in the body.
+        body_text = "".join(body_lines)
+
+        new_lines = list(lines)
+        count = 0
+        for idx in import_indices:
+            line = lines[idx]
+            m = _JAVA_IMPORT_RE.match(line.strip())
+            if not m:
+                continue  # blank line — keep as-is
+            fqn = m.group(1)
+            # Handle static imports: strip member name to get class name
+            parts = fqn.split(".")
+            simple_name = parts[-1]
+            # Wildcard imports (import foo.*) — never strip, too risky
+            if simple_name == "*":
+                continue
+            # Check if simple_name appears anywhere in the body
+            if simple_name not in body_text:
+                new_lines[idx] = ""  # remove this import line
+                count += 1
+
+        if count:
+            # Remove consecutive blank lines left by removed imports.
+            result: list[str] = []
+            prev_blank = False
+            for line in new_lines:
+                if line == "":
+                    continue  # was removed import — skip
+                is_blank = not line.strip()
+                if is_blank and prev_blank:
+                    continue  # collapse double-blank gaps
+                result.append(line)
+                prev_blank = is_blank
+
+            try:
+                with open(abs_path, "w", encoding="utf-8") as fh:
+                    fh.writelines(result)
+                removed[rel_path] = count
+                print(f"  [agent7] Stripped {count} unused import(s) from {rel_path}")
+            except Exception as e:
+                print(f"  [agent7] Failed to write {rel_path} after import strip: {e}")
+
+    return removed
+
+
 # ── Fix A helpers ──────────────────────────────────────────────────────────────
 
 def _is_already_applied(repo_path: str, patch_content: str) -> bool:
@@ -749,6 +854,24 @@ def run_validation(state: BackportState) -> BackportState:
         state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
         return state
 
+    # ── Step 3.5: Strip unused Java imports (pre-build checkstyle guard) ────────
+    # Collect all Java files written to disk during this attempt.
+    synth_java_files = [
+        h.get("file_path", "") for h in synthesized_hunks
+        if (h.get("file_path", "") or "").endswith(".java")
+    ]
+    aux_java_files = [
+        (h.get("file_path") or h.get("target_file") or "")
+        for h in developer_aux_hunks
+        if (h.get("file_path") or h.get("target_file") or "").endswith(".java")
+    ]
+    all_modified_java = sorted(set(synth_java_files + aux_java_files + [
+        h.get("file_path", "") for h in applied_hunks
+        if (h.get("file_path", "") or "").endswith(".java")
+    ]) - {""})
+    if all_modified_java:
+        _strip_unused_java_imports(repo_path, all_modified_java)
+
     # ── Step 4: Build ─────────────────────────────────────────────────────────
     print(f"  agent7: running build for {project}...")
     build_res: BuildResult = run_build(repo_path, project)
@@ -782,13 +905,9 @@ def run_validation(state: BackportState) -> BackportState:
                 f"Build failed ({build_res.mode}) — compile errors:\n{error_summary}"
             )
         else:
-            error_lines = [
-                l for l in build_res.output.splitlines()
-                if "error" in l.lower() and l.strip()
-            ]
-            excerpt = "\n".join(error_lines[-30:]) if error_lines else build_res.output[-2000:]
+            excerpt = _extract_error_tail(build_res.output)
             state["validation_error_context"] = (
-                f"Build failed ({build_res.mode}): {excerpt[-2000:]}"
+                f"Build failed ({build_res.mode}): {excerpt}"
             )
         state["validation_failure_category"] = mapped_category
         state["validation_retry_files"] = retry_files
