@@ -196,6 +196,7 @@ def _strip_unused_java_imports(repo_path: str, file_paths: list[str]) -> dict[st
 
         new_lines = list(lines)
         count = 0
+        seen_fqns: dict[str, int] = {}  # fqn → first-seen index (for duplicate detection)
         for idx in import_indices:
             line = lines[idx]
             m = _JAVA_IMPORT_RE.match(line.strip())
@@ -208,6 +209,15 @@ def _strip_unused_java_imports(repo_path: str, file_paths: list[str]) -> dict[st
             # Wildcard imports (import foo.*) — never strip, too risky
             if simple_name == "*":
                 continue
+            # Remove duplicate imports (same FQN seen before) — these cause
+            # checkstyle UnusedImports when the pipeline injects an import that
+            # already exists in the file (e.g. java.util.UUID added to a file
+            # that already imports it).
+            if fqn in seen_fqns:
+                new_lines[idx] = ""  # remove duplicate
+                count += 1
+                continue
+            seen_fqns[fqn] = idx
             # Check if simple_name appears anywhere in the body
             if simple_name not in body_text:
                 new_lines[idx] = ""  # remove this import line
@@ -674,6 +684,104 @@ def _apply_developer_aux_hunks(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# File-operation executor (DELETED / RENAMED production Java files)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _execute_file_operations(
+    repo_path: str, file_operations: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """
+    Execute filesystem-level file operations queued by Agent 1:
+
+      RENAMED — move old_file_path → target_new_path (falls back to file_path when
+                target_new_path is absent).  Content changes were already applied to
+                old_file_path by the CLAW step, so we just rename the file.
+
+      DELETED — remove file_path from disk.  Missing files are silently skipped
+                (another hunk may have already removed them, or they never existed
+                in this target branch).
+
+    Renames are executed before deletions so that a file renamed and then deleted in
+    the same patch is handled correctly.
+
+    Returns {"success": True, "applied": [...], "errors": [...], "output": str}.
+    File operations are non-fatal by design — failures are logged but do not abort
+    the build step.  The build compiler will surface any resulting inconsistencies.
+    """
+    if not file_operations:
+        return {"success": True, "applied": [], "errors": [], "output": ""}
+
+    applied: list[str] = []
+    errors: list[str] = []
+
+    renames = [op for op in file_operations if op.get("operation") == "RENAMED"]
+    deletions = [op for op in file_operations if op.get("operation") == "DELETED"]
+
+    # ── Renames first ─────────────────────────────────────────────────────────
+    for op in renames:
+        old_rel = _norm_path(op.get("old_file_path") or "")
+        # Prefer the computed target-branch destination; fall back to the mainline new path.
+        new_rel = _norm_path(op.get("target_new_path") or op.get("file_path") or "")
+
+        if not old_rel or not new_rel:
+            errors.append(f"RENAME skipped: missing old_file_path or file_path in {op}")
+            continue
+
+        src = os.path.join(repo_path, old_rel)
+        dst = os.path.join(repo_path, new_rel)
+
+        if not os.path.isfile(src):
+            # Source already gone (e.g. a previous attempt renamed it).
+            if os.path.isfile(dst):
+                applied.append(f"RENAME already done: {old_rel} → {new_rel}")
+            else:
+                errors.append(f"RENAME skipped (src not found): {old_rel}")
+            continue
+
+        if os.path.isfile(dst) and dst != src:
+            # Destination already exists — content changes are already in src so we
+            # overwrite the destination (idempotent retry).
+            errors.append(
+                f"RENAME dst already exists ({new_rel}); overwriting with content from {old_rel}"
+            )
+
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            os.replace(src, dst)  # atomic on POSIX; overwrites dst if present
+            applied.append(f"RENAMED: {old_rel} → {new_rel}")
+            print(f"  [agent7] file_ops: renamed {old_rel} → {new_rel}")
+        except Exception as exc:
+            errors.append(f"RENAME failed ({old_rel} → {new_rel}): {exc}")
+
+    # ── Deletions ─────────────────────────────────────────────────────────────
+    for op in deletions:
+        rel = _norm_path(op.get("file_path") or "")
+        if not rel:
+            errors.append(f"DELETE skipped: missing file_path in {op}")
+            continue
+
+        abs_path = os.path.join(repo_path, rel)
+        if not os.path.isfile(abs_path):
+            applied.append(f"DELETE skipped (already absent): {rel}")
+            continue
+
+        try:
+            os.remove(abs_path)
+            applied.append(f"DELETED: {rel}")
+            print(f"  [agent7] file_ops: deleted {rel}")
+        except Exception as exc:
+            errors.append(f"DELETE failed ({rel}): {exc}")
+
+    output_parts = applied + ([f"ERRORS: {e}" for e in errors] if errors else [])
+    return {
+        "success": True,  # non-fatal — build will surface real problems
+        "applied": applied,
+        "errors": errors,
+        "output": "\n".join(output_parts),
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Phase 0 baseline (used by shadow/evaluation harness)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -832,6 +940,23 @@ def run_validation(state: BackportState) -> BackportState:
         state["validation_results"] = validation_results
         state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
         return state
+
+    # ── Step 2.5: Execute structural file operations (RENAMED / DELETED) ────────
+    # These are queued by Agent 1 for production Java files whose mainline patch
+    # contained rename or delete operations.  Renames run before deletions.
+    # Content changes were already written by the CLAW step above; this step only
+    # moves or removes files at the filesystem level.
+    file_operations: list[dict[str, Any]] = state.get("file_operations") or []
+    if file_operations:
+        print(f"  agent7: executing {len(file_operations)} file operation(s)...")
+        file_ops_result = _execute_file_operations(repo_path, file_operations)
+        validation_results["file_operations"] = {
+            "applied": file_ops_result["applied"],
+            "errors": file_ops_result["errors"],
+            "output": file_ops_result["output"],
+        }
+        if file_ops_result["errors"]:
+            print(f"  agent7: file_ops warnings: {'; '.join(file_ops_result['errors'][:3])}")
 
     # ── Step 3: Apply developer aux hunks (git apply) ─────────────────────────
     print(f"  agent7: applying {len(developer_aux_hunks)} developer aux hunk(s)...")

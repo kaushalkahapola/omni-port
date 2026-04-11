@@ -14,13 +14,19 @@ NOTE: applied_hunks from Agent 3 are already written to disk and must NOT be
 re-synthesized or re-applied here.
 """
 
+import glob
 import json
+import logging
+import os
 import re
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
+from src.core.llm_router import get_default_router, LLMTier
+
+logger = logging.getLogger(__name__)
 
 # Matches Java member-declaration lvalues:  [modifiers] Type name =
 # Captures the declared name so we can detect duplicates introduced by new_string.
@@ -731,6 +737,134 @@ def _structural_fallback_for_failed_loc(
     )
 
 
+# ── New-file content adaptation ───────────────────────────────────────────────
+
+_JAVA_IMPORT_LINE_RE = re.compile(r"^import\s+(?:static\s+)?([\w.]+(?:\.\*)?);", re.MULTILINE)
+_JAVA_PACKAGE_RE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
+
+_MAX_SIBLING_FILES = 3
+_MAX_SIBLING_LINES = 60  # lines read from each sibling for context
+
+
+def _find_sibling_files(repo_path: str, file_path: str) -> List[str]:
+    """
+    Return up to _MAX_SIBLING_FILES other .java files from the same directory as
+    *file_path* in the target repo.  Returns repo-relative paths.
+    """
+    abs_dir = os.path.dirname(os.path.join(repo_path, file_path))
+    if not os.path.isdir(abs_dir):
+        # Directory doesn't exist yet — go one level up.
+        abs_dir = os.path.dirname(abs_dir)
+    if not os.path.isdir(abs_dir):
+        return []
+    siblings = [
+        os.path.relpath(os.path.join(abs_dir, f), repo_path).replace("\\", "/")
+        for f in os.listdir(abs_dir)
+        if f.endswith(".java") and f != os.path.basename(file_path)
+    ]
+    return siblings[:_MAX_SIBLING_FILES]
+
+
+def _read_file_head(repo_path: str, rel_path: str, max_lines: int) -> str:
+    try:
+        abs_path = os.path.join(repo_path, rel_path)
+        with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+        return "".join(lines[:max_lines])
+    except Exception:
+        return ""
+
+
+def _build_new_file_adaptation_prompt(
+    file_path: str,
+    raw_content: str,
+    sibling_snippets: List[Tuple[str, str]],
+) -> str:
+    sibling_block = ""
+    for sibling_path, snippet in sibling_snippets:
+        sibling_block += f"\n--- {sibling_path} (first {_MAX_SIBLING_LINES} lines) ---\n```java\n{snippet}\n```\n"
+
+    return f"""You are helping backport a Java source file to an older branch of the same repository.
+
+The NEW FILE below was taken verbatim from the mainline (newer) branch.  The TARGET BRANCH
+may use different package names, different import paths, or different class/method names
+for the same concepts.
+
+Your task: adapt ONLY the `package` declaration and `import` statements so they work on the
+target branch.  Do NOT change any logic, method bodies, class names, annotations, or
+non-import declarations.  If an import looks correct as-is, keep it unchanged.
+
+=== FILE TO ADAPT ===
+Path: {file_path}
+```java
+{raw_content}
+```
+
+=== SIBLING FILES FROM TARGET BRANCH (for import-path context) ===
+{sibling_block if sibling_block else "(no sibling files found — use best judgement)"}
+
+=== INSTRUCTIONS ===
+1. Compare the imports in the new file against the imports used in sibling files.
+2. If a sibling file uses a different package path for the same class (e.g.
+   `io.crate.newpkg.Foo` in mainline vs `io.crate.oldpkg.Foo` in target), update the import.
+3. If an import references a class that clearly does not exist in the target (no sibling
+   uses it or a recognizable equivalent), add a `// TODO: verify import` comment after it
+   rather than removing it — the build will catch genuine missing classes.
+4. Return ONLY the complete adapted Java file content, no explanations, no markdown fences.
+"""
+
+
+def _adapt_new_file_content(
+    file_path: str,
+    raw_content: str,
+    repo_path: str,
+    tokens_used: int,
+) -> Tuple[str, int]:
+    """
+    Attempt to adapt the import section of a new Java file for the target branch.
+
+    Returns (adapted_content, updated_tokens_used).  On any error the original
+    raw_content is returned unchanged so the pipeline can still proceed.
+    """
+    if not raw_content.strip():
+        return raw_content, tokens_used
+
+    # Only bother if the file actually has imports.
+    if not _JAVA_IMPORT_LINE_RE.search(raw_content):
+        return raw_content, tokens_used
+
+    siblings = _find_sibling_files(repo_path, file_path)
+    sibling_snippets = [
+        (s, _read_file_head(repo_path, s, _MAX_SIBLING_LINES))
+        for s in siblings
+        if _read_file_head(repo_path, s, _MAX_SIBLING_LINES).strip()
+    ]
+
+    # If there are no sibling files to provide context, skip adaptation —
+    # we have no basis for choosing alternative import paths.
+    if not sibling_snippets:
+        logger.debug("agent6 new_file: no sibling files found for %s, skipping adaptation", file_path)
+        return raw_content, tokens_used
+
+    prompt = _build_new_file_adaptation_prompt(file_path, raw_content, sibling_snippets)
+    try:
+        router = get_default_router()
+        llm = router.get_model(LLMTier.BALANCED, tokens_used)
+        response = llm.invoke(prompt)
+        raw_response = response.content if hasattr(response, "content") else str(response)
+        tokens_used += len(prompt.split()) + len(raw_response.split())
+        # Strip accidental markdown fences.
+        adapted = re.sub(r"^```(?:java)?\s*\n?", "", raw_response.strip(), flags=re.MULTILINE)
+        adapted = re.sub(r"\n?```\s*$", "", adapted.strip(), flags=re.MULTILINE)
+        if adapted.strip():
+            logger.info("agent6 new_file: adapted imports for %s", file_path)
+            return adapted, tokens_used
+    except Exception as exc:
+        logger.warning("agent6 new_file: adaptation LLM call failed for %s: %s", file_path, exc)
+
+    return raw_content, tokens_used
+
+
 # ── LangGraph node ────────────────────────────────────────────────────────────
 
 def hunk_synthesizer_agent(state: BackportState) -> BackportState:
@@ -753,6 +887,7 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     loc_results = state.get("localization_results", [])
     processed_indices = set(state.get("processed_hunk_indices", []))
     retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
+    tokens_used: int = state.get("tokens_used", 0)
 
     # ── Build synthesis batches ───────────────────────────────────────────────
 
@@ -777,27 +912,40 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
         if i not in processed_indices and i < len(loc_results):
             loc_result = loc_results[i]
 
-            # Fix G: new-file hunk — create the file directly.
+            # Fix G: new-file hunk — create the file directly, with import adaptation.
             if loc_result.method_used == "new_file":
                 file_path = loc_result.file_path or h.get("file_path", "")
                 new_content = h.get("new_content", "").rstrip("\n")
                 if file_path and new_content:
                     abs_path = Path(repo_path) / file_path
                     try:
+                        # Adapt imports/package declaration for the target branch
+                        # before writing to disk.  Falls back to raw content on error.
+                        adapted_content, tokens_used = _adapt_new_file_content(
+                            file_path, new_content, repo_path, tokens_used
+                        )
                         abs_path.parent.mkdir(parents=True, exist_ok=True)
-                        abs_path.write_text(new_content, encoding="utf-8")
+                        abs_path.write_text(adapted_content, encoding="utf-8")
                         # Add a sentinel SynthesizedHunk with empty old_string
                         # so agent7 knows the file was created (skip CLAW replace).
                         all_synthesized.append(SynthesizedHunk(
                             file_path=file_path,
                             old_string="",
-                            new_string=new_content,
+                            new_string=adapted_content,
                             confidence=1.0,
                             context_lines_included=0,
                             verified=True,
                         ).model_dump())
                     except Exception as e:
                         all_failed.append({**h, "error": f"new-file creation failed: {e}"})
+                continue
+
+            # renamed_file sentinel — pure rename with no content changes; nothing to synthesize.
+            if loc_result.method_used == "renamed_file":
+                continue
+
+            # deleted_file sentinel — deletion is executed by Agent 7 via file_operations; skip.
+            if loc_result.method_used == "deleted_file":
                 continue
 
             if loc_result.method_used != "failed" and loc_result.file_path:
@@ -905,4 +1053,5 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     state["synthesis_status"] = synthesis_status
     state["retry_contexts"] = retry_contexts
     state["current_attempt"] = state.get("current_attempt", 1) + 1
+    state["tokens_used"] = tokens_used
     return state

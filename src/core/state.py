@@ -133,6 +133,21 @@ class BackportState(TypedDict):
     fallback_attempts: int                # number of completed fallback runs (max 2)
     hunk_descriptions: List[Dict[str, Any]]  # HunkDescription objects from Phase 1
 
+    # File-level operations detected from the patch (populated by Agent 1).
+    # These are structural filesystem changes that are distinct from content-change
+    # hunks and are executed by Agent 7 before the build step.
+    #
+    # Each entry is a dict with:
+    #   operation:       "DELETED" | "RENAMED"
+    #   file_path:       target path (new path for RENAMED, path to remove for DELETED)
+    #   old_file_path:   previous path (RENAMED only — the path that exists in target)
+    #   target_new_path: desired final path in target branch (RENAMED only — may differ
+    #                    from mainline's new path when package structure differs)
+    #
+    # ADDED files are handled inline by Agent 6 (new_file localization path) and do
+    # not need a separate file_operations entry.
+    file_operations: List[Dict[str, Any]]
+
     # Metrics
     tokens_used: int
     wall_clock_time: float

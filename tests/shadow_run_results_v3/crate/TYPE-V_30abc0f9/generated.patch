@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
-index 12171a4a54..4f1022d036 100644
+index 12171a4a54..06d13f246c 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java
 @@ -18,9 +18,10 @@
@@ -59,16 +59,16 @@ index 12171a4a54..4f1022d036 100644
                              failure = t;
                              downstream.needsMoreData = false;
 -                            // continue because it's necessary to send something to downstreams still waiting for data
-+                            String reason = "An error was encountered: " + failure;
-+                            broadcastKill(killNodeAction, jobId, localNodeId, reason);
++                String reason = "An error was encountered: " + failure;
++                broadcastKill(killNodeAction, jobId, localNodeId, reason);
 +
-+                            it.close();
-+                            completionFuture.completeExceptionally(failure);
++                it.close();
++                completionFuture.completeExceptionally(failure);
                              countdownAndMaybeContinue(it, numActiveRequests, false);
                          }
                      }
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-index 4d64814dd5..69e02707a5 100644
+index 4d64814dd5..1e7071f336 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
 @@ -25,6 +25,7 @@ import java.util.Collections;
@@ -99,16 +99,17 @@ index 4d64814dd5..69e02707a5 100644
              DistributedResultRequest::new,
              new NodeActionRequestHandler<>(nodeAction));
      }
-@@ -205,32 +202,37 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
+@@ -204,29 +201,15 @@ public class TransportDistributedResultAction extends TransportAction<NodeReques
+             if (LOGGER.isTraceEnabled()) {
                  LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
              }
-             List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());
--            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.
--             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.
--             *
--             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke
--             * a kill to make sure that doesn't happen.
--             */
+-            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());
+             /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.
+              * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.
+              *
+              * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke
+              * a kill to make sure that doesn't happen.
+              */
 -            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
 -                excludedNodeIds,
 -                List.of(request.jobId()),
@@ -125,37 +126,9 @@ index 4d64814dd5..69e02707a5 100644
 -                        }
 -                    }
 -                );
-+            if (LOGGER.isTraceEnabled()) {
-+                LOGGER.trace("Received a result for job={} but couldn't find a RootTask for it", request.jobId());
-+            }
 +            String reason = "Received data for job=" + request.jobId() + " but there is no job context present. " +
 +                "This can happen due to bad network latency or if individual nodes are unresponsive due to high load";
-+            broadcastKill(request.jobId(), clusterService.localNode().getId(), reason);
++            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);
              return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));
          }
      }
- 
-+    /**
-+     * Sends KILL request to all nodes (excluding sender node).
-+     */
-+    private void broadcastKill(UUID jobId, String localNodeId, String reason) {
-+        List<String> excludedNodeIds = Collections.singletonList(localNodeId);
-+
-+        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(
-+            excludedNodeIds,
-+            List.of(jobId),
-+            Role.CRATE_USER.name(),
-+            reason
-+        );
-+        killNodeAction
-+            .execute(killRequest)
-+            .whenComplete((_, t) -> {
-+                if (t != null) {
-+                    LOGGER.debug("Could not kill " + jobId, t);
-+                }
-+            });
-+    }
-+
-     private static class SendResponsePageResultListener implements PageResultListener {
-         private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();
- 
