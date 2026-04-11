@@ -138,6 +138,52 @@ def _build_hunk_text(hunk: Dict[str, Any]) -> str:
     header = f"@@ -1,{src_count} +1,{tgt_count} @@\n"
     return header + "".join(body_lines)
 
+
+def _is_new_file_hunk(hunk: Dict[str, Any]) -> bool:
+    """
+    Fix G: Return True if this hunk represents a brand-new file creation.
+
+    Since parse_unified_diff only stores file_path (the +++ b/ path) and not the
+    --- a/ source path, we detect new-file hunks by the absence of old_content:
+    a pure addition has no context lines and no removed lines, so old_content is
+    empty (or only whitespace).
+
+    We also require new_content to be non-trivial so that empty hunks don't
+    accidentally get routed here.
+    """
+    old_content = (hunk.get("old_content") or "").strip()
+    new_content = (hunk.get("new_content") or "").strip()
+    file_path = (hunk.get("file_path") or "").strip()
+    # Must have a target file, no old content, and non-empty new content
+    return bool(file_path and not old_content and new_content)
+
+    """
+    Reconstruct a minimal unified diff hunk text from old_content / new_content
+    fields when raw hunk_text is not already stored.
+    """
+    old_lines = (hunk.get("old_content") or "").splitlines(keepends=True)
+    new_lines = (hunk.get("new_content") or "").splitlines(keepends=True)
+
+    # Compute a simple diff: lines only in old → removed, only in new → added,
+    # shared prefix/suffix lines → context.  For simple hunks this is accurate.
+    old_set = set(old_lines)
+    new_set = set(new_lines)
+
+    body_lines = []
+    for line in old_lines:
+        if line not in new_set:
+            body_lines.append(f"-{line}" if line.endswith("\n") else f"-{line}\n")
+        else:
+            body_lines.append(f" {line}" if line.endswith("\n") else f" {line}\n")
+    for line in new_lines:
+        if line not in old_set:
+            body_lines.append(f"+{line}" if line.endswith("\n") else f"+{line}\n")
+
+    src_count = sum(1 for l in body_lines if l.startswith(("-", " ")))
+    tgt_count = sum(1 for l in body_lines if l.startswith(("+", " ")))
+    header = f"@@ -1,{src_count} +1,{tgt_count} @@\n"
+    return header + "".join(body_lines)
+
 def _is_false_license_header_match(
     repo_path: str, canonical_file: str, res: LocalizationResult, hunk: Dict[str, Any]
 ) -> bool:
@@ -285,6 +331,65 @@ def _apply_inter_hunk_consistency(
 
 
 def localize_hunks(state: BackportState) -> BackportState:
+    """
+    Agent 1: Code Localizer
+
+    Step 0: Filter mainline hunks to Java-code-only (strip test/non-Java/auto-gen).
+      developer_aux_hunks is pre-populated by the caller from the target patch
+      (the actual developer backport). Agent 1 must NOT overwrite it — those aux
+      hunks must apply verbatim against the target branch, so they come from the
+      developer's real backport, not from the mainline patch.
+
+    Step 1: Execute the 5-stage hybrid localization per-hunk, per-file.
+    Fix G: New-file hunks (empty old_content) skip the 5-stage pipeline entirely
+    and receive a special LocalizationResult with method_used="new_file".
+
+    Step 2: Apply an inter-hunk consistency check to correct outlier file
+    assignments when multiple hunks from the same source file disagree.
+    """
+    repo_path = state["target_repo_path"]
+    all_hunks = state.get("hunks", [])
+
+    # Step 0: Filter mainline hunks — keep only Java production code hunks for the
+    # LLM pipeline. developer_aux_hunks (from target_patch) are left untouched.
+    java_code_hunks, _ = segregate_hunks(all_hunks)
+    state["hunks"] = java_code_hunks
+    # developer_aux_hunks pre-populated by caller; do NOT overwrite
+
+    results: List[LocalizationResult] = []
+    for hunk in java_code_hunks:
+        file_path = hunk.get("file_path", "")
+        if not file_path:
+            results.append(LocalizationResult(
+                method_used="failed",
+                confidence=0.0,
+                context_snapshot="",
+                file_path="",
+                start_line=0,
+                end_line=0,
+            ))
+            continue
+
+        # Fix G: new-file hunk — skip 5-stage pipeline, emit special result
+        if _is_new_file_hunk(hunk):
+            results.append(LocalizationResult(
+                method_used="new_file",
+                confidence=1.0,
+                context_snapshot="",
+                file_path=file_path,
+                start_line=0,
+                end_line=0,
+            ))
+            continue
+
+        loc_result = localizer_pipeline(repo_path, file_path, hunk)
+        results.append(loc_result)
+
+    results = _apply_inter_hunk_consistency(repo_path, java_code_hunks, results)
+
+    state["localization_results"] = results
+    return state
+
     """
     Agent 1: Code Localizer
 

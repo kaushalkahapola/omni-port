@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T04:04:41.828609",
+  "run_timestamp": "2026-04-11T05:53:17.189006",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "e6e749ebf12d618322696d0b45f86211efbfed17",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 25.49,
+      "elapsed_s": 26.82,
       "error": null,
       "java_hunks": 3,
       "aux_hunks": 2,
@@ -43,12 +43,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.79,
+      "elapsed_s": 3.8,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_III",
+        "patch_type": "PatchType.TYPE_II",
         "confidence": 0.85,
-        "reasoning": "The patch modifies the NumericType.java file by adding version checks and conditional logic around reading and writing scale values for BigDecimal streaming. It introduces new imports and changes the control flow based on the version of the stream, which indicates structural changes rather than simple string replacements or formatting fixes. The localization evidence shows mixed methods of discovery, including 'git_pickaxe' and 'embedding', with moderate confidence, supporting the assessment that the patch involves structural changes but not deep refactoring or complete redesign. Therefore, TYPE_III is appropriate with high confidence and a moderate token budget estimate to handle the structural adjustments and version compatibility logic.",
+        "reasoning": "The patch modifies serialization and deserialization logic in NumericType.java, adding version checks and conditional reading/writing of scale values. The changes involve conditional logic based on version and slight restructuring of existing code, but no major structural refactoring or API redesign. The localization evidence shows mixed methods with moderate confidence, including 'git_pickaxe' and 'embedding', indicating some fuzzy matching is needed. Overall, the patch is more complex than a simple string replacement but does not involve deep structural changes, fitting TYPE_II classification.",
         "is_auto_generated": false
       }
     },
@@ -59,26 +59,26 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 13.85,
+      "elapsed_s": 12.17,
       "error": null,
-      "adapted_count": 2
+      "adapted_count": 3
     },
     "agent5_structural": {
-      "elapsed_s": 112.76,
+      "elapsed_s": 0.04,
       "error": null,
-      "refactored_count": 1
+      "refactored_count": 0
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.02,
       "error": null,
-      "synthesized_count": 2,
+      "synthesized_count": 1,
       "failed_count": 1,
       "synthesis_status": "partial",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
-          "old_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;",
-          "new_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;",
+          "old_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
+          "new_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -91,10 +91,13 @@
           "context_lines_included": 3,
           "verified": true
         }
+      ],
+      "partial_rollback_files": [
+        "server/src/main/java/io/crate/types/NumericType.java"
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 0.3,
+      "elapsed_s": 0.25,
       "error": null,
       "validation_passed": false,
       "validation_failure_category": "context_mismatch",
@@ -123,13 +126,13 @@
     "developer_aux_hunks": 2,
     "processed_hunk_indices": [
       0,
-      2,
-      1
+      1,
+      2
     ],
     "tokens_used": 0,
     "synthesis_status": "partial",
     "applied_on_disk_ag3": 0,
-    "synthesized_count": 2,
+    "synthesized_count": 1,
     "failed_hunks_total": 1,
     "retry_contexts": [
       {
@@ -140,7 +143,7 @@
       },
       {
         "error_type": "context_mismatch",
-        "error_message": "aux patch apply failed for docs/appendices/release-notes/5.8.4.rst: [git-strict] error: patch failed: docs/appendices/release-notes/5.8.4.rst:60\nerror: docs/appendices/release-notes/5.8.4.rst: patch does not apply\n[git-tolerant] error: patch failed: docs/appendices/release-notes/5.8.4.rst:60\nerror: docs/appendices/release-notes/5.8.4.rst: patch does not apply\n[gnu-patch-dry-run] checking file docs/appendices/release-notes/5.8.4.rst\nHunk #1 FAILED at 60.\n1 out of 1 hunk FAILED",
+        "error_message": "aux patch apply failed for docs/appendices/release-notes/5.8.4.rst: [git-strict] error: patch failed: docs/appendices/release-notes/5.8.4.rst:60\nerror: docs/appendices/release-notes/5.8.4.rst: patch does not apply\n[git-tolerant] error: patch failed: docs/appendices/release-notes/5.8.4.rst:60\nerror: docs/appendices/release-notes/5.8.4.rst: patch does not apply\nHunk #1 FAILED at 60.\n1 out of 1 hunk FAILED",
         "attempt_count": 1,
         "suggested_action": "re-localize"
       }
@@ -148,14 +151,15 @@
     "failed_hunks": [
       {
         "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-        "old_content": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);\n",
-        "new_content": "    public BigDecimal readValueFrom(StreamInput in) throws IOException {\n        if (in.readBoolean()) {\n            byte[] bytes = in.readByteArray();\n            int scale = this.scale == null ? 0 : this.scale;\n            if (in.getVersion().onOrAfter(Version.V_5_9_0) && in.readBoolean()) {\n                scale = in.readVInt();\n                assert this.scale == null || this.scale == scale : \"streamed value scale differs from type scale\";\n            }\n            return new BigDecimal(\n                new BigInteger(bytes),\n                scale\n            );\n        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {\n                if (this.scale == null) {\n                    out.writeBoolean(true);\n                    out.writeVInt(v.scale());\n                } else {\n                    out.writeBoolean(false);\n                }\n            }\n        } else {\n            out.writeBoolean(false);\n        }\n    }",
-        "refactored": true,
-        "semantic_confidence": 0.55,
+        "old_content": "    public BigDecimal readValueFrom(StreamInput in) throws IOException {\n        if (in.readBoolean()) {\n            byte[] bytes = in.readByteArray();\n            int scale;\n            if (in.readBoolean()) {\n                scale = in.readVInt();\n                assert this.scale == null || this.scale == scale : \"streamed value scale differs from type scale\";\n            } else {\n                scale = this.scale == null ? 0 : this.scale;\n            }\n            return new BigDecimal(\n                new BigInteger(bytes),\n",
+        "new_content": "    public BigDecimal readValueFrom(StreamInput in) throws IOException {\n        if (in.readBoolean()) {\n            byte[] bytes = in.readByteArray();\n            int scale = this.scale == null ? 0 : this.scale;\n            if (in.getVersion().onOrAfter(Version.V_5_9_0) && in.readBoolean()) {\n                scale = in.readVInt();\n                assert this.scale == null || this.scale == scale : \"streamed value scale differs from type scale\";\n            }\n            return new BigDecimal(\n                new BigInteger(bytes),\n",
+        "imports_added": [],
+        "imports_removed": [],
+        "adapted": true,
         "loc_index": 1
       }
     ],
-    "generated_patch_bytes": 1867,
+    "generated_patch_bytes": 561,
     "target_patch_bytes": 7207,
     "validation_passed": false,
     "validation_failure_category": "context_mismatch",

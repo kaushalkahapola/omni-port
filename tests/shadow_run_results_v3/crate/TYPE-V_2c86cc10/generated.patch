@@ -1,15 +1,86 @@
-diff --git a/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java b/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
-index 84d2c6ae0f..91213f9c15 100644
---- a/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
-+++ b/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
-@@ -300,7 +300,9 @@ public class LogicalPlanner {
-             subqueryPlanner,
-             foreignDataWrappers,
-             planStats,
--            plannerContext.clusterState()
-+            plannerContext.clusterState(),
-+            coordinatorTxnCtx,
-+            plannerContext.nodeContext()
-         );
-         LogicalPlan logicalPlan = relation.accept(planBuilder, relation.outputs());
-         LogicalPlan optimizedPlan = optimizer.optimize(logicalPlan, planStats, coordinatorTxnCtx, tracer);
+diff --git a/server/src/main/java/io/crate/execution/dsl/phases/ForeignCollectPhase.java b/server/src/main/java/io/crate/execution/dsl/phases/ForeignCollectPhase.java
+index f8b1651bfd..45bc135a1b 100644
+--- a/server/src/main/java/io/crate/execution/dsl/phases/ForeignCollectPhase.java
++++ b/server/src/main/java/io/crate/execution/dsl/phases/ForeignCollectPhase.java
+@@ -48,8 +48,6 @@ public class ForeignCollectPhase extends AbstractProjectionsPhase implements Col
+ 
+     private DistributionInfo distributionInfo = DistributionInfo.DEFAULT_BROADCAST;
+ 
+-    public ForeignCollectPhase(UUID jobId,
+-                               int phaseId,
+                                String handlerNode,
+                                RelationName relationName,
+                                List<Symbol> toCollect,
+@@ -63,6 +61,14 @@ public class ForeignCollectPhase extends AbstractProjectionsPhase implements Col
+         this.query = query;
+         this.executeAs = executeAs;
+     }
++        super(jobId, phaseId, relationName.fqn(), null);
++        this.handlerNode = handlerNode;
++        this.relationName = relationName;
++        this.toCollect = toCollect;
++        this.outputTypes = Symbols.typeView(toCollect);
++        this.query = query;
++        this.executeAs = executeAs;
++    }
+ 
+     public ForeignCollectPhase(StreamInput in) throws IOException {
+         super(in);
+diff --git a/server/src/main/java/io/crate/fdw/ForeignDataWrappers.java b/server/src/main/java/io/crate/fdw/ForeignDataWrappers.java
+index c318ff79d3..49c02caea6 100644
+--- a/server/src/main/java/io/crate/fdw/ForeignDataWrappers.java
++++ b/server/src/main/java/io/crate/fdw/ForeignDataWrappers.java
+@@ -121,11 +121,21 @@ public class ForeignDataWrappers implements CollectSource {
+                 server.fdw(),
+                 foreignTable.server()
+             ));
++        }
++                foreignTable.server()
++            ));
+         }
+         String executeAs = phase.executeAs();
+         if (executeAs == null) {
+             executeAs = txnCtx.sessionSettings().userName();
+         }
++        return fdw.getIterator(
++            requireNonNull(roles.findUser(executeAs), "current user must exist"),
++            server,
++            foreignTable,
++            txnCtx,
++            executeAs = txnCtx.sessionSettings().userName();
++        }
+         return fdw.getIterator(
+             requireNonNull(roles.findUser(executeAs), "current user must exist"),
+             server,
+diff --git a/server/src/main/java/io/crate/fdw/JdbcForeignDataWrapper.java b/server/src/main/java/io/crate/fdw/JdbcForeignDataWrapper.java
+index 84410769d0..13891b6b98 100644
+--- a/server/src/main/java/io/crate/fdw/JdbcForeignDataWrapper.java
++++ b/server/src/main/java/io/crate/fdw/JdbcForeignDataWrapper.java
+@@ -122,9 +122,15 @@ final class JdbcForeignDataWrapper implements ForeignDataWrapper {
+                                                              Symbol query) {
+         SessionSettings sessionSettings = txnCtx.sessionSettings();
+         Settings userOptions = server.users().get(currentUser.name());
++        if (userOptions == null) {
++                                                             List<Symbol> collect,
++                                                             Symbol query) {
++        SessionSettings sessionSettings = txnCtx.sessionSettings();
++        Settings userOptions = server.users().get(currentUser.name());
+         if (userOptions == null) {
+             userOptions = Settings.EMPTY;
+         }
++        }
+         String user = foreignUser.get(userOptions);
+         String password = foreignPw.get(userOptions);
+         var properties = new Properties();
+diff --git a/server/src/main/java/io/crate/planner/optimizer/rule/MergeFilterAndForeignCollect.java b/server/src/main/java/io/crate/planner/optimizer/rule/MergeFilterAndForeignCollect.java
+index 6c630a00af..12c39c5675 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/rule/MergeFilterAndForeignCollect.java
++++ b/server/src/main/java/io/crate/planner/optimizer/rule/MergeFilterAndForeignCollect.java
+@@ -67,6 +67,7 @@ public class MergeFilterAndForeignCollect implements Rule<Filter> {
+                 collect.relation(),
+                 collect.outputs(),
+                 collect.where().add(filter.query()),
++                collect.executeAs(),
+                 collect.executeAs()
+             );
+         }

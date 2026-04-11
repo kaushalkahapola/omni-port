@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T04:05:04.521941",
+  "run_timestamp": "2026-04-11T05:53:17.045670",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "dcbd23f6208c99f85aa82d287d75a8eb5955000f",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 12.76,
+      "elapsed_s": 2.58,
       "error": null,
       "java_hunks": 2,
       "aux_hunks": 3,
@@ -19,27 +19,27 @@
           "method_used": "gumtree_ast",
           "confidence": 0.75,
           "start_line": 107,
-          "end_line": 218,
+          "end_line": 202,
           "symbol_mappings": {}
         },
         {
           "hunk_index": 1,
           "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
-          "method_used": "embedding",
-          "confidence": 0.839,
-          "start_line": 271,
-          "end_line": 280,
+          "method_used": "fuzzy",
+          "confidence": 0.821,
+          "start_line": 262,
+          "end_line": 268,
           "symbol_mappings": {}
         }
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.63,
+      "elapsed_s": 3.95,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.85,
-        "reasoning": "The patch modifies the ObjectIndexer class by changing when and how it updates its internal children references, moving from immediate updates during collectSchemaUpdates to deferred updates during updateTargets. This involves structural changes to the class's behavior and method implementations, including adding new logic to updateTargets and adjusting how children are managed. The patch also includes additions to the test suite to verify the new behavior, indicating a non-trivial structural change. The localization evidence shows that the main code changes were found via 'gumtree_ast' and 'embedding' with high confidence, supporting the classification as TYPE_III (structural changes). The patch is more complex than simple string replacements or whitespace changes but does not reach the level of deep refactoring or complete redesign, so TYPE_III is appropriate. The confidence is high given the evidence and the nature of the changes. The token budget estimate reflects the complexity of understanding and backporting these structural changes and associated tests.",
+        "reasoning": "The patch modifies the ObjectIndexer class by changing when and how it updates its internal children references, moving from immediate updates during collectSchemaUpdates to deferred updates during updateTargets. This involves structural changes in method logic and internal state management, including adding new loops and conditional logic to handle dynamic nested object columns. The patch also includes additions to test cases that verify the new behavior, indicating a non-trivial structural change rather than a simple string or whitespace fix. The localization evidence shows the main code changes were found via 'gumtree_ast' and 'fuzzy' matching with moderate confidence, supporting the classification as TYPE_III (structural changes). The patch is not auto-generated code.",
         "is_auto_generated": false
       }
     },
@@ -50,17 +50,17 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 11.56,
+      "elapsed_s": 12.41,
       "error": null,
       "adapted_count": 2
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.05,
       "error": null,
       "refactored_count": 0
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.11,
       "error": null,
       "synthesized_count": 2,
       "failed_count": 0,
@@ -68,16 +68,16 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
-          "old_string": "            if (value.containsKey(innerName) == false) {\n                var synth = docBuilder.getSyntheticValue(child.ident());\n                if (synth != null) {\n                    // directly modify the map so that containing types will see the value\n                    // if they need to write stored fields\n                    value.put(innerName, synth);\n                }\n            }\n            var innerValue = value.get(innerName);\n            docBuilder.checkColumnConstraint(child.ident(), innerValue);\n            if (innerValue == null) {\n                continue;\n            }\n            var valueIndexer = child.indexer;\n            // valueIndexer is null for partitioned columns\n            if (valueIndexer != null) {\n                innerValue = child.reference.valueType().sanitizeValue(innerValue);\n                docBuilder.translogWriter().writeFieldName(child.reference.storageIdentLeafName());\n                valueIndexer.indexValue(innerValue, docBuilder);\n                value.put(innerName, innerValue);\n            }\n        }\n        Map<String, Object> columnsToStore = new HashMap<>();\n        value.forEach((k, v) -> {\n            if (children.containsKey(k) == false) {\n                translogWriter.writeFieldName(this.unknownColumnPrefix + k);\n                translogWriter.writeValue(v);\n                columnsToStore.put(k, v);\n            }\n            if (v == null) {\n                columnsToStore.put(k, null);\n            }\n        });\n        if (docBuilder.maybeAddStoredField()) {\n            if (columnsToStore.isEmpty() == false) {\n                // We have unknown or null values that can't be reconstructed from doc values\n                // at read time, so we need to store them explicitly\n                docBuilder.addField(new StoredField(\n                    ref.storageIdentLeafName(),\n                    toBytes(columnsToStore, docBuilder.getTableVersionCreated()).toBytesRef()\n                ));\n            } else if (value.isEmpty()) {\n                // A completely empty object doesn't store anything in doc values, so we need to\n                // store a marker here to reconstruct it at read time and distinguish it from a\n                // null value\n                docBuilder.addField(new StoredField(\n                    ref.storageIdentLeafName(),\n                    toBytes(value, docBuilder.getTableVersionCreated()).toBytesRef()\n                ));\n            }\n        }\n        translogWriter.endObject();\n    }\n\n    private BytesReference toBytes(Map<String, Object> v, Version version) {\n        try (BytesStreamOutput out = new BytesStreamOutput()) {\n            out.setVersion(version);\n            out.writeMap(v, StreamOutput::writeString, StreamOutput::writeGenericValue);\n            return out.bytes();\n        } catch (IOException e) {\n            throw new UncheckedIOException(e);\n        }\n    }\n\n    @Override\n    public void collectSchemaUpdates(@Nullable Map<String, Object> value,\n                                     Consumer<? super Reference> onDynamicColumn,\n                                     Synthetics synthetics) throws IOException {\n        for (var entry : children.entrySet()) {\n            String innerName = entry.getKey();\n            Child child = entry.getValue();\n            Object innerValue = null;\n            if (value == null || value.containsKey(innerName) == false) {\n                Input<Object> synthetic = synthetics.get(child.ident());\n                if (synthetic != null) {\n                    innerValue = synthetic.value();\n                }\n            } else {\n                innerValue = value.get(innerName);\n            }\n            // valueIndexer is null for partitioned columns\n            if (child.indexer != null) {\n                var type = child.reference.valueType();\n                try {\n                    innerValue = type.sanitizeValue(innerValue);\n                } catch (ClassCastException | IllegalArgumentException e) {\n                    throw new ConversionException(innerValue, type);\n                }\n\n                child.indexer.collectSchemaUpdates(\n                    innerValue,\n                    onDynamicColumn,\n                    synthetics\n                );\n            }\n        }\n        if (value != null) {\n            addNewColumns(value, onDynamicColumn, synthetics);\n        }\n    }\n\n    @Override\n    public void updateTargets(Function<ColumnIdent, Reference> getRef) {\n        ColumnIdent objectColumn = ref.column();\n        Reference updatedSelf = getRef.apply(objectColumn);\n        ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());\n        for (var entry : children.entrySet()) {\n            Child child = entry.getValue();\n            var newChildRef = getRef.apply(child.ident());\n            if (Objects.equals(child.reference, newChildRef) == false) {\n                @SuppressWarnings(\"unchecked\")\n                ValueIndexer<Object> indexer = newChildRef.granularity() == RowGranularity.PARTITION\n                    ? null\n                    : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(table, newChildRef, getRef);\n\n                children.put(entry.getKey(), new Child(newChildRef, indexer));\n            }\n            child.indexer.updateTargets(getRef);\n",
-          "new_string": "            if (value.containsKey(innerName) == false) {\n                var synth = docBuilder.getSyntheticValue(child.ident());\n                if (synth != null) {\n                    // directly modify the map so that containing types will see the value\n                    // if they need to write stored fields\n                    value.put(innerName, synth);\n@Override\npublic void updateTargets(Function<ColumnIdent, Reference> getRef) {\n    ColumnIdent objectColumn = ref.column();\n    Reference updatedSelf = getRef.apply(objectColumn);\n    ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());\n    for (var entry : children.entrySet()) {\n        Child child = entry.getValue();\n        var newChildRef = getRef.apply(child.ident());\n        if (Objects.equals(child.reference, newChildRef) == false) {\n            @SuppressWarnings(\"unchecked\")\n            ValueIndexer<Object> indexer = newChildRef.granularity() == RowGranularity.PARTITION\n                ? null\n                : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(table, newChildRef, getRef);\n            children.put(entry.getKey(), new Child(newChildRef, indexer));\n        }\n        child.indexer.updateTargets(getRef);\n    }\n    for (String innerColumn : objectType.innerTypes().keySet()) {\n        if (!children.containsKey(innerColumn)) {\n            Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));\n            @SuppressWarnings(\"unchecked\")\n            ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(\n                table,\n                childRef,\n                getRef\n            );\n            children.put(innerColumn, new Child(childRef, childIndexer));\n        }\n    }\n}\n                    ? null\n                    : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(table, newChildRef, getRef);\n\n                children.put(entry.getKey(), new Child(newChildRef, indexer));\n            }\n            child.indexer.updateTargets(getRef);\n",
+          "old_string": "                           Map<ColumnIdent, Indexer.ColumnConstraint> checks) throws IOException {\n        xContentBuilder.startObject();\n        for (var entry : childColumns.entrySet()) {\n            var childRef = entry.getValue();\n            String innerName = entry.getKey();\n            DataType<?> type = childRef.valueType();\n            ColumnIdent innerColumn = column.getChild(innerName);\n            Object innerValue = null;\n            if (value == null || value.containsKey(innerName) == false) {\n                Input<Object> synthetic = synthetics.get(innerColumn);\n                if (synthetic != null) {\n                    innerValue = synthetic.value();\n                }\n            } else {\n                innerValue = value.get(innerName);\n            }\n            ColumnConstraint check = checks.get(innerColumn);\n            if (check != null) {\n                check.verify(innerValue);\n            }\n            if (innerValue == null) {\n                continue;\n            }\n            var valueIndexer = innerIndexers.get(innerName);\n            // valueIndexer is null for partitioned columns\n            if (valueIndexer != null) {\n                valueIndexer.indexValue(\n                    type.sanitizeValue(innerValue),\n                    childRef.storageIdentLeafName(),\n                    xContentBuilder,\n                    addField,\n                    synthetics,\n                    checks\n                );\n            }\n        }\n\n        if (value != null) {\n            indexUnknownColumns(value, xContentBuilder);\n        }\n        xContentBuilder.endObject();\n    }\n\n    @Override\n    public void collectSchemaUpdates(@Nullable Map<String, Object> value,\n                                     Consumer<? super Reference> onDynamicColumn,\n                                     Synthetics synthetics) throws IOException {\n        for (var entry : childColumns.entrySet()) {\n            var childRef = entry.getValue();\n            String innerName = entry.getKey();\n            DataType<?> type = childRef.valueType();\n            ColumnIdent innerColumn = column.getChild(innerName);\n            Object innerValue = null;\n            if (value == null || value.containsKey(innerName) == false) {\n                Input<Object> synthetic = synthetics.get(innerColumn);\n                if (synthetic != null) {\n                    innerValue = synthetic.value();\n                }\n            } else {\n                innerValue = value.get(innerName);\n            }\n            var valueIndexer = innerIndexers.get(innerName);\n            // valueIndexer is null for partitioned columns\n            if (valueIndexer != null) {\n                valueIndexer.collectSchemaUpdates(\n                    type.sanitizeValue(innerValue),\n                    onDynamicColumn,\n                    synthetics\n                );\n            }\n        }\n        if (value != null) {\n            addNewColumns(value, onDynamicColumn, synthetics);\n        }\n    }\n\n    @Override\n    public void updateTargets(Function<ColumnIdent, Reference> getRef) {\n        for (Map.Entry<String, Reference> entry : childColumns.entrySet()) {\n            var innerName = entry.getKey();\n            var oldChildRef = entry.getValue();\n            var newChildRef = getRef.apply(oldChildRef.column());\n            if (oldChildRef.equals(newChildRef) == false) {\n                entry.setValue(newChildRef);\n                if (newChildRef.granularity() != RowGranularity.PARTITION) {\n                    //noinspection unchecked\n                    ValueIndexer<Object> newIndexer = (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(\n                            newChildRef.ident().tableIdent(),\n                            newChildRef,\n                            getRef\n                    );\n                    innerIndexers.put(innerName, newIndexer);\n                }\n            }\n        }\n        for (var indexer : innerIndexers.values()) {\n            indexer.updateTargets(getRef);\n        }\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private void addNewColumns(Map<String, Object> value,\n",
+          "new_string": "                           Map<ColumnIdent, Indexer.ColumnConstraint> checks) throws IOException {\n        xContentBuilder.startObject();\n        for (var entry : childColumns.entrySet()) {\n            var childRef = entry.getValue();\n            String innerName = entry.getKey();\n            DataType<?> type = childRef.valueType();\n@Override\npublic void updateTargets(Function<ColumnIdent, Reference> getRef) {\n    ColumnIdent objectColumn = ref.column();\n    Reference updatedSelf = getRef.apply(objectColumn);\n    ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());\n    for (Map.Entry<String, Reference> entry : childColumns.entrySet()) {\n        String innerName = entry.getKey();\n        Reference oldChildRef = entry.getValue();\n        Reference newChildRef = getRef.apply(oldChildRef.column());\n        if (oldChildRef.equals(newChildRef) == false) {\n            entry.setValue(newChildRef);\n            if (newChildRef.granularity() != RowGranularity.PARTITION) {\n                //noinspection unchecked\n                ValueIndexer<Object> newIndexer = (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(\n                    table,\n                    newChildRef,\n                    getRef\n                );\n                innerIndexers.put(innerName, newIndexer);\n            }\n        }\n    }\n    for (var indexer : innerIndexers.values()) {\n        indexer.updateTargets(getRef);\n    }\n    for (String innerColumn : objectType.innerTypes().keySet()) {\n        if (!childColumns.containsKey(innerColumn)) {\n            Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));\n            //noinspection unchecked\n            ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(\n                table,\n                childRef,\n                getRef\n            );\n            childColumns.put(innerColumn, childRef);\n            innerIndexers.put(innerColumn, childIndexer);\n        }\n    }\n}\n            indexer.updateTargets(getRef);\n        }\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private void addNewColumns(Map<String, Object> value,\n",
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
-          "old_string": "                new ReferenceIdent(table, column.getChild(innerName)),\n                type,\n                position,\n                COLUMN_OID_UNASSIGNED\n            );\n            position--;\n            onDynamicColumn.accept(newColumn);\n            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(\n                table,\n                newColumn,\n                getRef\n            );\n            innerValue = type.sanitizeValue(innerValue);\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n",
-          "new_string": "                new ReferenceIdent(table, column.getChild(innerName)),\n                type,\n                position,\n                COLUMN_OID_UNASSIGNED\n            );\n            position--;\n\n                getRef\n            );\n            innerValue = type.sanitizeValue(innerValue);\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n",
+          "old_string": "            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(\n                table,\n                newColumn,\n                getRef\n            );\n            innerIndexers.put(innerName, valueIndexer);\n            childColumns.put(innerName, newColumn);\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n                synthetics\n            );\n        }\n",
+          "new_string": "            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(\n                table,\n                newColumn,\n                getRef\n            );\n            innerIndexers.put(innerName, valueIndexer);\n\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n                synthetics\n            );\n        }\n",
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
@@ -85,15 +85,15 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 0.39,
+      "elapsed_s": 44.36,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Aux hunk application failed: aux patch apply failed for server/src/test/java/io/crate/execution/dml/IndexerTest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/execution/dml/IndexerTest.java:1309\nerror: server/src/test/java/io/crate/execution/dml/IndexerTest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/execution/dml/IndexerTest.java:1309\nerror: server/src/test/java/io/crate/execution/dml/IndexerTest.java: patch does not apply\n",
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper): [INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-libs-pgwire: Unable to read Checkstyle results xml: /repo/libs/pgwire/target/checkstyle-result.xml: input contained no data -> [Help 1]\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-libs-shared: Unable to read Checkstyle results xml: /repo/libs/shared/targ",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": null,
-      "build_mode": null,
+      "build_success": false,
+      "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
@@ -123,18 +123,18 @@
     "failed_hunks_total": 0,
     "retry_contexts": [
       {
-        "error_type": "context_mismatch",
-        "error_message": "aux patch apply failed for server/src/test/java/io/crate/execution/dml/IndexerTest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/execution/dml/IndexerTest.java:1309\nerror: server/src/test/java/io/crate/execution/dml/IndexerTest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/execution/dml/IndexerTest.java:1309\nerror: server/src/test/java/io/crate/execution/dml/IndexerTest.java: patch does not apply\n[gnu-patch-dry-run] checking file server/src/test/java/io/crate/execution/dml/IndexerTest.java\nHunk #1 succeeded at 30",
+        "error_type": "unknown",
+        "error_message": "[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-libs-pgwire: Unable to read Checkstyle results xml: /repo/libs/pgwire/target/checkstyle-result.xml: input contained no data -> [Help 1]\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-libs-shared: Unable to read Checkstyle results xml: /repo/libs/shared/target/checkstyle-result.xml: no more data available - expected end tags </file></checkstyle> to close start tag <file> from line 55 and start tag <checkstyle> from line 2, parser stopped on TEXT seen ...<file name=\"/repo/libs/shared/src/main/java/io/crat... @55:52 -> [Help 1]\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-libs-guice: Unable to read Checkstyle results xml: /repo/libs/guice/target/checkstyle-result.xml: no more data available - expected end tags </file></checkstyle> to close start tag <file> from line 207 and start tag <checkstyle> from line 2, parser stopped on TEXT seen ...<file name=\"/repo/libs/... @207:24 -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-libs-pgwire\n\u274c Build Failed",
         "attempt_count": 1,
-        "suggested_action": "re-localize"
+        "suggested_action": "inspect_and_retry"
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 7394,
+    "generated_patch_bytes": 7839,
     "target_patch_bytes": 8918,
     "validation_passed": false,
-    "validation_failure_category": "context_mismatch",
-    "build_success": null,
+    "validation_failure_category": "unknown",
+    "build_success": false,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

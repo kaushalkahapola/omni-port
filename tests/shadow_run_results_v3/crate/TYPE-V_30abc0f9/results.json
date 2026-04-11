@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "run_timestamp": "2026-04-11T05:54:16.397916",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "30abc0f980778976840a80436d746fd445fd3e26",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 7.52,
+      "elapsed_s": 11.77,
       "error": null,
       "java_hunks": 13,
       "aux_hunks": 2,
@@ -133,12 +133,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.91,
+      "elapsed_s": 4.23,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.9,
-        "reasoning": "The patch introduces additional logic to handle out-of-memory (OOM) situations by broadcasting kill requests to other nodes when failures occur during distributed result streaming. The changes involve adding new method calls, imports, and parameters, but the overall structure of the classes remains the same. The patch was localized mostly via 'git_pickaxe' with high confidence and some 'git_exact' matches, indicating that the patch applies with some modifications rather than exact matches. The changes are not trivial string replacements (TYPE_I), nor do they involve deep structural refactoring or redesign (TYPE_IV or TYPE_V). Instead, they require fuzzy matching due to added logic and parameters, fitting the TYPE_II classification. The token budget estimate is moderate due to the patch size and complexity of understanding the new kill broadcast logic and its integration.",
+        "reasoning": "The patch introduces additional logic to handle out-of-memory (OOM) situations by broadcasting kill requests to nodes when certain failures occur during distributed result streaming. The changes involve adding new imports, fields, constructor parameters, and method calls to existing classes, as well as a new static helper method for broadcasting kill requests. The patch is not a trivial string replacement (TYPE_I), but it does not involve deep structural refactoring or redesign (TYPE_IV or TYPE_V). The patch was localized mostly via 'git_pickaxe' with high confidence, indicating some code changes but no major structural changes like renames or API redesigns. Therefore, the patch complexity fits TYPE_II, involving some fuzzy matching and moderate code additions. The confidence is high (0.9) given the localization evidence and the nature of changes. The token budget estimate is moderate (around 800 tokens) due to multiple files and moderate code additions.",
         "is_auto_generated": false
       }
     },
@@ -175,17 +175,17 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 39.15,
+      "elapsed_s": 35.81,
       "error": null,
       "adapted_count": 3
     },
     "agent5_structural": {
-      "elapsed_s": 166.25,
+      "elapsed_s": 89.08,
       "error": null,
       "refactored_count": 5
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.17,
       "error": null,
       "synthesized_count": 8,
       "failed_count": 0,
@@ -201,16 +201,8 @@
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "old_string": "    private volatile Throwable failure;\n\n    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,",
-          "new_string": "    private volatile Throwable failure;\n\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final String localNodeId;\n\n    public DistributingConsumer(Executor responseExecutor,\n                                UUID jobId,",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
-          "old_string": "                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();",
-          "new_string": "                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();",
+          "old_string": "    private volatile Throwable failure;",
+          "new_string": "    private volatile Throwable failure;\n\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final String localNodeId;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -218,7 +210,15 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
           "old_string": "                            countdownAndMaybeContinue(it, numActiveRequests, false);\n                        }\n                    }\n                );\n        }\n    }",
-          "new_string": "            if (isFailureReq) {\n                // For failure requests, perform the countdown which may close the iterator\n                countdownAndMaybeContinue(it, numActiveRequests, true);\n            } else {\n                String reason = \"An error was encountered: \" + failure;\n                broadcastKill(killNodeAction, jobId, localNodeId, reason);\n\n                it.close();\n                completionFuture.completeExceptionally(failure);\n            }\n        }\n    }",
+          "new_string": "                            String reason = \"An error was encountered: \" + failure;\n                            broadcastKill(killNodeAction, jobId, localNodeId, reason);\n\n                            it.close();\n                            completionFuture.completeExceptionally(failure);\n                        }\n                    }\n                );\n        }\n    }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumer.java",
+          "old_string": "                                byte inputId,\n                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                int pageSize) {\n        this.traceEnabled = LOGGER.isTraceEnabled();",
+          "new_string": "                                int bucketIdx,\n                                Collection<String> downstreamNodeIds,\n                                ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction,\n                                ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                String localNodeId,\n                                int pageSize,\n                                ThreadPool threadPool) {\n        this.threadPool = threadPool;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -242,7 +242,7 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
           "old_string": "            bucketIdx,\n            nodeOperation.downstreamNodes(),\n            distributedResultAction,\n            pageSize\n        );\n    }",
-          "new_string": "            bucketIdx,\n            nodeOperation.downstreamNodes(),\n            distributedResultAction,\n            killNodeAction,\n            clusterService.localNode().getId(),\n            pageSize,\n            threadPool\n        );",
+          "new_string": "            bucketIdx,\n            nodeOperation.downstreamNodes(),\n            distributedResultAction,\n            killNodeAction,\n            clusterService.localNode().getId(),\n            pageSize,\n            threadPool\n        );\n    }",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -258,11 +258,11 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 82.24,
+      "elapsed_s": 44.84,
       "error": null,
       "validation_passed": false,
       "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper): ync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/maven/c",
+      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.50s), 0 error(s).\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-libs-guice: Unable to read Checkstyle results xml: /repo/libs/guice/target/checkstyle-result.xml: input contained no data -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Ma",
       "validation_attempts": 1,
       "retry_files": [],
       "build_success": false,
@@ -280,7 +280,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 13,
@@ -293,8 +293,8 @@
       11,
       0,
       2,
-      3,
       5,
+      3,
       7,
       8,
       9,
@@ -308,13 +308,13 @@
     "retry_contexts": [
       {
         "error_type": "unknown",
-        "error_message": "--- Building code for 78c80d3 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] crate-libs-azure-testing                                           [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-copy-azure                                                   ",
+        "error_message": "[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.50s), 0 error(s).\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-libs-guice: Unable to read Checkstyle results xml: /repo/libs/guice/target/checkstyle-result.xml: input contained no data -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-libs-guice\n\u274c Build Failed",
         "attempt_count": 1,
         "suggested_action": "inspect_and_retry"
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 4061,
+    "generated_patch_bytes": 8450,
     "target_patch_bytes": 15919,
     "validation_passed": false,
     "validation_failure_category": "unknown",

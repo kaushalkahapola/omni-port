@@ -1,63 +1,5 @@
-diff --git a/server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java b/server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java
-index 6786ce5b5e..d7a466e0d2 100644
---- a/server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java
-+++ b/server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java
-@@ -52,6 +52,7 @@ import org.elasticsearch.action.support.master.AcknowledgedResponse;
- import org.elasticsearch.client.Client;
- import org.elasticsearch.cluster.ClusterChangedEvent;
- import org.elasticsearch.cluster.ClusterStateListener;
-+import org.elasticsearch.cluster.metadata.IndexMetadata;
- import org.elasticsearch.cluster.routing.allocation.AllocationService;
- import org.elasticsearch.cluster.service.ClusterService;
- import org.elasticsearch.common.Strings;
-@@ -264,9 +265,10 @@ public class LogicalReplicationService implements ClusterStateListener, Closeabl
-             );
-             throw new RelationAlreadyExists(relation, message);
-         };
--        for (var index : stateResponse.concreteIndices()) {
--            if (metadata.hasIndex(index)) {
--                onExists.accept(RelationName.fromIndexName(index));
-+        for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {
-+            String indexName = indexMetadata.getIndex().getName();
-+            if (metadata.hasIndex(indexName)) {
-+                onExists.accept(RelationName.fromIndexName(indexName));
-             }
-         }
-         for (var template : stateResponse.concreteTemplates()) {
-diff --git a/server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java b/server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java
-index 11e05e2d93..2138aa808d 100644
---- a/server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java
-+++ b/server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java
-@@ -102,6 +102,17 @@ public class LogicalReplicationSettings {
-         Setting.Property.IndexScope
-     );
- 
-+    /**
-+     * Internal index setting to mark the index as active (all primary shards active) and such can be restored.
-+     * It should be filtered out on the subscriber cluster when restoring or tracking indices.
-+     */
-+    public static final Setting<Boolean> REPLICATION_INDEX_ROUTING_ACTIVE = Setting.boolSetting(
-+        "index.replication.logical.source_routing_active",
-+        true,
-+        Setting.Property.InternalIndex,
-+        Setting.Property.IndexScope
-+    );
-+
-     /**
-      * These settings are not suitable to replicate between subscribed/replicated indices
-      */
-@@ -146,7 +157,8 @@ public class LogicalReplicationSettings {
-         MergeSchedulerConfig.AUTO_THROTTLE_SETTING,
-         MergeSchedulerConfig.MAX_MERGE_COUNT_SETTING,
-         MergeSchedulerConfig.MAX_THREAD_COUNT_SETTING,
--        EngineConfig.INDEX_CODEC_SETTING
-+        EngineConfig.INDEX_CODEC_SETTING,
-+        REPLICATION_INDEX_ROUTING_ACTIVE
-     );
- 
-     private int batchSize;
 diff --git a/server/src/main/java/io/crate/replication/logical/MetadataTracker.java b/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
-index f39e910cfc..6c6c61721c 100644
+index 40ba2f4942..263f4141e4 100644
 --- a/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
 +++ b/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
 @@ -23,6 +23,7 @@ package io.crate.replication.logical;
@@ -68,7 +10,7 @@ index f39e910cfc..6c6c61721c 100644
  
  import java.io.Closeable;
  import java.util.ArrayList;
-@@ -402,8 +403,8 @@ public final class MetadataTracker implements Closeable {
+@@ -403,8 +404,8 @@ public final class MetadataTracker implements Closeable {
          Set<RelationName> currentlyReplicatedTables = subscription.relations().keySet();
  
          Set<RelationName> existingRelations = publisherStateResponse.concreteIndices().stream()
@@ -79,7 +21,7 @@ index f39e910cfc..6c6c61721c 100644
              .filter(relationName -> currentlyReplicatedTables.contains(relationName) == false)
              .collect(Collectors.toCollection(() -> new HashSet<>()));
  
-@@ -437,13 +438,22 @@ public final class MetadataTracker implements Closeable {
+@@ -438,13 +439,22 @@ public final class MetadataTracker implements Closeable {
          var toRestoreIndices = new ArrayList<String>();
          var toRestoreTemplates = new ArrayList<String>();
  
@@ -105,127 +47,51 @@ index f39e910cfc..6c6c61721c 100644
              }
          }
          for (var templateName : stateResponse.concreteTemplates()) {
-diff --git a/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java b/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
-index d9914c03aa..430c2efb80 100644
---- a/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
-+++ b/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
-@@ -39,6 +39,7 @@ import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
- import org.elasticsearch.cluster.ClusterState;
- import org.elasticsearch.cluster.block.ClusterBlockException;
- import org.elasticsearch.cluster.block.ClusterBlockLevel;
-+import org.elasticsearch.cluster.metadata.IndexMetadata;
- import org.elasticsearch.cluster.service.ClusterService;
- import org.elasticsearch.common.inject.Inject;
- import org.elasticsearch.common.inject.Singleton;
-@@ -218,10 +219,9 @@ public class PublicationsStateAction extends ActionType<PublicationsStateAction.
-             return "Response{" + "relationsInPublications:" + relationsInPublications + '.' + "unknownPublications:" + unknownPublications + '}';
-         }
- 
--        public List<String> concreteIndices() {
-+        public List<IndexMetadata> concreteIndices() {
-             return relationsInPublications.values().stream()
-                 .flatMap(x -> x.indices().stream())
--                .map(x -> x.getIndex().getName())
-                 .toList();
-         }
- 
-diff --git a/server/src/main/java/io/crate/replication/logical/metadata/Publication.java b/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
-index 9e87dcd277..1c1ac1f64d 100644
---- a/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
-+++ b/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
-@@ -115,7 +115,6 @@ public class Publication implements Writeable {
-         return "Publication{forAllTables=" + forAllTables + ", owner=" + owner + ", tables=" + tables + "}";
-     }
- 
--
-     public Map<RelationName, RelationMetadata> resolveCurrentRelations(ClusterState state,
-                                                                        Roles roles,
-                                                                        Role publicationOwner,
-@@ -124,18 +123,7 @@ public class Publication implements Writeable {
-         // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned
-         Predicate<String> indexFilter = indexName -> {
-             var indexMetadata = state.metadata().index(indexName);
--            if (indexMetadata != null) {
--                boolean softDeletes = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());
--                if (softDeletes == false) {
--                    LOGGER.warn(
--                        "Table '{}' won't be replicated as the required table setting " +
--                            "'soft_deletes.enabled' is set to: {}",
--                        RelationName.fromIndexName(indexName),
--                        softDeletes
--                    );
--                    return false;
--                }
--                var routingTable = state.routingTable().index(indexName);
-+
-                 assert routingTable != null : "routingTable must not be null";
-                 return routingTable.allPrimaryShardsActive();
- 
-@@ -169,14 +157,28 @@ public class Publication implements Writeable {
-         }
- 
-         return relations.stream()
--            .filter(relationName -> indexFilter.test(relationName.indexNameOrAlias()))
-             .filter(relationName -> userCanPublish(roles, relationName, publicationOwner, publicationName))
-             .filter(relationName -> subscriberCanRead(roles, relationName, subscriber, publicationName))
--            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), indexFilter))
-+            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), applyCustomIndexSettings(state)))
-             .collect(Collectors.toMap(RelationMetadata::name, x -> x));
- 
-     }
- 
-+    @VisibleForTesting
-+    public static Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {
-+        // mark indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned
-+        return im -> {
-+            var routingTable = state.routingTable().index(im.getIndex());
-+            assert routingTable != null : "routingTable must not be null";
-+            boolean isActive = routingTable.allPrimaryShardsActive();
-+            IndexMetadata.Builder builder = IndexMetadata.builder(im);
-+            return builder.settings(Settings.builder()
-+                    .put(im.getSettings())
-+                    .put(REPLICATION_INDEX_ROUTING_ACTIVE.getKey(), isActive))
-+                .build();
-+        };
-+    }
-+
-     private static boolean subscriberCanRead(Roles roles, RelationName relationName, Role subscriber, String publicationName) {
-         boolean canRead = roles.hasPrivilege(subscriber, Permission.DQL, Securable.TABLE, relationName.fqn());
-         if (canRead == false) {
 diff --git a/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java b/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java
-index e26916a648..fd912fdb71 100644
+index c46621f3bb..dbc282fbfc 100644
 --- a/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java
 +++ b/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java
-@@ -24,7 +24,7 @@ package io.crate.replication.logical.metadata;
+@@ -24,7 +24,13 @@ package io.crate.replication.logical.metadata;
  import java.io.IOException;
  import java.util.ArrayList;
  import java.util.List;
--import java.util.function.Predicate;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
 +import java.util.function.Function;
  
++import org.elasticsearch.action.support.IndicesOptions;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.jetbrains.annotations.Nullable;
+ 
  import org.elasticsearch.action.support.IndicesOptions;
- import org.elasticsearch.cluster.metadata.IndexMetadata;
-@@ -58,7 +58,9 @@ public record RelationMetadata(RelationName name,
+@@ -58,7 +64,13 @@ public record RelationMetadata(RelationName name,
          out.writeOptionalWriteable(template);
      }
  
--    public static RelationMetadata fromMetadata(RelationName table, Metadata metadata, Predicate<String> filter) {
-+    public static RelationMetadata fromMetadata(RelationName table,
-+                                                Metadata metadata,
-+                                                Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings) {
+-    public static RelationMetadata fromMetadata(RelationName table, Metadata metadata) {
++        out.writeOptionalWriteable(template);
++    }
++
++    public static RelationMetadata fromMetadata(RelationName table, Metadata metadata, java.util.function.Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings) {
++        String indexNameOrAlias = table.indexNameOrAlias();
++        var indexMetadata = metadata.index(indexNameOrAlias);
++        if (indexMetadata == null) {
          String indexNameOrAlias = table.indexNameOrAlias();
          var indexMetadata = metadata.index(indexNameOrAlias);
          if (indexMetadata == null) {
-@@ -71,12 +73,14 @@ public record RelationMetadata(RelationName name,
+@@ -71,10 +83,18 @@ public record RelationMetadata(RelationName name,
              );
              ArrayList<IndexMetadata> indicesMetadata = new ArrayList<>(concreteIndices.length);
              for (String concreteIndex : concreteIndices) {
--                if (filter.test(concreteIndex)) {
--                    indicesMetadata.add(metadata.index(concreteIndex));
+-                indicesMetadata.add(metadata.index(concreteIndex));
++            );
++            ArrayList<IndexMetadata> indicesMetadata = new ArrayList<>(concreteIndices.length);
++            for (String concreteIndex : concreteIndices) {
 +                IndexMetadata concreteIndexMetadata = metadata.index(concreteIndex);
 +                if (concreteIndexMetadata == null) {
 +                    continue;
-                 }
++                }
 +                indicesMetadata.add(applyCustomIndexSettings.apply(concreteIndexMetadata));
              }
              return new RelationMetadata(table, indicesMetadata, templateMetadata);
@@ -234,52 +100,4 @@ index e26916a648..fd912fdb71 100644
 +        return new RelationMetadata(table, List.of(applyCustomIndexSettings.apply(indexMetadata)), null);
      }
  }
-diff --git a/server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java b/server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java
-index 40c6e8cfd0..a6dc678c17 100644
---- a/server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java
-+++ b/server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java
-@@ -22,6 +22,7 @@
- package io.crate.replication.logical.repository;
- 
- import static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;
-+import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;
- import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_SUBSCRIPTION_NAME;
- 
- import java.io.IOException;
-@@ -149,7 +150,14 @@ public class LogicalReplicationRepository extends AbstractLifecycleComponent imp
-         assert SNAPSHOT_ID.equals(snapshotId) : "SubscriptionRepository only supports " + SNAPSHOT_ID + " as the SnapshotId";
-         return getPublicationsState()
-             .thenApply(stateResponse ->
--                new SnapshotInfo(snapshotId, stateResponse.concreteIndices(), SnapshotState.SUCCESS, Version.CURRENT));
-+                new SnapshotInfo(
-+                    snapshotId,
-+                    stateResponse.concreteIndices().stream()
-+                        .filter(im -> REPLICATION_INDEX_ROUTING_ACTIVE.get(im.getSettings()))
-+                        .map(im -> im.getIndex().getName()).toList(),
-+                    SnapshotState.SUCCESS,
-+                    Version.CURRENT
-+                ));
-     }
- 
-     @Override
-@@ -194,9 +202,11 @@ public class LogicalReplicationRepository extends AbstractLifecycleComponent imp
-                 builder.put(REPLICATION_SUBSCRIPTION_NAME.getKey(), subscriptionName);
-                 // Store publishers original index UUID to be able to resolve the original index later on
-                 builder.put(PUBLISHER_INDEX_UUID.getKey(), indexMetadata.getIndexUUID());
-+                // Remove source routing active setting, it is only used as a marker to not restore these indices (yet)
-+                builder.remove(REPLICATION_INDEX_ROUTING_ACTIVE.getKey());
- 
-                 var indexMdBuilder = IndexMetadata.builder(indexMetadata).settings(builder);
--                indexMetadata.getAliases().valuesIt().forEachRemaining(a -> indexMdBuilder.putAlias(a));
-+                indexMetadata.getAliases().valuesIt().forEachRemaining(indexMdBuilder::putAlias);
-                 result.add(indexMdBuilder.build());
-             }
-             return result;
-@@ -305,7 +315,6 @@ public class LogicalReplicationRepository extends AbstractLifecycleComponent imp
-         throw new UnsupportedOperationException("Operation not permitted");
-     }
- 
--
-     @Override
-     public void executeConsistentStateUpdate(Function<RepositoryData,
-                                       ClusterStateUpdateTask> createUpdateTask, String source,
++}

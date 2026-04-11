@@ -1,179 +1,182 @@
 diff --git a/docs/appendices/release-notes/5.5.3.rst b/docs/appendices/release-notes/5.5.3.rst
-index 6ac9c6099d..0ee9fd9b54 100644
+index 6ac9c6099d..b54660eeb5 100644
 --- a/docs/appendices/release-notes/5.5.3.rst
 +++ b/docs/appendices/release-notes/5.5.3.rst
-@@ -49,6 +49,13 @@ See the :ref:`version_5.5.0` release notes for a full list of changes in the
- Fixes
- =====
+@@ -118,3 +118,6 @@ Fixes
  
-+- Fixed an issue, that led to no results being returned when trying to filter on
-+  a :ref:`PRIMARY KEY <constraints-primary-key>` column with an implicit cast.
-+  For example::
-+
-+    CREATE TABLE tbl(a string PRIMARY KEY);
-+    SELECT * FROM tbl WHERE a = 10;
-+
- - Rejected :ref:`renaming <sql-alter-table-rename-to>` of views and tables if
-   the target table or view already exists, and return an error message.
-   Previously, such a rename was allowed which caused the existing view or table
-diff --git a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
-index 6c93c40e2d..1f9c66d5db 100644
---- a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
-+++ b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
-@@ -116,7 +116,9 @@ public class EqualityExtractor {
-                                      boolean shortCircuitOnMatchPredicateUnknown,
-                                      @Nullable TransactionContext transactionContext) {
-         var context = new ProxyInjectingVisitor.Context(columns);
--        Symbol proxiedTree = symbol.accept(ProxyInjectingVisitor.INSTANCE, context);
-+        // Normalize the query so that any casts on literals are evaluated
-+        var normalizedQuery = normalizer.normalize(symbol, transactionContext);
-+        Symbol proxiedTree = normalizedQuery.accept(ProxyInjectingVisitor.INSTANCE, context);
+     SELECT * FROM t1 INNER JOIN t2 ON t1.col = t1.col;
  
-         // Match cannot execute without Lucene
-         if (shortCircuitOnMatchPredicateUnknown && context.unknowns.size() == 1) {
-@@ -293,7 +295,7 @@ public class EqualityExtractor {
-         @Override
-         public void writeTo(StreamOutput out) throws IOException {
-             throw new UnsupportedOperationException("writeTo not supported for " +
--                                                    EqProxy.class.getSimpleName());
-+                EqProxy.class.getSimpleName());
-         }
- 
-         public String forDisplay() {
-@@ -368,7 +370,7 @@ public class EqualityExtractor {
- 
-         static class Context {
- 
--            private LinkedHashMap<ColumnIdent, Comparison> comparisons;
-+            private final LinkedHashMap<ColumnIdent, Comparison> comparisons;
-             private boolean proxyBelow;
-             private final Set<Symbol> unknowns = new HashSet<>();
- 
-diff --git a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
-index 3b12d842c0..3f73343d65 100644
---- a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
-+++ b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
-@@ -21,6 +21,7 @@
- 
- package io.crate.expression.predicate;
- 
-+import static io.crate.execution.dml.ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION;
- import static io.crate.lucene.LuceneQueryBuilder.genericFunctionFilter;
- import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
- 
-@@ -113,7 +114,6 @@ public class IsNullPredicate<T> extends Scalar<Boolean, T> {
++- Fixed an issue that would cause :ref:`aggregation functions <aggregation>` on
++  columns used in the ``PARTITION BY()`` clause of a
++  :ref:`partitioned table <partitioned-tables>` to always return ``NULL``.
+diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
+index d7da5682ad..ad1f786171 100644
+--- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
++++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
+@@ -197,8 +197,14 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+             case DoubleType.ID:
+                 return new SortedNumericDocValueAggregator<>(
+                     reference.storageIdent(),
+-                    (ramAccounting, memoryManager, minNodeVersion) -> {
+-                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));
++            case TimestampType.ID_WITHOUT_TZ:
++                return new SortedNumericDocValueAggregator<>(
++                    reference.storageIdent(),
++                    (_, memoryManager, minNodeVersion) -> {
++                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));
++                        return initIfNeeded(state, memoryManager, precision);
++                    },
++                    (values, state) -> {
+                         var precision = optionalParams.size() == 1 ? (Integer) optionalParams.get(0).value() : HyperLogLogPlusPlus.DEFAULT_PRECISION;
+                         return initIfNeeded(state, memoryManager, precision);
+                     },
+@@ -209,8 +215,14 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+                         // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))
+                         // => mix64(doubleToLongBits(Double.longBitsToDouble(sortableDoubleBits(values.nextValue()))))
+                         // => mix64(sortableDoubleBits(values.nextValue()))
+-                        var hash = BitMixer.mix64(NumericUtils.sortableDoubleBits(values.nextValue()));
+-                        state.addHash(hash);
++            case DoubleType.ID:
++                return new SortedNumericDocValueAggregator<>(
++                    reference.storageIdent(),
++                    (_, memoryManager, minNodeVersion) -> {
++                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));
++                        return initIfNeeded(state, memoryManager, precision);
++                    },
++                    (values, state) -> {
+                     }
+                 );
+             case FloatType.ID:
+@@ -227,8 +239,14 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+                         // mix64(doubleToLongBits(decoded))
+                         // => mix64(doubleToLongBits((double)NumericUtils.sortableIntToFloat((int)values.nextValue())))
+                         // => mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int)values.nextValue()))) - no need to double cast, auto widening
+-                        var hash = BitMixer.mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int) values.nextValue())));
+-                        state.addHash(hash);
++            case FloatType.ID:
++                return new SortedNumericDocValueAggregator<>(
++                    reference.storageIdent(),
++                    (_, memoryManager, minNodeVersion) -> {
++                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));
++                        return initIfNeeded(state, memoryManager, precision);
++                    },
++                    (values, state) -> {
+                     }
+                 );
+             case StringType.ID:
+diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java b/server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java
+index a1330b3b43..52559f15c6 100644
+--- a/server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java
++++ b/server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java
+@@ -124,4 +124,18 @@ public abstract class AggregationFunction<TPartial, TFinal> implements FunctionI
+                                                        List<Literal<?>> optionalParams) {
          return null;
      }
++
++    protected Reference getAggReference(List<Reference> aggregationReferences) {
++        if (aggregationReferences == null || aggregationReferences.isEmpty()) {
++            return null;
++        }
++        Reference reference = aggregationReferences.get(0);
++        if (reference == null) {
++            return null;
++        }
++        if (!reference.hasDocValues() || reference.granularity() != io.crate.metadata.RowGranularity.DOC) {
++            return null;
++        }
++        return reference;
++    }
+ }
+diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java b/server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java
+index 6c8a88e2d4..a05b059e86 100644
+--- a/server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java
++++ b/server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java
+@@ -249,7 +249,7 @@ public class CountAggregation extends AggregationFunction<MutableLong, Long> {
+     }
  
--
-     @Nullable
-     public static Query refExistsQuery(Reference ref, Context context, boolean countEmptyArrays) {
-         String field = ref.storageIdent();
-diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
-index 7dd2f7c54b..59ad90905d 100644
---- a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
-+++ b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
-@@ -21,6 +21,7 @@
- 
- package io.crate.expression.scalar;
- 
-+import static io.crate.execution.dml.ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION;
- import static io.crate.expression.scalar.array.ArrayArgumentValidators.ensureInnerTypeIsNotUndefined;
- import static io.crate.lucene.LuceneQueryBuilder.genericFunctionFilter;
- import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
-@@ -77,7 +78,6 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+     private DocValueAggregator<?> getDocValueAggregator(Reference ref) {
+-        if (!ref.hasDocValues()) {
++        if (!ref.hasDocValues() || ref.granularity() != RowGranularity.DOC) {
+             return null;
          }
-     }
- 
--
-     private ArrayUpperFunction(Signature signature, BoundSignature boundSignature) {
-         super(signature, boundSignature);
-         ensureInnerTypeIsNotUndefined(boundSignature.argTypes(), signature.getName().name());
-@@ -127,7 +127,6 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         switch (ref.valueType().id()) {
+@@ -304,17 +304,22 @@ public class CountAggregation extends AggregationFunction<MutableLong, Long> {
+                 // the first seen not-null sub-column will be used
+                 if (notNullCol.isChildOf(aggregationRef.column())) {
+                     var notNullColRef = table.getReference(notNullCol);
++        if (aggregationReferences.size() != 1) {
++            return null;
++        }
++        Reference reference = aggregationReferences.getFirst();
++        if (reference == null) {
++            return null;
++        }
++        if (reference.valueType().id() == ObjectType.ID) {
++            // Count on object would require loading the source just to check if there is a value.
++            // Try to count on a non-null sub-column to be able to utilize doc-values.
++            for (var notNullCol : table.notNullColumns()) {
++                // the first seen not-null sub-column will be used
++                if (notNullCol.isChildOf(reference.column())) {
++                    var notNullColRef = table.getReference(notNullCol);
+                     if (notNullColRef == null) {
+                         continue;
+-                    }
+-                    var subColDocValAggregator = getDocValueAggregator(notNullColRef);
+-                    if (subColDocValAggregator != null) {
+-                        return subColDocValAggregator;
+-                    }
+-                }
+-            }
+-        }
+-        if (!reference.hasDocValues()) {
+             return null;
          }
-     }
- 
--
-     /**
-      * <pre>
-      * {@code
-diff --git a/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java b/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
-index 3ef699c70c..e82320c67c 100644
---- a/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
-+++ b/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
-@@ -49,6 +49,25 @@ public class UnnestFunction {
-     public static final String NAME = "unnest";
- 
-     public static void register(TableFunctionModule module) {
-+        module.register(
-+            Signature
-+                .table(
-+                    NAME,
-+        module.register(
-+            Signature
-+                .table(
-+                    NAME,
-+                    TypeSignature.parse("array(E)"),
-+                    TypeSignature.parse("E")
-+                )
-+                .withTypeVariableConstraints(io.crate.metadata.functions.TypeVariableConstraint.typeVariable("E")),
-+            (signature, boundSignature) -> new UnnestTableFunctionImplementation(
-+                signature,
-+                boundSignature,
-+                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?
-+                    new RowType(List.of(boundSignature.returnType())) :
-+                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))
-+        );
-         module.register(
-             Signature
-                 .table(
-@@ -57,19 +76,21 @@ public class UnnestFunction {
-                     RowType.EMPTY.getTypeSignature()
-                 )
-                 .withTypeVariableConstraints(typeVariableOfAnyType("N"))
-+                .withFeature(Scalar.Feature.NON_NULLABLE)
-                 .withVariableArity(),
-             (signature, boundSignature) -> {
--                List<DataType<?>> fieldTypes = Lists2.map(boundSignature.argTypes(), ArrayType::unnest);
--                Boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());
-+                var argTypes = boundSignature.argTypes();
-+                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());
-+                for (int i = 0; i < argTypes.size(); i++) {
-+                    DataType<?> dataType = argTypes.get(i);
-+                    fieldTypes.add(ArrayType.unnest(dataType));
-+                }
-+                boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());
-                 List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName
-                     ? List.of(NAME)
-                     : List.of();
-                 RowType returnType = new RowType(fieldTypes, fieldNames);
- 
--                /**
--                 * See class javadoc of {@link TableFunctionImplementation}
--                 * Single return value is promoted/unwrapped from Row
--                 **/
-                 BoundSignature newBoundSignature = new BoundSignature(
-                     boundSignature.argTypes(),
-                     fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType
-@@ -81,16 +102,6 @@ public class UnnestFunction {
-                 );
-             }
-         );
--        // unnest() to keep it compatible with previous versions
--        module.register(
--            Signature.table(
--                NAME,
--                DataTypes.UNTYPED_OBJECT.getTypeSignature()
--            ),
--            (signature, boundSignature) -> new UnnestTableFunctionImplementation(
--                signature,
--                boundSignature,
--                RowType.EMPTY)
-         );
-     }
- 
+         return getDocValueAggregator(reference);
+diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java b/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java
+index 20e2d09a60..0ae5bccbe6 100644
+--- a/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java
++++ b/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java
+@@ -231,13 +231,13 @@ public class StandardDeviationAggregation extends AggregationFunction<StandardDe
+         if (!reference.hasDocValues()) {
+             return null;
+         }
++        Reference reference = getAggReference(aggregationReferences);
++        if (reference == null) {
++            return null;
++        }
+         switch (reference.valueType().id()) {
+             case ByteType.ID:
+             case ShortType.ID:
+-            case IntegerType.ID:
+-            case LongType.ID:
+-            case TimestampType.ID_WITH_TZ:
+-            case TimestampType.ID_WITHOUT_TZ:
+                 return new SortedNumericDocValueAggregator<>(
+                     reference.storageIdent(),
+                     (ramAccounting, memoryManager, minNodeVersion) -> {
+diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java b/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java
+index 11754865a2..c82aa3b1d6 100644
+--- a/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java
++++ b/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java
+@@ -312,13 +312,13 @@ public class AverageAggregation extends AggregationFunction<AverageAggregation.A
+         Reference reference = aggregationReferences.get(0);
+         if (!reference.hasDocValues()) {
+             return null;
++        Reference reference = getAggReference(aggregationReferences);
++        if (reference == null) {
++            return null;
+         }
+         switch (reference.valueType().id()) {
+             case ByteType.ID:
+             case ShortType.ID:
+-            case IntegerType.ID:
+-            case LongType.ID:
+-                return new SortedNumericDocValueAggregator<>(
+                     reference.storageIdent(),
+                     (ramAccounting, memoryManager, minNodeVersion) -> {
+                         ramAccounting.addBytes(AverageStateType.INSTANCE.fixedSize());
 diff --git a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
-index 7f9cd25444..32f7ba0395 100644
+index 7f9cd25444..16d57bbd5a 100644
 --- a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
 +++ b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
 @@ -49,6 +49,7 @@ import io.crate.metadata.doc.DocSysColumns;
@@ -184,34 +187,7 @@ index 7f9cd25444..32f7ba0395 100644
  
  /**
   * Used to analyze a query for primaryKey/partition "direct access" possibilities.
-@@ -166,11 +167,15 @@ public final class WhereClauseOptimizer {
- 
-         EqualityExtractor eqExtractor = new EqualityExtractor(normalizer);
- 
--        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, query, txnCtx);
-+        // ExpressionAnalyzer will "blindly" add cast to the column, to match the datatype of the literal.
-+        // To be able to properly extract pkMatches (and therefore dockeys), so that the cast is moved to the literal,
-+        // we need to optimize the casts, before the extraction of pkMatches (and the dockeys after that)
-+        var optimizedCastsQuery = Optimizer.optimizeCasts(query, txnCtx, nodeCtx);
-+        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, optimizedCastsQuery, txnCtx);
-         Set<Symbol> clusteredBy = Collections.emptySet();
-         if (table.clusteredBy() != null) {
-             EqualityExtractor.EqMatches clusteredByMatches = eqExtractor.extractParentMatches(
--                Collections.singletonList(table.clusteredBy()), query, txnCtx);
-+                Collections.singletonList(table.clusteredBy()), optimizedCastsQuery, txnCtx);
-             List<List<Symbol>> clusteredBySymbols = clusteredByMatches.matches();
-             if (clusteredBySymbols != null) {
-                 clusteredBy = new HashSet<>(clusteredBySymbols.size());
-@@ -186,7 +191,7 @@ public final class WhereClauseOptimizer {
-                     table.primaryKey().size() == 1 && table.clusteredBy().equals(table.primaryKey().get(0))));
- 
-         if (pkMatches.matches() == null && shouldUseDocKeys) {
--            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), query, txnCtx);
-+            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), optimizedCastsQuery, txnCtx);
-         }
- 
-         if (pkMatches.matches() == null) {
-@@ -203,7 +208,7 @@ public final class WhereClauseOptimizer {
+@@ -203,7 +204,7 @@ public final class WhereClauseOptimizer {
                                    partitionIndicesWithinPks);
          }
          EqMatches partitionMatches = table.isPartitioned()
@@ -220,93 +196,60 @@ index 7f9cd25444..32f7ba0395 100644
              : EqMatches.NONE;
  
          WhereClauseValidator.validate(query);
-diff --git a/server/src/test/java/io/crate/planner/SelectPlannerTest.java b/server/src/test/java/io/crate/planner/SelectPlannerTest.java
-index 54ad212070..8d49799889 100644
---- a/server/src/test/java/io/crate/planner/SelectPlannerTest.java
-+++ b/server/src/test/java/io/crate/planner/SelectPlannerTest.java
-@@ -126,7 +126,7 @@ public class SelectPlannerTest extends CrateDummyClusterServiceUnitTest {
+diff --git a/server/src/test/java/io/crate/execution/engine/collect/DocValuesAggregatesTest.java b/server/src/test/java/io/crate/execution/engine/collect/DocValuesAggregatesTest.java
+index 421277f1d7..54a5bf4fc3 100644
+--- a/server/src/test/java/io/crate/execution/engine/collect/DocValuesAggregatesTest.java
++++ b/server/src/test/java/io/crate/execution/engine/collect/DocValuesAggregatesTest.java
+@@ -59,6 +59,7 @@ public class DocValuesAggregatesTest extends CrateDummyClusterServiceUnitTest {
+     private Functions functions;
+     private SqlExpressions e;
+     private DocTableInfo table;
++    private DocTableInfo partedTable;
  
-         LogicalPlan plan = e.logicalPlan("select name from users where _id = 1");
-         assertThat(plan).isEqualTo(
--            "Get[doc.users | name | DocKeys{1} | (_id = 1)]");
-+            "Get[doc.users | name | DocKeys{'1'} | (_id = 1)]");
-     }
- 
-     @Test
-diff --git a/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java b/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
-index 16a0c9dffb..30998cd0ee 100644
---- a/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
-+++ b/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
-@@ -30,9 +30,12 @@ import java.util.List;
- import org.junit.Before;
- import org.junit.Test;
- 
-+import io.crate.analyze.AnalyzedDeleteStatement;
-+import io.crate.analyze.AnalyzedStatement;
- import io.crate.analyze.QueriedSelectRelation;
- import io.crate.analyze.relations.DocTableRelation;
- import io.crate.expression.eval.EvaluatingNormalizer;
-+import io.crate.expression.symbol.Symbol;
- import io.crate.metadata.PartitionName;
- import io.crate.metadata.RelationName;
- import io.crate.metadata.RowGranularity;
-@@ -46,6 +49,7 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
      @Before
-     public void setUpExecutor() throws Exception {
-         e = SQLExecutor.builder(clusterService)
-+            .addTable("create table t_pk(a string primary key)")
-             .addTable("create table bystring (name string primary key, score double) " +
-                       "clustered by (name) ")
-             .addTable("create table clustered_by_only (x int) clustered by (x)")
-@@ -78,8 +82,19 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+     public void setup() {
+@@ -73,7 +74,20 @@ public class DocValuesAggregatesTest extends CrateDummyClusterServiceUnitTest {
+                 )
+                 """,
+             clusterService);
+-        Map<RelationName, AnalyzedRelation> sources = Map.of(name, new TableRelation(this.table));
++        RelationName partedName = new RelationName(DocSchemaInfo.NAME, "tbl_parted");
++        this.partedTable = SQLExecutor.partitionedTableInfo(
++            partedName,
++            """
++                create table tbl_parted (
++                    x long,
++                    y long,
++                    obj object as (col int not null)
++                ) PARTITIONED BY(y, obj['col'])
++                """,
++            clusterService);
++        Map<RelationName, AnalyzedRelation> sources = Map.of(
++            name, new TableRelation(this.table),
++            partedName, new TableRelation(this.partedTable));
+         e = new SqlExpressions(sources);
      }
  
-     private WhereClauseOptimizer.DetailedQuery optimize(String statement) {
--        QueriedSelectRelation queriedTable = e.analyze(statement);
--        DocTableRelation table = ((DocTableRelation) queriedTable.from().get(0));
-+        AnalyzedStatement stmt = e.analyze(statement);
-+        DocTableRelation table;
-+        Symbol where;
-+        if (stmt instanceof QueriedSelectRelation qsr) {
-+            table = (DocTableRelation) qsr.from().getFirst();
-+            where = qsr.where();
-+        } else if (stmt instanceof AnalyzedDeleteStatement ads) {
-+            table = ads.relation();
-+            where = ads.query();
-+        } else {
-+            throw new IllegalArgumentException("Neither a select or a delete statement is provided");
-+        }
-+
-         EvaluatingNormalizer normalizer = new EvaluatingNormalizer(
-             e.nodeCtx,
-             RowGranularity.CLUSTER,
-@@ -88,7 +103,7 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
-         );
-         return WhereClauseOptimizer.optimize(
-             normalizer,
--            queriedTable.where(),
-+            where,
-             table.tableInfo(),
-             e.getPlannerContext(clusterService.state()).transactionContext(),
-             e.nodeCtx
-@@ -184,4 +199,20 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
-             "((doc.partdatebin.ts > 1682899200000::bigint) AND (month AS date_bin('P28D'::interval, ts, 0::bigint) >= 1681344000000::bigint))"
-         );
+@@ -199,6 +213,22 @@ public class DocValuesAggregatesTest extends CrateDummyClusterServiceUnitTest {
+             );
      }
-+
+ 
 +    @Test
-+    public void test_filter_on_pk_with_implicit_cast() {
-+        WhereClauseOptimizer.DetailedQuery query = optimize("select * from t_pk where a = 10 OR a = true");
-+        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
-+        query = optimize("delete from t_pk where a = 10 OR a = true");
-+        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++    public void test_create_aggregators_for_partitioned_col_returns_null() {
++        var aggregators = DocValuesAggregates.createAggregators(
++            functions,
++            mock(LuceneReferenceResolver.class),
++            List.of(countAggregation(0),
++                    countAggregation(1),
++                    longSumAggregation(1)
++            ),
++            List.of(e.asSymbol("tbl_parted.y"), e.asSymbol("tbl_parted.obj['col']")),
++            partedTable,
++            Version.CURRENT
++        );
++        assertThat(aggregators).isNull();
 +    }
 +
-+    @Test
-+    public void test_filter_on_id_with_implicit_cast() {
-+        WhereClauseOptimizer.DetailedQuery query = optimize("select * from t_pk where _id = 10 OR _id = true");
-+        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
-+        query = optimize("delete from t_pk where _id = 10 OR _id = true");
-+        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
-+    }
- }
+     private static Aggregation countAggregation(int inputCol) {
+         return new Aggregation(
+             CountAggregation.SIGNATURE,

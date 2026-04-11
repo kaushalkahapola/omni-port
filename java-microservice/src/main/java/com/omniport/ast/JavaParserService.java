@@ -391,4 +391,58 @@ public class JavaParserService {
             // Directory not accessible — skip silently
         }
     }
+
+    /**
+     * Fix C: Validate a Java code snippet for syntactic correctness.
+     *
+     * Tries to parse the snippet in three modes:
+     *   1. As a class body (method/field wrapped in a dummy class)
+     *   2. As a full compilation unit
+     *   3. As a block statement
+     *
+     * Returns a map:
+     *   "status" -> "ok"          snippet is syntactically valid in at least one mode
+     *   "status" -> "parse_error" snippet has Java syntax errors in all modes
+     *   "errors" -> list of error messages (empty on success)
+     */
+    public Map<String, Object> parseSnippet(String code, String contextClass) {
+        Map<String, Object> result = new HashMap<>();
+        List<String> errors = new ArrayList<>();
+
+        if (code == null || code.trim().isEmpty()) {
+            result.put("status", "ok");
+            result.put("errors", errors);
+            return result;
+        }
+
+        // Attempt 1: parse as class body declaration (method or field)
+        try {
+            String wrapped = "class __SnippetWrapper__ {\n" + code + "\n}";
+            StaticJavaParser.parse(wrapped);
+            result.put("status", "ok");
+            result.put("errors", errors);
+            return result;
+        } catch (Exception e1) {
+            // Attempt 2: parse as full compilation unit
+            try {
+                StaticJavaParser.parse(code);
+                result.put("status", "ok");
+                result.put("errors", errors);
+                return result;
+            } catch (Exception e2) {
+                // Attempt 3: parse as a block statement
+                try {
+                    StaticJavaParser.parseBlock("{\n" + code + "\n}");
+                    result.put("status", "ok");
+                    result.put("errors", errors);
+                    return result;
+                } catch (Exception e3) {
+                    errors.add(e1.getMessage() != null ? e1.getMessage() : e1.toString());
+                    result.put("status", "parse_error");
+                    result.put("errors", errors);
+                    return result;
+                }
+            }
+        }
+    }
 }

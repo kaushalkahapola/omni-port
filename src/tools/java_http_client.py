@@ -95,3 +95,27 @@ def japicmp_compare(old_jar_path: str, new_jar_path: str) -> dict:
         "old_jar_path": old_jar_path,
         "new_jar_path": new_jar_path,
     })
+
+
+def javaparser_parse_snippet(code_snippet: str, context_class: str = "") -> dict:
+    """
+    Fix C: Validate that a Java code snippet is syntactically valid.
+
+    Sends the snippet to the Java microservice's /api/javaparser/parse-snippet
+    endpoint which tries to parse it as a class body declaration, then as a
+    statement, then as a compilation unit.
+
+    Response on success:
+      {"status": "ok", "errors": []}
+    Response on parse failure:
+      {"status": "parse_error", "errors": ["<message>", ...]}
+    Response when service unavailable (treated as pass — non-blocking gate):
+      {"status": "error", "message": "..."}
+
+    Callers should treat any non-"parse_error" status as "gate passes" so a
+    temporarily unavailable microservice never blocks synthesis.
+    """
+    return _post("/api/javaparser/parse-snippet", {
+        "code": code_snippet,
+        "context_class": context_class,
+    })

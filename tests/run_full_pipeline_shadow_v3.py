@@ -766,6 +766,24 @@ def process_patch(
     results["agents"]["agent6_synthesizer"]["synthesis_status"] = state.get("synthesis_status", "")
     results["agents"]["agent6_synthesizer"]["synthesized_hunks"] = make_serializable(synthesized)
 
+    # ── Fix E: Per-file atomic rollback ─────────────────────────────────────────
+    # If a file has BOTH synthesized hunks AND failed hunks, it means the LLM partially
+    # processed it — some hunks were verified, some were not. Applying partial edits
+    # leaves the file in a broken state (e.g. 13/18 hunks on Publication.java).
+    # Roll back partial files: discard their synthesized hunks so they're not applied,
+    # report the file as failed, and let other correctly processed files proceed cleanly.
+    failed_files = {h.get("file_path", "") for h in state.get("failed_hunks", [])} - {""}
+    synthesized_files = {h.get("file_path", "") for h in synthesized} - {""}
+    partial_files = failed_files & synthesized_files
+    if partial_files:
+        print(f"  [pipeline] Fix E: rolling back {len(partial_files)} partial file(s): {partial_files}")
+        state["synthesized_hunks"] = [
+            h for h in synthesized if h.get("file_path", "") not in partial_files
+        ]
+        synthesized = state["synthesized_hunks"]
+        results["agents"]["agent6_synthesizer"]["partial_rollback_files"] = sorted(partial_files)
+        results["agents"]["agent6_synthesizer"]["synthesized_count"] = len(synthesized)
+
     # ── 6. Apply synthesized hunks to disk, then capture the diff ────────────────
     # Agent 3's fast-apply hunks are already on disk at this point.
     # Synthesized hunks from agents 4/5/6 live only in state["synthesized_hunks"]; apply

@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T04:05:43.980804",
+  "run_timestamp": "2026-04-11T05:53:59.064328",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "1bdffa597776b5b71f290448017985319e670a91",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 20.87,
+      "elapsed_s": 36.34,
       "error": null,
       "java_hunks": 18,
       "aux_hunks": 5,
@@ -79,17 +79,17 @@
         {
           "hunk_index": 7,
           "file_path": "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java",
-          "method_used": "git_exact",
-          "confidence": 1.0,
-          "start_line": 39,
-          "end_line": 44,
+          "method_used": "fuzzy",
+          "confidence": 0.886,
+          "start_line": 40,
+          "end_line": 45,
           "symbol_mappings": {}
         },
         {
           "hunk_index": 8,
           "file_path": "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java",
-          "method_used": "git_exact",
-          "confidence": 1.0,
+          "method_used": "fuzzy",
+          "confidence": 0.886,
           "start_line": 218,
           "end_line": 227,
           "symbol_mappings": {}
@@ -178,19 +178,19 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 5.01,
+      "elapsed_s": 4.1,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch involves multiple changes across several Java source files, including adding new settings, modifying method signatures, changing data types (e.g., from String to IndexMetadata), and introducing new logic to handle indices with non-active primary shards. It also includes updates to tests and documentation. The changes are not simple string replacements or whitespace fixes, but involve structural modifications to the codebase, such as adding new fields, changing method parameters, and altering the logic flow to accommodate the new replication index routing active setting. The patch was localized mostly via exact matches and some fuzzy matches, indicating moderate complexity in applying the patch to the target branch. Therefore, the patch is best classified as TYPE_III (Structural changes).",
+        "reasoning": "The patch introduces a new internal index setting to mark indices as active or inactive based on shard status, modifies multiple classes to handle this new setting, and changes the logic for restoring and tracking indices in logical replication. It involves structural changes such as adding new methods, changing method signatures to accept functions instead of predicates, and altering the way indices are filtered and marked. The patch also includes updates to tests to cover the new behavior. The localization evidence shows a mix of exact matches and fuzzy matches, indicating some structural changes but not a complete redesign. Therefore, the patch complexity is best classified as TYPE_III (structural changes).",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
       "elapsed_s": 0.01,
       "error": null,
-      "applied_count": 13,
+      "applied_count": 9,
       "applied_hunks": [
         {
           "applied": true,
@@ -224,26 +224,6 @@
         },
         {
           "applied": true,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "error": null
-        },
-        {
-          "applied": true,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "error": null
-        },
-        {
-          "applied": true,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "error": null
-        },
-        {
-          "applied": true,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "error": null
-        },
-        {
-          "applied": true,
           "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
           "error": null
         },
@@ -260,20 +240,20 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 30.62,
+      "elapsed_s": 46.45,
       "error": null,
-      "adapted_count": 5
+      "adapted_count": 6
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 64.53,
       "error": null,
-      "refactored_count": 0
+      "refactored_count": 3
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.12,
       "error": null,
-      "synthesized_count": 4,
-      "failed_count": 1,
+      "synthesized_count": 6,
+      "failed_count": 2,
       "synthesis_status": "partial",
       "synthesized_hunks": [
         {
@@ -302,37 +282,56 @@
         },
         {
           "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "old_string": "                                                                       Role publicationOwner,\n                                                                       Role subscriber,\n                                                                       String publicationName) {\n        // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n        Predicate<String> indexFilter = indexName -> {\n            var indexMetadata = state.metadata().index(indexName);\n            if (indexMetadata != null) {\n                boolean softDeletes = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());\n                if (softDeletes == false) {\n                    LOGGER.warn(\n                        \"Table '{}' won't be replicated as the required table setting \" +\n                            \"'soft_deletes.enabled' is set to: {}\",\n                        RelationName.fromIndexName(indexName),\n                        softDeletes\n                    );\n                    return false;\n                }\n                var routingTable = state.routingTable().index(indexName);\n                assert routingTable != null : \"routingTable must not be null\";\n                return routingTable.allPrimaryShardsActive();\n\n            }\n            // Partitioned table case (template, no index).\n            return true;\n",
-          "new_string": "                                                                       Role publicationOwner,\n                                                                       Role subscriber,\n                                                                       String publicationName) {\n        // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n        Predicate<String> indexFilter = indexName -> {\n            var indexMetadata = state.metadata().index(indexName);\n\n                assert routingTable != null : \"routingTable must not be null\";\n                return routingTable.allPrimaryShardsActive();\n\n            }\n            // Partitioned table case (template, no index).\n            return true;\n",
+          "old_string": "            for (var cursor : metadata.templates().keys()) {\n                String templateName = cursor.value;\n                IndexParts indexParts = new IndexParts(templateName);\n                RelationName relationName = indexParts.toRelationName();\n                if (indexParts.isPartitioned()\n                        && userCanPublish(relationName, publicationOwner, publicationName)\n                        && subscriberCanRead(relationName, subscriber, publicationName)) {\n                    relations.put(relationName, RelationMetadata.fromMetadata(relationName, metadata));\n                }\n            }\n            for (var cursor : metadata.indices().values()) {\n                var indexMetadata = cursor.value;\n                var indexParts = new IndexParts(indexMetadata.getIndex().getName());\n                if (indexParts.isPartitioned()) {\n                    continue;\n                }\n                RelationName relationName = indexParts.toRelationName();\n                boolean softDeletes = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());\n                if (softDeletes == false) {\n                    LOGGER.warn(\n                        \"Table '{}' won't be replicated as the required table setting \" +\n                            \"'soft_deletes.enabled' is set to: {}\",\n                        relationName,\n                        softDeletes\n",
+          "new_string": "            for (var cursor : metadata.templates().keys()) {\n                String templateName = cursor.value;\n                IndexParts indexParts = new IndexParts(templateName);\n                RelationName relationName = indexParts.toRelationName();\n                if (indexParts.isPartitioned()\n                        && userCanPublish(relationName, publicationOwner, publicationName)\n\n                if (softDeletes == false) {\n                    LOGGER.warn(\n                        \"Table '{}' won't be replicated as the required table setting \" +\n                            \"'soft_deletes.enabled' is set to: {}\",\n                        relationName,\n                        softDeletes\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
+          "old_string": "\npackage io.crate.replication.logical.metadata;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.List;\n\nimport org.jetbrains.annotations.Nullable;\n\nimport org.elasticsearch.action.support.IndicesOptions;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;\nimport org.elasticsearch.cluster.metadata.IndexTemplateMetadata;\n",
+          "new_string": "\npackage io.crate.replication.logical.metadata;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.List;\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.List;\nimport java.util.function.Function;\n\nimport org.elasticsearch.action.support.IndicesOptions;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.jetbrains.annotations.Nullable;\n\nimport org.elasticsearch.action.support.IndicesOptions;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;\nimport org.elasticsearch.cluster.metadata.IndexTemplateMetadata;\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
+          "old_string": "    public void writeTo(StreamOutput out) throws IOException {\n        name.writeTo(out);\n        out.writeList(indices);\n        out.writeOptionalWriteable(template);\n    }\n\n    public static RelationMetadata fromMetadata(RelationName table, Metadata metadata) {\n        String indexNameOrAlias = table.indexNameOrAlias();\n        var indexMetadata = metadata.index(indexNameOrAlias);\n        if (indexMetadata == null) {\n            String templateName = PartitionName.templateName(table.schema(), table.name());\n            var templateMetadata = metadata.templates().get(templateName);\n            String[] concreteIndices = IndexNameExpressionResolver.concreteIndexNames(\n",
+          "new_string": "    public void writeTo(StreamOutput out) throws IOException {\n        name.writeTo(out);\n        out.writeList(indices);\n        out.writeOptionalWriteable(template);\n    }\n\n        out.writeOptionalWriteable(template);\n    }\n\n    public static RelationMetadata fromMetadata(RelationName table, Metadata metadata, java.util.function.Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings) {\n        String indexNameOrAlias = table.indexNameOrAlias();\n        var indexMetadata = metadata.index(indexNameOrAlias);\n        if (indexMetadata == null) {\n        String indexNameOrAlias = table.indexNameOrAlias();\n        var indexMetadata = metadata.index(indexNameOrAlias);\n        if (indexMetadata == null) {\n            String templateName = PartitionName.templateName(table.schema(), table.name());\n            var templateMetadata = metadata.templates().get(templateName);\n            String[] concreteIndices = IndexNameExpressionResolver.concreteIndexNames(\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
+          "old_string": "                metadata,\n                IndicesOptions.lenientExpandOpen(),\n                indexNameOrAlias\n            );\n            ArrayList<IndexMetadata> indicesMetadata = new ArrayList<>(concreteIndices.length);\n            for (String concreteIndex : concreteIndices) {\n                indicesMetadata.add(metadata.index(concreteIndex));\n            }\n            return new RelationMetadata(table, indicesMetadata, templateMetadata);\n        }\n        return new RelationMetadata(table, List.of(indexMetadata), null);\n    }\n}\n",
+          "new_string": "                metadata,\n                IndicesOptions.lenientExpandOpen(),\n                indexNameOrAlias\n            );\n            ArrayList<IndexMetadata> indicesMetadata = new ArrayList<>(concreteIndices.length);\n            for (String concreteIndex : concreteIndices) {\n            );\n            ArrayList<IndexMetadata> indicesMetadata = new ArrayList<>(concreteIndices.length);\n            for (String concreteIndex : concreteIndices) {\n                IndexMetadata concreteIndexMetadata = metadata.index(concreteIndex);\n                if (concreteIndexMetadata == null) {\n                    continue;\n                }\n                indicesMetadata.add(applyCustomIndexSettings.apply(concreteIndexMetadata));\n            }\n            return new RelationMetadata(table, indicesMetadata, templateMetadata);\n        }\n        return new RelationMetadata(table, List.of(applyCustomIndexSettings.apply(indexMetadata)), null);\n    }\n}\n}\n",
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
         }
+      ],
+      "partial_rollback_files": [
+        "server/src/main/java/io/crate/replication/logical/metadata/Publication.java"
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 45.15,
+      "elapsed_s": 0.42,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nlibs/sql-parser/src/test/java/io/crate/sql/parser/TestSqlParser.java:169: error: incompatible types: no instance(s) of type variable(s) E exist so that List<E> conforms to Optional<GroupBy>",
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Aux hunk application failed: aux patch apply failed for server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java:23\nerror: server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java:23\nerror: server/src/test/java/io/cra",
       "validation_attempts": 1,
-      "retry_files": [
-        "libs/sql-parser/src/test/java/io/crate/sql/parser/TestSqlParser.java"
-      ],
-      "build_success": false,
-      "build_mode": "crate-helper",
+      "retry_files": [],
+      "build_success": null,
+      "build_mode": null,
       "test_success": null,
       "test_mode": null,
       "test_state": null,
       "test_state_transition": null,
-      "compile_errors": [
-        {
-          "file": "libs/sql-parser/src/test/java/io/crate/sql/parser/TestSqlParser.java",
-          "line": 169,
-          "message": "error: incompatible types: no instance(s) of type variable(s) E exist so that List<E> conforms to Optional<GroupBy>"
-        }
-      ]
+      "compile_errors": []
     }
   },
   "summary": {
@@ -353,10 +352,6 @@
       3,
       7,
       8,
-      11,
-      12,
-      13,
-      14,
       15,
       16,
       17,
@@ -364,13 +359,17 @@
       5,
       6,
       9,
-      10
+      10,
+      12,
+      11,
+      13,
+      14
     ],
     "tokens_used": 0,
     "synthesis_status": "partial",
-    "applied_on_disk_ag3": 13,
-    "synthesized_count": 4,
-    "failed_hunks_total": 1,
+    "applied_on_disk_ag3": 9,
+    "synthesized_count": 6,
+    "failed_hunks_total": 2,
     "retry_contexts": [
       {
         "error_type": "synthesis_failed_no_match",
@@ -379,36 +378,50 @@
         "suggested_action": "relocalize"
       },
       {
-        "error_type": "unknown",
-        "error_message": "--- Building code for d108a39 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n#0 building with \"default\" instance using docker driver\n\n#1 [internal] load build definition from Dockerfile\n#1 transferring dockerfile: 1.18kB done\n#1 DONE 0.0s\n\n#2 [internal] load metadata for docker.io/library/maven:3.9-eclipse-temurin-24\n#2 DONE 0.3s\n\n#3 [internal] load .dockerignore\n#3 transferring context: 2B done\n#3 DONE 0.0s\n\n#4 [1/5] FROM docker.io/library/maven:3.9-eclipse-temurin-24@sha256:a137a467ec89b5713d0be817b55bdba6b4d6ef16e3d05565a79bc08d8e775a1c\n#4 resolve docker.io/library/maven:3.9-eclipse-temurin-24@sha256:a137a467ec89b5713d0be817b55bdba6b4d6ef16e3d05565a79bc08d8e775a1c 0.0s done\n#4 DONE 0.1s\n\n#5 [2/5] RUN apt-get update && apt-get install -y     git     rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /root/.m2/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /etc/maven/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /.m2/toolchains.xml &&     cp /usr/share/maven/conf/toolchains.xml /usr/share/maven/ref/toolchains.xml &&     chmod -R 777 /.m2 /usr/share/maven/ref/ /etc/maven /usr/share/maven/conf/toolchains.xml\n#8 CACHED\n\n#9 exporting to image\n#9 exporting layers 0.0s done\n#9 exporting manifest sha256:0d74cc1c64aaf1c4c8b651e15ad4a4dfbb869c68af5759f6ebffff665b323376 done\n#9 exporting config sha256:0e3430a77d8bbc7e42e6f17589d44797d67bb006839a860d45cb45b257f56cf5\n#9 exporting config sha256:0e3430a77",
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      },
+      {
+        "error_type": "context_mismatch",
+        "error_message": "aux patch apply failed for server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java:23\nerror: server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java:23\nerror: server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java: patch does not apply",
         "attempt_count": 1,
-        "suggested_action": "inspect_and_retry"
+        "suggested_action": "re-localize"
       }
     ],
     "failed_hunks": [
       {
         "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
         "old_content": "package io.crate.replication.logical.metadata;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Predicate;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\nimport org.elasticsearch.index.IndexSettings;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;\n",
-        "new_content": "package io.crate.replication.logical.metadata;\n\nimport static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Function;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\nimport org.elasticsearch.common.settings.Settings;\nimport org.elasticsearch.index.IndexSettings;\nimport org.jetbrains.annotations.VisibleForTesting;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;\n\n@VisibleForTesting\npublic static Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {\n    // mark indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n    return im -> {\n        var routingTable = state.routingTable().index(im.getIndex());\n        assert routingTable != null : \"routingTable must not be null\";\n        boolean isActive = routingTable.allPrimaryShardsActive();\n        IndexMetadata.Builder builder = IndexMetadata.builder(im);\n        return builder.settings(Settings.builder()\n                .put(im.getSettings())\n                .put(REPLICATION_INDEX_ROUTING_ACTIVE.getKey(), isActive))\n            .build();\n    };\n}\n",
+        "new_content": "package io.crate.replication.logical.metadata;\n\nimport static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Function;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\nimport org.elasticsearch.common.settings.Settings;\nimport org.jetbrains.annotations.VisibleForTesting;\nimport org.elasticsearch.index.IndexSettings;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;\n",
         "imports_added": [
-          "static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE",
-          "java.util.function.Function",
-          "org.elasticsearch.cluster.metadata.IndexMetadata",
-          "org.elasticsearch.common.settings.Settings",
-          "org.jetbrains.annotations.VisibleForTesting"
+          "import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;",
+          "import java.util.function.Function;",
+          "import org.elasticsearch.cluster.metadata.IndexMetadata;",
+          "import org.elasticsearch.common.settings.Settings;",
+          "import org.jetbrains.annotations.VisibleForTesting;"
         ],
         "imports_removed": [
-          "java.util.function.Predicate"
+          "import java.util.function.Predicate;"
         ],
         "adapted": true,
         "loc_index": 9
+      },
+      {
+        "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+        "old_content": "        }\n\n        return relations.stream()\n            .filter(relationName -> indexFilter.test(relationName.indexNameOrAlias()))\n            .filter(relationName -> userCanPublish(roles, relationName, publicationOwner, publicationName))\n            .filter(relationName -> subscriberCanRead(roles, relationName, subscriber, publicationName))\n            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), indexFilter))\n            .collect(Collectors.toMap(RelationMetadata::name, x -> x));\n\n    }\n\n    private static boolean subscriberCanRead(Roles roles, RelationName relationName, Role subscriber, String publicationName) {\n        boolean canRead = roles.hasPrivilege(subscriber, Permission.DQL, Securable.TABLE, relationName.fqn());\n        if (canRead == false) {\n",
+        "new_content": "        }\n\n        return relations.stream()\n            .filter(relationName -> userCanPublish(roles, relationName, publicationOwner, publicationName))\n            .filter(relationName -> subscriberCanRead(roles, relationName, subscriber, publicationName))\n            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), applyCustomIndexSettings(state)))\n            .collect(Collectors.toMap(RelationMetadata::name, x -> x));\n\n    }\n\n    public static java.util.function.Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {\n        // Routing-table based logic was removed in earlier changes; keep a no-op transformer\n        // so callers can uniformly accept a function to transform IndexMetadata.\n        return im -> im;\n    }\n\n    private static boolean subscriberCanRead(Roles roles, RelationName relationName, Role subscriber, String publicationName) {\n        boolean canRead = roles.hasPrivilege(subscriber, Permission.DQL, Securable.TABLE, relationName.fqn());\n        if (canRead == false) {",
+        "refactored": true,
+        "semantic_confidence": 0.6,
+        "loc_index": 11
       }
     ],
-    "generated_patch_bytes": 16565,
+    "generated_patch_bytes": 5618,
     "target_patch_bytes": 41304,
     "validation_passed": false,
-    "validation_failure_category": "unknown",
-    "build_success": false,
+    "validation_failure_category": "context_mismatch",
+    "build_success": null,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

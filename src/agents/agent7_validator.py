@@ -22,6 +22,7 @@ Retry routing decisions (failure_category → suggested_action):
 
 from __future__ import annotations
 
+import glob
 import os
 import re
 import subprocess
@@ -43,6 +44,45 @@ from src.tools.build_systems import (
 )
 
 MAX_VALIDATION_ATTEMPTS = 3
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fix H — Error-tail capture
+# ──────────────────────────────────────────────────────────────────────────────
+
+_ERROR_SIGNAL_RE = re.compile(
+    r"(?:error:|ERROR|FAILED|Exception|\.java:\d+:|BUILD FAILURE)",
+    re.IGNORECASE,
+)
+
+
+def _extract_build_errors(log: str, max_lines: int = 100, max_chars: int = 4000) -> str:
+    """
+    Extract the most actionable lines from a build/test log.
+
+    Preference order:
+     1. Lines matching error signals (javac errors, FAILED, Exception, etc.)
+        — collected from the tail of the log so we get actual compile errors,
+        not Docker/BuildKit preamble.
+     2. Last max_chars characters of the full log as a fallback.
+
+    Fix H: previously the code used log[:2000] which captured only Docker preamble.
+    """
+    if not log:
+        return ""
+    lines = log.splitlines()
+    # Collect matching lines from the full log (keep tail order)
+    error_lines = [l for l in lines if _ERROR_SIGNAL_RE.search(l)]
+    if error_lines:
+        # Take last max_lines of matched lines to avoid overwhelming output
+        excerpt_lines = error_lines[-max_lines:]
+        excerpt = "\n".join(excerpt_lines)
+        if len(excerpt) > max_chars:
+            excerpt = excerpt[-max_chars:]
+        return excerpt
+    # Fallback: just the tail
+    tail = log[-max_chars:]
+    return tail
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -109,9 +149,27 @@ def _build_patch_header(
     return "\n".join(header_lines) + "\n" + body
 
 
+def _check_already_applied(repo_path: str, patch_path: str) -> bool:
+    """
+    Fix A: Return True if the patch appears already applied (reverse-check passes).
+    Uses `git apply -R --check` to test whether the patch can be un-applied,
+    which means it was already applied forward.
+    """
+    r = subprocess.run(
+        ["git", "apply", "-R", "--check", "--whitespace=nowarn", patch_path],
+        capture_output=True, text=True, cwd=repo_path,
+    )
+    return r.returncode == 0
+
+
 def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str, Any]:
     """
-    Try git apply → git apply --ignore-whitespace → GNU patch, in order.
+    Try git apply → git apply --ignore-whitespace → GNU patch → git apply --3way, in order.
+
+    Fix A additions:
+    - Pre-check: if the patch is already applied (reverse-check passes), treat as success.
+    - 4th strategy: git apply --3way (3-way merge using blob history) for drifted context.
+
     Returns {"success": bool, "output": str, "strategy": str}.
     """
     print(f"  [agent7] Applying patch to {repo_path}")
@@ -122,6 +180,11 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
         ) as tmp:
             tmp.write(patch_content)
             tmp_path = tmp.name
+
+        # Fix A: Pre-check for already-applied patches
+        if _check_already_applied(repo_path, tmp_path):
+            print("  [agent7] Patch already applied (reverse-check passed) — treating as success")
+            return {"success": True, "output": "Patch already applied (no-op).", "strategy": "already-applied"}
 
         strategies = [
             ("git-strict",   ["git", "apply", "--recount", "--whitespace=nowarn", tmp_path]),
@@ -151,6 +214,17 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
         else:
             errors.append(f"[gnu-patch-dry-run] {(dry.stderr or dry.stdout or '').strip()}")
 
+        # Fix A: 4th strategy — git apply --3way (3-way merge using blob history)
+        print("  [agent7] Trying strategy: git-3way")
+        r3 = subprocess.run(
+            ["git", "apply", "--3way", "--recount", "--whitespace=nowarn", tmp_path],
+            capture_output=True, text=True, cwd=repo_path,
+        )
+        if r3.returncode == 0:
+            print("  [agent7] Strategy git-3way succeeded")
+            return {"success": True, "output": r3.stdout or "Applied via git --3way.", "strategy": "git-3way"}
+        errors.append(f"[git-3way] {(r3.stderr or r3.stdout or '').strip()}")
+
         print("  [agent7] All patch application strategies failed")
         return {"success": False, "output": "\n".join(errors), "strategy": "all-failed"}
     finally:
@@ -161,11 +235,92 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
                 pass
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Fix A — RST release-notes path remap
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _is_rst_release_notes(file_path: str) -> bool:
+    """Return True if the file looks like a versioned release-notes RST."""
+    p = (file_path or "").replace("\\", "/").lower()
+    return p.endswith(".rst") and "release" in p
+
+
+def _parse_version_tuple(filename: str) -> tuple[int, ...]:
+    """Extract a numeric version tuple from a filename like '5.10.12.rst' → (5, 10, 12)."""
+    parts = re.findall(r"\d+", filename)
+    return tuple(int(x) for x in parts)
+
+
+def _find_closest_rst(repo_path: str, target_file: str) -> str | None:
+    """
+    Fix A: Given a target RST path that doesn't exist, find the closest version
+    in the same parent directory (highest version number wins).
+
+    Example: 'docs/appendices/release-notes/5.10.9.rst' missing on target branch
+             which has '5.10.12.rst' → return '5.10.12.rst' path.
+    """
+    abs_target = os.path.join(repo_path, target_file)
+    parent_dir = os.path.dirname(abs_target)
+    if not os.path.isdir(parent_dir):
+        return None
+    rst_files = glob.glob(os.path.join(parent_dir, "*.rst"))
+    if not rst_files:
+        return None
+    # Sort by version tuple descending, pick highest
+    rst_files.sort(key=lambda f: _parse_version_tuple(os.path.basename(f)), reverse=True)
+    best = rst_files[0]
+    return os.path.relpath(best, repo_path)
+
+
+def _try_apply_rst_hunk_remapped(
+    repo_path: str, hunk_text: str, original_target: str
+) -> dict[str, Any]:
+    """
+    Fix A: When an RST aux hunk's target file doesn't exist, remap to the
+    closest-version RST in the same directory and append the added lines.
+
+    Returns {"success": bool, "output": str}.
+    """
+    remapped = _find_closest_rst(repo_path, original_target)
+    if not remapped:
+        return {"success": False, "output": f"No RST file found near {original_target}"}
+
+    print(f"  [agent7] RST remap: {original_target} → {remapped}")
+
+    # Extract only the added lines (+) from the hunk body
+    added_lines: list[str] = []
+    for line in hunk_text.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            added_lines.append(line[1:])  # strip leading '+'
+
+    if not added_lines:
+        return {"success": True, "output": f"RST remap: no added lines to apply to {remapped}"}
+
+    abs_remapped = os.path.join(repo_path, remapped)
+    try:
+        with open(abs_remapped, "r", encoding="utf-8") as f:
+            existing = f.read()
+        appended = existing.rstrip("\n") + "\n" + "\n".join(added_lines) + "\n"
+        with open(abs_remapped, "w", encoding="utf-8") as f:
+            f.write(appended)
+        return {"success": True, "output": f"RST remap: appended {len(added_lines)} line(s) to {remapped}"}
+    except Exception as e:
+        return {"success": False, "output": f"RST remap write error for {remapped}: {e}"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Synthesized hunk application
+# ──────────────────────────────────────────────────────────────────────────────
+
 def _apply_synthesized_hunks(
     repo_path: str, synthesized_hunks: list[dict[str, Any]]
 ) -> dict[str, Any]:
     """
     Apply CLAW-verified synthesized hunks (old_string → new_string replacement) to disk.
+
+    Fix G: Handles new-file hunks where old_string == "" — creates the file with
+    new_string as content instead of attempting a find-and-replace.
+
     Returns {"success": bool, "output": str, "applied_files": list[str]}.
     """
     print(f"  [agent7] Applying {len(synthesized_hunks)} synthesized hunks via CLAW")
@@ -184,12 +339,32 @@ def _apply_synthesized_hunks(
         old_string = hunk.get("old_string", "")
         new_string = hunk.get("new_string", "")
 
-        if not file_path or not old_string:
-            print(f"  [agent7] Hunk missing file_path or old_string: {hunk}")
-            errors.append(f"synthesized hunk missing file_path or old_string: {hunk}")
+        if not file_path:
+            print(f"  [agent7] Hunk missing file_path: {hunk}")
+            errors.append(f"synthesized hunk missing file_path: {hunk}")
             continue
 
         abs_path = os.path.join(repo_path, file_path)
+
+        # Fix G: new-file hunk — old_string is empty sentinel, create the file
+        if not old_string:
+            if os.path.exists(abs_path):
+                print(f"  [agent7] New-file hunk: {file_path} already exists, skipping creation")
+                if file_path not in applied_files:
+                    applied_files.append(file_path)
+                continue
+            try:
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                with open(abs_path, "w", encoding="utf-8") as f:
+                    f.write(new_string if new_string.endswith("\n") else new_string + "\n")
+                print(f"  [agent7] New-file hunk: created {file_path}")
+                if file_path not in applied_files:
+                    applied_files.append(file_path)
+            except Exception as e:
+                print(f"  [agent7] New-file creation error for {file_path}: {e}")
+                errors.append(f"{file_path}: new-file creation error — {e}")
+            continue
+
         if not os.path.exists(abs_path):
             print(f"  [agent7] File not found: {file_path}")
             errors.append(f"{file_path}: file not found in worktree")
@@ -291,6 +466,11 @@ def _apply_developer_aux_hunks(
     """
     Apply developer auxiliary hunks (test files, non-Java, auto-generated) via git apply.
     Groups hunks by target file, sorts bottom-to-top, then runs git apply with fallbacks.
+
+    Fix A additions:
+    - On failure for RST release-notes files: attempt path remap to closest version RST.
+    - On failure: check "already applied" before aborting (handled inside
+      _apply_patch_with_fallbacks via the pre-check).
     """
     if not developer_aux_hunks:
         return {"success": True, "output": "No developer aux hunks to apply.", "applied_files": []}
@@ -310,6 +490,22 @@ def _apply_developer_aux_hunks(
             if result["success"]:
                 applied_files.append(fp)
             else:
+                # Fix A: RST release-notes remap fallback
+                if _is_rst_release_notes(fp) and not os.path.isfile(os.path.join(repo_path, fp)):
+                    print(f"  [agent7] RST file missing, attempting version remap for {fp}")
+                    # Extract hunk_text from the raw_patch for content extraction
+                    hunk_body = "\n".join(
+                        l for l in h["raw_patch"].splitlines()
+                        if l.startswith("@@") or l.startswith("+") or l.startswith("-") or l.startswith(" ")
+                    )
+                    remap_result = _try_apply_rst_hunk_remapped(repo_path, hunk_body, fp)
+                    if remap_result["success"]:
+                        print(f"  [agent7] RST remap succeeded for {fp}")
+                        applied_files.append(fp)
+                        continue
+                    else:
+                        print(f"  [agent7] RST remap also failed for {fp}: {remap_result['output']}")
+
                 print(f"  [agent7] Raw patch apply failed for {fp}")
                 all_errors.append(f"aux patch apply failed for {fp}: {result['output'][:500]}")
                 restore_repo_state(repo_path)
@@ -401,6 +597,16 @@ def _apply_developer_aux_hunks(
         if combined_patch:
             result = _apply_patch_with_fallbacks(repo_path, combined_patch)
             if not result["success"]:
+                # Fix A: RST remap fallback for reconstructed-patch path
+                if _is_rst_release_notes(target_file) and not os.path.isfile(
+                    os.path.join(repo_path, target_file)
+                ):
+                    print(f"  [agent7] RST file missing, attempting version remap for {target_file}")
+                    remap_result = _try_apply_rst_hunk_remapped(repo_path, hunk_bodies, target_file)
+                    if remap_result["success"]:
+                        print(f"  [agent7] RST remap succeeded for {target_file}")
+                        continue
+
                 all_errors.append(
                     f"aux patch apply failed for {target_file}: {result['output'][:500]}"
                 )
@@ -485,9 +691,11 @@ def _build_retry_context(
         "test_failure": "regenerate_hunk",
         "infrastructure": "abort_transient_failure",
     }
+    # Fix H: use tail-extraction instead of raw [:2000] truncation
+    extracted = _extract_build_errors(error_message)
     return PatchRetryContext(
         error_type=failure_category,
-        error_message=error_message[:2000],
+        error_message=extracted[:4000],
         attempt_count=attempt,
         suggested_action=action_map.get(failure_category, "inspect_and_retry"),
     )
@@ -633,13 +841,10 @@ def run_validation(state: BackportState) -> BackportState:
                 f"Build failed ({build_res.mode}) — compile errors:\n{error_summary}"
             )
         else:
-            error_lines = [
-                l for l in build_res.output.splitlines()
-                if "error" in l.lower() and l.strip()
-            ]
-            excerpt = "\n".join(error_lines[-30:]) if error_lines else build_res.output[-2000:]
+            # Fix H: use tail extraction for the error context presented to the user
+            excerpt = _extract_build_errors(build_res.output)
             state["validation_error_context"] = (
-                f"Build failed ({build_res.mode}): {excerpt[-2000:]}"
+                f"Build failed ({build_res.mode}): {excerpt}"
             )
         state["validation_failure_category"] = mapped_category
         state["validation_retry_files"] = retry_files

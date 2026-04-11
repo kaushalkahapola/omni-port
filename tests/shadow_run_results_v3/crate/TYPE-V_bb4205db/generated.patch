@@ -1,57 +1,86 @@
 diff --git a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
-index 6a27301930..a7598053e3 100644
+index d7da5682ad..ad1f786171 100644
 --- a/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
 +++ b/extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java
-@@ -197,8 +197,8 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
-             case TimestampType.ID_WITHOUT_TZ:
-                 return new SortedNumericDocValueAggregator<>(
-                     reference.storageIdent(),
--                    (ramAccounting, memoryManager, minNodeVersion) -> {
--                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));
-+                    (_, memoryManager, minNodeVersion) -> {
-+                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));
-                         return initIfNeeded(state, memoryManager, precision);
-                     },
-                     (values, state) -> {
-@@ -209,8 +209,8 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+@@ -197,8 +197,14 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
              case DoubleType.ID:
                  return new SortedNumericDocValueAggregator<>(
                      reference.storageIdent(),
 -                    (ramAccounting, memoryManager, minNodeVersion) -> {
 -                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));
++            case TimestampType.ID_WITHOUT_TZ:
++                return new SortedNumericDocValueAggregator<>(
++                    reference.storageIdent(),
 +                    (_, memoryManager, minNodeVersion) -> {
 +                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));
++                        return initIfNeeded(state, memoryManager, precision);
++                    },
++                    (values, state) -> {
+                         var precision = optionalParams.size() == 1 ? (Integer) optionalParams.get(0).value() : HyperLogLogPlusPlus.DEFAULT_PRECISION;
                          return initIfNeeded(state, memoryManager, precision);
                      },
-                     (values, state) -> {
-@@ -227,8 +227,8 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+@@ -209,8 +215,14 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+                         // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))
+                         // => mix64(doubleToLongBits(Double.longBitsToDouble(sortableDoubleBits(values.nextValue()))))
+                         // => mix64(sortableDoubleBits(values.nextValue()))
+-                        var hash = BitMixer.mix64(NumericUtils.sortableDoubleBits(values.nextValue()));
+-                        state.addHash(hash);
++            case DoubleType.ID:
++                return new SortedNumericDocValueAggregator<>(
++                    reference.storageIdent(),
++                    (_, memoryManager, minNodeVersion) -> {
++                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));
++                        return initIfNeeded(state, memoryManager, precision);
++                    },
++                    (values, state) -> {
+                     }
+                 );
              case FloatType.ID:
-                 return new SortedNumericDocValueAggregator<>(
-                     reference.storageIdent(),
--                    (ramAccounting, memoryManager, minNodeVersion) -> {
--                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));
+@@ -227,8 +239,14 @@ public class HyperLogLogDistinctAggregation extends AggregationFunction<HyperLog
+                         // mix64(doubleToLongBits(decoded))
+                         // => mix64(doubleToLongBits((double)NumericUtils.sortableIntToFloat((int)values.nextValue())))
+                         // => mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int)values.nextValue()))) - no need to double cast, auto widening
+-                        var hash = BitMixer.mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int) values.nextValue())));
+-                        state.addHash(hash);
++            case FloatType.ID:
++                return new SortedNumericDocValueAggregator<>(
++                    reference.storageIdent(),
 +                    (_, memoryManager, minNodeVersion) -> {
 +                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));
-                         return initIfNeeded(state, memoryManager, precision);
-                     },
-                     (values, state) -> {
++                        return initIfNeeded(state, memoryManager, precision);
++                    },
++                    (values, state) -> {
+                     }
+                 );
+             case StringType.ID:
 diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java b/server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java
-index 47249d1a75..f1189a59fb 100644
+index a1330b3b43..52559f15c6 100644
 --- a/server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java
 +++ b/server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java
-@@ -34,6 +34,7 @@ import io.crate.expression.symbol.Literal;
- import io.crate.memory.MemoryManager;
- import io.crate.metadata.FunctionImplementation;
- import io.crate.metadata.Reference;
-+import io.crate.metadata.RowGranularity;
- import io.crate.metadata.doc.DocTableInfo;
- import io.crate.types.DataType;
- 
+@@ -124,4 +124,18 @@ public abstract class AggregationFunction<TPartial, TFinal> implements FunctionI
+                                                        List<Literal<?>> optionalParams) {
+         return null;
+     }
++
++    protected Reference getAggReference(List<Reference> aggregationReferences) {
++        if (aggregationReferences == null || aggregationReferences.isEmpty()) {
++            return null;
++        }
++        Reference reference = aggregationReferences.get(0);
++        if (reference == null) {
++            return null;
++        }
++        if (!reference.hasDocValues() || reference.granularity() != io.crate.metadata.RowGranularity.DOC) {
++            return null;
++        }
++        return reference;
++    }
+ }
 diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java b/server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java
-index 0aceb0857a..cfce1cad33 100644
+index 6c8a88e2d4..a05b059e86 100644
 --- a/server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java
 +++ b/server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java
-@@ -257,10 +257,10 @@ public class CountAggregation extends AggregationFunction<MutableLong, Long> {
+@@ -249,7 +249,7 @@ public class CountAggregation extends AggregationFunction<MutableLong, Long> {
      }
  
      private DocValueAggregator<?> getDocValueAggregator(Reference ref) {
@@ -59,58 +88,100 @@ index 0aceb0857a..cfce1cad33 100644
 +        if (!ref.hasDocValues() || ref.granularity() != RowGranularity.DOC) {
              return null;
          }
--        switch (ref.valueType().id()) {
-+        return switch (ref.valueType().id()) {
-             case ByteType.ID:
-             case ShortType.ID:
-             case IntegerType.ID:
-@@ -311,10 +311,9 @@ public class CountAggregation extends AggregationFunction<MutableLong, Long> {
-         if (reference.valueType().id() == ObjectType.ID) {
-             // Count on object would require loading the source just to check if there is a value.
-             // Try to count on a non-null sub-column to be able to utilize doc-values.
--            var aggregationRef = (Reference) aggregationReferences.get(0);
-             for (var notNullCol : table.notNullColumns()) {
+         switch (ref.valueType().id()) {
+@@ -304,17 +304,22 @@ public class CountAggregation extends AggregationFunction<MutableLong, Long> {
                  // the first seen not-null sub-column will be used
--                if (notNullCol.isChildOf(aggregationRef.column())) {
-+                if (notNullCol.isChildOf(reference.column())) {
+                 if (notNullCol.isChildOf(aggregationRef.column())) {
                      var notNullColRef = table.getReference(notNullCol);
++        if (aggregationReferences.size() != 1) {
++            return null;
++        }
++        Reference reference = aggregationReferences.getFirst();
++        if (reference == null) {
++            return null;
++        }
++        if (reference.valueType().id() == ObjectType.ID) {
++            // Count on object would require loading the source just to check if there is a value.
++            // Try to count on a non-null sub-column to be able to utilize doc-values.
++            for (var notNullCol : table.notNullColumns()) {
++                // the first seen not-null sub-column will be used
++                if (notNullCol.isChildOf(reference.column())) {
++                    var notNullColRef = table.getReference(notNullCol);
                      if (notNullColRef == null) {
                          continue;
+-                    }
+-                    var subColDocValAggregator = getDocValueAggregator(notNullColRef);
+-                    if (subColDocValAggregator != null) {
+-                        return subColDocValAggregator;
+-                    }
+-                }
+-            }
+-        }
+-        if (!reference.hasDocValues()) {
+             return null;
+         }
+         return getDocValueAggregator(reference);
 diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java b/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java
-index 526d8d0fe6..813cf993ae 100644
+index 20e2d09a60..0ae5bccbe6 100644
 --- a/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java
 +++ b/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java
-@@ -231,13 +231,10 @@ public class StandardDeviationAggregation extends AggregationFunction<StandardDe
-                                                        DocTableInfo table,
-                                                        Version shardCreatedVersion,
-                                                        List<Literal<?>> optionalParams) {
--        Reference reference = aggregationReferences.get(0);
-+        Reference reference = getAggReference(aggregationReferences);
-         if (reference == null) {
+@@ -231,13 +231,13 @@ public class StandardDeviationAggregation extends AggregationFunction<StandardDe
+         if (!reference.hasDocValues()) {
              return null;
          }
--        if (!reference.hasDocValues()) {
--            return null;
--        }
++        Reference reference = getAggReference(aggregationReferences);
++        if (reference == null) {
++            return null;
++        }
          switch (reference.valueType().id()) {
              case ByteType.ID:
              case ShortType.ID:
+-            case IntegerType.ID:
+-            case LongType.ID:
+-            case TimestampType.ID_WITH_TZ:
+-            case TimestampType.ID_WITHOUT_TZ:
+                 return new SortedNumericDocValueAggregator<>(
+                     reference.storageIdent(),
+                     (ramAccounting, memoryManager, minNodeVersion) -> {
 diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java b/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java
-index a374fd69c9..00175dccc2 100644
+index 11754865a2..c82aa3b1d6 100644
 --- a/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java
 +++ b/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java
-@@ -312,13 +312,10 @@ public class AverageAggregation extends AggregationFunction<AverageAggregation.A
-                                                        DocTableInfo table,
-                                                        Version shardCreatedVersion,
-                                                        List<Literal<?>> optionalParams) {
--        Reference reference = aggregationReferences.get(0);
-+        Reference reference = getAggReference(aggregationReferences);
-         if (reference == null) {
+@@ -312,13 +312,13 @@ public class AverageAggregation extends AggregationFunction<AverageAggregation.A
+         Reference reference = aggregationReferences.get(0);
+         if (!reference.hasDocValues()) {
              return null;
++        Reference reference = getAggReference(aggregationReferences);
++        if (reference == null) {
++            return null;
          }
--        if (!reference.hasDocValues()) {
--            return null;
--        }
          switch (reference.valueType().id()) {
              case ByteType.ID:
              case ShortType.ID:
+-            case IntegerType.ID:
+-            case LongType.ID:
+-                return new SortedNumericDocValueAggregator<>(
+                     reference.storageIdent(),
+                     (ramAccounting, memoryManager, minNodeVersion) -> {
+                         ramAccounting.addBytes(AverageStateType.INSTANCE.fixedSize());
+diff --git a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
+index 7f9cd25444..16d57bbd5a 100644
+--- a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
++++ b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
+@@ -49,6 +49,7 @@ import io.crate.metadata.doc.DocSysColumns;
+ import io.crate.metadata.doc.DocTableInfo;
+ import io.crate.planner.operators.SubQueryAndParamBinder;
+ import io.crate.planner.operators.SubQueryResults;
++import io.crate.planner.optimizer.symbol.Optimizer;
+ 
+ /**
+  * Used to analyze a query for primaryKey/partition "direct access" possibilities.
+@@ -203,7 +204,7 @@ public final class WhereClauseOptimizer {
+                                   partitionIndicesWithinPks);
+         }
+         EqMatches partitionMatches = table.isPartitioned()
+-            ? eqExtractor.extractMatches(table.partitionedBy(), query, txnCtx)
++            ? eqExtractor.extractMatches(table.partitionedBy(), optimizedCastsQuery, txnCtx)
+             : EqMatches.NONE;
+ 
+         WhereClauseValidator.validate(query);

@@ -61,6 +61,25 @@ public class JavaParserController {
         return getService().getMethodModifiers(repoPath, filePath, methodNames);
     }
 
+    /**
+     * Fix C: Validate a Java code snippet for syntactic correctness.
+     *
+     * Request body:
+     *   code          — Java code to validate (method body, class member, or full file)
+     *   context_class — optional simple class name hint (currently unused, reserved)
+     *
+     * Response body:
+     *   status → "ok"          snippet parsed successfully
+     *          → "parse_error" snippet has syntax errors
+     *   errors → list of error messages (empty on success)
+     */
+    @PostMapping("/parse-snippet")
+    public Map<String, Object> parseSnippet(@RequestBody Map<String, Object> request) {
+        String code = (String) request.getOrDefault("code", "");
+        String contextClass = (String) request.getOrDefault("context_class", "");
+        return getService().parseSnippet(code, contextClass);
+    }
+
     @GetMapping("/health")
     public Map<String, String> health() {
         return Map.of("status", "ok", "service", "javaparser");

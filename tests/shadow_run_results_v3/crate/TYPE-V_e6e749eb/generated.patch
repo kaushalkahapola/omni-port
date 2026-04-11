@@ -10,32 +10,3 @@ index c6c431d07e..9ccae3fdd9 100644
  import org.elasticsearch.common.io.stream.StreamInput;
  import org.elasticsearch.common.io.stream.StreamOutput;
  
-diff --git a/server/src/main/java/io/crate/types/NumericType.java b/server/src/main/java/io/crate/types/NumericType.java
-index 8648484629..58db842248 100644
---- a/server/src/main/java/io/crate/types/NumericType.java
-+++ b/server/src/main/java/io/crate/types/NumericType.java
-@@ -236,11 +236,20 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
-     @Override
-     public TypeSignature getTypeSignature() {
-         if (unscaled()) {
--            return super.getTypeSignature();
-+        if (v != null) {
-+            out.writeBoolean(true);
-+            out.writeByteArray(v.unscaledValue().toByteArray());
-+            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {
-+                if (scale == null) {
-+                    out.writeBoolean(true);
-+                    out.writeVInt(v.scale());
-+                } else {
-+                    out.writeBoolean(false);
-+                }
-+            }
-         } else {
--            ArrayList<TypeSignature> parameters = new ArrayList<>();
--            parameters.add(TypeSignature.of(precision));
--            if (scale != null) {
-+            out.writeBoolean(false);
-+        }
-                 parameters.add(TypeSignature.of(scale));
-             }
-             return new TypeSignature(getName(), parameters);

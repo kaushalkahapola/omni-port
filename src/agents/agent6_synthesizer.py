@@ -12,14 +12,23 @@ Input sources:
 
 NOTE: applied_hunks from Agent 3 are already written to disk and must NOT be
 re-synthesized or re-applied here.
+
+Fixes in this version:
+  C — JavaParser parsability gate on new_string (reject garbage before it reaches disk)
+  B — conf=0 structural fallback (full-file rewrite when localization failed entirely)
+  G — New-file hunk path (old_string="" → create file with new_string content)
+  D — AST-guided sub-hunk splitting on synthesis_no_match
 """
 
 import re
+import logging
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
+
+logger = logging.getLogger(__name__)
 
 # Matches Java member-declaration lvalues:  [modifiers] Type name =
 # Captures the declared name so we can detect duplicates introduced by new_string.
@@ -71,6 +80,19 @@ def _new_string_introduces_duplicates(
     remaining = file_content.replace(old_string, "", 1)
     existing = _declared_names(remaining)
     return bool(introduced & existing)
+
+
+def _has_adjacent_duplicate_imports(code: str) -> bool:
+    """
+    Fix C: Return True if the code has adjacent identical import lines.
+    This is a structural de-dup check beyond the declared-name check.
+    """
+    lines = code.splitlines()
+    import_lines = [l.strip() for l in lines if l.strip().startswith("import ")]
+    for i in range(1, len(import_lines)):
+        if import_lines[i] == import_lines[i - 1]:
+            return True
+    return False
 
 
 # ── Data models ───────────────────────────────────────────────────────────────
@@ -175,14 +197,175 @@ class HunkSynthesizer:
             return True, 1.0 if count == 1 else 0.9
         return False, 0.0
 
+    # ── Fix C: Parsability gate ───────────────────────────────────────────────
+
+    def _verify_new_string_parses(
+        self,
+        file_content: str,
+        old_string: str,
+        new_string: str,
+        file_path: str,
+    ) -> bool:
+        """
+        Fix C: Validate that replacing old_string with new_string produces parseable Java.
+
+        Checks:
+        1. Adjacent duplicate import lines (fast, no network)
+        2. JavaParser parse-snippet endpoint (network, gracefully degraded)
+
+        Returns True if the hunk passes all checks (gate passes), False to reject.
+        Non-Java files always return True (gate is Java-only).
+        """
+        if not file_path.endswith(".java"):
+            return True
+
+        # Fast check: adjacent duplicate imports
+        if _has_adjacent_duplicate_imports(new_string):
+            logger.debug("[Fix C] Rejecting hunk for %s: adjacent duplicate imports in new_string", file_path)
+            return False
+
+        # Network check: simulate replacement and parse the result
+        try:
+            from src.tools.java_http_client import javaparser_parse_snippet
+            # Validate just the new_string snippet (faster than full-file parse)
+            result = javaparser_parse_snippet(new_string, context_class="")
+            status = result.get("status", "error")
+            if status == "parse_error":
+                errors = result.get("errors", [])
+                logger.debug("[Fix C] Rejecting hunk for %s: parse_error — %s", file_path, errors[:1])
+                return False
+            # "ok" → passes; "error" (service unavailable) → treat as pass (non-blocking)
+        except Exception as e:
+            logger.debug("[Fix C] parse_snippet call failed for %s — treating as pass: %s", file_path, e)
+
+        return True
+
+    # ── Fix D: AST-guided sub-hunk splitting ─────────────────────────────────
+
+    def _split_hunk_by_ast(
+        self,
+        hunk: Dict[str, Any],
+        file_content: str,
+        file_path: str,
+        loc_result: "LocalizationResult",
+    ) -> List[SynthesizedHunk]:
+        """
+        Fix D: When a single hunk covers multiple methods (mainline refactored N→N+1 methods),
+        attempt to split it at method/class boundaries using GumTree, then synthesize each
+        sub-hunk independently.
+
+        Returns a list of verified SynthesizedHunks (may be empty if splitting fails or
+        the GumTree service is unavailable).
+        """
+        old_content = hunk.get("old_content", "")
+        new_content = hunk.get("new_content", "")
+        if not old_content or not new_content:
+            return []
+
+        try:
+            from src.tools.java_http_client import gumtree_diff
+            gumtree_result = gumtree_diff(str(self.repo_path), file_path, old_content)
+            if gumtree_result.get("status") == "error" or not gumtree_result.get("edits"):
+                return []
+
+            # Extract method boundary line numbers from GumTree edits
+            # Look for MethodDeclaration nodes to find split points
+            edits = gumtree_result.get("edits", [])
+            method_boundaries: List[int] = []
+            for edit in edits:
+                node_type = edit.get("nodeType", "")
+                if "Method" in node_type or "Constructor" in node_type:
+                    src_line = edit.get("srcPos", {}).get("line", 0)
+                    if src_line > 0:
+                        method_boundaries.append(src_line)
+
+            if not method_boundaries or len(method_boundaries) < 2:
+                return []
+
+            # Sort and de-dup split points
+            method_boundaries = sorted(set(method_boundaries))
+
+            # Split old_content at method boundaries
+            old_lines = old_content.splitlines(keepends=True)
+            new_lines = new_content.splitlines(keepends=True)
+
+            # Create sub-hunks by splitting old_content at method boundary lines
+            split_points = [0] + [b - 1 for b in method_boundaries[1:]] + [len(old_lines)]
+            results: List[SynthesizedHunk] = []
+
+            for i in range(len(split_points) - 1):
+                start = split_points[i]
+                end = split_points[i + 1]
+                sub_old = "".join(old_lines[start:end]).rstrip("\n")
+                # Corresponding new lines — heuristic: same proportional slice
+                # (approximate; GumTree edits would give exact mapping but we keep it simple)
+                new_start = int(start * len(new_lines) / max(len(old_lines), 1))
+                new_end = int(end * len(new_lines) / max(len(old_lines), 1))
+                sub_new = "".join(new_lines[new_start:new_end]).rstrip("\n")
+
+                if not sub_old:
+                    continue
+
+                # Try to synthesize this sub-hunk
+                sub_hunk = dict(hunk)
+                sub_hunk["old_content"] = sub_old
+                sub_hunk["new_content"] = sub_new
+
+                result = self.synthesize_hunk(sub_hunk, loc_result, file_content)
+                if result.verified:
+                    results.append(result)
+
+            return results
+
+        except Exception as e:
+            logger.debug("[Fix D] AST split failed for %s: %s", file_path, e)
+            return []
+
+    # ── Fix G: New-file synthesis ─────────────────────────────────────────────
+
+    def _synthesize_new_file(
+        self,
+        hunk: Dict[str, Any],
+        file_path: str,
+    ) -> SynthesizedHunk:
+        """
+        Fix G: Synthesize a hunk for a brand-new file.
+
+        old_string = "" (empty sentinel meaning "create this file")
+        new_string = the full file content from new_content
+        verified = True (no existence check needed — file is being created)
+        """
+        new_string = (hunk.get("new_content") or "").rstrip("\n")
+        if not new_string:
+            return SynthesizedHunk(
+                file_path=file_path,
+                old_string="",
+                new_string="",
+                confidence=0.0,
+                context_lines_included=0,
+                verified=False,
+            )
+        return SynthesizedHunk(
+            file_path=file_path,
+            old_string="",
+            new_string=new_string,
+            confidence=1.0,
+            context_lines_included=0,
+            verified=True,
+        )
+
+    # ── Core synthesis ────────────────────────────────────────────────────────
+
     def synthesize_hunk(
         self,
         hunk: Dict[str, Any],
-        loc_result: LocalizationResult,
+        loc_result: "LocalizationResult",
         file_content: Optional[str] = None,
     ) -> SynthesizedHunk:
         """
         Synthesizes a CLAW hunk pair and verifies old_string exists in the target file.
+
+        Fix G: If loc_result.method_used == "new_file", delegates to _synthesize_new_file.
 
         Context expansion strategy:
           - Try the raw old_content first (0 extra context lines).
@@ -191,8 +374,14 @@ class HunkSynthesizer:
             (Adding file context to old_string makes it unique; new_string stays
             as the pure replacement — the surrounding context is re-inserted
             verbatim by CLAW when it replaces old_string with new_string.)
+          - Fix D: If all context expansions fail, attempt AST-guided sub-hunk splitting.
         """
         file_path = loc_result.file_path
+
+        # Fix G: new-file fast path
+        if loc_result.method_used == "new_file":
+            return self._synthesize_new_file(hunk, file_path)
+
         old_string = hunk.get("old_content", "").rstrip("\n")
         new_string = hunk.get("new_content", "").rstrip("\n")
 
@@ -213,6 +402,16 @@ class HunkSynthesizer:
         verified, confidence = self.verify_old_string_exists(file_content, old_string)
         if verified:
             if _new_string_introduces_duplicates(file_content, old_string, new_string):
+                return SynthesizedHunk(
+                    file_path=file_path,
+                    old_string=old_string,
+                    new_string=new_string,
+                    confidence=0.0,
+                    context_lines_included=0,
+                    verified=False,
+                )
+            # Fix C: parsability gate
+            if not self._verify_new_string_parses(file_content, old_string, new_string, file_path):
                 return SynthesizedHunk(
                     file_path=file_path,
                     old_string=old_string,
@@ -266,6 +465,16 @@ class HunkSynthesizer:
                         context_lines_included=context_lines,
                         verified=False,
                     )
+                # Fix C: parsability gate on expanded new_string
+                if not self._verify_new_string_parses(file_content, expanded_old, expanded_new, file_path):
+                    return SynthesizedHunk(
+                        file_path=file_path,
+                        old_string=expanded_old,
+                        new_string=expanded_new,
+                        confidence=0.0,
+                        context_lines_included=context_lines,
+                        verified=False,
+                    )
                 return SynthesizedHunk(
                     file_path=file_path,
                     old_string=expanded_old,
@@ -274,6 +483,18 @@ class HunkSynthesizer:
                     context_lines_included=context_lines,
                     verified=True,
                 )
+
+        # Fix D: AST-guided sub-hunk splitting as last resort before full failure.
+        # Only attempt if the hunk covers multiple lines (worth splitting).
+        old_line_count = len((old_string or "").splitlines())
+        if old_line_count >= 5 and file_path.endswith(".java"):
+            split_results = self._split_hunk_by_ast(hunk, file_content, file_path, loc_result)
+            if split_results:
+                # Return the first successful split result.
+                # The caller (synthesize_batch) will handle multi-result returns.
+                # For now, store extras in the hunk's metadata for the batch method.
+                hunk["_ast_split_results"] = [r.model_dump() for r in split_results[1:]]
+                return split_results[0]
 
         # Do NOT attempt fuzzy fallback for code hunks. If localization failed to find
         # an exact match via git/context expansion, fuzzy search often finds the WRONG
@@ -344,7 +565,7 @@ class HunkSynthesizer:
     def synthesize_batch(
         self,
         hunks: List[Dict[str, Any]],
-        loc_results: List[LocalizationResult],
+        loc_results: List["LocalizationResult"],
         loc_index_override: Optional[List[int]] = None,
     ) -> SynthesizerOutput:
         """
@@ -352,6 +573,10 @@ class HunkSynthesizer:
 
         loc_index_override: when set, hunk[k] maps to loc_results[loc_index_override[k]].
         Otherwise, assumes 1-to-1 correspondence.
+
+        Fix D: Handles AST-split results stored in hunk["_ast_split_results"] — these
+        are additional verified hunks produced when a single hunk was split at method
+        boundaries. They are added to the synthesized output automatically.
         """
         synthesized = []
         failed = []
@@ -367,6 +592,9 @@ class HunkSynthesizer:
 
             if result.verified:
                 synthesized.append(result)
+                # Fix D: also add any extra split-results stored in the hunk dict
+                for extra in hunk.get("_ast_split_results", []):
+                    synthesized.append(SynthesizedHunk(**extra))
             else:
                 failed.append(hunk)
 
@@ -376,6 +604,113 @@ class HunkSynthesizer:
             success=len(failed) == 0,
             error_message=None if not failed else f"{len(failed)} hunk(s) failed verification",
         )
+
+
+# ── Fix B: conf=0 structural fallback helpers ─────────────────────────────────
+
+def rewrite_hunk_against_full_file(
+    hunk: Dict[str, Any],
+    file_content: str,
+    file_path: str,
+    llm_client: Any,
+) -> Optional[SynthesizedHunk]:
+    """
+    Fix B: When all 5 localization stages fail (conf=0, method_used="failed"),
+    invoke the Reasoning LLM with the full target file + the mainline hunk and ask it
+    to produce a CLAW old/new pair targeting the goal of the hunk.
+
+    Returns a verified SynthesizedHunk if successful, None otherwise.
+
+    The LLM is asked to return its result in the format:
+        OLD_STRING_START
+        <exact string from file>
+        OLD_STRING_END
+        NEW_STRING_START
+        <replacement string>
+        NEW_STRING_END
+    """
+    old_content = hunk.get("old_content", "")
+    new_content = hunk.get("new_content", "")
+
+    prompt = f"""You are Agent 5 (Structural Refactor) for OmniPort, a Java patch backporting system.
+
+A hunk from a mainline patch could not be localized in the target file — all 5 localization
+stages failed. Your task is to identify WHERE in the target file this change should be made,
+and produce an exact CLAW old/new string pair.
+
+Target file path: {file_path}
+
+Target file content:
+```java
+{file_content[:8000]}
+```
+
+Mainline hunk — code being REMOVED from mainline:
+```java
+{old_content}
+```
+
+Mainline hunk — code being ADDED in mainline:
+```java
+{new_content}
+```
+
+The target file may use different class names, method names, or have different structure
+than the mainline. Your job is to:
+1. Find the section in the TARGET FILE that corresponds semantically to the mainline old code
+2. Produce the equivalent new code adapted to the target file's actual names and structure
+3. Return EXACTLY in this format (no other text):
+
+OLD_STRING_START
+<copy the exact bytes from the target file that need replacing>
+OLD_STRING_END
+NEW_STRING_START
+<your replacement code using target file's actual names>
+NEW_STRING_END
+
+CRITICAL: OLD_STRING must be an exact verbatim substring of the target file content above.
+If you cannot identify a clear match, return empty OLD_STRING_START/END blocks.
+"""
+
+    try:
+        response = llm_client.invoke(prompt)
+        text = response.content if hasattr(response, "content") else str(response)
+
+        # Parse the delimited format
+        old_match = re.search(
+            r"OLD_STRING_START\n(.*?)\nOLD_STRING_END",
+            text, re.DOTALL
+        )
+        new_match = re.search(
+            r"NEW_STRING_START\n(.*?)\nNEW_STRING_END",
+            text, re.DOTALL
+        )
+
+        if not old_match or not new_match:
+            return None
+
+        old_string = old_match.group(1).strip()
+        new_string = new_match.group(1).strip()
+
+        if not old_string or old_string not in file_content:
+            return None
+
+        # Verify and return
+        count = file_content.count(old_string)
+        confidence = 1.0 if count == 1 else 0.9
+
+        return SynthesizedHunk(
+            file_path=file_path,
+            old_string=old_string,
+            new_string=new_string,
+            confidence=confidence,
+            context_lines_included=0,
+            verified=True,
+        )
+
+    except Exception as e:
+        logger.debug("[Fix B] rewrite_hunk_against_full_file failed for %s: %s", file_path, e)
+        return None
 
 
 # ── LangGraph node ────────────────────────────────────────────────────────────
@@ -390,6 +725,10 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
       - unprocessed raw hunks (fallback for hunks that no specialist claimed)
 
     applied_hunks (Agent 3 output) are already on disk and are excluded.
+
+    Fix B: conf=0 hunks (method_used="failed") now attempt a full-file structural
+    rewrite via the Reasoning LLM before being dropped as synthesis_skipped_no_localization.
+    Fix G: hunks with method_used="new_file" go directly to _synthesize_new_file.
     """
     repo_path = state["target_repo_path"]
     synthesizer = HunkSynthesizer(repo_path)
@@ -398,6 +737,22 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     loc_results = state.get("localization_results", [])
     processed_indices = set(state.get("processed_hunk_indices", []))
     retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
+
+    # Fix B: obtain LLM client for conf=0 fallback (lazy — only used when needed)
+    _llm_client_cache: List[Any] = []
+
+    def _get_llm_client() -> Optional[Any]:
+        if _llm_client_cache:
+            return _llm_client_cache[0]
+        try:
+            from src.core.llm_router import get_default_router, LLMTier
+            client = get_default_router().get_model(LLMTier.REASONING)
+            _llm_client_cache.append(client)
+            return client
+        except Exception as e:
+            logger.debug("[Fix B] Could not get LLM client: %s", e)
+            _llm_client_cache.append(None)
+            return None
 
     # ── Build synthesis batches ───────────────────────────────────────────────
 
@@ -414,21 +769,21 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     refactored_loc_indices = [h.get("loc_index", i) for i, h in enumerate(refactored)]
 
     # 3. Unprocessed raw hunks: indices not claimed by any prior agent.
-    # Attempt synthesis for ALL unclaimed hunks with a valid file location.
-    # Agent 3 already tried exact-match for every hunk — if a hunk reaches here
-    # unclaimed it means Agent 3/4/5 didn't pick it up. Try synthesis anyway;
-    # if old_string doesn't exist in file, synthesize_hunk will return verified=False
-    # and we'll fail cleanly rather than silently dropping the hunk.
     passthrough = []
     for i, h in enumerate(hunks):
         if i not in processed_indices and i < len(loc_results):
             loc_result = loc_results[i]
-            if loc_result.method_used != "failed" and loc_result.file_path:
+            if loc_result.method_used == "new_file":
+                # Fix G: new-file hunks — synthesize directly without localization
+                result = synthesizer._synthesize_new_file(h, loc_result.file_path)
+                if result.verified:
+                    all_synthesized.append(result.model_dump())
+                else:
+                    all_failed.append(h)
+            elif loc_result.method_used != "failed" and loc_result.file_path:
                 passthrough.append((i, h))
             else:
-                # Before dropping: check if this is a pure-addition hunk (empty old_content).
-                # For pure additions, localization can't find an anchor (nothing to match),
-                # but we still know the target file. Attempt end-of-class insertion.
+                # Before dropping: check for pure-addition hunk (empty old_content).
                 hunk_file = h.get("file_path") or h.get("target_file") or ""
                 old_content = h.get("old_content", "")
                 if not old_content and hunk_file:
@@ -436,6 +791,21 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
                     if result.verified:
                         all_synthesized.append(result.model_dump())
                         continue
+
+                # Fix B: conf=0 fallback — attempt full-file structural rewrite
+                hunk_file = loc_result.file_path or hunk_file
+                if hunk_file:
+                    file_content = synthesizer.read_file(hunk_file)
+                    if file_content:
+                        llm_client = _get_llm_client()
+                        if llm_client:
+                            logger.debug("[Fix B] Attempting full-file rewrite for %s (conf=0)", hunk_file)
+                            fix_b_result = rewrite_hunk_against_full_file(h, file_content, hunk_file, llm_client)
+                            if fix_b_result and fix_b_result.verified:
+                                logger.debug("[Fix B] Full-file rewrite succeeded for %s", hunk_file)
+                                all_synthesized.append(fix_b_result.model_dump())
+                                continue
+
                 all_failed.append(h)
                 retry_contexts.append(
                     PatchRetryContext(

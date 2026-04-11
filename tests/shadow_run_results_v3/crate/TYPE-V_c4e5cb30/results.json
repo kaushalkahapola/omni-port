@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T04:07:20.837152",
+  "run_timestamp": "2026-04-11T05:54:33.042616",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "c4e5cb305ee2a07c1b0c5c06d876111194ba5c18",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 45.47,
+      "elapsed_s": 174.68,
       "error": null,
       "java_hunks": 16,
       "aux_hunks": 1,
@@ -42,11 +42,11 @@
         },
         {
           "hunk_index": 3,
-          "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
-          "method_used": "fuzzy",
-          "confidence": 0.881,
-          "start_line": 50,
-          "end_line": 55,
+          "file_path": "server/src/main/java/io/crate/execution/dml/Indexer.java",
+          "method_used": "failed",
+          "confidence": 0.0,
+          "start_line": 0,
+          "end_line": 0,
           "symbol_mappings": {}
         },
         {
@@ -60,7 +60,7 @@
         },
         {
           "hunk_index": 5,
-          "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
+          "file_path": "server/src/main/java/io/crate/execution/dml/Indexer.java",
           "method_used": "failed",
           "confidence": 0.0,
           "start_line": 0,
@@ -69,7 +69,7 @@
         },
         {
           "hunk_index": 6,
-          "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
+          "file_path": "server/src/main/java/io/crate/execution/dml/Indexer.java",
           "method_used": "failed",
           "confidence": 0.0,
           "start_line": 0,
@@ -78,7 +78,7 @@
         },
         {
           "hunk_index": 7,
-          "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
+          "file_path": "server/src/main/java/io/crate/execution/dml/Indexer.java",
           "method_used": "failed",
           "confidence": 0.0,
           "start_line": 0,
@@ -88,19 +88,19 @@
         {
           "hunk_index": 8,
           "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
-          "method_used": "failed",
-          "confidence": 0.0,
-          "start_line": 0,
-          "end_line": 0,
+          "method_used": "fuzzy",
+          "confidence": 0.953,
+          "start_line": 146,
+          "end_line": 152,
           "symbol_mappings": {}
         },
         {
           "hunk_index": 9,
           "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
-          "method_used": "failed",
-          "confidence": 0.0,
-          "start_line": 0,
-          "end_line": 0,
+          "method_used": "fuzzy",
+          "confidence": 0.955,
+          "start_line": 168,
+          "end_line": 174,
           "symbol_mappings": {}
         },
         {
@@ -151,70 +151,83 @@
         {
           "hunk_index": 15,
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "method_used": "failed",
-          "confidence": 0.0,
-          "start_line": 0,
-          "end_line": 0,
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 179,
+          "end_line": 185,
           "symbol_mappings": {}
         }
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.0,
+      "elapsed_s": 4.37,
       "error": null,
       "classification": {
         "patch_type": "PatchType.MIXED",
         "confidence": 0.85,
-        "reasoning": "The patch includes multiple hunks with varying complexity. Some hunks, such as the addition of a constant and minor conditional changes in ArrayIndexer.java, are straightforward and closely match the target branch (TYPE_I). Other hunks involve adding new methods and modifying constructors with additional parameters in IndexDocumentBuilder.java, which requires understanding of structural changes and constructor chaining (TYPE_III). There are also changes in test cases and predicate/scalar classes that involve conditional logic based on version checks, which are moderate in complexity (TYPE_II). The localization evidence shows a mix of exact matches and fuzzy matches, with some hunks failing localization, indicating structural differences. Overall, the patch is not a trivial string replacement nor a deep refactoring or redesign, but a combination of exact, fuzzy, and structural changes, thus classified as MIXED with high confidence.",
+        "reasoning": "The patch includes multiple hunks with varying levels of complexity. Some changes, such as adding a constant and simple conditional checks (e.g., in ArrayIndexer.java and IsNullPredicate.java), are straightforward and align with TYPE_I or TYPE_II classifications due to exact or near-exact matches and minor formatting or API additions. However, other changes involve adding new methods, modifying constructors with additional parameters, and adjusting logic flow in IndexDocumentBuilder.java and test cases, which require understanding structural changes and API extensions, aligning more with TYPE_III complexity. The localization evidence shows a mix of 'git_exact', 'fuzzy', and 'failed' matches, indicating some parts are trivial to backport while others require more effort. Given this mixture, the overall classification is MIXED with a high confidence of 0.85. The token budget estimate is moderate to high (1200 tokens) due to the number of files and the structural changes involved.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
       "elapsed_s": 0.0,
       "error": null,
-      "applied_count": 2,
-      "applied_hunks": [
-        {
-          "applied": true,
-          "file_path": "server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java",
-          "error": null
-        },
-        {
-          "applied": true,
-          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "error": null
-        }
-      ]
+      "applied_count": 0,
+      "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 27.36,
+      "elapsed_s": 37.06,
       "error": null,
-      "adapted_count": 4
+      "adapted_count": 7
     },
     "agent5_structural": {
-      "elapsed_s": 45.61,
+      "elapsed_s": 56.44,
       "error": null,
-      "refactored_count": 3
+      "refactored_count": 2
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 33.11,
       "error": null,
-      "synthesized_count": 6,
-      "failed_count": 8,
+      "synthesized_count": 2,
+      "failed_count": 7,
       "synthesis_status": "partial",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/execution/dml/Indexer.java",
-          "old_string": "                    for (Object val : it) {\n                        if (val == null) {\n                            continue;\n                        }\n                        Field field = new Field(fqn, val.toString(), FulltextIndexer.FIELD_TYPE);\n                        docBuilder.addField(field);\n                    }\n                } else {\n                    Field field = new Field(fqn, value.toString(), FulltextIndexer.FIELD_TYPE);\n                    docBuilder.addField(field);\n                }\n            }\n        }\n",
-          "new_string": "                    for (Object val : it) {\n                        if (val == null) {\n                            continue;\n                        }\n                        Field field = new Field(fqn, val.toString(), FulltextIndexer.FIELD_TYPE);\n                        docBuilder.addField(field);\n                    addField,\n                    synthetics,\n                    columnConstraints,\n                    tableVersionCreated.onOrAfter(StoredRowLookup.PARTIAL_STORED_SOURCE_VERSION),\n                    tableVersionCreated.onOrAfter(ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)\n                );\n                } else {\n                    Field field = new Field(fqn, value.toString(), FulltextIndexer.FIELD_TYPE);\n                    docBuilder.addField(field);\n                }\n            }\n        }\n",
+          "old_string": "private final Function<ColumnIdent, Reference> getRef;\n    private final boolean writeOids;\n    private final Version tableVersionCreated;",
+          "new_string": "private final Function<ColumnIdent, Reference> getRef;\n    private final boolean writeOids;\n    private final Version tableVersionCreated;\n    private final boolean addArrayLengthField;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
+          "old_string": "     * Field prefix used for the array length field\n     */\n    public static final String ARRAY_LENGTH_FIELD_PREFIX = \"_array_length_\";\n\n    protected final ValueIndexer<T> innerIndexer;\n    protected final Streamer<List<T>> bytesConverter;\n    protected final String arrayLengthFieldName;\n    protected final Reference reference;\n\n    protected ArrayIndexer(ValueIndexer<T> innerIndexer, Function<ColumnIdent, Reference> getRef, Reference reference) {\n        this.innerIndexer = innerIndexer;\n        this.bytesConverter = (Streamer<List<T>>) reference.valueType().streamer();\n        this.reference = reference;\n",
+          "new_string": "     * Field prefix used for the array length field\n     */\n    public static final String ARRAY_LENGTH_FIELD_PREFIX = \"_array_length_\";\n\n    protected final ValueIndexer<T> innerIndexer;\n    protected final Streamer<List<T>> bytesConverter;\n        if (docBuilder.maybeAddArrayLengthField()) {\n            // map '[]' to '_array_length_ = 0'\n            // map '[null]' to '_array_length_ = 1'\n            // 'null' is not mapped; can utilize 'FieldExistsQuery' for 'IS NULL' filtering\n    protected final Reference reference;\n\n    protected ArrayIndexer(ValueIndexer<T> innerIndexer, Function<ColumnIdent, Reference> getRef, Reference reference) {\n        this.innerIndexer = innerIndexer;\n        this.bytesConverter = (Streamer<List<T>>) reference.valueType().streamer();\n        this.reference = reference;\n",
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
         },
         {
-          "file_path": "server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java",
-          "old_string": "import org.apache.lucene.search.BooleanQuery;\nimport org.apache.lucene.search.ConstantScoreQuery;\nimport org.apache.lucene.search.FieldExistsQuery;\nimport org.apache.lucene.search.MatchNoDocsQuery;\nimport org.apache.lucene.search.Query;\nimport org.apache.lucene.search.TermQuery;\nimport org.elasticsearch.common.lucene.search.Queries;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.execution.dml.ArrayIndexer;\nimport io.crate.expression.symbol.DynamicReference;\nimport io.crate.expression.symbol.Function;\n",
-          "new_string": "import org.apache.lucene.search.BooleanQuery;\nimport org.apache.lucene.search.ConstantScoreQuery;\nimport org.apache.lucene.search.FieldExistsQuery;\nimport org.apache.lucene.search.MatchNoDocsQuery;\nimport org.apache.lucene.search.Query;\nimport org.apache.lucene.search.TermQuery;\nimport org.apache.lucene.search.Query;\nimport org.apache.lucene.search.TermQuery;\nimport org.elasticsearch.common.lucene.search.Queries;\nimport org.elasticsearch.index.mapper.FieldNamesFieldMapper;\nimport org.elasticsearch.index.mapper.MappedFieldType;\nimport org.elasticsearch.index.mapper.MapperService;\nimport org.jetbrains.annotations.Nullable;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.execution.dml.ArrayIndexer;\nimport io.crate.expression.symbol.DynamicReference;\nimport io.crate.expression.symbol.Function;\n",
+          "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
+          "old_string": "    public IndexDocumentBuilder wrapTranslog(UnaryOperator<TranslogWriter> wrapFunction) {\n        return new IndexDocumentBuilder(doc, wrapFunction.apply(translogWriter), synthetics, constraints, tableVersionCreated, addStoredField, addArrayLengthField);\n    }",
+          "new_string": "    public IndexDocumentBuilder wrapTranslog(UnaryOperator<TranslogWriter> wrapFunction) {\n        return new IndexDocumentBuilder(doc, wrapFunction.apply(translogWriter), synthetics, constraints, tableVersionCreated, addStoredField, addArrayLengthField);\n    }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
+          "old_string": "            // Storage of the multidimensional arrays is not supported.\n            return null;\n        }\n        int cmpVal = cmpNumber.intValue();\n        // If the array col is from a table created on or after 5.9, we can utilize '_array_length_' indexes,\n        // see ArrayIndexer for details\n        if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {\n            return toQueryUsingArrayLengthIndex(parentName, arrayRef, cmpVal, context.tableInfo()::getReference);\n        }\n\n        DataType<?> innerType = ((ArrayType<?>) arrayRef.valueType()).innerType();\n        if (innerType instanceof ArrayType<?>) {\n            // Cannot utilize `_array_length_` index for arrays in tables created before 5.9\n",
+          "new_string": "            // Storage of the multidimensional arrays is not supported.\n            return null;\n        }\n        int cmpVal = cmpNumber.intValue();\n        // If the array col is from a table created on or after 5.9, we can utilize '_array_length_' indexes,\n        // see ArrayIndexer for details\n        int cmpVal = cmpNumber.intValue();\n        // If the array col is from a table created on or after 5.9, we can utilize '_array_length_' indexes,\n        // see ArrayIndexer for details\n        if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {\n            return toQueryUsingArrayLengthIndex(parentName, arrayRef, cmpVal, context.tableInfo()::getReference);\n        }\n            return toQueryUsingArrayLengthIndex(parentName, arrayRef, cmpVal, context.tableInfo()::getReference);\n        }\n\n        DataType<?> innerType = ((ArrayType<?>) arrayRef.valueType()).innerType();\n        if (innerType instanceof ArrayType<?>) {\n            // Cannot utilize `_array_length_` index for arrays in tables created before 5.9\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/execution/dml/Indexer.java",
+          "old_string": "                    for (Object val : it) {\n                        if (val == null) {\n                            continue;\n                        }\n                        Field field = new Field(fqn, val.toString(), FulltextIndexer.FIELD_TYPE);\n                        docBuilder.addField(field);\n                    }\n                } else {\n                    Field field = new Field(fqn, value.toString(), FulltextIndexer.FIELD_TYPE);\n                    docBuilder.addField(field);\n                }\n            }\n        }\n",
+          "new_string": "                    for (Object val : it) {\n                        if (val == null) {\n                            continue;\n                        }\n                        Field field = new Field(fqn, val.toString(), FulltextIndexer.FIELD_TYPE);\n                        docBuilder.addField(field);\n                    synthetics,\n                    columnConstraints,\n                    tableVersionCreated,\n                    tableVersionCreated.onOrAfter(StoredRowLookup.PARTIAL_STORED_SOURCE_VERSION),\n                    tableVersionCreated.onOrAfter(ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)\n                );\n    }\n                } else {\n                    Field field = new Field(fqn, value.toString(), FulltextIndexer.FIELD_TYPE);\n                    docBuilder.addField(field);\n                }\n            }\n        }\n",
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
@@ -222,47 +235,29 @@
         {
           "file_path": "server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java",
           "old_string": "            Query refExistsQuery = refExistsQuery(ref, context);\n            return refExistsQuery == null ? null : Queries.not(refExistsQuery);\n        }\n        return null;\n    }\n\n\n    @Nullable\n    public static Query refExistsQuery(Reference ref, Context context) {\n        String field = ref.storageIdent();\n        DataType<?> valueType = ref.valueType();\n        boolean canUseFieldsExist = ref.hasDocValues() || ref.indexType() == IndexType.FULLTEXT;\n        if (valueType instanceof ArrayType<?>) {\n            if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {\n                // Array columns in tables on and after 5.9 indexes _array_length_ fields. For null rows, nothing is indexed\n                // such that FieldExistsQuery can be used.\n",
-          "new_string": "            Query refExistsQuery = refExistsQuery(ref, context);\n            return refExistsQuery == null ? null : Queries.not(refExistsQuery);\n        }\n        return null;\n    }\n\n        DataType<?> valueType = ref.valueType();\n        boolean canUseFieldsExist = ref.hasDocValues() || (mappedFieldType != null && mappedFieldType.hasNorms());\n        if (valueType instanceof ArrayType<?>) {\n            if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {\n        DataType<?> valueType = ref.valueType();\n        boolean canUseFieldsExist = ref.hasDocValues() || ref.indexType() == IndexType.FULLTEXT;\n        if (valueType instanceof ArrayType<?>) {\n            if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {\n                // Array columns in tables on and after 5.9 indexes _array_length_ fields. For null rows, nothing is indexed\n                // such that FieldExistsQuery can be used.\n",
-          "confidence": 1.0,
-          "context_lines_included": 3,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "old_string": "\nimport java.util.List;\nimport java.util.function.IntPredicate;\n\nimport org.apache.lucene.search.BooleanClause;\nimport org.apache.lucene.search.BooleanQuery;\nimport org.apache.lucene.search.MatchNoDocsQuery;\nimport org.apache.lucene.search.Query;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.execution.dml.ArrayIndexer;\nimport io.crate.expression.operator.EqOperator;\n",
-          "new_string": "\nimport java.util.List;\nimport java.util.function.IntPredicate;\n\nimport org.apache.lucene.search.BooleanClause;\nimport org.apache.lucene.search.BooleanQuery;\nimport org.apache.lucene.search.BooleanQuery;\nimport org.apache.lucene.search.MatchNoDocsQuery;\nimport org.apache.lucene.search.Query;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport org.apache.lucene.search.Query;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.execution.dml.ArrayIndexer;\nimport io.crate.expression.operator.EqOperator;\n",
-          "confidence": 1.0,
-          "context_lines_included": 3,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
-          "old_string": "     * Field prefix used for the array length field\n     */\n    public static final String ARRAY_LENGTH_FIELD_PREFIX = \"_array_length_\";\n\n    protected final ValueIndexer<T> innerIndexer;\n    protected final Streamer<List<T>> bytesConverter;\n    protected final String arrayLengthFieldName;\n    protected final Reference reference;\n\n    protected ArrayIndexer(ValueIndexer<T> innerIndexer, Function<ColumnIdent, Reference> getRef, Reference reference) {\n        this.innerIndexer = innerIndexer;\n        this.bytesConverter = (Streamer<List<T>>) reference.valueType().streamer();\n        this.reference = reference;\n",
-          "new_string": "     * Field prefix used for the array length field\n     */\n    public static final String ARRAY_LENGTH_FIELD_PREFIX = \"_array_length_\";\n\n    protected final ValueIndexer<T> innerIndexer;\n    protected final Streamer<List<T>> bytesConverter;\n                innerIndexer.indexValue(value, docBuilder);\n            }\n        }\n        if (docBuilder.maybeAddArrayLengthField()) {\n            // map '[]' to '_array_length_ = 0'\n            // map '[null]' to '_array_length_ = 1'\n            // 'null' is not mapped; can utilize 'FieldExistsQuery' for 'IS NULL' filtering\n    protected final Reference reference;\n\n    protected ArrayIndexer(ValueIndexer<T> innerIndexer, Function<ColumnIdent, Reference> getRef, Reference reference) {\n        this.innerIndexer = innerIndexer;\n        this.bytesConverter = (Streamer<List<T>>) reference.valueType().streamer();\n        this.reference = reference;\n",
-          "confidence": 1.0,
-          "context_lines_included": 3,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
-          "old_string": "public class IndexDocumentBuilder {\n\n    private final Document doc;\n    private final TranslogWriter translogWriter;\n    private final ValueIndexer.Synthetics synthetics;\n    private final Map<ColumnIdent, Indexer.ColumnConstraint> constraints;\n    private final Version tableVersionCreated;\n    private final boolean addStoredField;\n    private final boolean addArrayLengthField;\n\n    /**\n     * Builds a new IndexDocumentBuilder\n",
-          "new_string": "public class IndexDocumentBuilder {\n\n    private final Document doc;\n    private final TranslogWriter translogWriter;\n    private final ValueIndexer.Synthetics synthetics;\n    private final Map<ColumnIdent, Indexer.ColumnConstraint> constraints;\n    private final Map<ColumnIdent, Indexer.ColumnConstraint> constraints;\n    private final Version tableVersionCreated;\n    private final boolean addStoredField;\n    private final boolean addArrayLengthField;\n\n    /**\n     * Builds a new IndexDocumentBuilder\n    private final Version tableVersionCreated;\n    private final boolean addStoredField;\n    private final boolean addArrayLengthField;\n\n    /**\n     * Builds a new IndexDocumentBuilder\n",
+          "new_string": "            Query refExistsQuery = refExistsQuery(ref, context);\n            return refExistsQuery == null ? null : Queries.not(refExistsQuery);\n        }\n        return null;\n    }\n\n    @Nullable\n    public static Query refExistsQuery(Reference ref, Context context, boolean countEmptyArrays) {\n        String field = ref.storageIdent();\n        MapperService mapperService = context.queryShardContext().getMapperService();\n        MappedFieldType mappedFieldType = mapperService.fieldType(field);\n        DataType<?> valueType = ref.valueType();\n        boolean canUseFieldsExist = ref.hasDocValues() || ref.indexType() == IndexType.FULLTEXT;\n        if (valueType instanceof ArrayType<?>) {\n            if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {\n                // Array columns in tables on and after 5.9 indexes _array_length_ fields. For null rows, nothing is indexed\n                // such that FieldExistsQuery can be used.\n                return ArrayIndexer.arrayLengthExistsQuery(ref, context.tableInfo()::getReference);\n            }\n            if (countEmptyArrays) {\n        DataType<?> valueType = ref.valueType();\n        boolean canUseFieldsExist = ref.hasDocValues() || ref.indexType() == IndexType.FULLTEXT;\n        if (valueType instanceof ArrayType<?>) {\n            if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {\n                // Array columns in tables on and after 5.9 indexes _array_length_ fields. For null rows, nothing is indexed\n                // such that FieldExistsQuery can be used.\n",
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
         }
+      ],
+      "partial_rollback_files": [
+        "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
+        "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
+        "server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java",
+        "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java"
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 0.26,
+      "elapsed_s": 84.58,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Aux hunk application failed: aux patch apply failed for server/src/test/java/io/crate/execution/dml/IndexerTest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/execution/dml/IndexerTest.java:840\nerror: server/src/test/java/io/crate/execution/dml/IndexerTest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/execution/dml/IndexerTest.java:840\nerror: server/src/test/java/io/crate/execution/dml/IndexerTest.java: patch does not apply\n[g",
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.24s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.33s), 0 error(s).\n[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.11s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.06s), 0 error(s).\n[INFO] Scanned 61 class file(s) for forbidden API invocations (in 0.14s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": null,
-      "build_mode": null,
+      "build_success": false,
+      "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
@@ -282,21 +277,24 @@
     "java_production_hunks": 16,
     "developer_aux_hunks": 1,
     "processed_hunk_indices": [
-      10,
-      13,
-      4,
-      11,
-      12,
-      14,
       0,
       1,
-      2
+      2,
+      8,
+      9,
+      10,
+      11,
+      13,
+      14,
+      15,
+      4,
+      12
     ],
     "tokens_used": 0,
     "synthesis_status": "partial",
-    "applied_on_disk_ag3": 2,
-    "synthesized_count": 6,
-    "failed_hunks_total": 8,
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 2,
+    "failed_hunks_total": 7,
     "retry_contexts": [
       {
         "error_type": "synthesis_skipped_no_localization",
@@ -317,24 +315,6 @@
         "suggested_action": "manual_review"
       },
       {
-        "error_type": "synthesis_skipped_no_localization",
-        "error_message": "Hunk unclaimed; localization failed entirely",
-        "attempt_count": 4,
-        "suggested_action": "manual_review"
-      },
-      {
-        "error_type": "synthesis_skipped_no_localization",
-        "error_message": "Hunk unclaimed; localization failed entirely",
-        "attempt_count": 4,
-        "suggested_action": "manual_review"
-      },
-      {
-        "error_type": "synthesis_skipped_no_localization",
-        "error_message": "Hunk unclaimed; localization failed entirely",
-        "attempt_count": 4,
-        "suggested_action": "manual_review"
-      },
-      {
         "error_type": "synthesis_failed_no_match",
         "error_message": "Could not verify exact string in target file",
         "attempt_count": 4,
@@ -377,16 +357,10 @@
         "suggested_action": "relocalize"
       },
       {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
-        "error_type": "context_mismatch",
-        "error_message": "aux patch apply failed for server/src/test/java/io/crate/execution/dml/IndexerTest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/execution/dml/IndexerTest.java:840\nerror: server/src/test/java/io/crate/execution/dml/IndexerTest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/execution/dml/IndexerTest.java:840\nerror: server/src/test/java/io/crate/execution/dml/IndexerTest.java: patch does not apply\n[gnu-patch-dry-run] checking file server/src/test/java/io/crate/execution/dml/IndexerTest.java\nReversed (or previously a",
+        "error_type": "unknown",
+        "error_message": "[INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.24s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.33s), 0 error(s).\n[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.11s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.06s), 0 error(s).\n[INFO] Scanned 61 class file(s) for forbidden API invocations (in 0.14s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbidden API invocations (in 0.10s), 0 error(s).\n[INFO] Scanned 584 class file(s) for forbidden API invocations (in 0.34s), 0 error(s).\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-server: Failed during checkstyle configuration: Exception was thrown while processing /repo/server/src/main/java/io/crate/execution/dml/Indexer.java: IllegalStateException occurred while parsing file /repo/server/src/main/java/io/crate/execution/dml/Indexer.java. 810:30: no viable alternative at input 'synthetics,': NoViableAltException -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server\n\u274c Build Failed",
         "attempt_count": 1,
-        "suggested_action": "re-localize"
+        "suggested_action": "inspect_and_retry"
       }
     ],
     "failed_hunks": [
@@ -406,42 +380,51 @@
         "new_content": "        return addStoredField;\n    }\n\n    /**\n     * Should the current arrayIndexer index its array length?\n     */\n    public boolean maybeAddArrayLengthField() {\n        return addArrayLengthField;\n    }\n\n    /**\n     * Returns an IndexDocumentBuilder that shares a lucene document and translog with the current one,\n     * but that tells any child indexers they should not add stored fields.\n"
       },
       {
-        "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
-        "old_content": "     * ordering and duplication, so child indexers do not need to store their values separately.\n     */\n    public IndexDocumentBuilder noStoredField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, false);\n    }\n\n    /**\n",
-        "new_content": "     * ordering and duplication, so child indexers do not need to store their values separately.\n     */\n    public IndexDocumentBuilder noStoredField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, false, addArrayLengthField);\n    }\n\n    /**\n     * Returns an IndexDocumentBuilder that shares a lucene document and translog with the current one,\n     * but that tells any child indexers they should not add array length fields.\n     * <p/>\n     * Called by ArrayIndexers that are not children of another ArrayIndexers in order to prevent child ArrayIndexers to\n     * index array lengths.\n     */\n    public IndexDocumentBuilder noArrayLengthField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, addStoredField, false);\n    }\n\n    /**\n"
+        "file_path": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
+        "old_content": "@Override\npublic void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {\n    docBuilder.translogWriter().startArray();\n    for (T value : values) {\n        if (value == null) {\n            docBuilder.translogWriter().writeNull();",
+        "new_content": "@Override\npublic void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {\n    docBuilder.translogWriter().startArray();\n    var nestedDocBuilder = docBuilder.noStoredField().noArrayLengthField();\n    for (T value : values) {\n        if (value == null) {\n            docBuilder.translogWriter().writeNull();",
+        "imports_added": [],
+        "imports_removed": [],
+        "adapted": true,
+        "loc_index": 1
       },
       {
         "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
-        "old_content": "     * preserve ordering and duplication.\n     */\n    public IndexDocumentBuilder wrapTranslog(UnaryOperator<TranslogWriter> wrapFunction) {\n        return new IndexDocumentBuilder(doc, wrapFunction.apply(translogWriter), synthetics, constraints, tableVersionCreated, addStoredField);\n    }\n\n    /**\n",
-        "new_content": "     * preserve ordering and duplication.\n     */\n    public IndexDocumentBuilder wrapTranslog(UnaryOperator<TranslogWriter> wrapFunction) {\n        return new IndexDocumentBuilder(doc, wrapFunction.apply(translogWriter), synthetics, constraints, tableVersionCreated, addStoredField, addArrayLengthField);\n    }\n\n    /**\n"
+        "old_content": "    /**\n     * ordering and duplication, so child indexers do not need to store their values separately.\n     */\n    public IndexDocumentBuilder noStoredField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, false, addArrayLengthField);\n    }\n\n    /**\n",
+        "new_content": "    /**\n     * ordering and duplication, so child indexers do not need to store their values separately.\n     */\n    public IndexDocumentBuilder noStoredField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, false, addArrayLengthField);\n    }\n\n    /**\n     * Returns an IndexDocumentBuilder that shares a lucene document and translog with the current one,\n     * but that tells any child indexers they should not add array length fields.\n     * <p/>\n     * Called by ArrayIndexers that are not children of another ArrayIndexers in order to prevent child ArrayIndexers to\n     * index array lengths.\n     */\n    public IndexDocumentBuilder noArrayLengthField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, addStoredField, false);\n    }\n\n    /**\n",
+        "imports_added": [],
+        "imports_removed": [],
+        "adapted": true,
+        "loc_index": 8
+      },
+      {
+        "file_path": "server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java",
+        "old_content": "import org.apache.lucene.search.Query;\nimport org.apache.lucene.search.TermQuery;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.lucene.search.Queries;\nimport org.jetbrains.annotations.Nullable;\n",
+        "new_content": "import org.apache.lucene.search.Query;\nimport org.apache.lucene.search.TermQuery;\nimport org.elasticsearch.common.lucene.search.Queries;\nimport org.jetbrains.annotations.Nullable;\n",
+        "imports_added": [],
+        "imports_removed": [
+          "org.elasticsearch.Version"
+        ],
+        "adapted": true,
+        "loc_index": 11
       },
       {
         "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-        "old_content": "        int cmpVal = cmpNumber.intValue();\n        // If the array col is from a table created on or after 5.9, we can utilize '_array_length_' indexes,\n        // see ArrayIndexer for details\n        if (context.tableInfo().versionCreated().onOrAfter(Version.V_5_9_0)) {\n            return toQueryUsingArrayLengthIndex(parentName, arrayRef, cmpVal, context.tableInfo()::getReference);\n        }\n\n",
-        "new_content": "        int cmpVal = cmpNumber.intValue();\n        // If the array col is from a table created on or after 5.9, we can utilize '_array_length_' indexes,\n        // see ArrayIndexer for details\n        if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {\n            return toQueryUsingArrayLengthIndex(parentName, arrayRef, cmpVal, context.tableInfo()::getReference);\n        }\n\n"
-      },
-      {
-        "file_path": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
-        "old_content": "\npublic class ArrayIndexer<T> implements ValueIndexer<List<T>> {\n\n    public static Query arrayLengthTermQuery(Reference arrayRef, int length, Function<ColumnIdent, Reference> getRef) {\n        return IntPoint.newExactQuery(toArrayLengthFieldName(arrayRef, getRef), length);\n    }\n",
-        "new_content": "\npublic class ArrayIndexer<T> implements ValueIndexer<List<T>> {\n\n    public static final Version ARRAY_LENGTH_FIELD_SUPPORTED_VERSION = Version.V_5_9_0;\n\n    public static Query arrayLengthTermQuery(Reference arrayRef, int length, Function<ColumnIdent, Reference> getRef) {\n        return IntPoint.newExactQuery(toArrayLengthFieldName(arrayRef, getRef), length);\n    }\n\n",
-        "refactored": true,
-        "semantic_confidence": 0.86,
-        "loc_index": 0
-      },
-      {
-        "file_path": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
-        "old_content": "\n    @Override\n    public void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {\n        docBuilder.translogWriter().startArray();\n        for (T value : values) {\n            if (value == null) {\n                docBuilder.translogWriter().writeNull();\n",
-        "new_content": "    @Override\n    public void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {\n        docBuilder.translogWriter().startArray();\n        IndexDocumentBuilder nestedDocBuilder = docBuilder.noStoredField().noArrayLengthField();\n        for (T value : values) {\n            if (value == null) {\n                docBuilder.translogWriter().writeNull();\n",
-        "refactored": true,
-        "semantic_confidence": 0.84,
-        "loc_index": 1
+        "old_content": "import org.apache.lucene.search.BooleanQuery;\nimport org.apache.lucene.search.MatchNoDocsQuery;\nimport org.apache.lucene.search.Query;\nimport org.elasticsearch.Version;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\n",
+        "new_content": "import org.apache.lucene.search.BooleanQuery;\nimport org.apache.lucene.search.MatchNoDocsQuery;\nimport org.apache.lucene.search.Query;\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\n",
+        "imports_added": [],
+        "imports_removed": [
+          "org.elasticsearch.Version"
+        ],
+        "adapted": true,
+        "loc_index": 14
       }
     ],
-    "generated_patch_bytes": 5758,
+    "generated_patch_bytes": 1381,
     "target_patch_bytes": 12638,
     "validation_passed": false,
-    "validation_failure_category": "context_mismatch",
-    "build_success": null,
+    "validation_failure_category": "unknown",
+    "build_success": false,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

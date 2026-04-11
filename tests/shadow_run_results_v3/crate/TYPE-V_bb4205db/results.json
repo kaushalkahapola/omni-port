@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T04:05:16.113718",
+  "run_timestamp": "2026-04-11T05:53:36.913125",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "bb4205db375cc17694818cbb88f03dc039a805ce",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 15.16,
+      "elapsed_s": 22.69,
       "error": null,
       "java_hunks": 26,
       "aux_hunks": 2,
@@ -250,17 +250,17 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.36,
+      "elapsed_s": 4.21,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch introduces a new method getAggReference() to centralize the logic of checking if an aggregation reference is valid, specifically adding a check for RowGranularity.DOC. This method is then used across multiple aggregation implementations to replace direct access to aggregationReferences.get(0) and to add the granularity check. The patch also modifies multiple aggregation classes to use this new method and adjust their logic accordingly. These changes involve structural modifications to method calls and logic flow, but do not represent a complete redesign or deep refactoring. The patch is not a trivial string replacement or whitespace change, but a structural change to the aggregation function implementations. The localization evidence shows most hunks were found with high confidence via git_exact or git_pickaxe, supporting the classification. The patch complexity is best classified as TYPE_III (structural changes). The confidence is high but not absolute due to some fuzzy matches. The token budget estimate is moderate given the number of files and structural changes.",
+        "reasoning": "The patch introduces a new method getAggReference() to centralize the logic of checking if an aggregation reference is valid, specifically adding a check for RowGranularity.DOC granularity. This method is then used across multiple aggregation implementations to replace direct access to aggregationReferences.get(0) and to add the granularity check. The patch also modifies multiple aggregation classes to use this new method and removes redundant hasDocValues() checks. Additionally, a new test is added to verify behavior with partitioned columns. The changes involve structural refactoring of method calls and logic centralization across many files, but the core functionality remains consistent. The patch is not a trivial string replacement or whitespace fix, nor is it a deep API redesign. It is a structural change affecting multiple classes and methods, thus classified as TYPE_III with high confidence. The token budget estimate is moderate due to the number of files and the structural nature of the changes.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.03,
       "error": null,
       "applied_count": 17,
       "applied_hunks": [
@@ -352,103 +352,376 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 34.92,
+      "elapsed_s": 33.58,
       "error": null,
-      "adapted_count": 6
+      "adapted_count": 7
     },
     "agent5_structural": {
-      "elapsed_s": 55.6,
+      "elapsed_s": 0.02,
       "error": null,
-      "refactored_count": 2
+      "refactored_count": 0
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 29.93,
       "error": null,
       "synthesized_count": 8,
-      "failed_count": 1,
-      "synthesis_status": "partial",
+      "failed_count": 0,
+      "synthesis_status": "success",
       "synthesized_hunks": [
         {
-          "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
-          "old_string": "            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
-          "new_string": "            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
-          "old_string": "            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
-          "new_string": "            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
-          "old_string": "            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
-          "new_string": "            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
           "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java",
-          "old_string": "import io.crate.memory.MemoryManager;\nimport io.crate.metadata.FunctionImplementation;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.doc.DocTableInfo;\nimport io.crate.types.DataType;",
-          "new_string": "import io.crate.memory.MemoryManager;\nimport io.crate.metadata.FunctionImplementation;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.RowGranularity;\nimport io.crate.metadata.doc.DocTableInfo;\nimport io.crate.types.DataType;",
+          "old_string": "@Nullable\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       List<Literal<?>> optionalParams) {\n        return null;\n    }\n}",
+          "new_string": "@Nullable\n    public DocValueAggregator<?> getDocValueAggregator(LuceneReferenceResolver referenceResolver,\n                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       List<Literal<?>> optionalParams) {\n        return null;\n    }\n\n    protected Reference getAggReference(List<Reference> aggregationReferences) {\n        if (aggregationReferences == null || aggregationReferences.isEmpty()) {\n            return null;\n        }\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues() || reference.granularity() != io.crate.metadata.RowGranularity.DOC) {\n            return null;\n        }\n        return reference;\n    }\n}",
           "confidence": 1.0,
           "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+          "old_string": "                        state.addHash(hash);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        var precision = optionalParams.size() == 1 ? (Integer) optionalParams.get(0).value() : HyperLogLogPlusPlus.DEFAULT_PRECISION;\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n",
+          "new_string": "                        state.addHash(hash);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        var precision = optionalParams.size() == 1 ? (Integer) optionalParams.get(0).value() : HyperLogLogPlusPlus.DEFAULT_PRECISION;\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        },
+        {
+          "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+          "old_string": "                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))\n                        // => mix64(doubleToLongBits(Double.longBitsToDouble(sortableDoubleBits(values.nextValue()))))\n                        // => mix64(sortableDoubleBits(values.nextValue()))\n                        var hash = BitMixer.mix64(NumericUtils.sortableDoubleBits(values.nextValue()));\n                        state.addHash(hash);\n                    }\n                );\n            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n",
+          "new_string": "                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableLongToDouble(values.nextValue())))\n                        // => mix64(doubleToLongBits(Double.longBitsToDouble(sortableDoubleBits(values.nextValue()))))\n                        // => mix64(sortableDoubleBits(values.nextValue()))\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                    }\n                );\n            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        },
+        {
+          "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
+          "old_string": "                    (values, state) -> {\n                        // Murmur3Hash.Float in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of float DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits((double)NumericUtils.sortableIntToFloat((int)values.nextValue())))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int)values.nextValue()))) - no need to double cast, auto widening\n                        var hash = BitMixer.mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int) values.nextValue())));\n                        state.addHash(hash);\n                    }\n                );\n            case StringType.ID:\n            case CharacterType.ID:\n                var precision = optionalParams.size() == 1 ? (Integer) optionalParams.get(0).value() : HyperLogLogPlusPlus.DEFAULT_PRECISION;\n                return new HllAggregator(reference.storageIdent(), dataType, precision) {\n",
+          "new_string": "                    (values, state) -> {\n                        // Murmur3Hash.Float in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of float DocValue is\n                        // mix64(doubleToLongBits(decoded))\n                        // => mix64(doubleToLongBits((double)NumericUtils.sortableIntToFloat((int)values.nextValue())))\n                        // => mix64(doubleToLongBits(NumericUtils.sortableIntToFloat((int)values.nextValue()))) - no need to double cast, auto widening\n            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                    }\n                );\n            case StringType.ID:\n            case CharacterType.ID:\n                var precision = optionalParams.size() == 1 ? (Integer) optionalParams.get(0).value() : HyperLogLogPlusPlus.DEFAULT_PRECISION;\n                return new HllAggregator(reference.storageIdent(), dataType, precision) {\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
+          "old_string": "    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues()) {\n            return null;\n        }\n        switch (ref.valueType().id()) {",
+          "new_string": "    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues() || ref.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        switch (ref.valueType().id()) {",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
+          "old_string": "            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            var aggregationRef = (Reference) aggregationReferences.get(0);\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(aggregationRef.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;\n                    }\n                    var subColDocValAggregator = getDocValueAggregator(notNullColRef);\n                    if (subColDocValAggregator != null) {\n                        return subColDocValAggregator;\n                    }\n                }\n            }\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        return getDocValueAggregator(reference);\n    }\n}\n",
+          "new_string": "            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            var aggregationRef = (Reference) aggregationReferences.get(0);\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(aggregationRef.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n        if (aggregationReferences.size() != 1) {\n            return null;\n        }\n        Reference reference = aggregationReferences.getFirst();\n        if (reference == null) {\n            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(reference.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;\n            return null;\n        }\n        return getDocValueAggregator(reference);\n    }\n}\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java",
-          "old_string": "        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:",
-          "new_string": "        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:",
+          "old_string": "                                                       DocTableInfo table,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();\n                    },\n",
+          "new_string": "                                                       DocTableInfo table,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();\n                    },\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java",
-          "old_string": "        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:",
-          "new_string": "        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:",
+          "old_string": "                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(AverageStateType.INSTANCE.fixedSize());\n                        return new AverageState();\n                    },\n                    (values, state) -> {\n",
+          "new_string": "                                                       List<Reference> aggregationReferences,\n                                                       DocTableInfo table,\n                                                       List<Literal<?>> optionalParams) {\n        Reference reference = aggregationReferences.get(0);\n        if (!reference.hasDocValues()) {\n            return null;\n        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(AverageStateType.INSTANCE.fixedSize());\n                        return new AverageState();\n                    },\n                    (values, state) -> {\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
-          "old_string": "    }\n\n    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues()) {\n            return null;\n        }\n        switch (ref.valueType().id()) {",
-          "new_string": "    }\n\n    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues() || ref.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        return switch (ref.valueType().id()) {",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
-          "old_string": "        if (aggregationReferences.size() != 1) {\n            return null;\n        }\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            var aggregationRef = (Reference) aggregationReferences.get(0);\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(aggregationRef.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;",
-          "new_string": "        if (aggregationReferences.size() != 1) {\n            return null;\n        }\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (reference.valueType().id() == ObjectType.ID) {\n            // Count on object would require loading the source just to check if there is a value.\n            // Try to count on a non-null sub-column to be able to utilize doc-values.\n            for (var notNullCol : table.notNullColumns()) {\n                // the first seen not-null sub-column will be used\n                if (notNullCol.isChildOf(reference.column())) {\n                    var notNullColRef = table.getReference(notNullCol);\n                    if (notNullColRef == null) {\n                        continue;",
-          "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         }
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 0.24,
+      "elapsed_s": 69.48,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Aux hunk application failed: aux patch apply failed for docs/appendices/release-notes/5.10.9.rst: [git-strict] error: docs/appendices/release-notes/5.10.9.rst: No such file or directory\n[git-tolerant] error: docs/appendices/release-notes/5.10.9.rst: No such file or directory\n[gnu-patch-dry-run] can't find file to patch at input line 5\nPerhaps you used the wrong -p or --strip option?\nThe text leading up to this was:\n--------------------------\n|diff --git a/docs/appendices/release-notes/5.10.9.rst",
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nlibs/dex/src/testFixtures/java/io/crate/data/testing/FailingBatchIterator.java:24: error: package io.crate.common.exceptions does not exist\nlibs/dex/src/testFixtures/java/io/crate/data/testing/FailingBatchIterator.java:29: error: cannot access Killable\nlibs/dex/src/testFixtures/java/io/crate/data/testing/BatchIteratorTester.java:42: error: package io.crate.common.exceptions does not exist\nlibs/dex/src/testFixtures/java/io/crate/data/testing/TestingRo",
       "validation_attempts": 1,
-      "retry_files": [],
-      "build_success": null,
-      "build_mode": null,
+      "retry_files": [
+        "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchIteratorTester.java",
+        "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchSimulatingIterator.java",
+        "libs/dex/src/testFixtures/java/io/crate/data/testing/FailingBatchIterator.java",
+        "libs/dex/src/testFixtures/java/io/crate/data/testing/TestingRowConsumer.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/SqlFormatter.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/Assignment.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/ColumnPolicy.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/OptimizeStatement.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/PartitionedBy.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/QualifiedName.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/ResetStatement.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/SetStatement.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/SetTransactionStatement.java",
+        "libs/sql-parser/src/main/java/io/crate/sql/tree/Table.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
       "test_state_transition": null,
-      "compile_errors": []
+      "compile_errors": [
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/FailingBatchIterator.java",
+          "line": 24,
+          "message": "error: package io.crate.common.exceptions does not exist"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/FailingBatchIterator.java",
+          "line": 29,
+          "message": "error: cannot access Killable"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchIteratorTester.java",
+          "line": 42,
+          "message": "error: package io.crate.common.exceptions does not exist"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/TestingRowConsumer.java",
+          "line": 33,
+          "message": "error: package io.crate.common.exceptions does not exist"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/FailingBatchIterator.java",
+          "line": 45,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchIteratorTester.java",
+          "line": 85,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchIteratorTester.java",
+          "line": 105,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchIteratorTester.java",
+          "line": 179,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchIteratorTester.java",
+          "line": 212,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/TestingRowConsumer.java",
+          "line": 102,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchSimulatingIterator.java",
+          "line": 145,
+          "message": "error: method does not override or implement a method from a supertype"
+        },
+        {
+          "file": "libs/dex/src/testFixtures/java/io/crate/data/testing/BatchSimulatingIterator.java",
+          "line": 147,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/Table.java",
+          "line": 24,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/Assignment.java",
+          "line": 24,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/OptimizeStatement.java",
+          "line": 24,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/PartitionedBy.java",
+          "line": 25,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/SetStatement.java",
+          "line": 29,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/ResetStatement.java",
+          "line": 24,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+          "line": 28,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+          "line": 29,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+          "line": 30,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+          "line": 31,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/SetTransactionStatement.java",
+          "line": 27,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/QualifiedName.java",
+          "line": 33,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/ColumnPolicy.java",
+          "line": 29,
+          "message": "error: package io.crate.common does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/SqlFormatter.java",
+          "line": 41,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 43,
+          "message": "error: package io.crate.common.collections does not exist"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/Table.java",
+          "line": 68,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/Assignment.java",
+          "line": 73,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/OptimizeStatement.java",
+          "line": 50,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/PartitionedBy.java",
+          "line": 44,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/SetStatement.java",
+          "line": 78,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/ResetStatement.java",
+          "line": 44,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+          "line": 91,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+          "line": 138,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+          "line": 158,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java",
+          "line": 204,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/SetTransactionStatement.java",
+          "line": 88,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/QualifiedName.java",
+          "line": 69,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/ColumnPolicy.java",
+          "line": 66,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/tree/ColumnPolicy.java",
+          "line": 69,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/SqlFormatter.java",
+          "line": 436,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/SqlFormatter.java",
+          "line": 539,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 448,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 790,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 816,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 845,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 870,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 1309,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 1325,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java",
+          "line": 2330,
+          "message": "error: cannot find symbol"
+        }
+      ]
     }
   },
   "summary": {
@@ -484,48 +757,30 @@
       2,
       3,
       7,
-      21,
-      25,
       14,
-      15
+      15,
+      21,
+      25
     ],
     "tokens_used": 0,
-    "synthesis_status": "partial",
+    "synthesis_status": "success",
     "applied_on_disk_ag3": 17,
     "synthesized_count": 8,
-    "failed_hunks_total": 1,
+    "failed_hunks_total": 0,
     "retry_contexts": [
       {
-        "error_type": "synthesis_skipped_no_localization",
-        "error_message": "Hunk unclaimed; localization failed entirely",
-        "attempt_count": 4,
-        "suggested_action": "manual_review"
-      },
-      {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
-        "error_type": "context_mismatch",
-        "error_message": "aux patch apply failed for docs/appendices/release-notes/5.10.9.rst: [git-strict] error: docs/appendices/release-notes/5.10.9.rst: No such file or directory\n[git-tolerant] error: docs/appendices/release-notes/5.10.9.rst: No such file or directory\n[gnu-patch-dry-run] can't find file to patch at input line 5\nPerhaps you used the wrong -p or --strip option?\nThe text leading up to this was:\n--------------------------\n|diff --git a/docs/appendices/release-notes/5.10.9.rst b/docs/appendices/release-notes/5.10.9.rst\n|index b153f76c99..045927be63 100644\n|--- a/docs/appen",
+        "error_type": "api_mismatch",
+        "error_message": "rg.jetbrains.annotations.Nullable Comparator<T>)\n[ERROR]   where T is a type-variable:\n[ERROR]     T extends Object declared in method <T>getEnd(Mode,int,int,int,@org.jetbrains.annotations.Nullable Object, T,@org.jetbrains.annotations.Nullable Comparator<T>,List<T>)\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/tree/FrameBound.java:[204,27] error: cannot find symbol\n[ERROR]   symbol: method findFirstLTEProbeValue(List<T>,int,int, T,@org.jetbrains.annotations.Nullable Comparator<T>)\n[ERROR]   where T is a type-variable:\n[ERROR]     T extends Object declared in method <T>getEnd(Mode,int,int,int,@org.jetbrains.annotations.Nullable Object, T,@org.jetbrains.annotations.Nullable Comparator<T>,List<T>)\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/tree/SetTransactionStatement.java:[88,36] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class SetTransactionStatement\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/tree/QualifiedName.java:[69,15] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class QualifiedName\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/tree/ColumnPolicy.java:[66,12] error: cannot find symbol\n[ERROR]   symbol:   variable Booleans\n[ERROR]   location: class ColumnPolicy\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/tree/ColumnPolicy.java:[69,12] error: cannot find symbol\n[ERROR]   symbol:   variable Booleans\n[ERROR]   location: class ColumnPolicy\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/SqlFormatter.java:[436,20] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class Formatter\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/SqlFormatter.java:[539,16] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class Formatter\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java:[448,28] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class AstBuilder\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java:[790,34] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class AstBuilder\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java:[816,26] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class AstBuilder\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java:[845,26] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class AstBuilder\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java:[870,38] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class AstBuilder\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java:[1309,32] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class AstBuilder\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java:[1325,32] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class AstBuilder\n[ERROR] /repo/libs/sql-parser/src/main/java/io/crate/sql/parser/AstBuilder.java:[2330,15] error: cannot find symbol\n[ERROR]   symbol:   variable Lists2\n[ERROR]   location: class AstBuilder\n[ERROR] -> [Help 2]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] [Help 2] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-libs-es-x-content\n\u274c Build Failed",
         "attempt_count": 1,
-        "suggested_action": "re-localize"
+        "suggested_action": "route_to_namespace_or_structural"
       }
     ],
-    "failed_hunks": [
-      {
-        "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java",
-        "old_content": "        return null;\n    }\n\n    protected DocValueAggregator<?> getNumericDocValueAggregator(\n        List<Reference> aggregationReferences,\n        TriConsumer<RamAccounting, TPartial, BigDecimal> applyToState) {\n\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n\n        DataType<?> valueType = reference.valueType();\n        if (valueType.id() != NumericType.ID) {\n",
-        "new_content": "        return null;\n    }\n\n    protected Reference getAggReference(List<Reference> aggregationReferences) {\n        if (aggregationReferences.isEmpty()) {\n            return null;\n        }\n        Reference reference = aggregationReferences.getFirst();\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues() || reference.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        return reference;\n    }\n\n    protected DocValueAggregator<?> getNumericDocValueAggregator(\n        List<Reference> aggregationReferences,\n        TriConsumer<RamAccounting, TPartial, BigDecimal> applyToState) {\n\n        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n\n        DataType<?> valueType = reference.valueType();\n        if (valueType.id() != NumericType.ID) {\n"
-      }
-    ],
-    "generated_patch_bytes": 7558,
+    "failed_hunks": [],
+    "generated_patch_bytes": 10948,
     "target_patch_bytes": 28152,
     "validation_passed": false,
-    "validation_failure_category": "context_mismatch",
-    "build_success": null,
+    "validation_failure_category": "api_mismatch",
+    "build_success": false,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

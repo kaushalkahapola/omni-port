@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T04:07:30.357970",
+  "run_timestamp": "2026-04-11T05:54:35.806416",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "28f8a4b4765ab933f6f4efebaf5bbadb61ff7b9b",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.96,
+      "elapsed_s": 0.93,
       "error": null,
       "java_hunks": 2,
       "aux_hunks": 3,
@@ -34,64 +34,61 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.48,
+      "elapsed_s": 3.41,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.95,
-        "reasoning": "The patch modifies the UnnestFunction.java file with changes that involve type signature adjustments and some restructuring of the function implementation. The first hunk is an exact match, but the second hunk involves changes found via 'git_pickaxe' indicating some formatting and structural adjustments but not deep refactoring or redesign. The patch also includes test additions and documentation updates which are straightforward. Overall, the patch requires fuzzy matching due to the signature and minor structural changes but does not involve deep structural refactoring or redesign, fitting TYPE_II complexity.",
+        "reasoning": "The patch modifies the UnnestFunction.java file with changes that involve type signature adjustments and some restructuring of the return type construction logic. The first hunk is an exact match, but the second hunk involves changes that require fuzzy matching due to modifications in method calls and logic structure. The patch also includes test additions and documentation updates, which are straightforward. Overall, the patch is more complex than a simple string replacement but does not involve deep structural refactoring or redesign, fitting a TYPE_II classification with high confidence.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
       "elapsed_s": 0.0,
       "error": null,
-      "applied_count": 1,
-      "applied_hunks": [
-        {
-          "applied": true,
-          "file_path": "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java",
-          "error": null
-        }
-      ]
+      "applied_count": 0,
+      "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 8.45,
+      "elapsed_s": 13.44,
       "error": null,
-      "adapted_count": 0
+      "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 61.38,
+      "elapsed_s": 38.93,
       "error": null,
       "refactored_count": 1
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.02,
       "error": null,
-      "synthesized_count": 1,
-      "failed_count": 0,
-      "synthesis_status": "success",
+      "synthesized_count": 0,
+      "failed_count": 1,
+      "synthesis_status": "partial",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java",
           "old_string": "\n    public static void register(TableFunctionModule module) {\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariableOfAnyType(\"N\"))\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                List<DataType<?>> fieldTypes = Lists2.map(boundSignature.argTypes(), ArrayType::unnest);\n                Boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());\n                List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName\n                    ? List.of(NAME)\n                    : List.of();\n                RowType returnType = new RowType(fieldTypes, fieldNames);\n\n                /**\n                 * See class javadoc of {@link TableFunctionImplementation}\n                 * Single return value is promoted/unwrapped from Row\n                 **/\n                BoundSignature newBoundSignature = new BoundSignature(\n                    boundSignature.argTypes(),\n                    fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType\n                );\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    newBoundSignature,\n                    returnType\n                );\n            }\n        );\n        // unnest() to keep it compatible with previous versions\n        module.register(\n            Signature.table(\n                NAME,\n                DataTypes.UNTYPED_OBJECT.getTypeSignature()\n            ),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                RowType.EMPTY)\n        );\n    }\n\n    static class UnnestTableFunctionImplementation extends TableFunctionImplementation<List<Object>> {\n\n        private final RowType returnType;\n",
-          "new_string": "\n    public static void register(TableFunctionModule module) {\n        module.register(\n            Signature\n                .table(\n                    NAME,\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"E\")\n                )\n                .withTypeVariableConstraints(io.crate.metadata.functions.TypeVariableConstraint.typeVariable(\"E\")),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?\n                    new RowType(List.of(boundSignature.returnType())) :\n                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))\n        );\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariableOfAnyType(\"N\"))\n                .withFeature(Scalar.Feature.NON_NULLABLE)\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                var argTypes = boundSignature.argTypes();\n                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());\n                for (int i = 0; i < argTypes.size(); i++) {\n                    DataType<?> dataType = argTypes.get(i);\n                    fieldTypes.add(ArrayType.unnest(dataType));\n                }\n                boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());\n                List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName\n                    ? List.of(NAME)\n                    : List.of();\n                RowType returnType = new RowType(fieldTypes, fieldNames);\n\n                BoundSignature newBoundSignature = new BoundSignature(\n                    boundSignature.argTypes(),\n                    fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType\n                );\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    newBoundSignature,\n                    returnType\n                );\n            }\n        );\n        );\n    }\n\n    static class UnnestTableFunctionImplementation extends TableFunctionImplementation<List<Object>> {\n\n        private final RowType returnType;\n",
+          "new_string": "\n    public static void register(TableFunctionModule module) {\n        module.register(\n            Signature\n                .table(\n                    NAME,\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"E\")\n                )\n                .withTypeVariableConstraints(typeVariableOfAnyType(\"E\")),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?\n                    new RowType(List.of(boundSignature.returnType())) :\n                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))\n        );\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariableOfAnyType(\"N\"))\n                .withFeature(Scalar.Feature.NON_NULLABLE)\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                var argTypes = boundSignature.argTypes();\n                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());\n                for (int i = 0; i < argTypes.size(); i++) {\n                    DataType<?> dataType = argTypes.get(i);\n                    fieldTypes.add(ArrayType.unnest(dataType));\n                }\n                Boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());\n                List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName\n                    ? List.of(NAME)\n                    : List.of();\n                RowType returnType = new RowType(fieldTypes, fieldNames);\n\n                // See class javadoc of TableFunctionImplementation\n                // Single return value is promoted/unwrapped from Row\n                BoundSignature newBoundSignature = new BoundSignature(\n                    boundSignature.argTypes(),\n                    fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType\n                );\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    newBoundSignature,\n                    returnType\n                );\n            }\n        );\n        );\n    }\n\n    static class UnnestTableFunctionImplementation extends TableFunctionImplementation<List<Object>> {\n\n        private final RowType returnType;\n",
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
         }
+      ],
+      "partial_rollback_files": [
+        "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java"
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 0.27,
+      "elapsed_s": 41.01,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Aux hunk application failed: aux patch apply failed for server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java:32\nerror: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java:32\nerror: server/src/test/java/io/crate/analyze/SelectSta",
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper): [INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.0:check (validate) on project jlink-jdk: Unable to read Checkstyle results xml: /repo/jlink-jdk/target/checkstyle-result.xml: input contained no data -> [Help 1]\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.0:check (validate) on project crate-libs-pgwire: Unable to read Checkstyle results xml: /repo/libs/pgwire/target/checkst",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": null,
-      "build_mode": null,
+      "build_success": false,
+      "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
@@ -115,24 +112,42 @@
       1
     ],
     "tokens_used": 0,
-    "synthesis_status": "success",
-    "applied_on_disk_ag3": 1,
-    "synthesized_count": 1,
-    "failed_hunks_total": 0,
+    "synthesis_status": "partial",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 0,
+    "failed_hunks_total": 1,
     "retry_contexts": [
       {
-        "error_type": "context_mismatch",
-        "error_message": "aux patch apply failed for server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java:32\nerror: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java:32\nerror: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: patch does not apply\n[gnu-patch-dry-run] checking file server/src/test/java/io/crate/analyze/SelectStat",
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.0:check (validate) on project jlink-jdk: Unable to read Checkstyle results xml: /repo/jlink-jdk/target/checkstyle-result.xml: input contained no data -> [Help 1]\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.0:check (validate) on project crate-libs-pgwire: Unable to read Checkstyle results xml: /repo/libs/pgwire/target/checkstyle-result.xml: input contained no data -> [Help 1]\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.0:check (validate) on project crate-libs-shared: Unable to read Checkstyle results xml: /repo/libs/shared/target/checkstyle-result.xml: no more data available - expected end tags </file></checkstyle> to close start tag <file> from line 43 and start tag <checkstyle> from line 2, parser stopped on TEXT seen .../crate/common/concurrent/KillableCompletionStage.java\">\\n</file>\\n<f... @45:3 -> [Help 1]\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.0:check (validate) on project crate-libs-guice: Unable to read Checkstyle results xml: /repo/libs/guice/target/checkstyle-result.xml: no more data available - expected end tags </file></checkstyle> to close start tag <file> from line 39 and start tag <checkstyle> from line 2, parser stopped on TEXT seen .../libs/guice/src/main/java/org/elasticsearch/common/inject/Scopes.j... @39:84 -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :jlink-jdk\n\u274c Build Failed",
         "attempt_count": 1,
-        "suggested_action": "re-localize"
+        "suggested_action": "inspect_and_retry"
       }
     ],
-    "failed_hunks": [],
-    "generated_patch_bytes": 15934,
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java",
+        "old_content": "package io.crate.expression.tablefunctions;\n\nimport static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;\nimport static io.crate.metadata.functions.TypeVariableConstraint.typeVariableOfAnyType;\n\nimport java.util.ArrayList;\n",
+        "new_content": "package io.crate.expression.tablefunctions;\n\nimport static io.crate.metadata.functions.TypeVariableConstraint.typeVariableOfAnyType;\n\nimport java.util.ArrayList;\n",
+        "imports_added": [],
+        "imports_removed": [
+          "import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;"
+        ],
+        "adapted": true,
+        "loc_index": 0
+      }
+    ],
+    "generated_patch_bytes": 13931,
     "target_patch_bytes": 7606,
     "validation_passed": false,
-    "validation_failure_category": "context_mismatch",
-    "build_success": null,
+    "validation_failure_category": "unknown",
+    "build_success": false,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},
