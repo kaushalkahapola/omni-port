@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "2d1d5792c54e7422dbb64fac5894ebcdcd1c92a0",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.29,
+      "elapsed_s": 0.06,
       "error": null,
       "java_hunks": 19,
       "aux_hunks": 7,
@@ -79,17 +79,17 @@
         {
           "hunk_index": 7,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "method_used": "git_pickaxe",
-          "confidence": 0.9,
-          "start_line": 216,
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 217,
           "end_line": 222,
           "symbol_mappings": {}
         },
         {
           "hunk_index": 8,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
-          "method_used": "failed",
-          "confidence": 0.0,
+          "method_used": "new_file",
+          "confidence": 1.0,
           "start_line": 0,
           "end_line": 0,
           "symbol_mappings": {}
@@ -97,8 +97,8 @@
         {
           "hunk_index": 9,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
-          "method_used": "failed",
-          "confidence": 0.0,
+          "method_used": "new_file",
+          "confidence": 1.0,
           "start_line": 0,
           "end_line": 0,
           "symbol_mappings": {}
@@ -187,19 +187,19 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.75,
+      "elapsed_s": 5.17,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_IV",
         "confidence": 0.95,
-        "reasoning": "The patch introduces new operators (AllLikeOperator and AllNotLikeOperator) with significant new classes and logic, including changes to core expression analysis, operator registration, and symbol printing. It adds new files and modifies existing ones with structural changes to support new functionality. The localization evidence shows most hunks found exactly, but two new files failed localization, indicating new code additions. This level of change indicates deep structural refactoring and API extension, consistent with TYPE_IV complexity. Confidence is high due to exact matches for most changes and clear structural additions. The token budget is estimated high due to the number of files, new classes, and complexity of the changes.",
+        "reasoning": "The patch introduces new operators (AllLikeOperator, AllNotLikeOperator) and extends existing classes and enums to support new functionality for 'ALL LIKE' and 'ALL NOT LIKE' SQL operators. It adds new files, modifies core expression analyzer logic, operator definitions, and symbol printing logic. The changes involve adding new classes, modifying sealed classes, and updating function signatures and printing logic, indicating a deep structural refactoring and API extension rather than a simple fix or minor adjustment. The localization evidence shows all hunks are found exactly or as new files, indicating the patch applies cleanly but involves significant new code and structural changes. Therefore, the patch complexity is TYPE_IV with high confidence and a substantial token budget estimate to handle the complexity during backporting.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
       "elapsed_s": 0.01,
       "error": null,
-      "applied_count": 15,
+      "applied_count": 16,
       "applied_hunks": [
         {
           "applied": true,
@@ -209,6 +209,11 @@
         {
           "applied": true,
           "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
           "error": null
         },
         {
@@ -279,9 +284,9 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 19.82,
+      "elapsed_s": 20.78,
       "error": null,
-      "adapted_count": 2
+      "adapted_count": 3
     },
     "agent5_structural": {
       "elapsed_s": 0.02,
@@ -291,7 +296,7 @@
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 2,
+      "synthesized_count": 1,
       "failed_count": 2,
       "synthesis_status": "partial",
       "synthesized_hunks": [
@@ -302,32 +307,43 @@
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "old_string": "                    ANY_ILIKE,\n                    DataTypes.STRING.getTypeSignature(),\n                    DataTypes.STRING_ARRAY.getTypeSignature(),\n                    Operator.RETURN_TYPE.getTypeSignature()\n                ).withFeature(Scalar.Feature.DETERMINISTIC)\n                .withFeature(Scalar.Feature.NULLABLE),\n            (signature, boundSignature) ->\n                new AnyLikeOperator(\n                    signature,\n                    boundSignature,\n                    CaseSensitivity.INSENSITIVE\n                )\n        );\n",
-          "new_string": "                    ANY_ILIKE,\n                    DataTypes.STRING.getTypeSignature(),\n                    DataTypes.STRING_ARRAY.getTypeSignature(),\n                    Operator.RETURN_TYPE.getTypeSignature()\n                ).withFeature(Scalar.Feature.DETERMINISTIC)\n                .withFeature(Scalar.Feature.NULLABLE),\n        builder.add(\n            Signature.scalar(\n                    ALL_LIKE,\n                    DataTypes.STRING.getTypeSignature(),\n                    DataTypes.STRING_ARRAY.getTypeSignature(),\n                    Operator.RETURN_TYPE.getTypeSignature()\n                ).withFeature(Scalar.Feature.DETERMINISTIC)\n                .withFeature(Scalar.Feature.NULLABLE),\n            (signature, boundSignature) ->\n                new AllLikeOperator(\n                    signature,\n                    boundSignature,\n                    CaseSensitivity.SENSITIVE\n                )\n        );\n        builder.add(\n            Signature.scalar(\n                    ALL_NOT_LIKE,\n                    DataTypes.STRING.getTypeSignature(),\n                    DataTypes.STRING_ARRAY.getTypeSignature(),\n                    Operator.RETURN_TYPE.getTypeSignature()\n                ).withFeature(Scalar.Feature.DETERMINISTIC)\n                .withFeature(Scalar.Feature.NULLABLE),\n            (signature, boundSignature) ->\n                new AllNotLikeOperator(\n                    signature,\n                    boundSignature,\n                    CaseSensitivity.SENSITIVE\n                )\n        );\n        builder.add(\n            Signature.scalar(\n                    ALL_ILIKE,\n                    DataTypes.STRING.getTypeSignature(),\n                    DataTypes.STRING_ARRAY.getTypeSignature(),\n                    Operator.RETURN_TYPE.getTypeSignature()\n                ).withFeature(Scalar.Feature.DETERMINISTIC)\n                .withFeature(Scalar.Feature.NULLABLE),\n            (signature, boundSignature) ->\n                new AllLikeOperator(\n                    signature,\n                    boundSignature,\n                    CaseSensitivity.INSENSITIVE\n                )\n        );\n        builder.add(\n            Signature.scalar(\n                    ALL_NOT_ILIKE,\n                    DataTypes.STRING.getTypeSignature(),\n                    DataTypes.STRING_ARRAY.getTypeSignature(),\n                    Operator.RETURN_TYPE.getTypeSignature()\n                ).withFeature(Scalar.Feature.DETERMINISTIC)\n                .withFeature(Scalar.Feature.NULLABLE),\n            (signature, boundSignature) ->\n                new AllNotLikeOperator(\n                    signature,\n                    boundSignature,\n                    CaseSensitivity.INSENSITIVE\n                )\n        );\n                new AnyLikeOperator(\n                    signature,\n                    boundSignature,\n                    CaseSensitivity.INSENSITIVE\n                )\n        );\n",
-          "confidence": 1.0,
-          "context_lines_included": 3,
-          "verified": true
         }
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 71.13,
+      "elapsed_s": 119.95,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper):    rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:32: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:33: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/all/AllOperator.java:48: error: cannot find symbol",
       "validation_attempts": 1,
-      "retry_files": [],
+      "retry_files": [
+        "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+        "server/src/main/java/io/crate/expression/operator/all/AllOperator.java"
+      ],
       "build_success": false,
       "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
       "test_state_transition": null,
-      "compile_errors": []
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+          "line": 32,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+          "line": 33,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
+          "line": 48,
+          "message": "error: cannot find symbol"
+        }
+      ]
     }
   },
   "summary": {
@@ -336,7 +352,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 129
     },
     "java_production_hunks": 19,
@@ -348,6 +364,7 @@
       4,
       5,
       6,
+      7,
       10,
       11,
       12,
@@ -358,27 +375,16 @@
       17,
       18,
       1,
-      7
+      8,
+      9
     ],
     "tokens_used": 0,
     "synthesis_status": "partial",
-    "applied_on_disk_ag3": 15,
-    "synthesized_count": 2,
+    "applied_on_disk_ag3": 16,
+    "synthesized_count": 1,
     "failed_hunks_total": 2,
     "retry_contexts": [
       {
-        "error_type": "synthesis_skipped_no_localization",
-        "error_message": "Hunk unclaimed; localization failed entirely",
-        "attempt_count": 4,
-        "suggested_action": "manual_review"
-      },
-      {
-        "error_type": "synthesis_skipped_no_localization",
-        "error_message": "Hunk unclaimed; localization failed entirely",
-        "attempt_count": 4,
-        "suggested_action": "manual_review"
-      },
-      {
         "error_type": "synthesis_failed_no_match",
         "error_message": "Could not verify exact string in target file",
         "attempt_count": 4,
@@ -391,28 +397,64 @@
         "suggested_action": "relocalize"
       },
       {
-        "error_type": "unknown",
-        "error_message": "--- Building code for 1f005c2 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      ",
+        "error_type": "api_mismatch",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[32,39] error: cannot find symbol\n  symbol:   class AllLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[33,39] error: cannot find symbol\n  symbol:   class AllNotLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllOperator.java:[48,87] error: cannot find symbol\n  symbol: class AllLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllOperator.java:[48,120] error: cannot find symbol\n  symbol: class AllNotLikeOperator\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[32,39] error: cannot find symbol\n[ERROR]   symbol:   class AllLikeOperator\n[ERROR]   location: package io.crate.expression.operator.all\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[33,39] error: cannot find symbol\n[ERROR]   symbol:   class AllNotLikeOperator\n[ERROR]   location: package io.crate.expression.operator.all\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllOperator.java:[48,87] error: cannot find symbol\n[ERROR]   symbol: class AllLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllOperator.java:[48,120] error: cannot find symbol\n[ERROR]   symbol: class AllNotLikeOperator\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
-        "suggested_action": "inspect_and_retry"
+        "suggested_action": "route_to_namespace_or_structural"
       }
     ],
     "failed_hunks": [
       {
         "file_path": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
-        "old_content": "-- /dev/null\n",
-        "new_content": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataType;\nimport io.crate.types.ObjectType;\n\npublic final class AllLikeOperator extends AllOperator<String> {\n\n    private final LikeOperators.CaseSensitivity caseSensitivity;\n\n    public AllLikeOperator(Signature signature,\n                           BoundSignature boundSignature,\n                           LikeOperators.CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n        DataType<?> innerType = ((ArrayType<?>) boundSignature.argTypes().get(1)).innerType();\n        if (innerType.id() == ObjectType.ID) {\n            throw new IllegalArgumentException(\"ALL on object arrays is not supported\");\n        }\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) ||\n            LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}\n"
+        "old_content": "",
+        "new_content": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataType;\nimport io.crate.types.ObjectType;\n\npublic final class AllLikeOperator extends AllOperator<String> {\n\n    private final LikeOperators.CaseSensitivity caseSensitivity;\n\n    public AllLikeOperator(Signature signature,\n                           BoundSignature boundSignature,\n                           LikeOperators.CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n        DataType<?> innerType = ((ArrayType<?>) boundSignature.argTypes().get(1)).innerType();\n        if (innerType.id() == ObjectType.ID) {\n            throw new IllegalArgumentException(\"ALL on object arrays is not supported\");\n        }\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) ||\n            LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}",
+        "is_new_file": true,
+        "is_del_file": false,
+        "file_operation": "ADDED",
+        "imports_added": [
+          "import org.apache.lucene.search.Query;",
+          "import io.crate.expression.operator.LikeOperators;",
+          "import io.crate.expression.symbol.Function;",
+          "import io.crate.expression.symbol.Literal;",
+          "import io.crate.lucene.LuceneQueryBuilder;",
+          "import io.crate.metadata.Reference;",
+          "import io.crate.metadata.functions.BoundSignature;",
+          "import io.crate.metadata.functions.Signature;",
+          "import io.crate.types.ArrayType;",
+          "import io.crate.types.DataType;",
+          "import io.crate.types.ObjectType;"
+        ],
+        "imports_removed": [],
+        "adapted": true,
+        "loc_index": 8
       },
       {
         "file_path": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
         "old_content": "",
-        "new_content": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.operator.LikeOperators.CaseSensitivity;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder.Context;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\n\npublic final class AllNotLikeOperator extends AllOperator<String> {\n\n    private final CaseSensitivity caseSensitivity;\n\n    public AllNotLikeOperator(Signature signature,\n                              BoundSignature boundSignature,\n                              CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n    }\n\n    @SuppressWarnings(\"unused\")\n    private static String negateWildcard(String wildCard) {\n        return \"~(\" + wildCard + ')';\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return !LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) &&\n            !LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}\n"
+        "new_content": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.operator.LikeOperators.CaseSensitivity;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder.Context;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\n\npublic final class AllNotLikeOperator extends AllOperator<String> {\n\n    private final CaseSensitivity caseSensitivity;\n\n    public AllNotLikeOperator(Signature signature,\n                              BoundSignature boundSignature,\n                              CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n    }\n\n    @SuppressWarnings(\"unused\")\n    private static String negateWildcard(String wildCard) {\n        return \"~(\" + wildCard + ')';\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return !LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) &&\n            !LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}",
+        "is_new_file": true,
+        "is_del_file": false,
+        "file_operation": "ADDED",
+        "imports_added": [
+          "import org.apache.lucene.search.Query;",
+          "import io.crate.expression.operator.LikeOperators;",
+          "import io.crate.expression.operator.LikeOperators.CaseSensitivity;",
+          "import io.crate.expression.symbol.Function;",
+          "import io.crate.expression.symbol.Literal;",
+          "import io.crate.lucene.LuceneQueryBuilder.Context;",
+          "import io.crate.metadata.Reference;",
+          "import io.crate.metadata.functions.BoundSignature;",
+          "import io.crate.metadata.functions.Signature;"
+        ],
+        "imports_removed": [],
+        "adapted": true,
+        "loc_index": 9
       }
     ],
-    "generated_patch_bytes": 11334,
+    "generated_patch_bytes": 14444,
     "target_patch_bytes": 41927,
     "validation_passed": false,
-    "validation_failure_category": "unknown",
+    "validation_failure_category": "api_mismatch",
     "build_success": false,
     "test_success": null,
     "test_mode": null,

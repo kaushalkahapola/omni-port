@@ -396,15 +396,33 @@ IMPORTANT:
         # produces refactored_code that replaces it verbatim in the target file.
         # intended_new_code is the mainline's new_content — it shows the structural
         # intent (e.g. remove if/else) that must be applied to the target version.
-        original_code = loc_result.context_snapshot
-        target_context = loc_result.context_snapshot
+        #
+        # IMPORTANT: context_snapshot was captured at localization time (before Agent 3
+        # applied any fast-apply hunks). If Agent 3 modified the same file, the snapshot
+        # may no longer be verbatim in the file. Re-read the current file to get the
+        # actual current state of the localized region — Agent 6 needs to find original_code
+        # verbatim when it applies the CLAW replacement.
+        original_code = loc_result.context_snapshot  # fallback if file read fails
+        from pathlib import Path
+        target_path = Path(self.repo_path) / loc_result.file_path
+        if target_path.exists() and loc_result.start_line > 0 and loc_result.end_line > 0:
+            try:
+                file_lines = target_path.read_text(encoding="utf-8").splitlines(keepends=True)
+                start = max(0, loc_result.start_line - 1)
+                end = min(len(file_lines), loc_result.end_line)
+                current_region = "".join(file_lines[start:end])
+                if current_region.strip():
+                    original_code = current_region
+            except (IOError, UnicodeDecodeError):
+                pass
+
         intended_new_code = hunk.get("new_content", "") or None
 
         edits = self.parse_gumtree_edits(edit_script) if edit_script else []
 
         return self.refactor_with_llm(
             original_code,
-            target_context,
+            original_code,  # target_context == original_code (current file state)
             edits,
             loc_result.symbol_mappings if loc_result.symbol_mappings else None,
             intended_new_code=intended_new_code,
@@ -479,6 +497,7 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
         # Fetch 30 lines of context before and after from the target file.
         pre_region_context = ""
         post_region_context = ""
+        current_file_region = loc_result.context_snapshot  # fallback
         from pathlib import Path
         target_path = Path(repo_path) / loc_result.file_path
         if target_path.exists():
@@ -488,7 +507,15 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
                     pre_start = max(0, loc_result.start_line - 31)
                     pre_end = loc_result.start_line - 1
                     pre_region_context = "".join(lines[pre_start:pre_end])
-                
+
+                    # Current file region: used as old_content so Agent 6 can find it.
+                    # This is the post-Agent3 state — may differ from context_snapshot.
+                    start = max(0, loc_result.start_line - 1)
+                    end = min(len(lines), loc_result.end_line) if loc_result.end_line > 0 else start + 1
+                    region = "".join(lines[start:end])
+                    if region.strip():
+                        current_file_region = region
+
                 if loc_result.end_line > 0:
                     post_start = loc_result.end_line
                     post_end = min(len(lines), post_start + 30)
@@ -506,10 +533,10 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
         if output.success and output.confidence > 0.5:
             refactored_hunks.append({
                 **hunk,
-                # old_content = target's CURRENT code (context_snapshot), so Agent 6
+                # old_content = current file region (post-Agent3 state), so Agent 6
                 # can find it verbatim in the target file for CLAW pair construction.
                 # new_content = Agent 5's refactored replacement.
-                "old_content": loc_result.context_snapshot,
+                "old_content": current_file_region,
                 "new_content": output.refactored_code,
                 "refactored": True,
                 "semantic_confidence": output.confidence,

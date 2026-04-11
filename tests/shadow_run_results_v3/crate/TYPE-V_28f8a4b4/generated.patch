@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java b/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
-index f4b2e57713..8d3d143588 100644
+index f4b2e57713..ac6a98ff22 100644
 --- a/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
 +++ b/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
 @@ -21,7 +21,6 @@
@@ -10,7 +10,7 @@ index f4b2e57713..8d3d143588 100644
  import static io.crate.metadata.functions.TypeVariableConstraint.typeVariableOfAnyType;
  
  import java.util.ArrayList;
-@@ -51,45 +50,30 @@ public class UnnestFunction {
+@@ -51,45 +50,32 @@ public class UnnestFunction {
  
      public static void register(TableFunctionModule module) {
          module.register(
@@ -58,14 +58,16 @@ index f4b2e57713..8d3d143588 100644
 -                // signature, such as we cannot resolve correctly the field types
 -                // of the record type from the array of any type with variable arity.
 +                List<DataType<?>> fieldTypes = Lists2.map(boundSignature.argTypes(), ArrayType::unnest);
-+                boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());
++                Boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());
 +                List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName
 +                    ? List.of(NAME)
 +                    : List.of();
 +                RowType returnType = new RowType(fieldTypes, fieldNames);
 +
-+                // See class javadoc of TableFunctionImplementation:
-+                // Single return value is promoted/unwrapped from Row
++                /*
++                 * See class javadoc of TableFunctionImplementation
++                 * Single return value is promoted/unwrapped from Row
++                 */
 +                BoundSignature newBoundSignature = new BoundSignature(
 +                    boundSignature.argTypes(),
 +                    fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType

@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T10:34:30.084331",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "30abc0f980778976840a80436d746fd445fd3e26",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 7.14,
+      "elapsed_s": 7.33,
       "error": null,
       "java_hunks": 13,
       "aux_hunks": 2,
@@ -133,12 +133,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.02,
+      "elapsed_s": 4.39,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.9,
-        "reasoning": "The patch introduces additional logic to handle out-of-memory (OOM) situations by broadcasting kill requests to other nodes when failures occur during distributed result streaming. The changes include adding new imports, fields, constructor parameters, and method calls to existing classes, as well as a new static helper method for broadcasting kill requests. The patch is mostly additive and modifies existing control flow without deep structural refactoring or redesign. The localization evidence shows most hunks were found via 'git_pickaxe' with high confidence, indicating some fuzzy matching due to added code rather than exact string replacements. Overall, the patch complexity aligns with TYPE_II, involving whitespace/formatting drift and moderate code additions requiring fuzzy matching rather than structural or API changes.",
+        "reasoning": "The patch introduces new logic to handle out-of-memory (OOM) situations by broadcasting kill requests to other nodes when failures occur during distributed result streaming. The changes involve adding new imports, fields, constructor parameters, and method calls to existing classes, as well as adding a new static helper method for broadcasting kill requests. The patch is mostly additive and modifies existing control flow without deep structural refactoring or redesign. The localization evidence shows most hunks were found via 'git_pickaxe' with high confidence, indicating some fuzzy matching due to added code rather than exact string replacements. The patch complexity is beyond trivial string replacement (TYPE_I) but does not reach deep structural refactoring (TYPE_IV) or redesign (TYPE_V). Therefore, TYPE_II classification is appropriate with high confidence. The token budget estimate accounts for the moderate size and complexity of the patch and the need to carefully integrate the new kill logic in multiple places.",
         "is_auto_generated": false
       }
     },
@@ -175,12 +175,12 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 31.96,
+      "elapsed_s": 32.36,
       "error": null,
       "adapted_count": 4
     },
     "agent5_structural": {
-      "elapsed_s": 87.48,
+      "elapsed_s": 119.87,
       "error": null,
       "refactored_count": 4
     },
@@ -226,7 +226,7 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
           "old_string": "\n    private final ClusterService clusterService;\n    private final Executor responseExecutor;\n    private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;\n\n    @Inject",
-          "new_string": "    private final ClusterService clusterService;\n    private final Executor responseExecutor;\n    private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private final ThreadPool threadPool;\n\n    @Inject",
+          "new_string": "    \n    private final ClusterService clusterService;\n    private final Executor responseExecutor;\n    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;\n    private ThreadPool threadPool;\n    \n    @Inject",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -234,7 +234,7 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java",
           "old_string": "                                       Node node) {\n        this.clusterService = clusterService;\n        this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);\n    }\n\n    public DistributingConsumer create(NodeOperation nodeOperation,",
-          "new_string": "                                       Node node) {\n        this.clusterService = clusterService;\n        this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);\n        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);\n        this.threadPool = threadPool;\n    }\n\n    public DistributingConsumer create(NodeOperation nodeOperation,",
+          "new_string": "                                       Node node) {\n        this.clusterService = clusterService;\n        this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);\n        this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);\n        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);\n        this.threadPool = threadPool;\n\n    }\n\n    public DistributingConsumer create(NodeOperation nodeOperation,",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -250,7 +250,7 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java",
           "old_string": "                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            List<String> excludedNodeIds = Collections.singletonList(clusterService.localNode().getId());\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n             *\n             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n             * a kill to make sure that doesn't happen.\n             */\n            KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n                excludedNodeIds,\n                List.of(request.jobId()),\n                Role.CRATE_USER.name(),\n                \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\"\n            );\n            killNodeAction\n                .execute(killRequest)\n                .whenComplete(\n                    (resp, t) -> {\n                        if (t != null) {\n                            LOGGER.debug(\"Could not kill \" + request.jobId(), t);\n                        }\n                    }\n                );\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));\n        }\n    }\n\n    private static class SendResponsePageResultListener implements PageResultListener {\n        private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();",
-          "new_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n             *\n             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n             * a kill to make sure that doesn't happen.\n             */\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));\n        }\n    }\n\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((_, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }\n\n    private static class SendResponsePageResultListener implements PageResultListener {\n        private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();",
+          "new_string": "            if (LOGGER.isTraceEnabled()) {\n                LOGGER.trace(\"Received a result for job={} but couldn't find a RootTask for it\", request.jobId());\n            }\n            /* The upstream (DistributingConsumer) forwards failures to other downstreams and eventually considers its job done.\n             * But it cannot inform the handler-merge about a failure because the JobResponse is sent eagerly.\n             *\n             * The handler local-merge would get stuck if not all its upstreams send their requests, so we need to invoke\n             * a kill to make sure that doesn't happen.\n             */\n            String reason = \"Received data for job=\" + request.jobId() + \" but there is no job context present. \" +\n                \"This can happen due to bad network latency or if individual nodes are unresponsive due to high load\";\n            broadcastKill(killNodeAction, request.jobId(), clusterService.localNode().getId(), reason);\n            return CompletableFuture.failedFuture(new TaskMissing(TaskMissing.Type.ROOT, request.jobId()));\n        }\n    }\n\n    /**\n     * Sends KILL request to all nodes (excluding sender node).\n     */\n    public static void broadcastKill(ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction,\n                                     UUID jobId,\n                                     String localNodeId,\n                                     String reason) {\n        List<String> excludedNodeIds = Collections.singletonList(localNodeId);\n\n        KillJobsNodeRequest killRequest = new KillJobsNodeRequest(\n            excludedNodeIds,\n            List.of(jobId),\n            Role.CRATE_USER.name(),\n            reason\n        );\n        killNodeAction\n            .execute(killRequest)\n            .whenComplete((resp, t) -> {\n                if (t != null) {\n                    LOGGER.debug(\"Could not kill \" + jobId, t);\n                }\n            });\n    }\n\n    private static class SendResponsePageResultListener implements PageResultListener {\n        private final CompletableFuture<DistributedResultResponse> future = new CompletableFuture<>();",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -258,11 +258,11 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 77.94,
+      "elapsed_s": 83.88,
       "error": null,
       "validation_passed": false,
       "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.21s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.32s), 0 error(s).\n[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.09s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.07s), 0 error(s).\n[INFO] Scanned 61 class file(s) for forbidden API invocations (in 0.07s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
+      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.24s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.30s), 0 error(s).\n[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.12s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.05s), 0 error(s).\n[INFO] Scanned 61 class file(s) for forbidden API invocations (in 0.13s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
       "validation_attempts": 1,
       "retry_files": [],
       "build_success": false,
@@ -314,7 +314,7 @@
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 11209,
+    "generated_patch_bytes": 11283,
     "target_patch_bytes": 15919,
     "validation_passed": false,
     "validation_failure_category": "unknown",

@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T10:08:00.672749",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "27413adb352fbfcb967c8c6900e8123446232307",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 29.07,
+      "elapsed_s": 49.83,
       "error": null,
       "java_hunks": 10,
       "aux_hunks": 2,
@@ -106,12 +106,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.41,
+      "elapsed_s": 4.05,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.85,
-        "reasoning": "The patch involves removing the STRICTNULL feature flag from multiple array scalar functions and refactoring their implementation from using UnaryScalar to a new Scalar subclass with overridden evaluate methods. This indicates structural changes in the code, including changes in class instantiation and method overrides. The patch also updates multiple related classes consistently, showing a pattern of structural modification rather than simple string replacement or formatting changes. The localization evidence shows the hunks were found via fuzzy, javaparser, and embedding methods with moderate to high confidence, supporting the structural nature of the changes. Therefore, the patch is classified as TYPE_III (structural changes).",
+        "reasoning": "The patch involves removing the STRICTNULL feature flag from multiple array scalar functions and refactoring their implementation from using UnaryScalar to a new Scalar subclass with overridden evaluate methods. This is a structural change affecting method signatures and class usage patterns, not just simple string replacements or formatting changes. The localization evidence shows a mix of fuzzy, javaparser, and embedding methods with moderate to high confidence, indicating some structural differences in the target branch. The changes are consistent across multiple related classes, indicating a moderate complexity structural refactor rather than a deep API redesign or trivial fix. Therefore, the patch is classified as TYPE_III with good confidence and a moderate token budget estimate to handle the structural changes during backporting.",
         "is_auto_generated": false
       }
     },
@@ -122,12 +122,12 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 70.75,
+      "elapsed_s": 60.34,
       "error": null,
       "adapted_count": 8
     },
     "agent5_structural": {
-      "elapsed_s": 82.68,
+      "elapsed_s": 67.19,
       "error": null,
       "refactored_count": 2
     },
@@ -141,7 +141,7 @@
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java",
           "old_string": "\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.expression.scalar.array.ArraySummationFunctions;\nimport io.crate.metadata.Functions;\nimport io.crate.metadata.Scalar;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataTypes;",
-          "new_string": "import org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.expression.scalar.array.ArraySummationFunctions;\nimport io.crate.metadata.NodeContext;\nimport io.crate.metadata.Functions;\nimport io.crate.metadata.Scalar;\nimport io.crate.metadata.TransactionContext;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataTypes;",
+          "new_string": "import org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.metadata.NodeContext;\nimport io.crate.metadata.TransactionContext;\nimport io.crate.expression.scalar.array.ArraySummationFunctions;\nimport io.crate.metadata.Functions;\nimport io.crate.metadata.Scalar;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataTypes;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -157,33 +157,33 @@
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java",
           "old_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMaxFunction::new\n        );",
-          "new_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.DETERMINISTIC),\n            ArrayMaxFunction::new\n        );",
+          "new_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                ),\n            ArrayMaxFunction::new\n        );",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java",
-          "old_string": "            module.add(\n                Signature.scalar(\n                    NAME,\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n                ArrayMaxFunction::new\n            );",
-          "new_string": "            module.add(\n                Signature.scalar(\n                    NAME,\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n                )\n                .withFeature(Feature.DETERMINISTIC),\n                ArrayMaxFunction::new\n            );",
+          "old_string": "        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMaxFunction::new\n        );\n\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n            module.add(\n                Signature.scalar(\n                    NAME,\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n",
+          "new_string": "        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n            module.add(\n                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n                    )\n                    .withFeature(Feature.DETERMINISTIC),\n                    ArrayMaxFunction::new\n                );\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n            module.add(\n                Signature.scalar(\n                    NAME,\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java",
-          "old_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMinFunction::new",
-          "new_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.DETERMINISTIC),\n            ArrayMinFunction::new",
+          "old_string": "\n    private final DataType dataType;\n\n    public static void register(Functions.Builder module) {\n\n        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMinFunction::new\n        );\n\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n",
+          "new_string": "\n    private final DataType dataType;\n\n    public static void register(Functions.Builder module) {\n\n        module.add(\nmodule.add(\n    Signature.scalar(\n            NAME,\n            new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n            DataTypes.NUMERIC.getTypeSignature()\n        )\n        .withFeature(Feature.DETERMINISTIC),\n    ArrayMinFunction::new\n);\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMinFunction::new\n        );\n\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java",
-          "old_string": "                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n                    )\n                    .withFeature(Feature.NULLABLE),\n                ArrayMinFunction::new\n            );",
-          "new_string": "                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n                    ),\n                ArrayMinFunction::new\n            );",
+          "old_string": "        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMinFunction::new\n        );\n\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n            module.add(\n                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n",
+          "new_string": "        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n                )\n                .withFeature(Feature.DETERMINISTIC),\n            ArrayMinFunction::new\n        );\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n            module.add(\n                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
@@ -213,58 +213,19 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 294.16,
+      "elapsed_s": 74.59,
       "error": null,
-      "validation_passed": true,
-      "validation_failure_category": "",
-      "validation_error_context": "",
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.56s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.25s), 0 error(s).\n[INFO] Scanned 80 class file(s) for forbidden API invocations (in 0.12s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.09s), 0 error(s).\n[INFO] Scanned 68 class file(s) for forbidden API invocations (in 0.14s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": true,
+      "build_success": false,
       "build_mode": "crate-helper",
-      "test_success": true,
-      "test_mode": "crate-helper",
-      "test_state": {
-        "xml_reports": [
-          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.predicate.NotPredicateTest.xml"
-        ],
-        "target_classes": [
-          "NotPredicateTest"
-        ],
-        "test_cases": {
-          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolBoolean": "passed",
-          "io.crate.expression.predicate.NotPredicateTest#testEvaluate": "passed",
-          "io.crate.expression.predicate.NotPredicateTest#test_neq_on_array_scalars_that_evaluate_non_null_inputs_to_nulls": "passed",
-          "io.crate.expression.predicate.NotPredicateTest#test_not_on_case_uses_strict_3vl": "passed",
-          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbol": "passed",
-          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolNull": "passed"
-        },
-        "classes": {
-          "io.crate.expression.predicate.NotPredicateTest": "passed"
-        },
-        "summary": {
-          "passed": 6,
-          "failed": 0,
-          "skipped": 0,
-          "total": 6
-        }
-      },
-      "test_state_transition": {
-        "valid_backport_signal": true,
-        "fail_to_pass": [],
-        "pass_to_fail": [],
-        "newly_passing": [
-          "io.crate.expression.predicate.NotPredicateTest#testEvaluate",
-          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbol",
-          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolBoolean",
-          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolNull",
-          "io.crate.expression.predicate.NotPredicateTest#test_neq_on_array_scalars_that_evaluate_non_null_inputs_to_nulls",
-          "io.crate.expression.predicate.NotPredicateTest#test_not_on_case_uses_strict_3vl"
-        ],
-        "baseline_total": 0,
-        "patched_total": 6,
-        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
-      },
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
       "compile_errors": []
     }
   },
@@ -302,6 +263,12 @@
         "error_message": "Could not verify exact string in target file",
         "attempt_count": 4,
         "suggested_action": "relocalize"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:check (validate) on project crate-server: Failed during checkstyle configuration: Exception was thrown while processing /repo/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java: IllegalStateException occurred while parsing file /repo/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java. 48:18: mismatched input '(' expecting ';': InputMismatchException -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
       }
     ],
     "failed_hunks": [
@@ -313,36 +280,21 @@
         "is_del_file": false,
         "file_operation": "MODIFIED",
         "refactored": true,
-        "semantic_confidence": 0.91,
+        "semantic_confidence": 0.66,
         "loc_index": 1
       }
     ],
-    "generated_patch_bytes": 4558,
+    "generated_patch_bytes": 4085,
     "target_patch_bytes": 13789,
-    "validation_passed": true,
-    "validation_failure_category": "",
-    "build_success": true,
-    "test_success": true,
-    "test_mode": "crate-helper",
-    "test_transition": {
-      "valid_backport_signal": true,
-      "fail_to_pass": [],
-      "pass_to_fail": [],
-      "newly_passing": [
-        "io.crate.expression.predicate.NotPredicateTest#testEvaluate",
-        "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbol",
-        "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolBoolean",
-        "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolNull",
-        "io.crate.expression.predicate.NotPredicateTest#test_neq_on_array_scalars_that_evaluate_non_null_inputs_to_nulls",
-        "io.crate.expression.predicate.NotPredicateTest#test_not_on_case_uses_strict_3vl"
-      ],
-      "baseline_total": 0,
-      "patched_total": 6,
-      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
-    },
+    "validation_passed": false,
+    "validation_failure_category": "unknown",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
     "fail_to_pass_count": 0,
-    "newly_passing_count": 6,
+    "newly_passing_count": 0,
     "pass_to_fail_count": 0,
-    "backport_success": true
+    "backport_success": false
   }
 }

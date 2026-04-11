@@ -1,3 +1,40 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java b/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
+index 4f6f6a123f..7ae6f97182 100644
+--- a/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
+@@ -46,6 +46,8 @@ import io.crate.types.StorageSupport;
+ 
+ public class ArrayIndexer<T> implements ValueIndexer<List<T>> {
+ 
++    public static final Version ARRAY_LENGTH_FIELD_SUPPORTED_VERSION = Version.V_5_9_0;
++
+     public static Query arrayLengthTermQuery(Reference arrayRef, int length, Function<ColumnIdent, Reference> getRef) {
+         return IntPoint.newExactQuery(toArrayLengthFieldName(arrayRef, getRef), length);
+     }
+@@ -108,10 +110,13 @@ public class ArrayIndexer<T> implements ValueIndexer<List<T>> {
+         this.arrayLengthFieldName = toArrayLengthFieldName(reference, getRef);
+         this.reference = reference;
+     }
+-
++    
+     @Override
+     public void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {
+         docBuilder.translogWriter().startArray();
++        // use a nested document builder for array elements so we don't add stored fields
++        // or array-length fields for each nested value
++        docBuilder = docBuilder.noStoredField().noArrayLengthField();
+         for (T value : values) {
+             if (value == null) {
+                 docBuilder.translogWriter().writeNull();
+@@ -119,7 +124,7 @@ public class ArrayIndexer<T> implements ValueIndexer<List<T>> {
+                 innerIndexer.indexValue(value, docBuilder);
+             }
+         }
+-        if (docBuilder.getTableVersionCreated().onOrAfter(Version.V_5_9_0)) {
++        if (docBuilder.maybeAddArrayLengthField()) {
+             // map '[]' to '_array_length_ = 0'
+             // map '[null]' to '_array_length_ = 1'
+             // 'null' is not mapped; can utilize 'FieldExistsQuery' for 'IS NULL' filtering
 diff --git a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
 index 395776c479..cb8c3fa7f5 100644
 --- a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java

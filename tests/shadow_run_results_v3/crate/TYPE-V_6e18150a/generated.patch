@@ -1,20 +1,21 @@
 diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java
-index 87130eac33..dad1d1eab4 100644
+index 87130eac33..eb75aff692 100644
 --- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java
 +++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java
-@@ -61,10 +61,11 @@ public class SwapCastsInComparisonOperators implements Rule<Function> {
+@@ -61,13 +61,11 @@ public class SwapCastsInComparisonOperators implements Rule<Function> {
              Reference ref = (Reference) cast.arguments().getFirst();
              DataType<?> refInnerType = ArrayType.unnest(ref.valueType());
              DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());
--            if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {
++            Object value = literal.value();
+             if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {
+-                return true;
++                return literalInnerType.isConvertableTo(refInnerType, false);
+             }
+-            if (isSafeConversion(literalInnerType, refInnerType)) {
 -                return true;
 -            }
--            if (isSafeConversion(literalInnerType, refInnerType)) {
-+var value = literal.value();
-+if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {
-+    return literalInnerType.isConvertableTo(refInnerType, false);
-+}
-+return isNarrowingConversionPossible(value, ref.valueType());
-                 return true;
-             }
-             return isNarrowingConversionPossible(literal.value(), ref.valueType());
+-            return isNarrowingConversionPossible(literal.value(), ref.valueType());
++            return isNarrowingConversionPossible(value, ref.valueType());
+         }
+         return true;
+     }

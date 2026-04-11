@@ -12,50 +12,43 @@ index d10fefd0e7..b5bafe5964 100644
          );
      }
 diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java
-index 95f0e38981..7538a9e14b 100644
+index 95f0e38981..fc81cd307a 100644
 --- a/server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java
 +++ b/server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java
-@@ -51,7 +51,7 @@ public class ArrayMaxFunction<T> extends Scalar<T, List<T>> {
+@@ -50,8 +50,7 @@ public class ArrayMaxFunction<T> extends Scalar<T, List<T>> {
+                     NAME,
                      new ArrayType(DataTypes.NUMERIC).getTypeSignature(),
                      DataTypes.NUMERIC.getTypeSignature()
-                 )
+-                )
 -                .withFeature(Feature.NULLABLE),
-+                .withFeature(Feature.DETERMINISTIC),
++                ),
              ArrayMaxFunction::new
          );
  
-@@ -62,7 +62,7 @@ public class ArrayMaxFunction<T> extends Scalar<T, List<T>> {
-                     new ArrayType(supportedType).getTypeSignature(),
-                     supportedType.getTypeSignature()
-                 )
--                .withFeature(Feature.NULLABLE),
-+                .withFeature(Feature.DETERMINISTIC),
-                 ArrayMaxFunction::new
-             );
-         }
 diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
-index f5e89e86ad..9c4a5028fd 100644
+index f5e89e86ad..70b6df8ecb 100644
 --- a/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
 +++ b/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
-@@ -51,7 +51,7 @@ public class ArrayMinFunction<T> extends Scalar<T, List<T>> {
-                     new ArrayType(DataTypes.NUMERIC).getTypeSignature(),
-                     DataTypes.NUMERIC.getTypeSignature()
-                 )
--                .withFeature(Feature.NULLABLE),
-+                .withFeature(Feature.DETERMINISTIC),
-             ArrayMinFunction::new
-         );
+@@ -46,10 +46,15 @@ public class ArrayMinFunction<T> extends Scalar<T, List<T>> {
+     public static void register(Functions.Builder module) {
  
-@@ -61,8 +61,7 @@ public class ArrayMinFunction<T> extends Scalar<T, List<T>> {
-                         NAME,
-                         new ArrayType(supportedType).getTypeSignature(),
-                         supportedType.getTypeSignature()
--                    )
--                    .withFeature(Feature.NULLABLE),
-+                    ),
-                 ArrayMinFunction::new
-             );
-         }
+         module.add(
+-            Signature.scalar(
+-                    NAME,
+-                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),
+-                    DataTypes.NUMERIC.getTypeSignature()
++module.add(
++    Signature.scalar(
++            NAME,
++            new ArrayType(DataTypes.NUMERIC).getTypeSignature(),
++            DataTypes.NUMERIC.getTypeSignature()
++        )
++        .withFeature(Feature.DETERMINISTIC),
++    ArrayMinFunction::new
++);
+                 )
+                 .withFeature(Feature.NULLABLE),
+             ArrayMinFunction::new
 diff --git a/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java b/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java
 index 9f26eb7ad7..09527d9db0 100644
 --- a/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java

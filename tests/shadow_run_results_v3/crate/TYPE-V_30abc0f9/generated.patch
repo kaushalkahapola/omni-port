@@ -68,7 +68,7 @@ index 12171a4a54..4f1022d036 100644
                          }
                      }
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
-index 3dc1921a76..5dd2b2e783 100644
+index 3dc1921a76..7c54531e34 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/DistributingConsumerFactory.java
 @@ -37,6 +37,9 @@ import io.crate.data.breaker.RamAccounting;
@@ -81,29 +81,33 @@ index 3dc1921a76..5dd2b2e783 100644
  import io.crate.execution.support.ActionExecutor;
  import io.crate.execution.support.NodeRequest;
  import io.crate.planner.distribution.DistributionInfo;
-@@ -45,10 +48,11 @@ import io.crate.planner.distribution.DistributionInfo;
+@@ -45,11 +48,12 @@ import io.crate.planner.distribution.DistributionInfo;
  public class DistributingConsumerFactory {
  
      private static final String RESPONSE_EXECUTOR_NAME = ThreadPool.Names.SEARCH;
 -
++    
      private final ClusterService clusterService;
      private final Executor responseExecutor;
-     private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
+-    private final ActionExecutor<NodeRequest<DistributedResultRequest>, DistributedResultResponse> distributedResultAction;
+-
 +    private final ActionExecutor<KillJobsNodeRequest, KillResponse> killNodeAction;
-+    private final ThreadPool threadPool;
- 
++    private ThreadPool threadPool;
++    
      @Inject
      public DistributingConsumerFactory(ClusterService clusterService,
-@@ -57,6 +61,8 @@ public class DistributingConsumerFactory {
+                                        ThreadPool threadPool,
+@@ -57,6 +61,9 @@ public class DistributingConsumerFactory {
          this.clusterService = clusterService;
          this.responseExecutor = threadPool.executor(RESPONSE_EXECUTOR_NAME);
          this.distributedResultAction = req -> node.client().execute(DistributedResultAction.INSTANCE, req);
 +        this.killNodeAction = req -> node.client().execute(KillJobsNodeAction.INSTANCE, req);
 +        this.threadPool = threadPool;
++
      }
  
      public DistributingConsumer create(NodeOperation nodeOperation,
-@@ -110,7 +116,10 @@ public class DistributingConsumerFactory {
+@@ -110,7 +117,10 @@ public class DistributingConsumerFactory {
              bucketIdx,
              nodeOperation.downstreamNodes(),
              distributedResultAction,
@@ -116,7 +120,7 @@ index 3dc1921a76..5dd2b2e783 100644
      }
  
 diff --git a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
-index 4d64814dd5..4336f9434e 100644
+index 4d64814dd5..637827ed20 100644
 --- a/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
 +++ b/server/src/main/java/io/crate/execution/engine/distribution/TransportDistributedResultAction.java
 @@ -25,6 +25,7 @@ import java.util.Collections;
@@ -202,7 +206,7 @@ index 4d64814dd5..4336f9434e 100644
 +        );
 +        killNodeAction
 +            .execute(killRequest)
-+            .whenComplete((_, t) -> {
++            .whenComplete((resp, t) -> {
 +                if (t != null) {
 +                    LOGGER.debug("Could not kill " + jobId, t);
 +                }

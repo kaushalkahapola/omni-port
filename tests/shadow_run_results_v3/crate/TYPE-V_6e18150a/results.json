@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T10:01:38.857767",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "6e18150a3937176f863d24c4449a8f7c95e84331",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.09,
+      "elapsed_s": 0.98,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 2,
@@ -25,12 +25,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.46,
+      "elapsed_s": 2.83,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.9,
-        "reasoning": "The patch modifies an existing method by adding a variable assignment and changing a return statement to handle a new case for comparing non-boolean columns to boolean literals. The changes are localized and involve minor logic adjustments without structural or API changes. The patch was found via 'git_pickaxe' indicating some code drift but no major refactoring or redesign. The test addition is straightforward and does not increase complexity significantly. Therefore, the patch complexity aligns with TYPE_II, involving minor logic changes and requiring fuzzy matching for backporting.",
+        "reasoning": "The patch modifies existing logic in SwapCastsInComparisonOperators.java by adding a variable assignment and changing a return condition to allow comparing non-boolean columns to boolean literals. The change is localized and involves minor code adjustments without structural changes or API refactoring. The test addition is straightforward. The patch was found via 'git_pickaxe' indicating a fuzzy match rather than an exact string replacement. Therefore, it fits TYPE_II classification with high confidence.",
         "is_auto_generated": false
       }
     },
@@ -41,14 +41,14 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 4.95,
+      "elapsed_s": 9.97,
       "error": null,
-      "adapted_count": 1
+      "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 37.12,
       "error": null,
-      "refactored_count": 0
+      "refactored_count": 1
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
@@ -59,20 +59,20 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
-          "old_string": "    private static boolean isSwappable(Function cmpOp) {\n        if (cmpOp.arguments().get(1) instanceof Literal<?> literal) {\n            Function cast = (Function) cmpOp.arguments().getFirst();\n            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n            if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n                return true;\n            }\n            if (isSafeConversion(literalInnerType, refInnerType)) {\n                return true;\n            }\n            return isNarrowingConversionPossible(literal.value(), ref.valueType());\n        }\n        return true;\n    }\n",
-          "new_string": "    private static boolean isSwappable(Function cmpOp) {\n        if (cmpOp.arguments().get(1) instanceof Literal<?> literal) {\n            Function cast = (Function) cmpOp.arguments().getFirst();\n            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\nvar value = literal.value();\nif (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n    return literalInnerType.isConvertableTo(refInnerType, false);\n}\nreturn isNarrowingConversionPossible(value, ref.valueType());\n                return true;\n            }\n            return isNarrowingConversionPossible(literal.value(), ref.valueType());\n        }\n        return true;\n    }\n",
+          "old_string": "            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n            if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n                return true;\n            }\n            if (isSafeConversion(literalInnerType, refInnerType)) {\n                return true;\n            }\n            return isNarrowingConversionPossible(literal.value(), ref.valueType());",
+          "new_string": "            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n            Object value = literal.value();\n            if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n                return literalInnerType.isConvertableTo(refInnerType, false);\n            }\n            return isNarrowingConversionPossible(value, ref.valueType());",
           "confidence": 1.0,
-          "context_lines_included": 3,
+          "context_lines_included": 0,
           "verified": true
         }
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 85.42,
+      "elapsed_s": 113.81,
       "error": null,
       "validation_passed": false,
       "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.36s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.26s), 0 error(s).\n[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.10s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.05s), 0 error(s).\n[INFO] Scanned 61 class file(s) for forbidden API invocations (in 0.08s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
+      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.30s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.34s), 0 error(s).\n[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.14s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.06s), 0 error(s).\n[INFO] Scanned 61 class file(s) for forbidden API invocations (in 0.10s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
       "validation_attempts": 1,
       "retry_files": [],
       "build_success": false,
@@ -106,13 +106,13 @@
     "retry_contexts": [
       {
         "error_type": "unknown",
-        "error_message": "[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-server: Failed during checkstyle configuration: Exception was thrown while processing /repo/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java: IllegalStateException occurred while parsing file /repo/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java. 73:8: mismatched input 'return' expecting '}': InputMismatchException -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "[ERROR] /repo/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java:26:15: Unused import - io.crate.types.DataTypes.isSafeConversion. [UnusedImports]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-server: Failed during checkstyle execution: There is 1 error reported by Checkstyle 10.20.0 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
         "suggested_action": "inspect_and_retry"
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 1356,
+    "generated_patch_bytes": 1347,
     "target_patch_bytes": 3023,
     "validation_passed": false,
     "validation_failure_category": "unknown",

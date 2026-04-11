@@ -1,8 +1,8 @@
 diff --git a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
-index 9aafe63987..d7ea4e7329 100644
+index 9aafe63987..f173888604 100644
 --- a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
 +++ b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
-@@ -107,96 +107,45 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+@@ -107,96 +107,49 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
              var childRef = entry.getValue();
              String innerName = entry.getKey();
              DataType<?> type = childRef.valueType();
@@ -13,24 +13,7 @@ index 9aafe63987..d7ea4e7329 100644
 -                if (synthetic != null) {
 -                    innerValue = synthetic.value();
 -                }
-+@Override
-+public void updateTargets(Function<ColumnIdent, Reference> getRef) {
-+    ColumnIdent objectColumn = ref.column();
-+    Reference updatedSelf = getRef.apply(objectColumn);
-+    ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());
-+    for (var entry : childColumns.entrySet()) {
-+        String innerName = entry.getKey();
-+        Reference oldChildRef = entry.getValue();
-+        Reference newChildRef = getRef.apply(oldChildRef.column());
-+        if (oldChildRef.equals(newChildRef) == false) {
-+            //noinspection unchecked
-+            ValueIndexer<Object> indexer = newChildRef.granularity() == RowGranularity.PARTITION
-+                ? null
-+                : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(table, newChildRef, getRef);
-+            childColumns.put(innerName, newChildRef);
-+            if (indexer != null) {
-+                innerIndexers.put(innerName, indexer);
-             } else {
+-            } else {
 -                innerValue = value.get(innerName);
 -            }
 -            ColumnConstraint check = checks.get(innerColumn);
@@ -50,16 +33,33 @@ index 9aafe63987..d7ea4e7329 100644
 -                    addField,
 -                    synthetics,
 -                    checks
--                );
-+                innerIndexers.remove(innerName);
-             }
-         }
++@Override
++public void updateTargets(Function<ColumnIdent, Reference> getRef) {
++    ColumnIdent objectColumn = column;
++    Reference updatedSelf = getRef.apply(objectColumn);
++    ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());
++    for (var entry : childColumns.entrySet()) {
++        String innerName = entry.getKey();
++        Reference oldChildRef = entry.getValue();
++        Reference newChildRef = getRef.apply(oldChildRef.column());
++        if (oldChildRef.equals(newChildRef) == false) {
++            entry.setValue(newChildRef);
++            @SuppressWarnings("unchecked")
++            ValueIndexer<Object> newIndexer = newChildRef.granularity() == RowGranularity.PARTITION
++                ? null
++                : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(
++                    table,
++                    newChildRef,
++                    getRef
+                 );
+-            }
+-        }
 -
 -        if (value != null) {
 -            indexUnknownColumns(value, xContentBuilder);
 -        }
 -        xContentBuilder.endObject();
-     }
+-    }
 -
 -    @Override
 -    public void collectSchemaUpdates(@Nullable Map<String, Object> value,
@@ -76,7 +76,9 @@ index 9aafe63987..d7ea4e7329 100644
 -                if (synthetic != null) {
 -                    innerValue = synthetic.value();
 -                }
--            } else {
++            if (newIndexer == null) {
++                innerIndexers.remove(innerName);
+             } else {
 -                innerValue = value.get(innerName);
 -            }
 -            var valueIndexer = innerIndexers.get(innerName);
@@ -87,13 +89,12 @@ index 9aafe63987..d7ea4e7329 100644
 -                    onDynamicColumn,
 -                    synthetics
 -                );
--            }
--        }
++                innerIndexers.put(innerName, newIndexer);
+             }
+         }
 -        if (value != null) {
 -            addNewColumns(value, onDynamicColumn, synthetics);
 -        }
-+    for (var indexer : innerIndexers.values()) {
-+        indexer.updateTargets(getRef);
      }
 -
 -    @Override
@@ -114,17 +115,20 @@ index 9aafe63987..d7ea4e7329 100644
 -                    innerIndexers.put(innerName, newIndexer);
 -                }
 -            }
-+    for (String innerColumn : objectType.innerTypes().keySet()) {
-+        if (!childColumns.containsKey(innerColumn)) {
-+            Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));
-+            //noinspection unchecked
++    for (var indexer : innerIndexers.values()) {
++        indexer.updateTargets(getRef);
++    }
++    for (String innerName : objectType.innerTypes().keySet()) {
++        if (!childColumns.containsKey(innerName)) {
++            Reference childRef = getRef.apply(objectColumn.getChild(innerName));
++            @SuppressWarnings("unchecked")
 +            ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(
 +                table,
 +                childRef,
 +                getRef
 +            );
-+            childColumns.put(innerColumn, childRef);
-+            innerIndexers.put(innerColumn, childIndexer);
++            childColumns.put(innerName, childRef);
++            innerIndexers.put(innerName, childIndexer);
          }
 -        for (var indexer : innerIndexers.values()) {
 +    }
@@ -132,7 +136,7 @@ index 9aafe63987..d7ea4e7329 100644
              indexer.updateTargets(getRef);
          }
      }
-@@ -262,7 +211,7 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+@@ -262,7 +215,7 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
                  getRef
              );
              innerIndexers.put(innerName, valueIndexer);

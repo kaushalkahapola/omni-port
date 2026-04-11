@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T16:08:57.247497",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "a5b58411425101903763df8df41237801652ca8b",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 3.06,
+      "elapsed_s": 2.99,
       "error": null,
       "java_hunks": 3,
       "aux_hunks": 2,
@@ -43,12 +43,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.82,
+      "elapsed_s": 3.47,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.85,
-        "reasoning": "The patch modifies the ExplainProfilePlan.java file by adding and adjusting ram accounting logic to fix a memory leak issue. The changes involve adding a new ramAccounting variable and modifying method parameters and calls accordingly. The localization evidence indicates the hunks were found via 'git_pickaxe' with confidence around 0.74 to 0.85, suggesting some minor code drift but no major structural changes. The patch also updates documentation and adds a test case, which are straightforward additions. Overall, the patch requires fuzzy matching due to parameter changes and added logic but does not involve structural or API redesign, fitting TYPE_II classification.",
+        "reasoning": "The patch modifies the ExplainProfilePlan.java file by adding and adjusting ram accounting logic to fix a memory leak issue. The changes involve adding a new ramAccounting variable and adjusting method parameters and calls accordingly. The localization evidence indicates the hunks were found via 'git_pickaxe' with confidence around 0.74 to 0.85, suggesting some minor differences in the target branch requiring fuzzy matching. The changes are not trivial string replacements (TYPE_I), nor do they involve deep structural refactoring or redesign (TYPE_IV or TYPE_V). They are more than just whitespace or formatting changes, but do not involve renaming or major structural changes (TYPE_III). Therefore, TYPE_II classification is appropriate. The token budget estimate is moderate due to the need to carefully adjust method signatures and ensure proper resource management.",
         "is_auto_generated": false
       }
     },
@@ -65,7 +65,7 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 8.22,
+      "elapsed_s": 7.38,
       "error": null,
       "adapted_count": 2
     },
@@ -84,15 +84,15 @@
         {
           "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
           "old_string": "    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {",
-          "new_string": "    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n            \"multi-phase\",\n            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n        );\n        consumer.completionFuture().whenComplete((__, ___) -> ramAccounting.close());",
+          "new_string": "    @Override\n    public void executeOrFail(DependencyCarrier dependencies,\n                              PlannerContext plannerContext,\n                              RowConsumer consumer,\n                              Row params,\n                              SubQueryResults subQueryResults) {\n        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(\n            \"multi-phase\",\n            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),\n            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()\n        );\n        consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/planner/node/management/ExplainPlan.java",
-          "old_string": "                null,",
-          "new_string": "                ramAccounting,",
+          "old_string": "                plannerContext,\n                consumer,\n                params,\n                subQueryResults,\n                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                null,\n                null\n            );",
+          "new_string": "                plannerContext,\n                consumer,\n                params,\n                subQueryResults,\n                new IdentityHashMap<>(),\n                new ArrayList<>(plan.dependencies().size()),\n                ramAccounting,\n                null\n            );",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -100,7 +100,7 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 278.0,
+      "elapsed_s": 316.92,
       "error": null,
       "validation_passed": true,
       "validation_failure_category": "",
@@ -116,16 +116,16 @@
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.integrationtests.ExplainAnalyzeIntegrationTest.xml"
         ],
         "target_classes": [
-          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest"
+          "ExplainAnalyzeIntegrationTest"
         ],
         "test_cases": {
-          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_with_all_values_sub_query_does_not_leak_memory": "passed",
           "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_with_nested_subquery": "passed",
           "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_query_execution_contains_shard_information": "passed",
           "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_on_statement_with_subquery": "passed",
-          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#testExplainAnalyzeReportsExecutionTimesOnBothNodesInclQueryBreakdown": "passed",
           "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_query_execution_contains_shard_and_partition_information": "passed",
-          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#testExplainSelectWithoutJobExecutionContexts": "passed"
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#testExplainSelectWithoutJobExecutionContexts": "passed",
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#testExplainAnalyzeReportsExecutionTimesOnBothNodesInclQueryBreakdown": "passed",
+          "io.crate.integrationtests.ExplainAnalyzeIntegrationTest#test_explain_analyze_with_all_values_sub_query_does_not_leak_memory": "passed"
         },
         "classes": {
           "io.crate.integrationtests.ExplainAnalyzeIntegrationTest": "passed"
@@ -157,7 +157,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 7
     },
     "java_production_hunks": 3,
@@ -174,7 +174,7 @@
     "failed_hunks_total": 0,
     "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 2178,
+    "generated_patch_bytes": 3253,
     "target_patch_bytes": 4854,
     "validation_passed": true,
     "validation_failure_category": "",

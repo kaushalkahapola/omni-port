@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
-index 6c93c40e2d..8e7c994d29 100644
+index 6c93c40e2d..1cd0067624 100644
 --- a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
 +++ b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
 @@ -116,7 +116,9 @@ public class EqualityExtractor {
@@ -7,9 +7,9 @@ index 6c93c40e2d..8e7c994d29 100644
                                       @Nullable TransactionContext transactionContext) {
          var context = new ProxyInjectingVisitor.Context(columns);
 -        Symbol proxiedTree = symbol.accept(ProxyInjectingVisitor.INSTANCE, context);
-+        // Normalize the symbol so that any casts on literals are evaluated before proxy injection
-+        var normalizedSymbol = normalizer.normalize(symbol, transactionContext);
-+        Symbol proxiedTree = normalizedSymbol.accept(ProxyInjectingVisitor.INSTANCE, context);
++        // Normalize the query so that any casts on literals are evaluated
++        var normalizedQuery = normalizer.normalize(symbol, transactionContext);
++        Symbol proxiedTree = normalizedQuery.accept(ProxyInjectingVisitor.INSTANCE, context);
  
          // Match cannot execute without Lucene
          if (shortCircuitOnMatchPredicateUnknown && context.unknowns.size() == 1) {
@@ -22,8 +22,11 @@ index 6c93c40e2d..8e7c994d29 100644
          }
  
          public String forDisplay() {
-@@ -368,7 +370,7 @@ public class EqualityExtractor {
+@@ -365,10 +367,9 @@ public class EqualityExtractor {
+             }
  
+         }
+-
          static class Context {
  
 -            private LinkedHashMap<ColumnIdent, Comparison> comparisons;
@@ -31,54 +34,3 @@ index 6c93c40e2d..8e7c994d29 100644
              private boolean proxyBelow;
              private final Set<Symbol> unknowns = new HashSet<>();
  
-diff --git a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
-index 7f9cd25444..e0492bed57 100644
---- a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
-+++ b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
-@@ -49,6 +49,7 @@ import io.crate.metadata.doc.DocSysColumns;
- import io.crate.metadata.doc.DocTableInfo;
- import io.crate.planner.operators.SubQueryAndParamBinder;
- import io.crate.planner.operators.SubQueryResults;
-+import io.crate.planner.optimizer.symbol.Optimizer;
- 
- /**
-  * Used to analyze a query for primaryKey/partition "direct access" possibilities.
-@@ -163,14 +164,17 @@ public final class WhereClauseOptimizer {
-         boolean sequenceVersioningInQuery = Symbols.containsColumn(query, DocSysColumns.SEQ_NO) &&
-                                             Symbols.containsColumn(query, DocSysColumns.PRIMARY_TERM);
-         List<ColumnIdent> pkCols = pkColsInclVersioning(table, versionInQuery, sequenceVersioningInQuery);
--
-         EqualityExtractor eqExtractor = new EqualityExtractor(normalizer);
- 
--        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, query, txnCtx);
-+        // ExpressionAnalyzer will "blindly" add cast to the column, to match the datatype of the literal.
-+        // To be able to properly extract pkMatches (and therefore dockeys), so that the cast is moved to the literal,
-+        // we need to optimize the casts, before the extraction of pkMatches (and the dockeys after that)
-+        Symbol optimizedCastsQuery = Optimizer.optimizeCasts(query, txnCtx, nodeCtx);
-+        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, optimizedCastsQuery, txnCtx);
-         Set<Symbol> clusteredBy = Collections.emptySet();
-         if (table.clusteredBy() != null) {
-             EqualityExtractor.EqMatches clusteredByMatches = eqExtractor.extractParentMatches(
--                Collections.singletonList(table.clusteredBy()), query, txnCtx);
-+                Collections.singletonList(table.clusteredBy()), optimizedCastsQuery, txnCtx);
-             List<List<Symbol>> clusteredBySymbols = clusteredByMatches.matches();
-             if (clusteredBySymbols != null) {
-                 clusteredBy = new HashSet<>(clusteredBySymbols.size());
-@@ -186,7 +190,7 @@ public final class WhereClauseOptimizer {
-                     table.primaryKey().size() == 1 && table.clusteredBy().equals(table.primaryKey().get(0))));
- 
-         if (pkMatches.matches() == null && shouldUseDocKeys) {
--            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), query, txnCtx);
-+            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), optimizedCastsQuery, txnCtx);
-         }
- 
-         if (pkMatches.matches() == null) {
-@@ -203,7 +207,7 @@ public final class WhereClauseOptimizer {
-                                   partitionIndicesWithinPks);
-         }
-         EqMatches partitionMatches = table.isPartitioned()
--            ? eqExtractor.extractMatches(table.partitionedBy(), query, txnCtx)
-+            ? eqExtractor.extractMatches(table.partitionedBy(), optimizedCastsQuery, txnCtx)
-             : EqMatches.NONE;
- 
-         WhereClauseValidator.validate(query);

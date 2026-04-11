@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
-index 83615af1f4..d8710927c6 100644
+index 83615af1f4..2f655311f0 100644
 --- a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
 +++ b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
 @@ -60,6 +60,7 @@ import io.crate.exceptions.ColumnUnknownException;
@@ -10,15 +10,21 @@ index 83615af1f4..d8710927c6 100644
  import io.crate.expression.operator.AndOperator;
  import io.crate.expression.operator.EqOperator;
  import io.crate.expression.operator.ExistsOperator;
-@@ -68,7 +69,6 @@ import io.crate.expression.operator.Operator;
+@@ -67,8 +68,12 @@ import io.crate.expression.operator.LikeOperators;
+ import io.crate.expression.operator.Operator;
  import io.crate.expression.operator.OrOperator;
  import io.crate.expression.operator.RegexpMatchCaseInsensitiveOperator;
++import io.crate.expression.operator.OrOperator;
++import io.crate.expression.operator.RegexpMatchCaseInsensitiveOperator;
  import io.crate.expression.operator.RegexpMatchOperator;
 -import io.crate.expression.operator.all.AllOperator;
++import io.crate.expression.operator.any.AnyOperator;
++import io.crate.expression.predicate.NotPredicate;
++import io.crate.expression.scalar.ArraySliceFunction;
  import io.crate.expression.operator.any.AnyOperator;
  import io.crate.expression.predicate.NotPredicate;
  import io.crate.expression.scalar.ArraySliceFunction;
-@@ -841,7 +841,7 @@ public class ExpressionAnalyzer {
+@@ -841,7 +846,7 @@ public class ExpressionAnalyzer {
              Symbol arraySymbol = node.getValue().accept(this, context);
              Symbol leftSymbol = node.getPattern().accept(this, context);
              return allocateFunction(
@@ -28,7 +34,7 @@ index 83615af1f4..d8710927c6 100644
                  context);
          }
 diff --git a/server/src/main/java/io/crate/expression/operator/LikeOperators.java b/server/src/main/java/io/crate/expression/operator/LikeOperators.java
-index b73a865da7..38dfb6e6aa 100644
+index b73a865da7..f232d4c639 100644
 --- a/server/src/main/java/io/crate/expression/operator/LikeOperators.java
 +++ b/server/src/main/java/io/crate/expression/operator/LikeOperators.java
 @@ -29,6 +29,9 @@ import org.apache.lucene.search.Query;
@@ -91,6 +97,69 @@ index b73a865da7..38dfb6e6aa 100644
          }
          return name;
      }
+@@ -217,6 +238,62 @@ public class LikeOperators {
+                     CaseSensitivity.INSENSITIVE
+                 )
+         );
++        builder.add(
++            Signature.builder(ALL_LIKE, FunctionType.SCALAR)
++                .argumentTypes(DataTypes.STRING.getTypeSignature(),
++                    DataTypes.STRING_ARRAY.getTypeSignature())
++                .returnType(Operator.RETURN_TYPE.getTypeSignature())
++                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)
++                .build(),
++            (signature, boundSignature) ->
++                new AllLikeOperator(
++                    signature,
++                    boundSignature,
++                    CaseSensitivity.SENSITIVE
++                )
++        );
++        builder.add(
++            Signature.builder(ALL_NOT_LIKE, FunctionType.SCALAR)
++                .argumentTypes(DataTypes.STRING.getTypeSignature(),
++                    DataTypes.STRING_ARRAY.getTypeSignature())
++                .returnType(Operator.RETURN_TYPE.getTypeSignature())
++                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)
++                .build(),
++            (signature, boundSignature) ->
++                new AllNotLikeOperator(
++                    signature,
++                    boundSignature,
++                    CaseSensitivity.SENSITIVE
++                )
++        );
++        builder.add(
++            Signature.builder(ALL_ILIKE, FunctionType.SCALAR)
++                .argumentTypes(DataTypes.STRING.getTypeSignature(),
++                    DataTypes.STRING_ARRAY.getTypeSignature())
++                .returnType(Operator.RETURN_TYPE.getTypeSignature())
++                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)
++                .build(),
++            (signature, boundSignature) ->
++                new AllLikeOperator(
++                    signature,
++                    boundSignature,
++                    CaseSensitivity.INSENSITIVE
++                )
++        );
++        builder.add(
++            Signature.builder(ALL_NOT_ILIKE, FunctionType.SCALAR)
++                .argumentTypes(DataTypes.STRING.getTypeSignature(),
++                    DataTypes.STRING_ARRAY.getTypeSignature())
++                .returnType(Operator.RETURN_TYPE.getTypeSignature())
++                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)
++                .build(),
++            (signature, boundSignature) ->
++                new AllNotLikeOperator(
++                    signature,
++                    boundSignature,
++                    CaseSensitivity.INSENSITIVE
++                )
++        );
+     }
+ 
+     static final Pattern makePattern(String pattern, CaseSensitivity caseSensitivity, Character escape) {
 diff --git a/server/src/main/java/io/crate/expression/operator/all/AllOperator.java b/server/src/main/java/io/crate/expression/operator/all/AllOperator.java
 index 562ca19d4b..6fc68b2830 100644
 --- a/server/src/main/java/io/crate/expression/operator/all/AllOperator.java

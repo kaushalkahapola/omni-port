@@ -228,6 +228,52 @@ def _should_namespace_adapt(
 
 # ── LLM-backed adaptation ─────────────────────────────────────────────────────
 
+def _extract_api_examples(file_content: str, added_lines: List[str], max_examples: int = 3) -> str:
+    """
+    For pure-add hunks, find existing usages in the target file that share the
+    same top-level API call as the added lines, so the LLM knows the correct style.
+
+    Returns a formatted string of examples, or empty string if none found.
+    """
+    if not added_lines or not file_content:
+        return ""
+
+    # Extract top-level call patterns from added lines (e.g. "Signature.scalar", "builder.field")
+    patterns: List[str] = []
+    for line in added_lines:
+        m = re.match(r'\s*([\w.]+)\s*\(', line.strip())
+        if m:
+            call = m.group(1)
+            # Use only the first two components (e.g. "Signature.scalar" → "Signature")
+            prefix = call.split(".")[0]
+            if prefix and len(prefix) > 3 and prefix not in patterns:
+                patterns.append(prefix)
+
+    if not patterns:
+        return ""
+
+    examples: List[str] = []
+    seen: set = set()
+    for line in file_content.splitlines():
+        for prefix in patterns:
+            if prefix + "." in line or prefix + "(" in line:
+                stripped = line.strip()
+                if stripped and stripped not in seen and len(stripped) > 10:
+                    seen.add(stripped)
+                    examples.append(stripped)
+                    if len(examples) >= max_examples * len(patterns):
+                        break
+
+    if not examples:
+        return ""
+
+    return (
+        "\n⚠️  EXISTING API USAGE EXAMPLES FROM THE TARGET FILE (use THESE patterns, not the mainline style):\n"
+        + "\n".join(f"  {e}" for e in examples[:max_examples * 2])
+        + "\n"
+    )
+
+
 def _adapt_with_llm(
     hunk: Dict[str, Any],
     loc_result: LocalizationResult,
@@ -235,9 +281,12 @@ def _adapt_with_llm(
     post_region_context: str = "",
     same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
     abstract_methods_in_target: Optional[Set[str]] = None,
+    verification_feedback: str = "",
 ) -> NamespaceAdaptationOutput:
     """
     Calls the Balanced LLM to rewrite imports and symbol references.
+    Optional verification_feedback is included when a prior attempt produced
+    adapted_old_content that wasn't found verbatim in the target file.
     """
     mappings_text = "\n".join(
         f"  - {orig} -> {target}"
@@ -278,6 +327,7 @@ Code immediately AFTER the replaced region in the target file (already exists �
     imports_added_summary = "\n".join(f"  + {l}" for l in diff["imports_added"]) or "  (none)"
 
     pure_add_note = ""
+    api_examples_note = ""
     if diff["is_pure_add"]:
         pure_add_note = """
 IMPORTANT — THIS IS A PURE ADDITION:
@@ -288,6 +338,15 @@ IMPORTANT — THIS IS A PURE ADDITION:
   (translated to target-branch API style if needed).
 - Do NOT remove or omit any existing code; nothing is deleted by this hunk.
 """
+        # Extract API usage examples from target file so the LLM uses the right style.
+        # This prevents copying the mainline's newer API when the target branch uses an older one.
+        file_content_for_examples = None
+        if loc_result.context_snapshot:
+            file_content_for_examples = loc_result.context_snapshot
+        if pre_region_context:
+            file_content_for_examples = (file_content_for_examples or "") + "\n" + pre_region_context
+        if file_content_for_examples:
+            api_examples_note = _extract_api_examples(file_content_for_examples, diff["lines_added"])
 
     # Build same-file context section to prevent referencing already-deleted symbols.
     same_file_section = ""
@@ -329,9 +388,23 @@ Rules:
   ends with `;` it is abstract.
 """
 
+    verification_feedback_section = ""
+    if verification_feedback:
+        verification_feedback_section = f"""
+⚠️  PREVIOUS ATTEMPT FAILED VERIFICATION:
+Your previous adapted_old_content was not found verbatim in the target file.
+The actual content of the target file at the localized region is shown below.
+You MUST produce an adapted_old_content that appears EXACTLY as shown in the target file.
+
+Actual target file content at localized region:
+```java
+{verification_feedback}
+```
+"""
+
     prompt = f"""You are Agent 4 (Namespace Adapter) for OmniPort, a Java patch backporting system.
 A patch hunk must be adapted to a different codebase version where symbol names and imports differ.
-{same_file_section}{abstract_class_note}
+{same_file_section}{abstract_class_note}{verification_feedback_section}
 Known symbol renames from localization analysis:
 {mappings_text}
 
@@ -348,7 +421,7 @@ Import changes:
   Imports removed: {imports_removed_summary}
   Imports added:   {imports_added_summary}
 ─────────────────────────────────────────────────────────────────────────────────
-{pure_add_note}
+{pure_add_note}{api_examples_note}
 Original hunk — old_content (context + removed lines from the source branch):
 ```java
 {hunk.get("old_content", "")}
@@ -470,6 +543,16 @@ Format your response EXACTLY as follows:
             
         old_content = block_match.group(1).rstrip()
         new_content = block_match.group(2).strip("\n") # preserve trailing whitespace if any but remove bounding newlines
+
+        # Preserve leading newlines from the original old_content.
+        # LLMs commonly strip the blank line that precedes import blocks, causing
+        # checkstyle EmptyLineSeparator failures (e.g. import directly after package).
+        orig_old = hunk.get("old_content", "")
+        orig_leading_newlines = len(orig_old) - len(orig_old.lstrip('\n'))
+        if orig_leading_newlines > 0 and not old_content.startswith('\n'):
+            leading = '\n' * orig_leading_newlines
+            old_content = leading + old_content
+            new_content = leading + new_content
 
         return NamespaceAdaptationOutput(
             adapted_old_content=old_content,
@@ -660,6 +743,29 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
             processed_indices.remove(i)
             continue
 
+        # Verification retry: if adapted_old_content is not found verbatim in the
+        # target file, re-call the LLM once with explicit feedback showing what the
+        # file actually contains at the localized region.
+        if output.success and file_content and output.adapted_old_content:
+            if output.adapted_old_content not in file_content:
+                # Build feedback: actual file content at localized region.
+                actual_region = ""
+                if loc_result.start_line > 0:
+                    lines = file_content.splitlines(keepends=True)
+                    # Show wider window (±10 lines) around the localized region.
+                    start = max(0, loc_result.start_line - 11)
+                    end = min(len(lines), (loc_result.end_line if loc_result.end_line > 0 else loc_result.start_line + 5) + 10)
+                    actual_region = "".join(lines[start:end])
+                if not actual_region:
+                    actual_region = loc_result.context_snapshot or ""
+                if actual_region:
+                    output = _adapt_with_llm(
+                        hunk, loc_result, pre_region_context, post_region_context,
+                        same_file_applied,
+                        abstract_methods_in_target=abstract_methods_in_target or None,
+                        verification_feedback=actual_region,
+                    )
+
         if output.success:
             adapted_hunks.append({
                 **hunk,
@@ -669,6 +775,10 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
                 "imports_removed": output.imports_removed,
                 "adapted": True,
                 "loc_index": i,
+                # Preserve original mainline content for structural fallback in Agent 6.
+                # Once we overwrite old_content/new_content above, the original is gone.
+                "original_old_content": hunk.get("old_content", ""),
+                "original_new_content": hunk.get("new_content", ""),
             })
         else:
             failed_hunks.append({**hunk, "error": output.error_message})

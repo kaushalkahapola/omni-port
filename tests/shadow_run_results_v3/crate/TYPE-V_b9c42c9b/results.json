@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "b9c42c9bbc08a39b51c7205a98da6972b56ce612",
@@ -115,12 +115,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.48,
+      "elapsed_s": 3.67,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_I",
+        "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "All hunks in the patch were found in the target branch via 'git_exact' with confidence 1.00, indicating that the patch applies as exact matches or very close to exact matches. The changes are mostly straightforward code additions and modifications without structural or API redesign. The patch fixes a specific bug related to portal suspension and batch execution, involving changes in a few classes and test additions, but no deep structural refactoring or redesign. Therefore, the patch complexity is TYPE_I (exact match string replacement, trivial backport). The confidence is high but not absolute due to the presence of multiple files and some logic changes. The token budget estimate is moderate, reflecting the patch size and the need to verify correctness and tests.",
+        "reasoning": "The patch involves multiple source files with structural changes, including modifications to class fields, method logic, and control flow in Java classes related to session and result consumption handling. The changes are not simple string replacements or whitespace fixes but involve adding new logic to handle portal suspension and resumption, managing CompletableFutures, and updating session execution flow. The patch also includes new test cases and logging statements, indicating a moderate complexity level. All hunks were found via 'git_exact' with high confidence, suggesting the patch applies cleanly but involves structural code changes rather than trivial edits. Therefore, the patch is best classified as TYPE_III (structural changes).",
         "is_auto_generated": false
       }
     },
@@ -205,20 +205,33 @@
       "synthesized_hunks": []
     },
     "agent7_validator": {
-      "elapsed_s": 186.74,
+      "elapsed_s": 187.46,
       "error": null,
       "validation_passed": false,
       "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper):    rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:110: error: cannot find symbol\nserver/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:118: error: cannot find symbol",
       "validation_attempts": 1,
-      "retry_files": [],
+      "retry_files": [
+        "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java"
+      ],
       "build_success": false,
       "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
       "test_state_transition": null,
-      "compile_errors": []
+      "compile_errors": [
+        {
+          "file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
+          "line": 110,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
+          "line": 118,
+          "message": "error: cannot find symbol"
+        }
+      ]
     }
   },
   "summary": {
@@ -227,7 +240,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 11,
@@ -253,7 +266,7 @@
     "retry_contexts": [
       {
         "error_type": "api_mismatch",
-        "error_message": "--- Building code for 508dde5 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] crate-libs-azure-testing                                           [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-copy-azure                                                   ",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[110,32] error: cannot find symbol\n  symbol:   method waitingForWrite()\n[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[118,32] error: cannot find symbol\n  symbol:   method waitingForWrite()\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:testCompile (default-testCompile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[110,32] error: cannot find symbol\n[ERROR]   symbol:   method waitingForWrite()\n[ERROR]   location: variable batchConsumer of type RowConsumerToResultReceiver\n[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[118,32] error: cannot find symbol\n[ERROR]   symbol:   method waitingForWrite()\n[ERROR]   location: variable batchConsumer of type RowConsumerToResultReceiver\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
         "suggested_action": "route_to_namespace_or_structural"
       }

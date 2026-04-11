@@ -108,7 +108,7 @@ def get_patches_from_config(
             if type_filter and patch.get("type") != type_filter:
                 continue
             original_commit = patch.get("original_commit", "")
-            if commit_filter and original_commit != commit_filter:
+            if commit_filter and not original_commit.startswith(commit_filter):
                 continue
             patches.append({
                 "repo": repo_name,
@@ -160,7 +160,7 @@ def get_patches_from_csv(
                 continue
             if type_filter and patch_type != type_filter:
                 continue
-            if commit_filter and original_commit != commit_filter:
+            if commit_filter and not original_commit.startswith(commit_filter):
                 continue
 
             rel_path = REPO_PATH_MAP.get(project)

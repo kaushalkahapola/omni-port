@@ -163,13 +163,26 @@ def _check_simulated_brace_balance(
     Return True if the simulated replacement keeps brace balance.
     Unbalanced braces in new_string relative to old_string are a strong signal
     that the LLM produced malformed code.
+
+    Critical case: if old_string is a PARTIAL view of a method body (old_net > 0,
+    meaning it opens more braces than it closes), then new_string must NOT close
+    more braces than old_string did. If new_net < old_net, the LLM completed the
+    full method body inside new_string while old_string only covers the beginning —
+    this creates orphaned code after the replacement point (the body continuation
+    that was not part of old_string remains verbatim, after the newly-inserted
+    closing brace).
     """
     old_open, old_close = _count_braces(old_string)
     new_open, new_close = _count_braces(new_string)
     old_net = old_open - old_close
     new_net = new_open - new_close
-    # The net brace contribution must be the same (or differ by at most 1 for
-    # edge cases where context is expanded to include an outer class brace).
+    # Directional guard: if old_string is partially open (old_net > 0), new_string
+    # must not close more braces than old_string. new_net < old_net means the LLM
+    # emitted an extra closing brace, completing a body that was not fully in old_string.
+    if old_net > 0 and new_net < old_net:
+        return False
+    # Allow at most 1 unit of tolerance for edge cases where context expansion
+    # includes an outer class brace.
     return abs(new_net - old_net) <= 1
 
 
@@ -831,7 +844,40 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
             continue
         output = synthesizer.synthesize_batch(batch, loc_results, loc_index_override=loc_idx_list)
         all_synthesized.extend(h.model_dump() for h in output.synthesized_hunks)
-        all_failed.extend(output.failed_hunks)
+
+        # For all failed hunks, try the structural fallback (Agent 5's skeleton
+        # rewrite) as a last resort. For "adapted" hunks, Agent 4 stored the
+        # original mainline old/new content so the LLM has accurate context.
+        # For "passthrough" and "refactored" hunks, use the hunk content as-is.
+        for failed_hunk in output.failed_hunks:
+            file_path_for_fallback = None
+            proxy = dict(failed_hunk)
+
+            if label == "adapted":
+                loc_idx = failed_hunk.get("loc_index")
+                if loc_idx is not None and loc_idx < len(loc_results):
+                    loc_r = loc_results[loc_idx]
+                    file_path_for_fallback = loc_r.file_path
+                    # Restore original mainline content so the LLM sees the full patch intent.
+                    if failed_hunk.get("original_old_content"):
+                        proxy["old_content"] = failed_hunk["original_old_content"]
+                        proxy["new_content"] = failed_hunk.get("original_new_content", "")
+            elif label == "refactored":
+                loc_idx = failed_hunk.get("loc_index")
+                if loc_idx is not None and loc_idx < len(loc_results):
+                    file_path_for_fallback = loc_results[loc_idx].file_path
+                if not file_path_for_fallback:
+                    file_path_for_fallback = failed_hunk.get("file_path") or failed_hunk.get("target_file")
+            else:  # passthrough
+                file_path_for_fallback = failed_hunk.get("file_path") or failed_hunk.get("target_file")
+
+            if file_path_for_fallback:
+                fb = _structural_fallback_for_failed_loc(proxy, file_path_for_fallback, repo_path)
+                if fb is not None:
+                    all_synthesized.append(fb.model_dump())
+                    continue
+
+            all_failed.append(failed_hunk)
 
     # Fix D: drain any extra sub-hunks produced by the split path.
     if _PENDING_EXTRA_HUNKS:

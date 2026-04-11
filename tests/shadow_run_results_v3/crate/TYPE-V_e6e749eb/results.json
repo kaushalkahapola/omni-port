@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T10:16:59.646089",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "e6e749ebf12d618322696d0b45f86211efbfed17",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 16.15,
+      "elapsed_s": 13.77,
       "error": null,
       "java_hunks": 3,
       "aux_hunks": 2,
@@ -43,12 +43,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.9,
+      "elapsed_s": 3.22,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_III",
+        "patch_type": "PatchType.TYPE_II",
         "confidence": 0.85,
-        "reasoning": "The patch modifies the NumericType.java file by adding version checks and conditional logic around reading and writing scale values. It introduces new imports and changes the control flow to handle different serialization formats depending on the version. The changes are structural, involving API usage (Version checks) and conditional logic, not just simple string replacements or whitespace fixes. The localization evidence shows mixed methods of discovery, including embedding with moderate confidence, indicating some structural divergence. Therefore, the patch complexity aligns with TYPE_III (structural changes). The confidence is high due to clear structural modifications, and the token budget is moderate to cover the reasoning and potential code adjustments.",
+        "reasoning": "The patch modifies the NumericType.java file by adding version checks and conditional logic around reading and writing the scale of BigDecimal values. The changes involve adding imports and adjusting serialization/deserialization logic with version awareness. The localization evidence shows that some hunks were found via 'git_pickaxe' with moderate confidence and others via 'embedding' with lower confidence, indicating some fuzzy matching is needed. The patch does not involve structural or API changes but requires careful matching due to version-dependent logic and conditional branches, typical of TYPE_II complexity (whitespace/formatting drift and minor logic adjustments). The confidence is high due to clear version checks and minor code changes, and the token budget is moderate to handle the conditional logic and version checks in the backport.",
         "is_auto_generated": false
       }
     },
@@ -59,26 +59,34 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 12.59,
+      "elapsed_s": 11.79,
       "error": null,
       "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 97.46,
+      "elapsed_s": 46.28,
       "error": null,
       "refactored_count": 2
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 2,
-      "failed_count": 1,
-      "synthesis_status": "partial",
+      "synthesized_count": 3,
+      "failed_count": 0,
+      "synthesis_status": "success",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
-          "old_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.common.io.stream.StreamInput;",
-          "new_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;",
+          "old_string": "\nimport org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
+          "new_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+          "old_string": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);",
+          "new_string": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {\n                if (scale == null) {\n                    out.writeBoolean(true);\n                    out.writeVInt(v.scale());\n                } else {\n                    out.writeBoolean(false);\n                }\n            }\n        } else {\n            out.writeBoolean(false);",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -94,11 +102,11 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 111.33,
+      "elapsed_s": 108.91,
       "error": null,
       "validation_passed": false,
       "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.57s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.25s), 0 error(s).\n[INFO] Scanned 79 class file(s) for forbidden API invocations (in 0.11s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.07s), 0 error(s).\n[INFO] Scanned 68 class file(s) for forbidden API invocations (in 0.11s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
+      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.52s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.29s), 0 error(s).\n[INFO] Scanned 79 class file(s) for forbidden API invocations (in 0.10s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.07s), 0 error(s).\n[INFO] Scanned 68 class file(s) for forbidden API invocations (in 0.15s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
       "validation_attempts": 1,
       "retry_files": [],
       "build_success": false,
@@ -127,38 +135,20 @@
       2
     ],
     "tokens_used": 0,
-    "synthesis_status": "partial",
+    "synthesis_status": "success",
     "applied_on_disk_ag3": 0,
-    "synthesized_count": 1,
-    "failed_hunks_total": 1,
+    "synthesized_count": 3,
+    "failed_hunks_total": 0,
     "retry_contexts": [
       {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
         "error_type": "unknown",
-        "error_message": "[ERROR] /repo/server/src/main/java/io/crate/types/IntegerType.java:29:8: Unused import - org.elasticsearch.Version. [UnusedImports]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:check (validate) on project crate-server: Failed during checkstyle execution: There is 1 error reported by Checkstyle 10.17.0 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "[ERROR] /repo/server/src/main/java/io/crate/types/IntegerType.java:28:8: Unused import - org.elasticsearch.Version. [UnusedImports]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:check (validate) on project crate-server: Failed during checkstyle execution: There is 1 error reported by Checkstyle 10.17.0 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
         "suggested_action": "inspect_and_retry"
       }
     ],
-    "failed_hunks": [
-      {
-        "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-        "old_content": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);\n",
-        "new_content": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public BigDecimal readValueFrom(StreamInput in) throws IOException {\n        if (in.readBoolean()) {\n            byte[] bytes = in.readByteArray();\n            int scale = this.scale == null ? 0 : this.scale;\n            if (in.getVersion().onOrAfter(Version.V_5_9_0) && in.readBoolean()) {\n                scale = in.readVInt();\n                assert this.scale == null || this.scale == scale : \"streamed value scale differs from type scale\";\n            }\n            return new BigDecimal(\n                new BigInteger(bytes),\n                scale,\n                mathContextOrDefault()\n            );\n        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {\n                if (scale == null) {\n                    out.writeBoolean(true);\n                    out.writeVInt(v.scale());\n                } else {\n                    out.writeBoolean(false);\n                }\n            }\n        } else {\n            out.writeBoolean(false);\n        }",
-        "is_new_file": false,
-        "is_del_file": false,
-        "file_operation": "MODIFIED",
-        "refactored": true,
-        "semantic_confidence": 0.58,
-        "loc_index": 1
-      }
-    ],
-    "generated_patch_bytes": 561,
+    "failed_hunks": [],
+    "generated_patch_bytes": 1488,
     "target_patch_bytes": 7207,
     "validation_passed": false,
     "validation_failure_category": "unknown",

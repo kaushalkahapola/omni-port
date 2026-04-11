@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T10:38:41.632489",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "c4e5cb305ee2a07c1b0c5c06d876111194ba5c18",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 27.36,
+      "elapsed_s": 51.84,
       "error": null,
       "java_hunks": 16,
       "aux_hunks": 1,
@@ -160,12 +160,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.26,
+      "elapsed_s": 4.89,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
-        "confidence": 0.9,
-        "reasoning": "The patch involves multiple changes across several Java files, including adding a new constant, modifying method calls, adding new methods, and updating test cases. The changes are not simple string replacements but involve some structural adjustments and additions. The localization evidence shows a mix of 'git_exact' and 'fuzzy' matches with high confidence, indicating that the patch applies with some modifications due to formatting or minor structural differences. There are no deep structural refactorings or complete redesigns, so TYPE_II (whitespace/formatting drift requiring fuzzy matching) is appropriate. The token budget is estimated to be moderate due to the patch size and complexity of changes across multiple files.",
+        "confidence": 0.85,
+        "reasoning": "The patch involves multiple changes across several files, including adding a new constant, modifying method calls, adding new methods, and updating test cases. Most changes are related to adding a feature flag for array length indexing support and adjusting logic to conditionally index array lengths for nested object arrays. The localization evidence shows a mix of 'git_exact' and 'fuzzy' matches with some 'failed' and 'embedding' matches, indicating some structural differences but mostly straightforward adaptations. The patch does not involve deep structural refactoring or redesign but requires careful fuzzy matching and adaptation to the target branch's existing code structure, especially in IndexDocumentBuilder where some hunks failed localization and required embedding fallback. Therefore, the patch complexity is best classified as TYPE_II (whitespace/formatting drift and minor structural changes requiring fuzzy matching).",
         "is_auto_generated": false
       }
     },
@@ -212,22 +212,30 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 23.36,
+      "elapsed_s": 21.41,
       "error": null,
-      "adapted_count": 1
+      "adapted_count": 2
     },
     "agent5_structural": {
-      "elapsed_s": 175.69,
+      "elapsed_s": 220.73,
       "error": null,
-      "refactored_count": 4
+      "refactored_count": 3
     },
     "agent6_synthesizer": {
-      "elapsed_s": 83.67,
+      "elapsed_s": 72.97,
       "error": null,
-      "synthesized_count": 5,
-      "failed_count": 4,
+      "synthesized_count": 4,
+      "failed_count": 5,
       "synthesis_status": "partial",
       "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
+          "old_string": "        if (docBuilder.getTableVersionCreated().onOrAfter(Version.V_5_9_0)) {",
+          "new_string": "        if (docBuilder.maybeAddArrayLengthField()) {",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
         {
           "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
           "old_string": "        ValueIndexer.Synthetics synthetics,\n        Map<ColumnIdent, Indexer.ColumnConstraint> constraints,\n        Version tableVersionCreated\n    ) {\n        this.translogWriter = translogWriter;\n        this.synthetics = synthetics;\n        this.constraints = constraints;\n        this.tableVersionCreated = tableVersionCreated;\n    }",
@@ -238,8 +246,8 @@
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
-          "old_string": "                innerIndexer.indexValue(value, docBuilder);\n            }\n        }\n        if (docBuilder.getTableVersionCreated().onOrAfter(Version.V_5_9_0)) {\n            // map '[]' to '_array_length_ = 0'\n            // map '[null]' to '_array_length_ = 1'\n            // 'null' is not mapped; can utilize 'FieldExistsQuery' for 'IS NULL' filtering",
-          "new_string": "                innerIndexer.indexValue(value, docBuilder);\n            }\n        }\n        if (docBuilder.maybeAddArrayLengthField()) {\n            // map '[]' to '_array_length_ = 0'\n            // map '[null]' to '_array_length_ = 1'\n            // 'null' is not mapped; can utilize 'FieldExistsQuery' for 'IS NULL' filtering",
+          "old_string": "\n    @Override\n    public void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {\n        docBuilder.translogWriter().startArray();\n        for (T value : values) {\n            if (value == null) {\n                docBuilder.translogWriter().writeNull();",
+          "new_string": "    \n    @Override\n    public void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {\n        docBuilder.translogWriter().startArray();\n        // use a nested document builder for array elements so we don't add stored fields\n        // or array-length fields for each nested value\n        docBuilder = docBuilder.noStoredField().noArrayLengthField();\n        for (T value : values) {\n            if (value == null) {\n                docBuilder.translogWriter().writeNull();",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -251,35 +259,18 @@
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
-          "old_string": "    private final Version tableVersionCreated;\n\n    /**\n     * Builds a new IndexDocumentBuilder\n     */\n    public IndexDocumentBuilder(\n        TranslogWriter translogWriter,\n        ValueIndexer.Synthetics synthetics,\n        Map<ColumnIdent, Indexer.ColumnConstraint> constraints,\n        Version tableVersionCreated",
-          "new_string": "    private final Version tableVersionCreated;\n\n    /**\n     * Returns an IndexDocumentBuilder that shares a lucene document and translog with the current one,\n     * but that tells any child indexers they should not add stored fields.\n     */\n    public IndexDocumentBuilder noStoredField() {\n        return new IndexDocumentBuilder(translogWriter, synthetics, constraints, tableVersionCreated);\n    }\n\n    /**\n     * Returns an IndexDocumentBuilder that shares a lucene document and translog with the current one,\n     * but that tells any child indexers they should not add array length fields.\n     */\n    public IndexDocumentBuilder noArrayLengthField() {\n        return new IndexDocumentBuilder(translogWriter, synthetics, constraints, tableVersionCreated);\n    }\n\n    /**\n     * Builds a new IndexDocumentBuilder\n     */\n    public IndexDocumentBuilder(\n        TranslogWriter translogWriter,\n        ValueIndexer.Synthetics synthetics,\n        Map<ColumnIdent, Indexer.ColumnConstraint> constraints,\n        Version tableVersionCreated",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
-          "old_string": "    public void addField(IndexableField field) {\n        doc.add(field);\n    }\n\n    /**\n     * @return the TranslogWriter\n     */\n    public TranslogWriter translogWriter() {\n        return translogWriter;\n    }",
-          "new_string": "    public void addField(IndexableField field) {\n        doc.add(field);\n    }\n\n    /**\n     * Returns a new IndexDocumentBuilder where the translog writer is wrapped by the\n     * provided function. The returned builder preserves the current document's fields\n     * (including ordering and duplication).\n     */\n    public IndexDocumentBuilder wrapTranslog(java.util.function.UnaryOperator<TranslogWriter> wrapFunction) {\n        IndexDocumentBuilder wrapped = new IndexDocumentBuilder(wrapFunction.apply(translogWriter), synthetics, constraints, tableVersionCreated);\n        // copy existing fields to preserve ordering and duplicates\n        for (IndexableField f : this.doc.getFields()) {\n            wrapped.doc.add(f);\n        }\n        return wrapped;\n    }\n\n    /**\n     * @return the TranslogWriter\n     */\n    public TranslogWriter translogWriter() {\n        return translogWriter;\n    }",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
         }
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 131.07,
+      "elapsed_s": 143.46,
       "error": null,
       "validation_passed": false,
       "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/expression/predicate/IsNullPredicate.java:126: error: cannot find symbol\nserver/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:180: error: cannot find symbol",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/execution/dml/ArrayIndexer.java:119: error: cannot find symbol\nserver/src/main/java/io/crate/execution/dml/ArrayIndexer.java:127: error: cannot find symbol",
       "validation_attempts": 1,
       "retry_files": [
-        "server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java",
-        "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java"
+        "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java"
       ],
       "build_success": false,
       "build_mode": "crate-helper",
@@ -289,13 +280,13 @@
       "test_state_transition": null,
       "compile_errors": [
         {
-          "file": "server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java",
-          "line": 126,
+          "file": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
+          "line": 119,
           "message": "error: cannot find symbol"
         },
         {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 180,
+          "file": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
+          "line": 127,
           "message": "error: cannot find symbol"
         }
       ]
@@ -320,9 +311,9 @@
       13,
       14,
       15,
+      2,
       5,
       1,
-      2,
       3,
       8,
       9
@@ -330,12 +321,12 @@
     "tokens_used": 0,
     "synthesis_status": "partial",
     "applied_on_disk_ag3": 7,
-    "synthesized_count": 0,
-    "failed_hunks_total": 4,
+    "synthesized_count": 2,
+    "failed_hunks_total": 5,
     "retry_contexts": [
       {
         "error_type": "structural_refactor_failed",
-        "error_message": "confidence=0.38",
+        "error_message": "confidence=0.36",
         "attempt_count": 3,
         "suggested_action": "manual_review"
       },
@@ -376,21 +367,27 @@
         "suggested_action": "relocalize"
       },
       {
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      },
+      {
         "error_type": "api_mismatch",
-        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java:[24] error: cannot find symbol\n  symbol:   static ARRAY_LENGTH_FIELD_SUPPORTED_VERSION\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[24] error: cannot find symbol\n  symbol:   static ARRAY_LENGTH_FIELD_SUPPORTED_VERSION\n[ERROR] /repo/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java:[126,63] error: cannot find symbol\n  symbol:   variable ARRAY_LENGTH_FIELD_SUPPORTED_VERSION\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[180,59] error: cannot find symbol\n  symbol:   variable ARRAY_LENGTH_FIELD_SUPPORTED_VERSION\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java:[24] error: cannot find symbol\n[ERROR]   symbol:   static ARRAY_LENGTH_FIELD_SUPPORTED_VERSION\n[ERROR]   location: class ArrayIndexer\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[24] error: cannot find symbol\n[ERROR]   symbol:   static ARRAY_LENGTH_FIELD_SUPPORTED_VERSION\n[ERROR]   location: class ArrayIndexer\n[ERROR] /repo/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java:[126,63] error: cannot find symbol\n[ERROR]   symbol:   variable ARRAY_LENGTH_FIELD_SUPPORTED_VERSION\n[ERROR]   location: class IsNullPredicate<T>\n[ERROR]   where T is a type-variable:\n[ERROR]     T extends Object declared in class IsNullPredicate\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[180,59] error: cannot find symbol\n[ERROR]   symbol:   variable ARRAY_LENGTH_FIELD_SUPPORTED_VERSION\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java:[119,31] error: cannot find symbol\n  symbol:   method noStoredField()\n[ERROR] /repo/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java:[127,22] error: cannot find symbol\n  symbol:   method maybeAddArrayLengthField()\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java:[119,31] error: cannot find symbol\n[ERROR]   symbol:   method noStoredField()\n[ERROR]   location: variable docBuilder of type IndexDocumentBuilder\n[ERROR] /repo/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java:[127,22] error: cannot find symbol\n[ERROR]   symbol:   method maybeAddArrayLengthField()\n[ERROR]   location: variable docBuilder of type IndexDocumentBuilder\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
         "suggested_action": "route_to_namespace_or_structural"
       }
     ],
     "failed_hunks": [
       {
-        "file_path": "server/src/main/java/io/crate/execution/dml/ArrayIndexer.java",
-        "old_content": "    @Override\n    public void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {\n        docBuilder.translogWriter().startArray();\n        var nestedDocBuilder = docBuilder.noStoredField();\n        for (T value : values) {\n            if (value == null) {\n                docBuilder.translogWriter().writeNull();\n",
-        "new_content": "    @Override\n    public void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {\n        docBuilder.translogWriter().startArray();\n        var nestedDocBuilder = docBuilder.noStoredField().noArrayLengthField();\n        for (T value : values) {\n            if (value == null) {\n                docBuilder.translogWriter().writeNull();\n",
+        "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
+        "old_content": "     * ordering and duplication, so child indexers do not need to store their values separately.\n     */\n    public IndexDocumentBuilder noStoredField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, false);\n    }\n\n    /**\n",
+        "new_content": "     * ordering and duplication, so child indexers do not need to store their values separately.\n     */\n    public IndexDocumentBuilder noStoredField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, false, addArrayLengthField);\n    }\n\n    /**\n     * Returns an IndexDocumentBuilder that shares a lucene document and translog with the current one,\n     * but that tells any child indexers they should not add array length fields.\n     * <p/>\n     * Called by ArrayIndexers that are not children of another ArrayIndexers in order to prevent child ArrayIndexers to\n     * index array lengths.\n     */\n    public IndexDocumentBuilder noArrayLengthField() {\n        return new IndexDocumentBuilder(doc, translogWriter, synthetics, constraints, tableVersionCreated, addStoredField, false);\n    }\n\n    /**\n",
         "is_new_file": false,
         "is_del_file": false,
         "file_operation": "MODIFIED",
-        "error": "Low semantic confidence: 0.38"
+        "error": "Low semantic confidence: 0.36"
       },
       {
         "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
@@ -415,9 +412,20 @@
         "is_new_file": false,
         "is_del_file": false,
         "file_operation": "MODIFIED"
+      },
+      {
+        "file_path": "server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java",
+        "old_content": "    public void addField(IndexableField field) {\n        doc.add(field);\n    }\n\n    /**\n     * @return the TranslogWriter\n     */\n    public TranslogWriter translogWriter() {\n        return translogWriter;\n    }\n",
+        "new_content": "    public void addField(IndexableField field) {\n        doc.add(field);\n    }\n\n    /**\n     * preserve ordering and duplication.\n     */\n    public IndexDocumentBuilder wrapTranslog(java.util.function.UnaryOperator<TranslogWriter> wrapFunction) {\n        TranslogWriter wrapped = wrapFunction.apply(translogWriter);\n        return new IndexDocumentBuilder(wrapped, synthetics, constraints, tableVersionCreated) {\n            {\n                // copy existing fields from the current builder's document into this new builder's document\n                for (IndexableField f : IndexDocumentBuilder.this.doc.getFields()) {\n                    // use super.addField to ensure we add to this instance's doc (not to the outer instance)\n                    super.addField(f);\n                }\n            }\n\n            @Override\n            public void addField(IndexableField field) {\n                // keep both documents in sync: add to the original (outer) doc and to this instance's doc\n                IndexDocumentBuilder.this.doc.add(field);\n                super.addField(field);\n            }\n        };\n    }\n\n    /**\n     * @return the TranslogWriter\n     */\n    public TranslogWriter translogWriter() {\n        return translogWriter;\n    }",
+        "is_new_file": false,
+        "is_del_file": false,
+        "file_operation": "MODIFIED",
+        "refactored": true,
+        "semantic_confidence": 0.7,
+        "loc_index": 9
       }
     ],
-    "generated_patch_bytes": 4055,
+    "generated_patch_bytes": 6035,
     "target_patch_bytes": 12638,
     "validation_passed": false,
     "validation_failure_category": "api_mismatch",

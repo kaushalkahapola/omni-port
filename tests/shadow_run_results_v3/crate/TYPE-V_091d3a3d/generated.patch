@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java
-index f81a2a8d77..92460dafd5 100644
+index f81a2a8d77..31f7d5adab 100644
 --- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java
 +++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableClient.java
 @@ -35,10 +35,12 @@ import java.util.stream.Collectors;
@@ -15,53 +15,148 @@ index f81a2a8d77..92460dafd5 100644
  import org.elasticsearch.cluster.service.ClusterService;
  import org.elasticsearch.common.inject.Inject;
  import org.elasticsearch.common.inject.Singleton;
-@@ -193,12 +195,24 @@ public class AlterTableClient {
-         List<String> partitionValues = partitionName == null
-             ? List.of()
-             : partitionName.values();
--        IndexMetadata sourceIndexMetadata = currentState.metadata().getIndex(table.ident(), partitionValues, true, im -> im);
-+        Metadata metadata = currentState.metadata();
-+        IndexMetadata sourceIndexMetadata = metadata.getIndex(table.ident(), partitionValues, true, im -> im);
-         if (sourceIndexMetadata == null) {
-             throw new RelationUnknown(
-                 String.format(Locale.ENGLISH, "Table/Partition '%s' does not exist", table.ident().fqn()));
-         }
- 
+@@ -143,63 +145,20 @@ public class AlterTableClient {
+             OpenTableRequest request = new OpenTableRequest(
+                 relationName, partitionName == null ? List.of() : partitionName.values());
+             return client.execute(TransportOpenTable.ACTION, request).thenApply(_ -> -1L);
+-        } else {
+-            CloseTableRequest request = new CloseTableRequest(
+-                relationName, partitionName == null ? List.of() : partitionName.values());
+-            return client.execute(TransportCloseTable.ACTION, request).thenApply(_ -> -1L);
+-        }
+-    }
+-
+-    public CompletableFuture<Long> setSettingsOrResize(BoundAlterTable analysis) {
+-        validateSettingsForPublishedTables(analysis.table().ident(),
+-                                           analysis.settings(),
+-                                           logicalReplicationService.publications(),
+-                                           indexScopedSettings);
+-
+-        final Settings settings = analysis.settings();
+-        final boolean includesNumberOfShardsSetting = settings.hasValue(SETTING_NUMBER_OF_SHARDS);
+-        final boolean isResizeOperationRequired = includesNumberOfShardsSetting &&
+-                                                  (!analysis.isPartitioned() || analysis.partitionName() != null);
+-
+-        if (isResizeOperationRequired) {
+-            if (settings.size() > 1) {
+-                throw new IllegalArgumentException("Setting [number_of_shards] cannot be combined with other settings");
 +        String staleIndexUUID = null;
 +        for (var cursor : metadata.indices().values()) {
 +            IndexMetadata indexMetadata = cursor.value;
++
 +            Settings settings = indexMetadata.getSettings();
 +            String sourceUUID = IndexMetadata.INDEX_RESIZE_SOURCE_UUID.get(settings);
 +            if (sourceIndexMetadata.getIndexUUID().equals(sourceUUID)) {
 +                staleIndexUUID = indexMetadata.getIndexUUID();
 +                break;
-+            }
-+        }
-+
+             }
+-            return resize(analysis);
+-        }
+-        return setSettings(analysis);
+-    }
+-
+-    private CompletableFuture<Long> setSettings(BoundAlterTable analysis) {
+-        try {
+-            PartitionName partitionName = analysis.partitionName();
+-            AlterTableRequest request = new AlterTableRequest(
+-                analysis.table().ident(),
+-                partitionName == null ? List.of() : partitionName.values(),
+-                analysis.isPartitioned(),
+-                analysis.excludePartitions(),
+-                analysis.settings()
+-            );
+-            return client.execute(TransportAlterTable.ACTION, request).thenApply(_ -> -1L);
+-        } catch (IOException e) {
+-            return CompletableFuture.failedFuture(e);
+-        }
+-    }
+-
+-    private CompletableFuture<Long> resize(BoundAlterTable analysis) {
+-        final TableInfo table = analysis.table();
+-        PartitionName partitionName = analysis.partitionName();
+-        final ClusterState currentState = clusterService.state();
+-        List<String> partitionValues = partitionName == null
+-            ? List.of()
+-            : partitionName.values();
+-        IndexMetadata sourceIndexMetadata = currentState.metadata().getIndex(table.ident(), partitionValues, true, im -> im);
+-        if (sourceIndexMetadata == null) {
+-            throw new RelationUnknown(
+-                String.format(Locale.ENGLISH, "Table/Partition '%s' does not exist", table.ident().fqn()));
+         }
+ 
          final int targetNumberOfShards = getNumberOfShards(analysis.settings());
++
          validateNumberOfShardsForResize(sourceIndexMetadata, targetNumberOfShards);
          validateReadOnlyIndexForResize(sourceIndexMetadata);
-@@ -208,9 +222,16 @@ public class AlterTableClient {
+ 
+@@ -208,58 +167,16 @@ public class AlterTableClient {
              partitionName == null ? List.of() : partitionName.values(),
              targetNumberOfShards
          );
 -        return deleteTempIndices()
 -            .thenCompose(_ -> client.execute(TransportResize.ACTION, request))
 -            .thenApply(_ -> 0L);
-+
+-    }
+-
+-    @VisibleForTesting
+-    static int getNumberOfShards(final Settings settings) {
+-        return Objects.requireNonNull(
+-            settings.getAsInt(SETTING_NUMBER_OF_SHARDS, null),
+-            "Setting 'number_of_shards' is missing"
+-        );
+-    }
+-
+-    @VisibleForTesting
+-    static void validateNumberOfShardsForResize(IndexMetadata indexMetadata, int targetNumberOfShards) {
+-        final int currentNumberOfShards = indexMetadata.getNumberOfShards();
+-        if (currentNumberOfShards == targetNumberOfShards) {
+-            throw new IllegalArgumentException(
+-                String.format(Locale.ENGLISH,
+-                    "Table/partition is already allocated <%d> shards",
+-                    currentNumberOfShards));
+-        }
+-        if (targetNumberOfShards < currentNumberOfShards && currentNumberOfShards % targetNumberOfShards != 0) {
+-            throw new IllegalArgumentException(
+-                String.format(Locale.ENGLISH,
+-                    "Requested number of shards: <%d> needs to be a factor of the current one: <%d>",
+-                    targetNumberOfShards,
+-                    currentNumberOfShards));
+-        }
+-    }
+ 
+-    @VisibleForTesting
+-    static void validateReadOnlyIndexForResize(IndexMetadata indexMetadata) {
+-        final Boolean readOnly = indexMetadata
+-            .getSettings()
+-            .getAsBoolean(INDEX_BLOCKS_WRITE_SETTING.getKey(), Boolean.FALSE);
+-        if (!readOnly) {
+-            throw new IllegalStateException("Table/Partition needs to be at a read-only state." +
+-                                               " Use 'ALTER table ... set (\"blocks.write\"=true)' and retry");
 +        CompletableFuture<ResizeResponse> resizeFuture;
 +        if (staleIndexUUID == null) {
 +            resizeFuture = client.execute(TransportResize.ACTION, request);
 +        } else {
 +            GCDanglingArtifactsRequest gcReq = new GCDanglingArtifactsRequest(List.of(staleIndexUUID));
 +            resizeFuture = client.execute(TransportGCDanglingArtifacts.ACTION, gcReq)
-+                .thenCompose(__ -> client.execute(TransportResize.ACTION, request));
-+        }
-+        return resizeFuture.thenApply(__ -> 0L);
-     }
- 
-     @VisibleForTesting
-@@ -279,9 +300,4 @@ public class AlterTableClient {
++                .thenCompose(_ -> client.execute(TransportResize.ACTION, request));
+         }
+-    }
+-
+-    @VisibleForTesting
+-    static void validateSettingsForPublishedTables(RelationName relationName,
+-                                                   Settings settings,
+-                                                   Map<String, Publication> publications,
+-                                                   IndexScopedSettings indexScopedSettings) {
+-        // Static settings changes must be prevented for tables included
+-        // in logical replication publication. Static settings cannot not be applied ad-hoc on
+-        // an open table and may also cause the shard tracking as part of the logical replication
+-        // to fail e.g. when the number of shards is changed on a table which is tracked.
+-        for (var entry : publications.entrySet()) {
++        return resizeFuture.thenApply(_ -> 0L);
+             var publicationName = entry.getKey();
+             var publication = entry.getValue();
+             if (publication.isForAllTables() || publication.tables().contains(relationName)) {
+@@ -279,9 +196,4 @@ public class AlterTableClient {
              }
          }
      }
@@ -125,13 +220,73 @@ index 8b700cd461..13290b6ad7 100644
      }
  }
 diff --git a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
-index 466ad54e85..4ed8c9417e 100644
+index 466ad54e85..ff010d41b3 100644
 --- a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
 +++ b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
-@@ -92,10 +92,23 @@ public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCD
-                         IndexMetadata::getIndex)
-                     );
-                 }
+@@ -32,70 +32,26 @@ import org.elasticsearch.cluster.ClusterStateTaskExecutor;
+ import org.elasticsearch.cluster.block.ClusterBlockException;
+ import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.cluster.metadata.Metadata;
+-import org.elasticsearch.cluster.metadata.MetadataDeleteIndexService;
+-import org.elasticsearch.cluster.metadata.RelationMetadata;
+-import org.elasticsearch.cluster.service.ClusterService;
+-import org.elasticsearch.common.inject.Inject;
+-import org.elasticsearch.common.inject.Singleton;
+-import org.elasticsearch.index.Index;
+-import org.elasticsearch.threadpool.ThreadPool;
+-import org.elasticsearch.transport.TransportService;
+-
+-import com.carrotsearch.hppc.cursors.ObjectCursor;
+-
+-import io.crate.execution.ddl.AbstractDDLTransportAction;
+-import io.crate.metadata.cluster.DDLClusterStateTaskExecutor;
+-
+-@Singleton
+-public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCDanglingArtifactsRequest, AcknowledgedResponse> {
+-
+-    public static final Action ACTION = new Action();
+-
+-    public static class Action extends ActionType<AcknowledgedResponse> {
+-        private static final String NAME = "internal:crate:admin/gc";
+-
+-        private Action() {
+-            super(NAME);
+-        }
+-    }
+-
+-    private final DDLClusterStateTaskExecutor<GCDanglingArtifactsRequest> executor;
+-
+-    @Inject
+-    public TransportGCDanglingArtifacts(TransportService transportService,
+-                                        ClusterService clusterService,
+-                                        ThreadPool threadPool,
+-                                        MetadataDeleteIndexService deleteIndexService) {
+-        super(
+-            ACTION.name(),
+-            transportService,
+-            clusterService,
+-            threadPool,
+-            GCDanglingArtifactsRequest::new,
+-            AcknowledgedResponse::new,
+-            AcknowledgedResponse::new,
+-            "gc"
+-        );
+-        executor = new DDLClusterStateTaskExecutor<>() {
+-            @Override
+-            protected ClusterState execute(ClusterState currentState,
+-                                           GCDanglingArtifactsRequest gcDanglingArtifactsRequest) {
+-                Metadata metadata = currentState.metadata();
+-
+-                Set<Index> danglingIndicesToDelete = new HashSet<>();
+-                Set<Index> allTableIndices = new HashSet<>();
+-                for (RelationMetadata rm : metadata.relations(RelationMetadata.class)) {
+-                    allTableIndices.addAll(metadata.getIndices(
+-                        rm.name(),
+-                        List.of(),
+-                        false,
+-                        IndexMetadata::getIndex)
+-                    );
+-                }
 -                for (ObjectCursor<IndexMetadata> indexMetadata : metadata.indices().values()) {
 -                    Index index = indexMetadata.value.getIndex();
 -                    if (allTableIndices.contains(index) == false) {
@@ -145,17 +300,38 @@ index 466ad54e85..4ed8c9417e 100644
 +                    }
 +                } else {
 +                    for (String indexUUID : gcDanglingArtifactsRequest.indexUUIDs()) {
-+                        IndexMetadata indexMetadata = metadata.index(indexUUID);
-+                        if (indexMetadata == null) {
-+                            continue;
-+                        }
-+                        Index index = indexMetadata.getIndex();
-+                        if (allTableIndices.contains(index) == false) {
-+                            danglingIndicesToDelete.add(index);
++                        for (ObjectCursor<IndexMetadata> indexMetadata : metadata.indices().values()) {
++                            IndexMetadata im = indexMetadata.value;
++                            Index index = im.getIndex();
++                            // match by UUID and ensure it's not part of known table indices
++                            if (index.getUUID().equals(indexUUID)) {
++                                if (allTableIndices.contains(index) == false) {
++                                    danglingIndicesToDelete.add(index);
++                                }
++                                break;
++                            }
 +                        }
                      }
                  }
  
+@@ -103,17 +59,3 @@ public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCD
+                     return currentState;
+                 }
+                 return deleteIndexService.deleteIndices(currentState, danglingIndicesToDelete);
+-            }
+-        };
+-    }
+-
+-    @Override
+-    public ClusterStateTaskExecutor<GCDanglingArtifactsRequest> clusterStateTaskExecutor(GCDanglingArtifactsRequest request) {
+-        return executor;
+-    }
+-
+-    @Override
+-    protected ClusterBlockException checkBlock(GCDanglingArtifactsRequest request, ClusterState state) {
+-        return null;
+-    }
+-}
 diff --git a/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java b/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java
 index 637adb3b7b..28751dec36 100644
 --- a/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java
@@ -170,10 +346,10 @@ index 637adb3b7b..28751dec36 100644
      }
  }
 diff --git a/server/src/main/java/org/elasticsearch/Version.java b/server/src/main/java/org/elasticsearch/Version.java
-index e0b2f2f0c8..d434714fa4 100644
+index e0b2f2f0c8..fc2a7e5833 100644
 --- a/server/src/main/java/org/elasticsearch/Version.java
 +++ b/server/src/main/java/org/elasticsearch/Version.java
-@@ -206,11 +206,14 @@ public class Version implements Comparable<Version> {
+@@ -206,6 +206,7 @@ public class Version implements Comparable<Version> {
      public static final Version V_6_0_1 = new Version(9_00_01_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
      public static final Version V_6_0_2 = new Version(9_00_02_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
      public static final Version V_6_0_3 = new Version(9_00_03_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
@@ -181,14 +357,6 @@ index e0b2f2f0c8..d434714fa4 100644
  
      public static final Version V_6_1_0 = new Version(9_01_00_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
      public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);
- 
--    public static final Version CURRENT = V_6_1_1;
-+    public static final Version V_6_2_0 = new Version(9_02_00_99, true, org.apache.lucene.util.Version.LUCENE_10_3_1);
-+
-+    public static final Version CURRENT = V_6_2_0;
- 
-     private static final ImmutableOpenIntMap<Version> ID_TO_VERSION;
-     private static final ImmutableOpenMap<String, Version> STRING_TO_VERSION;
 diff --git a/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java b/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java
 index 5fd8fdb7d7..4ad292bc37 100644
 --- a/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java

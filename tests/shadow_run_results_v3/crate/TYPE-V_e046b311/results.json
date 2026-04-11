@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T02:53:00.660795",
+  "run_timestamp": "2026-04-11T11:04:45.673276",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "e046b311fc71b35e8a1c52f53eabd35af3d09e24",
@@ -43,12 +43,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.79,
+      "elapsed_s": 3.72,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
-        "confidence": 0.85,
-        "reasoning": "The patch involves a small refactor of a method by removing a conditional branch and simplifying the return logic, as well as adding a new test case. The changes are mostly whitespace and minor structural adjustments without deep API changes or redesign. The localization evidence shows the hunks were found via 'git_exact' and 'git_pickaxe' with high confidence, indicating the patch applies with minor adjustments. Therefore, the patch complexity fits TYPE_II, requiring fuzzy matching due to slight code structure changes but no major refactoring.",
+        "confidence": 0.9,
+        "reasoning": "The patch involves a small refactor of a method by removing a version check and unifying the logic for all versions, along with a minor import change and addition of a test case. The changes are mostly whitespace and minor structural adjustments without deep API changes or redesign. The localization evidence shows the hunks were found with high confidence via 'git_exact' and 'git_pickaxe', indicating minor differences and some fuzzy matching. Therefore, the patch complexity fits TYPE_II, requiring fuzzy matching and minor adaptation.",
         "is_auto_generated": false
       }
     },
@@ -65,14 +65,14 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 10.36,
+      "elapsed_s": 15.44,
       "error": null,
-      "adapted_count": 2
+      "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 37.76,
       "error": null,
-      "refactored_count": 0
+      "refactored_count": 1
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
@@ -83,16 +83,16 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
-          "old_string": "        leafNamesByOid = new HashMap<>();\n        Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n            .filter(r -> r.oid() != Metadata.COLUMN_OID_UNASSIGNED)\n            .forEach(r -> leafNamesByOid.put(Long.toString(r.oid()), r.column().leafName()));\n        this.analyzers = analyzers;\n        this.ident = ident;\n        this.pkConstraintName = pkConstraintName;",
-          "new_string": "        leafNamesByOid = new HashMap<>();\n        Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n            .filter(r -> r.oid() != COLUMN_OID_UNASSIGNED)\n            .forEach(r -> leafNamesByOid.put(Long.toString(r.oid()), r.column().leafName()));\n        this.analyzers = analyzers;\n        this.ident = ident;\n        this.pkConstraintName = pkConstraintName;",
+          "old_string": "        this.indexColumns = indexColumns;\n        leafNamesByOid = new HashMap<>();\n        Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n            .filter(r -> r.oid() != Metadata.COLUMN_OID_UNASSIGNED)\n            .forEach(r -> leafNamesByOid.put(Long.toString(r.oid()), r.column().leafName()));\n        this.analyzers = analyzers;\n        this.ident = ident;\n        this.pkConstraintName = pkConstraintName;",
+          "new_string": "        this.indexColumns = indexColumns;\n        leafNamesByOid = new HashMap<>();\n        Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n            .filter(r -> r.oid() != COLUMN_OID_UNASSIGNED)\n            .forEach(r -> leafNamesByOid.put(Long.toString(r.oid()), r.column().leafName()));\n        this.analyzers = analyzers;\n        this.ident = ident;\n        this.pkConstraintName = pkConstraintName;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
-          "old_string": "    /**\n     * Starting from 5.5 column OID-s are used as source keys.\n     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n     * <ul>\n     *  <li>OBJECT (IGNORED) sub-columns</li>\n     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n     * </ul>\n     */\n    public UnaryOperator<String> lookupNameBySourceKey() {\n        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n            return oidOrName -> {\n                String name = leafNamesByOid.get(oidOrName);\n                if (name == null) {\n                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                    }\n                    return oidOrName;\n                }\n                return name;\n            };\n        } else {\n            return UnaryOperator.identity();\n        }\n    }",
-          "new_string": "    public UnaryOperator<String> lookupNameBySourceKey() {\n        return oidOrName -> {\n            String name = leafNamesByOid.get(oidOrName);\n            if (name == null) {\n                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                }\n                return oidOrName;\n            }\n            return name;\n        };\n    }",
+          "old_string": "        return notNullColumns;\n    }\n\n    /**\n     * Starting from 5.5 column OID-s are used as source keys.\n     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n     * <ul>\n     *  <li>OBJECT (IGNORED) sub-columns</li>\n     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n     * </ul>\n     */\n    public UnaryOperator<String> lookupNameBySourceKey() {\n        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n            return oidOrName -> {\n                String name = leafNamesByOid.get(oidOrName);\n                if (name == null) {\n                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                    }\n                    return oidOrName;\n                }\n                return name;\n            };\n        } else {\n            return UnaryOperator.identity();\n        }\n    }",
+          "new_string": "        return notNullColumns;\n    }\n\n    public UnaryOperator<String> lookupNameBySourceKey() {\n        return oidOrName -> {\n            String name = leafNamesByOid.get(oidOrName);\n            if (name == null) {\n                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                }\n                return oidOrName;\n            }\n            return name;\n        };\n    }",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -100,7 +100,7 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 291.48,
+      "elapsed_s": 293.76,
       "error": null,
       "validation_passed": true,
       "validation_failure_category": "",
@@ -116,26 +116,26 @@
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.metadata.doc.DocTableInfoTest.xml"
         ],
         "target_classes": [
-          "io.crate.metadata.doc.DocTableInfoTest"
+          "DocTableInfoTest"
         ],
         "test_cases": {
-          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents": "passed",
           "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions": "passed",
           "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template": "passed",
           "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns": "passed",
           "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents": "passed",
           "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_returns_null_for_deleted_columns": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references": "passed"
+          "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0": "passed"
         },
         "classes": {
           "io.crate.metadata.doc.DocTableInfoTest": "passed"
