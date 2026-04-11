@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T15:40:23.312020",
+  "run_timestamp": "2026-04-11T11:38:16.212558",
   "repo": "crate",
   "patch_type": "TYPE-III",
   "original_commit": "a9b402ecedd96c3db5a4945937b7d90ae03457a3",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.97,
+      "elapsed_s": 0.84,
       "error": null,
       "java_hunks": 6,
       "aux_hunks": 2,
@@ -70,12 +70,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 5.67,
+      "elapsed_s": 2.29,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch introduces new imports, adds a new dependency injection parameter (ClusterService), modifies constructors, and adds new methods to handle snapshots in progress. It also updates existing methods to integrate the new functionality. These changes involve structural modifications to the class, including new method definitions and changes to class state, indicating structural changes rather than simple string replacements or formatting fixes. The localization evidence shows most hunks found with high confidence via 'git_exact' and one via 'git_pickaxe', supporting a structural but not deeply refactored change. The patch is not trivial but does not represent a deep refactoring or complete redesign, thus classified as TYPE_III with high confidence.",
+        "reasoning": "The patch introduces new imports, adds a new dependency (ClusterService) to the constructor, modifies the internal logic to include snapshots in progress from the cluster state, and adds new methods to handle these snapshots. It also updates tests to mock and verify this new behavior. These changes involve structural modifications to the class, including new methods and integration with cluster state services, which go beyond simple string replacements or formatting changes. The localization evidence shows most hunks are found exactly or with high confidence, indicating the patch applies well but requires understanding of structural changes. Therefore, the patch is best classified as TYPE_III (structural changes).",
         "is_auto_generated": false
       }
     },
@@ -112,12 +112,12 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 5.29,
+      "elapsed_s": 3.16,
       "error": null,
       "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.06,
       "error": null,
       "refactored_count": 0
     },
@@ -131,7 +131,7 @@
         {
           "file_path": "server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java",
           "old_string": "import org.elasticsearch.snapshots.SnapshotInfo;\nimport org.elasticsearch.snapshots.SnapshotShardFailure;\nimport org.elasticsearch.snapshots.SnapshotState;\n\nimport org.jetbrains.annotations.VisibleForTesting;\nimport io.crate.common.collections.Lists;",
-          "new_string": "import org.elasticsearch.snapshots.SnapshotInfo;\nimport org.elasticsearch.snapshots.SnapshotShardFailure;\nimport org.elasticsearch.snapshots.SnapshotState;\nimport org.elasticsearch.snapshots.SnapshotsService;\nimport org.jetbrains.annotations.Nullable;\nimport org.jetbrains.annotations.VisibleForTesting;\nimport io.crate.common.collections.Lists;",
+          "new_string": "import org.elasticsearch.snapshots.SnapshotInfo;\nimport org.elasticsearch.snapshots.SnapshotShardFailure;\nimport org.elasticsearch.snapshots.SnapshotState;\nimport org.elasticsearch.snapshots.SnapshotsService;\nimport org.jetbrains.annotations.Nullable;\n\nimport org.jetbrains.annotations.VisibleForTesting;\nimport io.crate.common.collections.Lists;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -139,7 +139,7 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 267.23,
+      "elapsed_s": 476.18,
       "error": null,
       "validation_passed": true,
       "validation_failure_category": "",
@@ -152,24 +152,29 @@
       "test_mode": "crate-helper",
       "test_state": {
         "xml_reports": [
-          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.reference.sys.snapshot.SysSnapshotsTest.xml"
+          "/home/kaushal/omni-port/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.reference.sys.snapshot.SysSnapshotsTest.xml",
+          "/home/kaushal/omni-port/repos/crate/server/target/surefire-reports/TEST-io.crate.integrationtests.SysSnapshotsTest.xml"
         ],
         "target_classes": [
-          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest"
+          "SysSnapshotsTest"
         ],
         "test_cases": {
-          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_current_snapshot_does_not_fail_if_get_repository_data_returns_failed_future": "passed",
           "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_snapshot_in_progress_shown_in_sys_snapshots": "passed",
-          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#testUnavailableSnapshotsAreFilteredOut": "passed"
+          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#testUnavailableSnapshotsAreFilteredOut": "passed",
+          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_current_snapshot_does_not_fail_if_get_repository_data_returns_failed_future": "passed",
+          "io.crate.integrationtests.SysSnapshotsTest#test_sys_snapshots_lists_empty_partitioned_table": "passed",
+          "io.crate.integrationtests.SysSnapshotsTest#test_sys_snapshots_returns_table_partition_information": "passed",
+          "io.crate.integrationtests.SysSnapshotsTest#testQueryAllColumns": "passed"
         },
         "classes": {
-          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest": "passed"
+          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest": "passed",
+          "io.crate.integrationtests.SysSnapshotsTest": "passed"
         },
         "summary": {
-          "passed": 3,
+          "passed": 6,
           "failed": 0,
           "skipped": 0,
-          "total": 3
+          "total": 6
         }
       },
       "test_state_transition": {
@@ -179,10 +184,13 @@
         "newly_passing": [
           "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#testUnavailableSnapshotsAreFilteredOut",
           "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_current_snapshot_does_not_fail_if_get_repository_data_returns_failed_future",
-          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_snapshot_in_progress_shown_in_sys_snapshots"
+          "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_snapshot_in_progress_shown_in_sys_snapshots",
+          "io.crate.integrationtests.SysSnapshotsTest#testQueryAllColumns",
+          "io.crate.integrationtests.SysSnapshotsTest#test_sys_snapshots_lists_empty_partitioned_table",
+          "io.crate.integrationtests.SysSnapshotsTest#test_sys_snapshots_returns_table_partition_information"
         ],
         "baseline_total": 0,
-        "patched_total": 3,
+        "patched_total": 6,
         "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
@@ -194,7 +202,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 6,
@@ -214,7 +222,7 @@
     "failed_hunks_total": 0,
     "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 4915,
+    "generated_patch_bytes": 5335,
     "target_patch_bytes": 12329,
     "validation_passed": true,
     "validation_failure_category": "",
@@ -228,14 +236,17 @@
       "newly_passing": [
         "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#testUnavailableSnapshotsAreFilteredOut",
         "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_current_snapshot_does_not_fail_if_get_repository_data_returns_failed_future",
-        "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_snapshot_in_progress_shown_in_sys_snapshots"
+        "io.crate.expression.reference.sys.snapshot.SysSnapshotsTest#test_snapshot_in_progress_shown_in_sys_snapshots",
+        "io.crate.integrationtests.SysSnapshotsTest#testQueryAllColumns",
+        "io.crate.integrationtests.SysSnapshotsTest#test_sys_snapshots_lists_empty_partitioned_table",
+        "io.crate.integrationtests.SysSnapshotsTest#test_sys_snapshots_returns_table_partition_information"
       ],
       "baseline_total": 0,
-      "patched_total": 3,
+      "patched_total": 6,
       "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 3,
+    "newly_passing_count": 6,
     "pass_to_fail_count": 0,
     "backport_success": true
   }

@@ -46,22 +46,25 @@ index 2effd6d7bf..ea62ab5958 100644
          }
          return new RolesMetadata(newRoles);
      }
-diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java
-index 9a189cab59..3e49df8f82 100644
---- a/server/src/main/java/io/crate/role/Role.java
-+++ b/server/src/main/java/io/crate/role/Role.java
-@@ -184,8 +184,12 @@ public class Role implements Writeable, ToXContent {
- 
+diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+index bbcaf64b09..5e54848960 100644
+--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
++++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+@@ -238,14 +238,9 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem
+                 }
+             }
+         }
+-        if (affectedCount > 0) {
+-            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));
+-        }
+-        return affectedCount;
+-    }
+-
+-    @Override
+-    public EnumSet<Metadata.XContentContext> context() {
++            if (affectedCount > 0) {
++                roles.put(role.name(), role.with(grantedRoles));
++            }
+         return EnumSet.of(Metadata.XContentContext.GATEWAY, Metadata.XContentContext.SNAPSHOT);
      }
  
--    public Role with(Set<Privilege> privileges) {
--        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);
-+    public Role with(RolePrivileges privileges) {
-+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
-+    }
-+
-+    public Role with(Set<GrantedRole> grantedRoles) {
-+        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
-     }
- 
-     public Role with(@Nullable SecureHash password,

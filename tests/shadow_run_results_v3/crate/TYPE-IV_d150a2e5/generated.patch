@@ -1,8 +1,21 @@
 diff --git a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
-index 61c17be1a7..f4535dd056 100644
+index 61c17be1a7..a3e26c66da 100644
 --- a/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
 +++ b/server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java
-@@ -122,11 +122,20 @@ public class AlterTableOperation {
+@@ -64,10 +64,12 @@ import io.crate.execution.support.ChainableAction;
+ import io.crate.execution.support.ChainableActions;
+ import io.crate.metadata.GeneratedReference;
+ import io.crate.metadata.PartitionName;
++import io.crate.metadata.Reference;
+ import io.crate.metadata.RelationName;
+ import io.crate.metadata.table.TableInfo;
+ import io.crate.replication.logical.LogicalReplicationService;
+ import io.crate.replication.logical.metadata.Publication;
++import io.crate.sql.tree.ColumnPolicy;
+ 
+ @Singleton
+ public class AlterTableOperation {
+@@ -122,11 +124,20 @@ public class AlterTableOperation {
      }
  
      public CompletableFuture<Long> addColumn(AddColumnRequest addColumnRequest) {

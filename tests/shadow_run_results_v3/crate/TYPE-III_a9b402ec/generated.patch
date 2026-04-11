@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java b/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java
-index e4348bc0f0..5d8eee33cd 100644
+index e4348bc0f0..2a848a2454 100644
 --- a/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java
 +++ b/server/src/main/java/io/crate/expression/reference/sys/snapshot/SysSnapshots.java
 @@ -31,8 +31,11 @@ import java.util.function.Supplier;
@@ -14,7 +14,16 @@ index e4348bc0f0..5d8eee33cd 100644
  import org.elasticsearch.repositories.RepositoriesService;
  import org.elasticsearch.repositories.Repository;
  import org.elasticsearch.snapshots.SnapshotException;
-@@ -53,15 +56,17 @@ public class SysSnapshots {
+@@ -40,6 +43,8 @@ import org.elasticsearch.snapshots.SnapshotId;
+ import org.elasticsearch.snapshots.SnapshotInfo;
+ import org.elasticsearch.snapshots.SnapshotShardFailure;
+ import org.elasticsearch.snapshots.SnapshotState;
++import org.elasticsearch.snapshots.SnapshotsService;
++import org.jetbrains.annotations.Nullable;
+ 
+ import org.jetbrains.annotations.VisibleForTesting;
+ import io.crate.common.collections.Lists;
+@@ -53,15 +58,17 @@ public class SysSnapshots {
  
      private static final Logger LOGGER = LogManager.getLogger(SysSnapshots.class);
      private final Supplier<Collection<Repository>> getRepositories;
@@ -35,7 +44,7 @@ index e4348bc0f0..5d8eee33cd 100644
      }
  
      public CompletableFuture<Iterable<SysSnapshot>> currentSnapshots() {
-@@ -77,6 +82,11 @@ public class SysSnapshots {
+@@ -77,6 +84,11 @@ public class SysSnapshots {
                      return CompletableFutures.allSuccessfulAsList(snapshots);
                  });
              sysSnapshots.add(futureSnapshots);
@@ -47,7 +56,7 @@ index e4348bc0f0..5d8eee33cd 100644
          }
          return CompletableFutures.allSuccessfulAsList(sysSnapshots).thenApply(data -> {
              ArrayList<SysSnapshot> result = new ArrayList<>();
-@@ -105,6 +115,22 @@ public class SysSnapshots {
+@@ -105,6 +117,22 @@ public class SysSnapshots {
          );
      }
  
@@ -70,7 +79,7 @@ index e4348bc0f0..5d8eee33cd 100644
      private static CompletableFuture<SysSnapshot> createSysSnapshot(Repository repository, SnapshotId snapshotId) {
          return repository.getSnapshotGlobalMetadata(snapshotId).thenCombine(
              repository.getSnapshotInfo(snapshotId),
-@@ -135,4 +161,26 @@ public class SysSnapshots {
+@@ -135,4 +163,26 @@ public class SysSnapshots {
                  throw Exceptions.toRuntimeException(err);
              });
      }
