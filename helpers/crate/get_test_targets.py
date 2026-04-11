@@ -7,6 +7,7 @@ import sys
 import os
 import subprocess
 import json
+import argparse
 import xml.etree.ElementTree as ET
 
 
@@ -42,11 +43,16 @@ def extract_test_class_name(file_path):
     return filename
 
 
-def get_modified_test_files(repo_dir, commit_sha):
-    """Get modified test files from commit."""
+def get_modified_test_files(repo_dir, commit_sha=None, use_worktree=False):
+    """Get modified test files from commit or worktree."""
     try:
+        if use_worktree:
+            cmd = "git diff --name-only --diff-filter=M"
+        else:
+            cmd = f"git diff-tree --no-commit-id --name-only --diff-filter=M -r {commit_sha}"
+        
         result = subprocess.run(
-            f"git diff-tree --no-commit-id --name-only --diff-filter=M -r {commit_sha}",
+            cmd,
             shell=True, cwd=repo_dir, capture_output=True, text=True, check=True
         )
         all_modified = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
@@ -62,11 +68,16 @@ def get_modified_test_files(repo_dir, commit_sha):
         return []
 
 
-def get_added_test_files(repo_dir, commit_sha):
-    """Get added test files from commit."""
+def get_added_test_files(repo_dir, commit_sha=None, use_worktree=False):
+    """Get added test files from commit or worktree."""
     try:
+        if use_worktree:
+            cmd = "git diff --name-only --diff-filter=A"
+        else:
+            cmd = f"git diff-tree --no-commit-id --name-only --diff-filter=A -r {commit_sha}"
+            
         result = subprocess.run(
-            f"git diff-tree --no-commit-id --name-only --diff-filter=A -r {commit_sha}",
+            cmd,
             shell=True, cwd=repo_dir, capture_output=True, text=True, check=True
         )
         all_added = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
@@ -83,28 +94,21 @@ def get_added_test_files(repo_dir, commit_sha):
 
 
 def main():
-    # Parse arguments
-    repo_dir = None
-    commit_sha = None
-    
-    i = 1
-    while i < len(sys.argv):
-        if sys.argv[i] == '--repo' and i + 1 < len(sys.argv):
-            repo_dir = sys.argv[i + 1]
-            i += 2
-        elif sys.argv[i] == '--commit' and i + 1 < len(sys.argv):
-            commit_sha = sys.argv[i + 1]
-            i += 2
-        else:
-            i += 1
-    
-    if not repo_dir or not commit_sha:
-        print("Usage: get_test_targets.py --repo <repo_dir> --commit <commit_sha>", file=sys.stderr)
+    parser = argparse.ArgumentParser(description="Extract Maven test targets")
+    parser.add_argument("--repo", required=True, help="Path to the repository")
+    parser.add_argument("--commit", help="Commit SHA to examine")
+    parser.add_argument("--worktree", action="store_true", help="Analyze uncommitted changes")
+    args = parser.parse_args()
+
+    if not args.commit and not args.worktree:
+        print("Usage: get_test_targets.py --repo <repo_dir> [--commit <commit_sha> | --worktree]", file=sys.stderr)
         sys.exit(1)
     
+    repo_dir = args.repo
+    
     # Get modified and added test files
-    modified_test_files = get_modified_test_files(repo_dir, commit_sha)
-    added_test_files = get_added_test_files(repo_dir, commit_sha)
+    modified_test_files = get_modified_test_files(repo_dir, commit_sha=args.commit, use_worktree=args.worktree)
+    added_test_files = get_added_test_files(repo_dir, commit_sha=args.commit, use_worktree=args.worktree)
     
     modified_targets = []
     added_targets = []
@@ -133,8 +137,13 @@ def main():
 
     # Simple source module detection (heuristic)
     try:
+        if args.worktree:
+            cmd = "git diff --name-only"
+        else:
+            cmd = f"git diff-tree --no-commit-id --name-only -r {args.commit}"
+            
         result = subprocess.run(
-            f"git diff-tree --no-commit-id --name-only -r {commit_sha}",
+            cmd,
             shell=True, cwd=repo_dir, capture_output=True, text=True, check=True
         )
         all_changed = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]

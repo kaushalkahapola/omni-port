@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T04:05:16.113718",
+  "run_timestamp": "2026-04-11T10:24:43.555980",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "bb4205db375cc17694818cbb88f03dc039a805ce",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 15.16,
+      "elapsed_s": 14.4,
       "error": null,
       "java_hunks": 26,
       "aux_hunks": 2,
@@ -250,17 +250,17 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.36,
+      "elapsed_s": 4.28,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch introduces a new method getAggReference() to centralize the logic of checking if an aggregation reference is valid, specifically adding a check for RowGranularity.DOC. This method is then used across multiple aggregation implementations to replace direct access to aggregationReferences.get(0) and to add the granularity check. The patch also modifies multiple aggregation classes to use this new method and adjust their logic accordingly. These changes involve structural modifications to method calls and logic flow, but do not represent a complete redesign or deep refactoring. The patch is not a trivial string replacement or whitespace change, but a structural change to the aggregation function implementations. The localization evidence shows most hunks were found with high confidence via git_exact or git_pickaxe, supporting the classification. The patch complexity is best classified as TYPE_III (structural changes). The confidence is high but not absolute due to some fuzzy matches. The token budget estimate is moderate given the number of files and structural changes.",
+        "reasoning": "The patch introduces a new method getAggReference() to centralize the logic of checking if an aggregation reference is valid, specifically adding a check for RowGranularity.DOC. This method is then used across multiple aggregation implementations to replace direct access to aggregationReferences.get(0) and to add granularity checks. The patch also modifies multiple aggregation classes to use this new method and adjust their logic accordingly. These changes involve structural modifications to method calls and logic flow, but do not represent a complete redesign or deep refactoring. The patch is not a trivial string replacement or whitespace change, but rather a structural change to the aggregation function implementations. The localization evidence shows high confidence matches mostly via 'git_exact' and 'git_pickaxe', supporting the structural nature of the changes. Therefore, the patch is classified as TYPE_III with high confidence. The token budget estimate is moderate due to the number of files and the structural nature of the changes.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.01,
       "error": null,
       "applied_count": 17,
       "applied_hunks": [
@@ -352,17 +352,17 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 34.92,
+      "elapsed_s": 45.2,
       "error": null,
       "adapted_count": 6
     },
     "agent5_structural": {
-      "elapsed_s": 55.6,
+      "elapsed_s": 44.18,
       "error": null,
       "refactored_count": 2
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 37.56,
       "error": null,
       "synthesized_count": 8,
       "failed_count": 1,
@@ -378,10 +378,10 @@
         },
         {
           "file_path": "extensions/functions/src/main/java/io/crate/operation/aggregation/HyperLogLogDistinctAggregation.java",
-          "old_string": "            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
-          "new_string": "            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {",
+          "old_string": "                        var hash = BitMixer.mix64(values.nextValue());\n                        state.addHash(hash);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n",
+          "new_string": "                        var hash = BitMixer.mix64(values.nextValue());\n                        state.addHash(hash);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (_, memoryManager, minNodeVersion) -> {\n                        var state = new HllState(valueType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        var hash = BitMixer.mix64(NumericUtils.sortableDoubleBits(values.nextValue()));\n                        state.addHash(hash);\n                    }\n                );\n                        var state = new HllState(dataType, minNodeVersion.onOrAfter(Version.V_4_1_0));\n                        return initIfNeeded(state, memoryManager, precision);\n                    },\n                    (values, state) -> {\n                        // Murmur3Hash.Double in regular aggregation calls mix64 of doubleToLongBits(double value).\n                        // Equivalent of that in context of double DocValue is\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         },
         {
@@ -402,8 +402,8 @@
         },
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java",
-          "old_string": "        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:",
-          "new_string": "        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:",
+          "old_string": "        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();\n                    },\n                    (values, state) -> state.increment(values.nextValue())\n                );\n            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();\n                    },\n                    (values, state) -> {\n                        var value = NumericUtils.sortableIntToFloat((int) values.nextValue());\n                        state.increment(value);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();",
+          "new_string": "        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n        switch (reference.valueType().id()) {\n            case ByteType.ID:\n            case ShortType.ID:\n            case IntegerType.ID:\n            case LongType.ID:\n            case TimestampType.ID_WITH_TZ:\n            case TimestampType.ID_WITHOUT_TZ:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();\n                    },\n                    (values, state) -> state.increment(values.nextValue())\n                );\n            case FloatType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();\n                    },\n                    (values, state) -> {\n                        var value = NumericUtils.sortableIntToFloat((int) values.nextValue());\n                        state.increment(value);\n                    }\n                );\n            case DoubleType.ID:\n                return new SortedNumericDocValueAggregator<>(\n                    reference.storageIdent(),\n                    (ramAccounting, memoryManager, minNodeVersion) -> {\n                        ramAccounting.addBytes(StdDevStateType.INSTANCE.fixedSize());\n                        return new StandardDeviation();",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -419,7 +419,7 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/CountAggregation.java",
           "old_string": "    }\n\n    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues()) {\n            return null;\n        }\n        switch (ref.valueType().id()) {",
-          "new_string": "    }\n\n    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues() || ref.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        return switch (ref.valueType().id()) {",
+          "new_string": "    }\n\n    private DocValueAggregator<?> getDocValueAggregator(Reference ref) {\n        if (!ref.hasDocValues() || ref.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        switch (ref.valueType().id()) {",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -435,20 +435,82 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 0.24,
+      "elapsed_s": 146.84,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Aux hunk application failed: aux patch apply failed for docs/appendices/release-notes/5.10.9.rst: [git-strict] error: docs/appendices/release-notes/5.10.9.rst: No such file or directory\n[git-tolerant] error: docs/appendices/release-notes/5.10.9.rst: No such file or directory\n[gnu-patch-dry-run] can't find file to patch at input line 5\nPerhaps you used the wrong -p or --strip option?\nThe text leading up to this was:\n--------------------------\n|diff --git a/docs/appendices/release-notes/5.10.9.rst",
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/execution/engine/aggregation/impl/ArbitraryAggregation.java:164: error: cannot find symbol\nserver/src/main/java/io/crate/execution/engine/aggregation/impl/GeometricMeanAggregation.java:311: error: cannot find symbol\nserver/src/main/java/io/crate/execution/engine/aggregation/impl/MaximumAggregation.java:222: error: cannot find symbol\nserver/src/main/java/io/crate/execution/engine/aggregation/impl/MinimumAggregation.java:2",
       "validation_attempts": 1,
-      "retry_files": [],
-      "build_success": null,
-      "build_mode": null,
+      "retry_files": [
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/ArbitraryAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/GeometricMeanAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/MaximumAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/MinimumAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/NumericSumAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/SumAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/TopKAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/VarianceAggregation.java",
+        "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
       "test_state_transition": null,
-      "compile_errors": []
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/ArbitraryAggregation.java",
+          "line": 164,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/GeometricMeanAggregation.java",
+          "line": 311,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/MaximumAggregation.java",
+          "line": 222,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/MinimumAggregation.java",
+          "line": 257,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/NumericSumAggregation.java",
+          "line": 186,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java",
+          "line": 234,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/SumAggregation.java",
+          "line": 199,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/TopKAggregation.java",
+          "line": 224,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/VarianceAggregation.java",
+          "line": 233,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java",
+          "line": 315,
+          "message": "error: cannot find symbol"
+        }
+      ]
     }
   },
   "summary": {
@@ -492,7 +554,7 @@
     "tokens_used": 0,
     "synthesis_status": "partial",
     "applied_on_disk_ag3": 17,
-    "synthesized_count": 8,
+    "synthesized_count": 7,
     "failed_hunks_total": 1,
     "retry_contexts": [
       {
@@ -508,24 +570,27 @@
         "suggested_action": "relocalize"
       },
       {
-        "error_type": "context_mismatch",
-        "error_message": "aux patch apply failed for docs/appendices/release-notes/5.10.9.rst: [git-strict] error: docs/appendices/release-notes/5.10.9.rst: No such file or directory\n[git-tolerant] error: docs/appendices/release-notes/5.10.9.rst: No such file or directory\n[gnu-patch-dry-run] can't find file to patch at input line 5\nPerhaps you used the wrong -p or --strip option?\nThe text leading up to this was:\n--------------------------\n|diff --git a/docs/appendices/release-notes/5.10.9.rst b/docs/appendices/release-notes/5.10.9.rst\n|index b153f76c99..045927be63 100644\n|--- a/docs/appen",
+        "error_type": "api_mismatch",
+        "error_message": "ryAggregation.java:[164,30] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class ArbitraryAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/GeometricMeanAggregation.java:[311,30] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class GeometricMeanAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/MaximumAggregation.java:[222,34] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class FixedMaximumAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/MinimumAggregation.java:[257,34] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class FixedMinimumAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/NumericSumAggregation.java:[186,30] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class NumericSumAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/StandardDeviationAggregation.java:[234,30] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class StandardDeviationAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/SumAggregation.java:[199,30] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class SumAggregation<T>\n[ERROR]   where T is a type-variable:\n[ERROR]     T extends Number declared in class SumAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/TopKAggregation.java:[224,30] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class TopKAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/VarianceAggregation.java:[233,30] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class VarianceAggregation\n[ERROR] /repo/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/AverageAggregation.java:[315,30] error: cannot find symbol\n[ERROR]   symbol:   method getAggReference(List<Reference>)\n[ERROR]   location: class AverageAggregation\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
-        "suggested_action": "re-localize"
+        "suggested_action": "route_to_namespace_or_structural"
       }
     ],
     "failed_hunks": [
       {
         "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/AggregationFunction.java",
         "old_content": "        return null;\n    }\n\n    protected DocValueAggregator<?> getNumericDocValueAggregator(\n        List<Reference> aggregationReferences,\n        TriConsumer<RamAccounting, TPartial, BigDecimal> applyToState) {\n\n        Reference reference = aggregationReferences.get(0);\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues()) {\n            return null;\n        }\n\n        DataType<?> valueType = reference.valueType();\n        if (valueType.id() != NumericType.ID) {\n",
-        "new_content": "        return null;\n    }\n\n    protected Reference getAggReference(List<Reference> aggregationReferences) {\n        if (aggregationReferences.isEmpty()) {\n            return null;\n        }\n        Reference reference = aggregationReferences.getFirst();\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues() || reference.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        return reference;\n    }\n\n    protected DocValueAggregator<?> getNumericDocValueAggregator(\n        List<Reference> aggregationReferences,\n        TriConsumer<RamAccounting, TPartial, BigDecimal> applyToState) {\n\n        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n\n        DataType<?> valueType = reference.valueType();\n        if (valueType.id() != NumericType.ID) {\n"
+        "new_content": "        return null;\n    }\n\n    protected Reference getAggReference(List<Reference> aggregationReferences) {\n        if (aggregationReferences.isEmpty()) {\n            return null;\n        }\n        Reference reference = aggregationReferences.getFirst();\n        if (reference == null) {\n            return null;\n        }\n        if (!reference.hasDocValues() || reference.granularity() != RowGranularity.DOC) {\n            return null;\n        }\n        return reference;\n    }\n\n    protected DocValueAggregator<?> getNumericDocValueAggregator(\n        List<Reference> aggregationReferences,\n        TriConsumer<RamAccounting, TPartial, BigDecimal> applyToState) {\n\n        Reference reference = getAggReference(aggregationReferences);\n        if (reference == null) {\n            return null;\n        }\n\n        DataType<?> valueType = reference.valueType();\n        if (valueType.id() != NumericType.ID) {\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "file_operation": "MODIFIED"
       }
     ],
-    "generated_patch_bytes": 7558,
+    "generated_patch_bytes": 26211,
     "target_patch_bytes": 28152,
     "validation_passed": false,
-    "validation_failure_category": "context_mismatch",
-    "build_success": null,
+    "validation_failure_category": "api_mismatch",
+    "build_success": false,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

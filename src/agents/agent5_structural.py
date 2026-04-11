@@ -213,12 +213,58 @@ Task:
 CRITICAL: refactored_code will be substituted verbatim for the TARGET code shown above.
 It must use only identifiers that exist in the target branch (no mainline-specific names).
 Return ONLY valid Java code in refactored_code.
+Format your response EXACTLY as follows:
+
+# Explanation
+<your reasoning here>
+
+# Confidence
+<a float between 0.0 and 1.0>
+
+# Search/Replace Block
+<<<<
+<exact code to replace from the TARGET file>
+====
+<refactored replacement code>
+>>>>
 """
 
-        structured_llm = self.llm_client.with_structured_output(StructuralAdaptationOutput)
         try:
-            result: StructuralAdaptationOutput = structured_llm.invoke(prompt)
-            return result
+            response = self.llm_client.invoke(prompt)
+            content = response.content if hasattr(response, "content") else str(response)
+            
+            explanation = ""
+            confidence = 0.0
+            
+            import re
+            expl_match = re.search(r'# Explanation\n(.*?)(?=# Confidence|# Search/Replace Block|<<<<)', content, re.DOTALL)
+            if expl_match:
+                explanation = expl_match.group(1).strip()
+                
+            conf_match = re.search(r'# Confidence\n(.*?)(?=# Search/Replace Block|<<<<)', content, re.DOTALL)
+            if conf_match:
+                nums = re.findall(r'0\.\d+|1\.0|0\.0', conf_match.group(1))
+                if nums:
+                    confidence = float(nums[0])
+                    
+            block_match = re.search(r'<<<<\n(.*?)\n====\n(.*?)>>>>', content, re.DOTALL)
+            if not block_match:
+                return StructuralAdaptationOutput(
+                    refactored_code=original_code,
+                    confidence=0.0,
+                    explanation=content,
+                    success=False,
+                    error_message="Failed to parse Aider SEARCH/REPLACE block `<<<< ==== >>>>`",
+                )
+                
+            new_content = block_match.group(2).strip("\n")
+            return StructuralAdaptationOutput(
+                refactored_code=new_content,
+                confidence=confidence,
+                explanation=explanation,
+                success=True,
+                error_message=None
+            )
         except Exception as e:
             return StructuralAdaptationOutput(
                 refactored_code=original_code,
@@ -262,9 +308,22 @@ Return ONLY valid Java code in refactored_code.
 Localization failed for the following hunk — we could not find the exact code snippet in the
 target branch. Your task is to:
 1. Read the TARGET file below and find where this change should be applied.
-2. Output a JSON object with two fields:
-   - "old_string": the exact text in the TARGET file that should be replaced (must exist verbatim)
-   - "new_string": the replacement text (apply the intent of the mainline change)
+2. Output a Search/Replace block that captures the exact lines to be replaced, and the new lines to substitute.
+
+Format your response EXACTLY as follows:
+
+# Explanation
+<your reasoning here>
+
+# Confidence
+<0.0 to 1.0>
+
+# Search/Replace Block
+<<<<
+<the exact text from the TARGET file that should be replaced>
+====
+<the replacement text>
+>>>>
 
 Mainline old code (what was removed/changed in the mainline commit):
 ```java
@@ -282,24 +341,36 @@ TARGET file ({file_path}):
 ```
 
 IMPORTANT:
-- old_string MUST be an exact substring of the target file shown above.
-- new_string should apply the same semantic change but using the target branch's identifiers.
-- Output ONLY valid JSON: {{"old_string": "...", "new_string": "..."}}
-- If you cannot find a safe replacement point, output: {{"old_string": "", "new_string": ""}}
+- The text between <<<< and ==== MUST be an exact substring of the target file shown above.
+- The text between ==== and >>>> should apply the same semantic change but using the target branch's identifiers.
+- CRITICAL: Your <<<< block MUST be globally unique within the target file. If you are replacing a generic line like `}} return null;`, you must include enough surrounding lines (e.g. 3-4 lines before and after) to guarantee the text only appears exactly once in the file.
+- If you cannot find a safe replacement point, leave the blocks empty.
 """
         try:
             response = self.llm_client.invoke(prompt)
             content = response.content if hasattr(response, "content") else str(response)
-            # Strip markdown code fences if present
-            content = content.strip()
-            if content.startswith("```"):
-                content = "\n".join(content.splitlines()[1:])
-                if content.endswith("```"):
-                    content = content[:-3].strip()
+            
+            import re
+            block_match = re.search(r'<<<<\n(.*?)\n====\n(.*?)>>>>', content, re.DOTALL)
+            
+            if not block_match:
+                return StructuralAdaptationOutput(
+                    refactored_code="",
+                    confidence=0.0,
+                    explanation=content,
+                    success=False,
+                    error_message="Failed to parse Aider SEARCH/REPLACE block `<<<< ==== >>>>`",
+                )
+                
+            old_str = block_match.group(1).rstrip()
+            new_str = block_match.group(2).strip("\n")
+            
+            import json
+            json_str = json.dumps({"old_string": old_str, "new_string": new_str})
+            
             return StructuralAdaptationOutput(
-                refactored_code=content,  # JSON string; agent6 will parse it
+                refactored_code=json_str,  # Agent 6 parses this JSON!
                 confidence=0.6,
-                explanation="Skeleton rewrite from full target file",
                 success=True,
                 error_message=None,
             )

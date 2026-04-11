@@ -403,17 +403,84 @@ Key rules:
     old and new, but target shows `barMap` → adapted_new_content must use `barMap`.
     Never copy a mainline field name when the target clearly uses a different name
     for the same field.
+- BRACE SCOPING RULE (CRITICAL): Pay extreme attention to the curly braces `{{` and `}}` in the target context. If the mainline patch inserted code AFTER a closing `}}`, you MUST ensure your adapted_new_content inserts the new code AFTER the corresponding `}}` in the target file, NOT inside the preceding block. Do NOT accidentally inject code inside an unrelated `if` or `for` block from the pre_region_context. Misplaced insertions cause severe logical breakages.
+- NO CODE HALLUCINATION / CUSTOM LOGIC (CRITICAL): You are a namespace adapter, not a feature developer. Do NOT invent new logic, do NOT write fallback wrappers, do NOT add null-checks, and do NOT author code that was not explicitly present in the "Lines being ADDED" section. If the mainline patch adds exactly 3 lines of code, your adapted_new_content must add exactly those 3 lines (with translated variable names). Absolutely no bridging logic or "helpful" additions are permitted.
+- PURE ADDITIONS TEMPLATE (CRITICAL): If you are processing a PURE ADDITION, your adapted_new_content must be EXACTLY your adapted_old_content concatenated with the exact code lines from the 'Lines being ADDED' section. 
+  - Do NOT "translate" or mimic surrounding context lines (e.g. if the mainline context has a return statement, do not invent a `return null;` in the target).
+  - Do NOT add any extra logic loops, variables, or statements. Just adapt the symbol names exclusively within the ADDED lines.
 
-Return adapted_old_content and adapted_new_content as valid Java code snippets.
+Format your response EXACTLY as follows:
+
+# Notes
+<your brief notes here>
+
+# Imports Added
+<add import statements here, one per line, or none>
+
+# Imports Removed
+<remove import statements here, one per line, or none>
+
+# Search/Replace Block
+<<<<
+<adapted_old_content exactly as it should appear>
+====
+<adapted_new_content exactly as it should appear>
+>>>>
 """
 
     router = get_default_router()
     balanced_model = router.get_model(LLMTier.BALANCED)
-    structured_llm = balanced_model.with_structured_output(NamespaceAdaptationOutput)
-
+    
     try:
-        result: NamespaceAdaptationOutput = structured_llm.invoke(prompt)
-        return result
+        response = balanced_model.invoke(prompt)
+        content = response.content if hasattr(response, "content") else str(response)
+        
+        import re
+        
+        notes = ""
+        imports_added = []
+        imports_removed = []
+        
+        notes_match = re.search(r'# Notes\n(.*?)(?=# Imports Added|# Search/Replace Block|<<<<)', content, re.DOTALL)
+        if notes_match:
+            notes = notes_match.group(1).strip()
+            
+        added_match = re.search(r'# Imports Added\n(.*?)(?=# Imports Removed|# Search/Replace Block|<<<<)', content, re.DOTALL)
+        if added_match:
+            lines = added_match.group(1).strip().split('\n')
+            imports_added = [l.strip() for l in lines if l.strip() and l.strip().lower() != "none" and not l.strip().startswith("<")]
+
+        removed_match = re.search(r'# Imports Removed\n(.*?)(?=# Search/Replace Block|<<<<)', content, re.DOTALL)
+        if removed_match:
+            lines = removed_match.group(1).strip().split('\n')
+            imports_removed = [l.strip() for l in lines if l.strip() and l.strip().lower() != "none" and not l.strip().startswith("<")]
+
+        block_match = re.search(r'<<<<\n(.*?)\n====\n(.*?)>>>>', content, re.DOTALL)
+        if not block_match:
+            # Fall back to empty to indicate parse failure
+            return NamespaceAdaptationOutput(
+                adapted_old_content=hunk.get("old_content", ""),
+                adapted_new_content=hunk.get("new_content", ""),
+                imports_added=[],
+                imports_removed=[],
+                notes=content,
+                success=False,
+                error_message="Failed to parse Aider SEARCH/REPLACE block `<<<< ==== >>>>`",
+            )
+            
+        old_content = block_match.group(1).rstrip()
+        new_content = block_match.group(2).strip("\n") # preserve trailing whitespace if any but remove bounding newlines
+
+        return NamespaceAdaptationOutput(
+            adapted_old_content=old_content,
+            adapted_new_content=new_content,
+            imports_added=imports_added,
+            imports_removed=imports_removed,
+            notes=notes,
+            success=True,
+            error_message=None
+        )
+
     except Exception as e:
         return NamespaceAdaptationOutput(
             adapted_old_content=hunk.get("old_content", ""),

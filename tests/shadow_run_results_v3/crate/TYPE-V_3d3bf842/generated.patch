@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
-index b4ce983f2e..e3debf08bc 100644
+index b4ce983f2e..45fb89ea6d 100644
 --- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 +++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
 @@ -47,8 +47,6 @@ import io.crate.expression.symbol.Symbol;
@@ -38,10 +38,21 @@ index b4ce983f2e..e3debf08bc 100644
              usedBytes += RamUsageEstimator.sizeOf(id);
              for (var assignment : assignments) {
                  usedBytes += assignment.ramBytesUsed();
-@@ -345,13 +344,17 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
-             }
+@@ -334,23 +333,15 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+             );
          }
  
+-        public static long sizeEstimateForUpdate(Stats stats, TableInfo tableInfo) {
+-            // if stats are not available we fall back to estimate the size based on
+-            // column types. Therefore we need to get the column information.
+-            if (stats.isEmpty()) {
+-                Collection<Reference> ramAccountedColumns = tableInfo.allColumns();
+-                return stats.estimateSizeForColumns(ramAccountedColumns);
+-            } else {
+-                return stats.averageSizePerRowInBytes();
+-            }
+-        }
+-
 +        /// @param fullDocSizeEstimate the expected number of bytes
 +        /// the full document has when loaded from disk
          public static Item forInsert(String id,
@@ -53,11 +64,9 @@ index b4ce983f2e..e3debf08bc 100644
 +                                     @Nullable Symbol[] onConflictAssignments,
 +                                     long fullDocSizeEstimate) {
              long usedBytes = SHALLOW_SIZE;
-+            usedBytes += fullDocSizeEstimate;
              usedBytes += RamUsageEstimator.sizeOf(id);
              for (String pkValue : pkValues) {
-                 usedBytes += RamUsageEstimator.sizeOf(pkValue);
-@@ -364,6 +367,7 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+@@ -364,6 +355,7 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
                  }
              }
              if (onConflictAssignments != null) {

@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T08:20:18.210575",
+  "run_timestamp": "2026-04-11T09:55:54.606805",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "3dea6f6fb4a1fabd94a442fade1747ea3d4a1915",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.76,
+      "elapsed_s": 0.75,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 2,
@@ -25,12 +25,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.25,
+      "elapsed_s": 3.47,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.87,
-        "reasoning": "The patch modifies existing logic in ArrayUpperFunction.java by adding a conditional check for nested array types and returns null in that case. This is a small structural addition but does not involve renaming methods or deep refactoring. The patch also adds new test cases and updates release notes. The localization evidence shows the main code change hunk was found via 'git_pickaxe' with confidence 0.87, indicating some fuzzy matching due to minor code drift. Overall, the patch is more than trivial string replacement but does not involve complex structural or API changes, fitting TYPE_II classification.",
+        "reasoning": "The patch modifies existing code by adding a conditional check for nested array types and returns null in that case, which is a small but non-trivial logic addition. The change is localized and does not involve structural or API changes, but it is more than just whitespace or exact string replacement. The patch was found via 'git_pickaxe' with a confidence of 0.87, indicating a fuzzy match rather than an exact match. The test additions are straightforward and support the new logic. Overall, this fits the TYPE_II classification for whitespace/formatting drift or minor logic additions requiring fuzzy matching.",
         "is_auto_generated": false
       }
     },
@@ -41,14 +41,14 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 5.24,
+      "elapsed_s": 7.75,
       "error": null,
-      "adapted_count": 0
+      "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 34.62,
+      "elapsed_s": 0.02,
       "error": null,
-      "refactored_count": 1
+      "refactored_count": 0
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
@@ -59,8 +59,8 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "old_string": "        }\n        int cmpVal = cmpNumber.intValue();\n\n        // For numeric types all values are stored, so the doc-value-count represents the number of not-null values\n        // Only unique values are stored for IP and TEXT types, so the doc-value-count represents the number of unique not-null  values\n        // [a, a, a]",
-          "new_string": "            return toQueryUsingArrayLengthIndex(parentName, arrayRef, cmpVal);\n        }\n\n        DataType<?> innerType = ((ArrayType<?>) arrayRef.valueType()).innerType();\n        if (innerType instanceof ArrayType<?>) {\n            // Cannot utilize `_array_length_` index for arrays in tables created before 5.9\n            return null;\n        }\n\n        // For numeric types all values are stored, so the doc-value-count represents the number of not-null values\n        // Only unique values are stored for IP and TEXT types, so the doc-value-count represents the number of unique not-null  values\n        // [a, a, a]",
+          "old_string": "        if (elementType.id() == ObjectType.ID || elementType.equals(DataTypes.GEO_SHAPE)) {\n            // No doc-values for these, can't utilize doc-value-count\n            return null;\n        }",
+          "new_string": "        if (elementType.id() == ObjectType.ID || elementType.equals(DataTypes.GEO_SHAPE)) {\n            // No doc-values for these, can't utilize doc-value-count\n            return null;\n        }\n\n        DataType<?> innerType = ((ArrayType<?>) arrayRef.valueType()).innerType();\n        if (innerType instanceof ArrayType<?>) {\n            // Cannot utilize `_array_length_` index for arrays in tables created before 5.9\n            return null;\n        }",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -68,63 +68,57 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 140.47,
+      "elapsed_s": 272.01,
       "error": null,
-      "validation_passed": false,
-      "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:175: error: cannot find symbol\nserver/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:207: error: cannot find symbol\nserver/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:211: error: cannot find symbol\nserver/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:217: error: cannot find symbol\nserver/src/main/java/io/crate/expression/s",
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
       "validation_attempts": 1,
-      "retry_files": [
-        "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java"
-      ],
-      "build_success": false,
+      "retry_files": [],
+      "build_success": true,
       "build_mode": "crate-helper",
-      "test_success": null,
-      "test_mode": null,
-      "test_state": null,
-      "test_state_transition": null,
-      "compile_errors": [
-        {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 175,
-          "message": "error: cannot find symbol"
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.lucene.ArrayLengthQueryBuilderTest.xml"
+        ],
+        "target_classes": [
+          "ArrayLengthQueryBuilderTest"
+        ],
+        "test_cases": {
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_array_length_on_array_sub_columns_of_array_of_objects": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLte0IsNoMatch": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt0UsesExistsQuery": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGte1UsesNumTermsPerDocQuery": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtColumnIsNotOptimized": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtNULLDoesNotMatch": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLt1IsNoMatch": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_NumTermsPerDocQuery_maps_column_idents_to_oids": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt1UsesNumTermsPerOrAndGenericFunction": "passed"
         },
-        {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 207,
-          "message": "error: cannot find symbol"
+        "classes": {
+          "io.crate.lucene.ArrayLengthQueryBuilderTest": "passed"
         },
-        {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 211,
-          "message": "error: cannot find symbol"
-        },
-        {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 217,
-          "message": "error: cannot find symbol"
-        },
-        {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 223,
-          "message": "error: cannot find symbol"
-        },
-        {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 225,
-          "message": "error: cannot find symbol"
-        },
-        {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 232,
-          "message": "error: cannot find symbol"
-        },
-        {
-          "file": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "line": 238,
-          "message": "error: cannot find symbol"
+        "summary": {
+          "passed": 9,
+          "failed": 0,
+          "skipped": 0,
+          "total": 9
         }
-      ]
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_array_length_on_array_sub_columns_of_array_of_objects"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 9,
+        "patched_total": 9,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
     }
   },
   "summary": {
@@ -146,26 +140,29 @@
     "applied_on_disk_ag3": 0,
     "synthesized_count": 1,
     "failed_hunks_total": 0,
-    "retry_contexts": [
-      {
-        "error_type": "api_mismatch",
-        "error_message": "ject crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[175,70] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[207,74] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[211,20] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[217,20] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[223,20] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[225,27] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[232,20] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[232,35] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:[238,20] error: cannot find symbol\n[ERROR]   symbol:   variable cmpVal\n[ERROR]   location: class ArrayUpperFunction\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
-        "attempt_count": 1,
-        "suggested_action": "route_to_namespace_or_structural"
-      }
-    ],
+    "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 1286,
+    "generated_patch_bytes": 976,
     "target_patch_bytes": 2753,
-    "validation_passed": false,
-    "validation_failure_category": "api_mismatch",
-    "build_success": false,
-    "test_success": null,
-    "test_mode": null,
-    "test_transition": {},
-    "fail_to_pass_count": 0,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#test_array_length_on_array_sub_columns_of_array_of_objects"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 9,
+      "patched_total": 9,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
     "newly_passing_count": 0,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

@@ -455,7 +455,7 @@ class HunkSynthesizer:
 
         # Attempt 0: raw old_string.
         verified, confidence = self.verify_old_string_exists(file_content, old_string)
-        if verified:
+        if verified and confidence >= 1.0:
             if _new_string_introduces_duplicates(file_content, old_string, new_string):
                 return SynthesizedHunk(
                     file_path=file_path,
@@ -495,7 +495,7 @@ class HunkSynthesizer:
                 context_lines,
             )
             verified, confidence = self.verify_old_string_exists(file_content, expanded_old)
-            if verified:
+            if verified and confidence >= 1.0:
                 # Build the expanded new_string: same surrounding context lines
                 # from the file, but with the core replacement swapped in.
                 context_before = self.extract_lines_with_context(

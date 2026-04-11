@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T04:04:21.724356",
+  "run_timestamp": "2026-04-11T10:01:38.857767",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "6e18150a3937176f863d24c4449a8f7c95e84331",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 5.79,
+      "elapsed_s": 1.09,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 2,
@@ -16,21 +16,21 @@
         {
           "hunk_index": 0,
           "file_path": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
-          "method_used": "failed",
-          "confidence": 0.0,
-          "start_line": 0,
-          "end_line": 0,
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 61,
+          "end_line": 70,
           "symbol_mappings": {}
         }
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.26,
+      "elapsed_s": 3.46,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
-        "confidence": 0.85,
-        "reasoning": "The patch modifies existing logic in SwapCastsInComparisonOperators.java by adding a variable assignment and adjusting a conditional return statement. These changes are minor and involve slight code restructuring without altering the overall structure or API. The release notes and test additions are straightforward documentation and test enhancements. The localization evidence indicates a 'failed' match with zero confidence, suggesting some formatting or minor code differences in the target branch. Therefore, the patch requires fuzzy matching due to minor drift but no deep structural changes, classifying it as TYPE_II.",
+        "confidence": 0.9,
+        "reasoning": "The patch modifies an existing method by adding a variable assignment and changing a return statement to handle a new case for comparing non-boolean columns to boolean literals. The changes are localized and involve minor logic adjustments without structural or API changes. The patch was found via 'git_pickaxe' indicating some code drift but no major refactoring or redesign. The test addition is straightforward and does not increase complexity significantly. Therefore, the patch complexity aligns with TYPE_II, involving minor logic changes and requiring fuzzy matching for backporting.",
         "is_auto_generated": false
       }
     },
@@ -41,33 +41,42 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 4.95,
       "error": null,
-      "adapted_count": 0
+      "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 0.03,
+      "elapsed_s": 0.02,
       "error": null,
       "refactored_count": 0
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 0,
-      "failed_count": 1,
-      "synthesis_status": "failed",
-      "synthesized_hunks": []
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
+          "old_string": "    private static boolean isSwappable(Function cmpOp) {\n        if (cmpOp.arguments().get(1) instanceof Literal<?> literal) {\n            Function cast = (Function) cmpOp.arguments().getFirst();\n            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n            if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n                return true;\n            }\n            if (isSafeConversion(literalInnerType, refInnerType)) {\n                return true;\n            }\n            return isNarrowingConversionPossible(literal.value(), ref.valueType());\n        }\n        return true;\n    }\n",
+          "new_string": "    private static boolean isSwappable(Function cmpOp) {\n        if (cmpOp.arguments().get(1) instanceof Literal<?> literal) {\n            Function cast = (Function) cmpOp.arguments().getFirst();\n            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\nvar value = literal.value();\nif (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n    return literalInnerType.isConvertableTo(refInnerType, false);\n}\nreturn isNarrowingConversionPossible(value, ref.valueType());\n                return true;\n            }\n            return isNarrowingConversionPossible(literal.value(), ref.valueType());\n        }\n        return true;\n    }\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        }
+      ]
     },
     "agent7_validator": {
-      "elapsed_s": 0.33,
+      "elapsed_s": 85.42,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Aux hunk application failed: aux patch apply failed for docs/appendices/release-notes/5.10.2.rst: [git-strict] error: docs/appendices/release-notes/5.10.2.rst: No such file or directory\n[git-tolerant] error: docs/appendices/release-notes/5.10.2.rst: No such file or directory\n[gnu-patch-dry-run] can't find file to patch at input line 5\nPerhaps you used the wrong -p or --strip option?\nThe text leading up to this was:\n--------------------------\n|diff --git a/docs/appendices/release-notes/5.10.2.rst",
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.36s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.26s), 0 error(s).\n[INFO] Scanned 78 class file(s) for forbidden API invocations (in 0.10s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.05s), 0 error(s).\n[INFO] Scanned 61 class file(s) for forbidden API invocations (in 0.08s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": null,
-      "build_mode": null,
+      "build_success": false,
+      "build_mode": "crate-helper",
       "test_success": null,
       "test_mode": null,
       "test_state": null,
@@ -86,44 +95,28 @@
     },
     "java_production_hunks": 1,
     "developer_aux_hunks": 2,
-    "processed_hunk_indices": [],
+    "processed_hunk_indices": [
+      0
+    ],
     "tokens_used": 0,
-    "synthesis_status": "failed",
+    "synthesis_status": "success",
     "applied_on_disk_ag3": 0,
-    "synthesized_count": 0,
-    "failed_hunks_total": 1,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
     "retry_contexts": [
       {
-        "error_type": "synthesis_skipped_no_localization",
-        "error_message": "Hunk unclaimed; localization failed entirely",
-        "attempt_count": 4,
-        "suggested_action": "manual_review"
-      },
-      {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
-        "error_type": "context_mismatch",
-        "error_message": "aux patch apply failed for docs/appendices/release-notes/5.10.2.rst: [git-strict] error: docs/appendices/release-notes/5.10.2.rst: No such file or directory\n[git-tolerant] error: docs/appendices/release-notes/5.10.2.rst: No such file or directory\n[gnu-patch-dry-run] can't find file to patch at input line 5\nPerhaps you used the wrong -p or --strip option?\nThe text leading up to this was:\n--------------------------\n|diff --git a/docs/appendices/release-notes/5.10.2.rst b/docs/appendices/release-notes/5.10.2.rst\n|index a57deb0641..d9132347b3 100644\n|--- a/docs/appen",
+        "error_type": "unknown",
+        "error_message": "[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-server: Failed during checkstyle configuration: Exception was thrown while processing /repo/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java: IllegalStateException occurred while parsing file /repo/server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java. 73:8: mismatched input 'return' expecting '}': InputMismatchException -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
-        "suggested_action": "re-localize"
+        "suggested_action": "inspect_and_retry"
       }
     ],
-    "failed_hunks": [
-      {
-        "file_path": "server/src/main/java/io/crate/planner/optimizer/symbol/rule/SwapCastsInComparisonOperators.java",
-        "old_content": "            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n            if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n                return true;\n            }\n            return isNarrowingConversionPossible(literal.value(), ref.valueType());\n        }\n        return true;\n    }\n",
-        "new_content": "            Reference ref = (Reference) cast.arguments().getFirst();\n            DataType<?> refInnerType = ArrayType.unnest(ref.valueType());\n            DataType<?> literalInnerType = ArrayType.unnest(literal.valueType());\n            var value = literal.value();\n            if (!DataTypes.isNumeric(literalInnerType) || !DataTypes.isNumeric(refInnerType)) {\n                return literalInnerType.isConvertableTo(refInnerType, false);\n            }\n            return isNarrowingConversionPossible(value, ref.valueType());\n        }\n        return true;\n    }\n"
-      }
-    ],
-    "generated_patch_bytes": 0,
+    "failed_hunks": [],
+    "generated_patch_bytes": 1356,
     "target_patch_bytes": 3023,
     "validation_passed": false,
-    "validation_failure_category": "context_mismatch",
-    "build_success": null,
+    "validation_failure_category": "unknown",
+    "build_success": false,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

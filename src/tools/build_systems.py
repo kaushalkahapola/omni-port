@@ -435,8 +435,14 @@ def collect_test_results(
             name = (case.attrib.get("name") or "").strip()
             if not cls or not name:
                 continue
-            if tc_set and cls not in tc_set:
-                continue
+            if tc_set:
+                matched = False
+                for target in tc_set:
+                    if cls == target or cls.endswith("." + target):
+                        matched = True
+                        break
+                if not matched:
+                    continue
             if case.find("failure") is not None:
                 status = "failed"
             elif case.find("error") is not None:

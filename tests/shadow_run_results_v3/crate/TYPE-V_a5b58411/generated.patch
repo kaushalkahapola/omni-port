@@ -1,8 +1,30 @@
 diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
-index fe20bbb9bb..9f2d0fd37c 100644
+index fe20bbb9bb..f063f990c6 100644
 --- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
 +++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
-@@ -236,24 +236,9 @@ public class ExplainPlan implements Plan {
+@@ -138,6 +138,12 @@ public class ExplainPlan implements Plan {
+                               RowConsumer consumer,
+                               Row params,
+                               SubQueryResults subQueryResults) {
++        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
++            "multi-phase",
++            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
++            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
++        );
++        consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());
+         if (context != null) {
+             assert subPlan instanceof LogicalPlan : "subPlan must be a LogicalPlan";
+             LogicalPlan plan = (LogicalPlan) subPlan;
+@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {
+                 subQueryResults,
+                 new IdentityHashMap<>(),
+                 new ArrayList<>(plan.dependencies().size()),
+-                null,
++                ramAccounting,
+                 null
+             );
+         } else {
+@@ -236,24 +242,9 @@ public class ExplainPlan implements Plan {
                                               SubQueryResults subQueryResults,
                                               Map<SelectSymbol, Object> valuesBySubQuery,
                                               List<Map<String, Object>> explainResults,
@@ -28,7 +50,7 @@ index fe20bbb9bb..9f2d0fd37c 100644
          IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();
          ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());
          List<CompletableFuture<?>> subPlansFutures = new ArrayList<>(plan.dependencies().size());
-@@ -363,7 +348,6 @@ public class ExplainPlan implements Plan {
+@@ -363,7 +354,6 @@ public class ExplainPlan implements Plan {
              });
      }
  
