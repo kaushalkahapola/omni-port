@@ -541,14 +541,13 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
             # after the replaced block (prevents it from re-emitting that code).
             if loc_result.end_line > 0:
                 post_start = loc_result.end_line  # end_line is 1-indexed; next line index
-                post_end = min(len(lines), post_start + 20)
+                post_end = min(len(lines), post_start + 30)
                 post_region_context = "".join(lines[post_start:post_end])
 
-            # Pre-region context only for git_pickaxe: its window may be too narrow.
-            if loc_result.method_used == "git_pickaxe":
-                pre_start = max(0, loc_result.start_line - 21)
-                pre_end = loc_result.start_line - 1
-                pre_region_context = "".join(lines[pre_start:pre_end])
+            # Pre-region context: include for all methods as requested.
+            pre_start = max(0, loc_result.start_line - 31)
+            pre_end = loc_result.start_line - 1
+            pre_region_context = "".join(lines[pre_start:pre_end])
 
         # Collect other hunks on the same file that were already fast-applied by Agent 3,
         # so the LLM knows which symbols/methods have been removed and can't be referenced.

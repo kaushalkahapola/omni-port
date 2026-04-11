@@ -30,6 +30,7 @@ from typing import Any
 
 from src.backport_claw.apply_hunk import CLAWHunkApplier
 from src.core.state import BackportState, PatchRetryContext
+from src.agents.agent1_localizer import _is_test_file
 from src.tools.build_systems import (
     BuildResult,
     TestResult,
@@ -109,6 +110,115 @@ def _build_patch_header(
     return "\n".join(header_lines) + "\n" + body
 
 
+# ── Fix H: error-tail capture ─────────────────────────────────────────────────
+
+_ERROR_KEYWORDS = ("error:", "error[", "ERROR", "FAILED", "Exception", "BUILD FAILURE",
+                   "cannot find symbol", "symbol:", "incompatible types", "warning:")
+
+def _extract_error_tail(log: str, max_chars: int = 3000) -> str:
+    """
+    Return the most useful portion of a build log for diagnostics.
+    Prefers lines containing error/failure keywords from the TAIL of the log,
+    so that Docker preamble (which appears at the top) is skipped.
+    Falls back to the last max_chars characters when no keyword lines found.
+    """
+    lines = log.splitlines()
+    # Collect lines with error-relevant keywords
+    error_lines = [l for l in lines if any(kw in l for kw in _ERROR_KEYWORDS)]
+    if error_lines:
+        tail = "\n".join(error_lines[-120:])  # at most 120 error lines
+        return tail[-max_chars:]
+    # No keyword lines — just return the tail
+    return log[-max_chars:] if len(log) > max_chars else log
+
+
+# ── Fix A helpers ──────────────────────────────────────────────────────────────
+
+def _is_already_applied(repo_path: str, patch_content: str) -> bool:
+    """
+    Return True if the patch has already been applied (reverse-check passes).
+    """
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".patch", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(patch_content)
+            tmp_path = tmp.name
+        r = subprocess.run(
+            ["git", "apply", "--reverse", "--check", "--ignore-space-change",
+             "--ignore-whitespace", tmp_path],
+            capture_output=True, text=True, cwd=repo_path,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
+def _remap_rst_path(patch_content: str, repo_path: str) -> str:
+    """
+    For release-notes .rst hunks whose target file does not exist on the target
+    branch, remap the path to the highest-version .rst file in the same directory.
+    Returns potentially modified patch_content.
+    """
+    rst_dir = os.path.join(repo_path, "docs", "appendices", "release-notes")
+    if not os.path.isdir(rst_dir):
+        return patch_content
+
+    # Find all .rst files that match X.Y.Z.rst pattern
+    try:
+        rst_files = [
+            f for f in os.listdir(rst_dir)
+            if re.match(r"^\d+\.\d+\.\d+\.rst$", f)
+        ]
+    except OSError:
+        return patch_content
+
+    if not rst_files:
+        return patch_content
+
+    def version_key(fname: str):
+        try:
+            parts = fname[:-4].split(".")
+            return tuple(int(p) for p in parts)
+        except ValueError:
+            return (0, 0, 0)
+
+    rst_files.sort(key=version_key, reverse=True)
+    highest_rst = rst_files[0]
+
+    # Look for lines like "+++ b/docs/appendices/release-notes/X.Y.Z.rst"
+    # where X.Y.Z.rst does not exist on disk.
+    lines = patch_content.splitlines(keepends=True)
+    new_lines = []
+    for line in lines:
+        if line.startswith("+++ b/docs/appendices/release-notes/") and line.strip().endswith(".rst"):
+            fname = line.strip().split("/")[-1]
+            target_abs = os.path.join(rst_dir, fname)
+            if not os.path.isfile(target_abs):
+                # Remap to highest existing version
+                line = line.replace(fname, highest_rst)
+        elif line.startswith("--- a/docs/appendices/release-notes/") and line.strip().endswith(".rst"):
+            fname = line.strip().split("/")[-1]
+            target_abs = os.path.join(rst_dir, fname)
+            if not os.path.isfile(target_abs):
+                line = line.replace(fname, highest_rst)
+        elif line.startswith("diff --git ") and "/docs/appendices/release-notes/" in line:
+            # Also fix the diff --git header
+            parts = line.strip().split()
+            if len(parts) >= 3:
+                for fname in rst_files:
+                    pass  # keep existing file references as-is
+        new_lines.append(line)
+    return "".join(new_lines)
+
+
 def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str, Any]:
     """
     Try git apply → git apply --ignore-whitespace → GNU patch, in order.
@@ -126,6 +236,8 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
         strategies = [
             ("git-strict",   ["git", "apply", "--recount", "--whitespace=nowarn", tmp_path]),
             ("git-tolerant", ["git", "apply", "--recount", "--ignore-space-change",
+                              "--ignore-whitespace", "--whitespace=nowarn", tmp_path]),
+            ("git-3way",     ["git", "apply", "--3way", "--ignore-space-change",
                               "--ignore-whitespace", "--whitespace=nowarn", tmp_path]),
         ]
         errors: list[str] = []
@@ -150,6 +262,12 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
             errors.append(f"[gnu-patch] {(apply.stderr or apply.stdout or '').strip()}")
         else:
             errors.append(f"[gnu-patch-dry-run] {(dry.stderr or dry.stdout or '').strip()}")
+
+        # Already-applied check: if the patch was already applied (sibling backport),
+        # treat as success rather than failing.
+        if _is_already_applied(repo_path, patch_content):
+            print("  [agent7] Patch detected as already applied — treating as success")
+            return {"success": True, "output": "Already applied (reverse-check passed).", "strategy": "already-applied"}
 
         print("  [agent7] All patch application strategies failed")
         return {"success": False, "output": "\n".join(errors), "strategy": "all-failed"}
@@ -184,9 +302,20 @@ def _apply_synthesized_hunks(
         old_string = hunk.get("old_string", "")
         new_string = hunk.get("new_string", "")
 
-        if not file_path or not old_string:
-            print(f"  [agent7] Hunk missing file_path or old_string: {hunk}")
-            errors.append(f"synthesized hunk missing file_path or old_string: {hunk}")
+        if not file_path:
+            print(f"  [agent7] Hunk missing file_path: {hunk}")
+            errors.append(f"synthesized hunk missing file_path: {hunk}")
+            continue
+
+        # Fix G: new-file hunks have empty old_string — the file was already written by
+        # agent6. Just verify it exists on disk; no CLAW replacement needed.
+        if not old_string:
+            abs_path = os.path.join(repo_path, file_path)
+            if os.path.exists(abs_path):
+                if file_path not in applied_files:
+                    applied_files.append(file_path)
+            else:
+                errors.append(f"{file_path}: new-file hunk — file not found on disk after agent6 creation")
             continue
 
         abs_path = os.path.join(repo_path, file_path)
@@ -306,14 +435,25 @@ def _apply_developer_aux_hunks(
         for h in developer_aux_hunks:
             fp = h.get("file_path", "unknown")
             print(f"  [agent7] Applying raw patch for {fp}")
-            result = _apply_patch_with_fallbacks(repo_path, h["raw_patch"])
+            # Fix A: remap .rst paths that don't exist on the target branch
+            raw = h["raw_patch"]
+            if fp.endswith(".rst"):
+                raw = _remap_rst_path(raw, repo_path)
+            result = _apply_patch_with_fallbacks(repo_path, raw)
             if result["success"]:
                 applied_files.append(fp)
             else:
-                print(f"  [agent7] Raw patch apply failed for {fp}")
-                all_errors.append(f"aux patch apply failed for {fp}: {result['output'][:500]}")
-                restore_repo_state(repo_path)
-                return {"success": False, "output": "\n".join(all_errors), "applied_files": []}
+                # Fix A: non-critical aux hunks (release notes, non-test non-Java)
+                # log a warning and continue rather than aborting.
+                is_critical = _is_test_file(fp) or fp.endswith(".java")
+                if is_critical:
+                    print(f"  [agent7] Critical aux patch apply failed for {fp}")
+                    all_errors.append(f"aux patch apply failed for {fp}: {result['output'][:500]}")
+                    restore_repo_state(repo_path)
+                    return {"success": False, "output": "\n".join(all_errors), "applied_files": []}
+                else:
+                    print(f"  [agent7] Non-critical aux patch skipped for {fp}: {result['output'][:200]}")
+                    all_errors.append(f"[non-critical skip] {fp}: {result['output'][:300]}")
         print(f"  [agent7] Applied {len(applied_files)} raw aux patches")
         return {
             "success": True,
@@ -399,18 +539,25 @@ def _apply_developer_aux_hunks(
                 all_errors.append(f"aux hunk build error for {target_file}: {e}")
 
         if combined_patch:
+            # Fix A: remap .rst paths
+            if target_file.endswith(".rst"):
+                combined_patch = _remap_rst_path(combined_patch, repo_path)
             result = _apply_patch_with_fallbacks(repo_path, combined_patch)
             if not result["success"]:
-                all_errors.append(
-                    f"aux patch apply failed for {target_file}: {result['output'][:500]}"
-                )
-                # On aux apply failure restore and abort (these files must apply cleanly)
-                restore_repo_state(repo_path)
-                return {
-                    "success": False,
-                    "output": "\n".join(all_errors),
-                    "applied_files": [],
-                }
+                is_critical = _is_test_file(target_file) or target_file.endswith(".java")
+                if is_critical:
+                    all_errors.append(
+                        f"aux patch apply failed for {target_file}: {result['output'][:500]}"
+                    )
+                    restore_repo_state(repo_path)
+                    return {
+                        "success": False,
+                        "output": "\n".join(all_errors),
+                        "applied_files": [],
+                    }
+                else:
+                    print(f"  [agent7] Non-critical aux patch skipped for {target_file}")
+                    all_errors.append(f"[non-critical skip] {target_file}: {result['output'][:300]}")
 
     return {
         "success": True,
@@ -485,9 +632,11 @@ def _build_retry_context(
         "test_failure": "regenerate_hunk",
         "infrastructure": "abort_transient_failure",
     }
+    # Fix H: capture error tail (javac errors) rather than Docker preamble at the top.
+    diagnostic = _extract_error_tail(error_message)
     return PatchRetryContext(
         error_type=failure_category,
-        error_message=error_message[:2000],
+        error_message=diagnostic,
         attempt_count=attempt,
         suggested_action=action_map.get(failure_category, "inspect_and_retry"),
     )

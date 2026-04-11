@@ -766,6 +766,41 @@ def process_patch(
     results["agents"]["agent6_synthesizer"]["synthesis_status"] = state.get("synthesis_status", "")
     results["agents"]["agent6_synthesizer"]["synthesized_hunks"] = make_serializable(synthesized)
 
+    # ── Fix E: per-file atomic apply ─────────────────────────────────────────
+    # If any hunk in a file failed synthesis, roll back ALL changes to that file
+    # so the build does not see a half-migrated state that obscures the real error.
+    failed_hunks_state = state.get("failed_hunks", [])
+    if failed_hunks_state:
+        failed_files = {
+            (h.get("file_path") or h.get("target_file") or "").split("/")[-1]: (
+                h.get("file_path") or h.get("target_file") or ""
+            )
+            for h in failed_hunks_state
+        }
+        # Identify files that also have SUCCESSFUL synthesized hunks — those must be
+        # rolled back since they are now partial.
+        affected_files = set()
+        for fp_name, fp in failed_files.items():
+            if fp:
+                affected_files.add(fp)
+        if affected_files:
+            for fp in sorted(affected_files):
+                if fp:
+                    r = subprocess.run(
+                        ["git", "-C", repo_path, "checkout", "HEAD", "--", fp],
+                        capture_output=True, text=True,
+                    )
+                    if r.returncode == 0:
+                        print(f"  [pipeline] Fix E: rolled back partial changes to {fp}")
+                    else:
+                        print(f"  [pipeline] Fix E: could not roll back {fp}: {r.stderr[:200]}")
+            # Remove synthesized hunks for affected files from state so agent7 doesn't try to re-apply.
+            synthesized = [
+                h for h in synthesized
+                if (h.get("file_path") or "") not in affected_files
+            ]
+            state["synthesized_hunks"] = synthesized
+
     # ── 6. Apply synthesized hunks to disk, then capture the diff ────────────────
     # Agent 3's fast-apply hunks are already on disk at this point.
     # Synthesized hunks from agents 4/5/6 live only in state["synthesized_hunks"]; apply

@@ -121,6 +121,8 @@ class StructuralRefactor:
         api_changes: Optional[Dict[str, str]] = None,
         intended_new_code: Optional[str] = None,
         same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
+        pre_region_context: str = "",
+        post_region_context: str = "",
     ) -> StructuralAdaptationOutput:
         if not self.llm_client:
             return StructuralAdaptationOutput(
@@ -140,6 +142,24 @@ but may use mainline API names that differ from the target branch):
 {intended_new_code}
 ```
 
+"""
+
+        pre_context_section = ""
+        if pre_region_context.strip():
+            pre_context_section = f"""
+Code immediately BEFORE the localized region in the target file (already exists — do NOT remove unless it is part of the block being replaced):
+```java
+{pre_region_context}
+```
+"""
+
+        post_context_section = ""
+        if post_region_context.strip():
+            post_context_section = f"""
+Code immediately AFTER the replaced region in the target file (already exists — do NOT recreate):
+```java
+{post_region_context}
+```
 """
 
         same_file_section = ""
@@ -171,6 +191,7 @@ Current code in the TARGET file (this is what refactored_code will REPLACE verba
 ```java
 {original_code}
 ```
+{pre_context_section}{post_context_section}
 {intended_section}
 Structural changes detected by GumTree:
 {self._format_edits(edits)}
@@ -207,12 +228,98 @@ Return ONLY valid Java code in refactored_code.
                 error_message=str(e),
             )
 
+    def rewrite_from_target_skeleton(
+        self,
+        hunk: Dict[str, Any],
+        target_file_content: str,
+        file_path: str,
+    ) -> StructuralAdaptationOutput:
+        """
+        Fix B fallback: called when localization returned confidence=0 (method_used=failed).
+        Sends the FULL target file (up to 8000 chars) to the LLM and asks it to find the
+        right location and emit a JSON {old_string, new_string} pair for CLAW replacement.
+        The result is stored in refactored_code as a JSON string that agent6 will parse.
+        """
+        if not self.llm_client:
+            return StructuralAdaptationOutput(
+                refactored_code="",
+                confidence=0.0,
+                explanation="",
+                success=False,
+                error_message="LLM client not configured.",
+            )
+
+        # Truncate very large files so the prompt fits in context.
+        snippet = target_file_content[:8000]
+        if len(target_file_content) > 8000:
+            snippet += "\n// ... [file truncated] ..."
+
+        new_code = hunk.get("new_content", "").strip()
+        old_code = hunk.get("old_content", "").strip()
+
+        prompt = f"""You are Agent 5 (Structural Refactor) for a Java patch backporting system.
+
+Localization failed for the following hunk — we could not find the exact code snippet in the
+target branch. Your task is to:
+1. Read the TARGET file below and find where this change should be applied.
+2. Output a JSON object with two fields:
+   - "old_string": the exact text in the TARGET file that should be replaced (must exist verbatim)
+   - "new_string": the replacement text (apply the intent of the mainline change)
+
+Mainline old code (what was removed/changed in the mainline commit):
+```java
+{old_code}
+```
+
+Mainline new code (what was added/changed in the mainline commit):
+```java
+{new_code}
+```
+
+TARGET file ({file_path}):
+```java
+{snippet}
+```
+
+IMPORTANT:
+- old_string MUST be an exact substring of the target file shown above.
+- new_string should apply the same semantic change but using the target branch's identifiers.
+- Output ONLY valid JSON: {{"old_string": "...", "new_string": "..."}}
+- If you cannot find a safe replacement point, output: {{"old_string": "", "new_string": ""}}
+"""
+        try:
+            response = self.llm_client.invoke(prompt)
+            content = response.content if hasattr(response, "content") else str(response)
+            # Strip markdown code fences if present
+            content = content.strip()
+            if content.startswith("```"):
+                content = "\n".join(content.splitlines()[1:])
+                if content.endswith("```"):
+                    content = content[:-3].strip()
+            return StructuralAdaptationOutput(
+                refactored_code=content,  # JSON string; agent6 will parse it
+                confidence=0.6,
+                explanation="Skeleton rewrite from full target file",
+                success=True,
+                error_message=None,
+            )
+        except Exception as e:
+            return StructuralAdaptationOutput(
+                refactored_code="",
+                confidence=0.0,
+                explanation="",
+                success=False,
+                error_message=str(e),
+            )
+
     def refactor_hunk(
         self,
         hunk: Dict[str, Any],
         loc_result: LocalizationResult,
         edit_script: Optional[str] = None,
         same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
+        pre_region_context: str = "",
+        post_region_context: str = "",
     ) -> StructuralAdaptationOutput:
         # original_code is the TARGET's current code (context_snapshot), since Agent 5
         # produces refactored_code that replaces it verbatim in the target file.
@@ -231,6 +338,8 @@ Return ONLY valid Java code in refactored_code.
             loc_result.symbol_mappings if loc_result.symbol_mappings else None,
             intended_new_code=intended_new_code,
             same_file_applied_hunks=same_file_applied_hunks,
+            pre_region_context=pre_region_context,
+            post_region_context=post_region_context,
         )
 
 
@@ -277,9 +386,9 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
             break
 
         loc_result = loc_results[i]
-        # Skip hunks where localization found no file at all — Agent 5 needs at
-        # least a file path and context snapshot to reason about structure.
-        if loc_result.method_used == "failed" or not loc_result.file_path:
+        # Skip hunks where localization found no file at all, or new-file hunks
+        # (handled by Agent 6's new-file path).
+        if loc_result.method_used in ("failed", "new_file") or not loc_result.file_path:
             continue
         # Process if routing criteria met OR if Agent 4 explicitly escalated this hunk.
         if not _should_structural_refactor(loc_result) and i not in escalation_indices:
@@ -296,8 +405,32 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
             for j in processed_indices
             if j != i and j < len(hunks) and hunks[j].get("file_path") == current_file
         ]
+        # Fetch 30 lines of context before and after from the target file.
+        pre_region_context = ""
+        post_region_context = ""
+        from pathlib import Path
+        target_path = Path(repo_path) / loc_result.file_path
+        if target_path.exists():
+            try:
+                lines = target_path.read_text(encoding="utf-8").splitlines(keepends=True)
+                if loc_result.start_line > 0:
+                    pre_start = max(0, loc_result.start_line - 31)
+                    pre_end = loc_result.start_line - 1
+                    pre_region_context = "".join(lines[pre_start:pre_end])
+                
+                if loc_result.end_line > 0:
+                    post_start = loc_result.end_line
+                    post_end = min(len(lines), post_start + 30)
+                    post_region_context = "".join(lines[post_start:post_end])
+            except (IOError, UnicodeDecodeError):
+                pass
 
-        output = refactor.refactor_hunk(hunk, loc_result, same_file_applied_hunks=same_file_applied)
+        output = refactor.refactor_hunk(
+            hunk, loc_result,
+            same_file_applied_hunks=same_file_applied,
+            pre_region_context=pre_region_context,
+            post_region_context=post_region_context
+        )
 
         if output.success and output.confidence > 0.5:
             refactored_hunks.append({

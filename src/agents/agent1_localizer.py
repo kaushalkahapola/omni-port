@@ -241,11 +241,11 @@ def _apply_inter_hunk_consistency(
         if len(indices) < 2:
             continue  # need at least 2 hunks to have a majority
 
-        # Count target files among successful (non-failed) results.
+        # Count target files among successful (non-failed, non-new_file) results.
         target_counts: Counter = Counter()
         for i in indices:
             r = results[i]
-            if r.method_used != "failed" and r.file_path:
+            if r.method_used not in ("failed", "new_file") and r.file_path:
                 target_counts[r.file_path] += 1
 
         if not target_counts:
@@ -311,7 +311,17 @@ def localize_hunks(state: BackportState) -> BackportState:
     results: List[LocalizationResult] = []
     for hunk in java_code_hunks:
         file_path = hunk.get("file_path", "")
-        if file_path:
+        # Fix G: new-file hunks (--- /dev/null) skip the 5-stage pipeline entirely.
+        if hunk.get("is_new_file"):
+            results.append(LocalizationResult(
+                method_used="new_file",
+                confidence=1.0,
+                context_snapshot="",
+                file_path=file_path or "",
+                start_line=0,
+                end_line=0,
+            ))
+        elif file_path:
             loc_result = localizer_pipeline(repo_path, file_path, hunk)
             results.append(loc_result)
         else:
