@@ -233,7 +233,10 @@ def localizer_pipeline(repo_path: str, file_path: str, hunk: Dict[str, Any]) -> 
 
     # Stage 1
     res = run_git_localization(repo_path, canonical_file, hunk)
-    if _accept(res): return res
+    if res and res.method_used == "path_redirect":
+        canonical_file = res.file_path
+        hunk["file_path"] = canonical_file
+    elif _accept(res): return res
 
     # Stage 2
     res = run_fuzzy_localization(repo_path, canonical_file, hunk)
@@ -384,50 +387,6 @@ def localize_hunks(state: BackportState) -> BackportState:
 
         loc_result = localizer_pipeline(repo_path, file_path, hunk)
         results.append(loc_result)
-
-    results = _apply_inter_hunk_consistency(repo_path, java_code_hunks, results)
-
-    state["localization_results"] = results
-    return state
-
-    """
-    Agent 1: Code Localizer
-
-    Step 0: Filter mainline hunks to Java-code-only (strip test/non-Java/auto-gen).
-      developer_aux_hunks is pre-populated by the caller from the target patch
-      (the actual developer backport). Agent 1 must NOT overwrite it — those aux
-      hunks must apply verbatim against the target branch, so they come from the
-      developer's real backport, not from the mainline patch.
-
-    Step 1: Execute the 5-stage hybrid localization per-hunk, per-file.
-
-    Step 2: Apply an inter-hunk consistency check to correct outlier file
-    assignments when multiple hunks from the same source file disagree.
-    """
-    repo_path = state["target_repo_path"]
-    all_hunks = state.get("hunks", [])
-
-    # Step 0: Filter mainline hunks — keep only Java production code hunks for the
-    # LLM pipeline. developer_aux_hunks (from target_patch) are left untouched.
-    java_code_hunks, _ = segregate_hunks(all_hunks)
-    state["hunks"] = java_code_hunks
-    # developer_aux_hunks pre-populated by caller; do NOT overwrite
-
-    results: List[LocalizationResult] = []
-    for hunk in java_code_hunks:
-        file_path = hunk.get("file_path", "")
-        if file_path:
-            loc_result = localizer_pipeline(repo_path, file_path, hunk)
-            results.append(loc_result)
-        else:
-            results.append(LocalizationResult(
-                method_used="failed",
-                confidence=0.0,
-                context_snapshot="",
-                file_path="",
-                start_line=0,
-                end_line=0,
-            ))
 
     results = _apply_inter_hunk_consistency(repo_path, java_code_hunks, results)
 

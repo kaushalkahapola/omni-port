@@ -14,7 +14,7 @@ WORKDIR /repo
 
 # Inject toolchains.xml to satisfy Maven plugins (multiple paths for redundancy)
 RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ && \
-    echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml && \
+    echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain><toolchain><type>jdk</type><provides><version>22.0.2+9</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml && \
     cp /usr/share/maven/conf/toolchains.xml /root/.m2/toolchains.xml && \
     cp /usr/share/maven/conf/toolchains.xml /etc/maven/toolchains.xml && \
     cp /usr/share/maven/conf/toolchains.xml /.m2/toolchains.xml && \

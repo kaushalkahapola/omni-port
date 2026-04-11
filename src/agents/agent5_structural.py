@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 from src.core.llm_router import get_default_router, LLMTier
 
-_STRUCTURAL_METHODS = {"gumtree_ast"}
+_STRUCTURAL_METHODS = {"gumtree_ast", "embedding"}
 _LOW_CONFIDENCE_THRESHOLD = 0.6
 
 
@@ -121,6 +121,7 @@ class StructuralRefactor:
         api_changes: Optional[Dict[str, str]] = None,
         intended_new_code: Optional[str] = None,
         same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
+        file_content: Optional[str] = None,
     ) -> StructuralAdaptationOutput:
         if not self.llm_client:
             return StructuralAdaptationOutput(
@@ -130,6 +131,20 @@ class StructuralRefactor:
                 success=False,
                 error_message="LLM client not configured for Structural Refactor agent.",
             )
+
+        full_file_section = ""
+        if file_content and file_content.strip():
+            full_file_section = f"""
+---
+FULL TARGET FILE CONTENT (For Reference Only):
+To understand variable declarations, class fields, imports, and method signatures,
+you may reference the full file content below. DO NOT output the full file in your
+response. Output ONLY the replacement for the TARGET block.
+```java
+{file_content}
+```
+---
+"""
 
         intended_section = ""
         if intended_new_code and intended_new_code.strip():
@@ -178,6 +193,8 @@ Structural changes detected by GumTree:
 API changes detected by japicmp:
 {self._format_api_changes(api_changes)}
 
+{full_file_section}
+
 Task:
 1. Understand the structural change shown in the "Intended new code" (e.g. removing an
    if/else version check, inlining a branch, simplifying a method body).
@@ -213,6 +230,7 @@ Return ONLY valid Java code in refactored_code.
         loc_result: LocalizationResult,
         edit_script: Optional[str] = None,
         same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
+        file_content: Optional[str] = None,
     ) -> StructuralAdaptationOutput:
         # original_code is the TARGET's current code (context_snapshot), since Agent 5
         # produces refactored_code that replaces it verbatim in the target file.
@@ -231,6 +249,7 @@ Return ONLY valid Java code in refactored_code.
             loc_result.symbol_mappings if loc_result.symbol_mappings else None,
             intended_new_code=intended_new_code,
             same_file_applied_hunks=same_file_applied_hunks,
+            file_content=file_content,
         )
 
 
@@ -291,13 +310,22 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
         # Collect other hunks on the same file already applied by Agent 3,
         # so the LLM knows which symbols/methods are no longer available.
         current_file = loc_result.file_path
+        file_content = ""
+        try:
+            import os
+            target_path = os.path.join(repo_path, current_file)
+            with open(target_path, "r") as f:
+                file_content = f.read()
+        except Exception:
+            pass
+
         same_file_applied: List[Dict[str, Any]] = [
             hunks[j]
             for j in processed_indices
             if j != i and j < len(hunks) and hunks[j].get("file_path") == current_file
         ]
 
-        output = refactor.refactor_hunk(hunk, loc_result, same_file_applied_hunks=same_file_applied)
+        output = refactor.refactor_hunk(hunk, loc_result, same_file_applied_hunks=same_file_applied, file_content=file_content)
 
         if output.success and output.confidence > 0.5:
             refactored_hunks.append({

@@ -62,7 +62,7 @@ if ${DOCKER_CMD} run --rm \
     bash -c "git config --global --add safe.directory /repo && \
     export MAVEN_OPTS=\"\${MAVEN_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\" && \
     mkdir -p /root/.m2 && \
-    echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /root/.m2/toolchains.xml && \
+    echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain><toolchain><type>jdk</type><provides><version>22.0.2+9</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /root/.m2/toolchains.xml && \
     mvn clean install -DskipTests -T ${MAVEN_THREADS} --global-toolchains /root/.m2/toolchains.xml"; then
     echo "✅ Build Succeeded"
     exit 0

@@ -450,10 +450,13 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
     for i, hunk in enumerate(hunks):
         if i in processed_indices:
             continue
-        if i >= len(loc_results):
-            break
 
         loc_result = loc_results[i]
+
+        # Defer structurally drifted hunks directly to Agent 5. Agent 4 should only
+        # process hunks that retained their basic structure and were localized easily.
+        if loc_result.method_used in {"gumtree_ast", "embedding"} or loc_result.confidence < 0.6:
+            continue
 
         # Skip only completely failed localization (no file found at all).
         if loc_result.method_used == "failed" or not loc_result.file_path:

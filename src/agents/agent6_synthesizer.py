@@ -92,7 +92,52 @@ def _has_adjacent_duplicate_imports(code: str) -> bool:
     for i in range(1, len(import_lines)):
         if import_lines[i] == import_lines[i - 1]:
             return True
-    return False
+def _strip_java_comments(code: str) -> str:
+    # Remove // comments
+    code = re.sub(r'//.*', '', code)
+    # Remove /* */ comments
+    code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
+    # Remove string literals to be safe
+    code = re.sub(r'"(?:\\.|[^"\\])*"', '""', code)
+    return code
+
+def _has_undeclared_variables(file_content: str, old_string: str, new_string: str) -> Tuple[bool, str]:
+    """
+    Fix C Extended: Simple but valuable check to detect LLM hallucinations.
+    Ensures that any new lower-camel-case identifiers (variables/methods) introduced
+    in new_string actually exist in the surrounding file context or are locally declared.
+    """
+    clean_new = _strip_java_comments(new_string)
+    clean_old = _strip_java_comments(old_string)
+    
+    tokens = set(re.findall(r'\b[a-z][a-zA-Z0-9_]*\b', clean_new))
+    old_tokens = set(re.findall(r'\b[a-z][a-zA-Z0-9_]*\b', clean_old))
+    introduced_tokens = tokens - old_tokens
+    
+    java_keywords = {"abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
+        "class", "const", "continue", "default", "do", "double", "else", "enum",
+        "extends", "final", "finally", "float", "for", "goto", "if", "implements",
+        "import", "instanceof", "int", "interface", "long", "native", "new",
+        "package", "private", "protected", "public", "return", "short", "static",
+        "strictfp", "super", "switch", "synchronized", "this", "throw", "throws",
+        "transient", "try", "void", "volatile", "while", "true", "false", "null",
+        "var", "record", "sealed", "permits", "yield"}
+        
+    to_check = {t for t in introduced_tokens if len(t) > 2 and t not in java_keywords}
+    
+    surrounding_context = file_content.replace(old_string, "", 1)
+    surrounding_tokens = set(re.findall(r'\b[a-z][a-zA-Z0-9_]*\b', surrounding_context))
+    
+    missing_from_file = to_check - surrounding_tokens
+    
+    for token in missing_from_file:
+        # Check if it's locally declared in new_string (e.g., "Type token = " or "Type token;")
+        decl_pattern = rf'(?:\w+(?:<.*>)?(?:\[\])*)\s+{token}\s*(?:[=;),])'
+        if not re.search(decl_pattern, new_string):
+            return True, token
+            
+    return False, ""
+
 
 
 # ── Data models ───────────────────────────────────────────────────────────────
@@ -224,11 +269,17 @@ class HunkSynthesizer:
             logger.debug("[Fix C] Rejecting hunk for %s: adjacent duplicate imports in new_string", file_path)
             return False
 
-        # Network check: simulate replacement and parse the result
+        # Semantic fast check: Undeclared variables
+        has_undeclared, missing_token = _has_undeclared_variables(file_content, old_string, new_string)
+        if has_undeclared:
+            logger.debug("[Fix C] Rejecting hunk for %s: undeclared variable/symbol '%s' in new_string", file_path, missing_token)
+            return False
+
+        # Network check: simulate replacement and parse the FULL modified result to catch broken boundaries
         try:
             from src.tools.java_http_client import javaparser_parse_snippet
-            # Validate just the new_string snippet (faster than full-file parse)
-            result = javaparser_parse_snippet(new_string, context_class="")
+            modified_file = file_content.replace(old_string, new_string, 1)
+            result = javaparser_parse_snippet(modified_file, context_class="")
             status = result.get("status", "error")
             if status == "parse_error":
                 errors = result.get("errors", [])

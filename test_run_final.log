@@ -1,0 +1,103 @@
+Shadow v3 run started at 2026-04-11T06:57:11.265436
+Processing 1 patch(es)
+Results → /home/kaushal/backport-claw/tests/shadow_run_results_v3
+
+
+[1/1]
+================================================================
+  [pipeline] Processing TYPE-V | repo=crate | commit=3dea6f6fb4a1
+  [pipeline] Description: master → 5.8
+  [pipeline] Backport Target: 6c771f9afe2f
+================================================================
+  [pipeline] Capturing reference patches for 3dea6f6fb4a1fabd94a442fade1747ea3d4a1915
+  [pipeline] mainline.patch saved to /home/kaushal/backport-claw/tests/shadow_run_results_v3/crate/TYPE-V_3dea6f6f
+  [pipeline] target.patch saved to /home/kaushal/backport-claw/tests/shadow_run_results_v3/crate/TYPE-V_3dea6f6f
+  [pipeline] Preparing worktree: checking out 6c771f9afe2f1b60bbd8dd7385f40ac8bdff7de7~1
+  Parsed 4 total hunk(s) from mainline patch
+  Extracted 2 aux hunk(s) from target.patch
+
+  [pipeline] Phase 0 (baseline):
+  [pipeline] phase0 cache: hit (mode=baseline-crate-helper) — skipping baseline run
+
+  Pipeline:
+    [pipeline] Starting Agent: agent1_localizer... Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 9455.30it/s]
+[1mRobertaModel LOAD REPORT[0m from: microsoft/unixcoder-base
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+DONE (8.24s)
+    → 1 Java code hunk(s) | 2 developer aux hunk(s)
+    [pipeline] Starting Agent: agent2_classifier... /home/kaushal/backport-claw/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=PatchClassification(patch...is_auto_generated=False), input_type=PatchClassification])
+  return self.__pydantic_serializer__.to_python(
+DONE (3.15s)
+    [pipeline] Starting Agent: agent3_fastapply... DONE (0.00s)
+    [pipeline] Starting Agent: agent4_namespace... DONE (0.00s)
+    [pipeline] Starting Agent: agent5_structural... /home/kaushal/backport-claw/.venv/lib/python3.12/site-packages/pydantic/main.py:464: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=StructuralAdaptationOutpu...rue, error_message=None), input_type=StructuralAdaptationOutput])
+  return self.__pydantic_serializer__.to_python(
+DONE (30.52s)
+    [pipeline] Starting Agent: agent6_synthesizer... DONE (0.01s)
+  [agent7] Applying 1 synthesized hunks via CLAW
+  [agent7] Applied synthesized hunks to 1 files
+
+  generated.patch written (1038 bytes)
+    [pipeline] Starting Agent: agent7_validator...   agent7: synthesized hunks already on disk (pre-applied), skipping apply step
+  agent7: applying 2 developer aux hunk(s)...
+  [agent7] Applying 2 developer aux hunks
+  [agent7] Using raw_patch mode for aux hunks
+  [agent7] Applying raw patch for docs/appendices/release-notes/5.8.2.rst
+  [agent7] Applying patch to /home/kaushal/backport-claw/repos/crate
+  [agent7] Trying strategy: git-strict
+  [agent7] Strategy git-strict succeeded
+  [agent7] Applying raw patch for server/src/test/java/io/crate/lucene/ArrayLengthQueryBuilderTest.java
+  [agent7] Applying patch to /home/kaushal/backport-claw/repos/crate
+  [agent7] Trying strategy: git-strict
+  [agent7] Strategy git-strict succeeded
+  [agent7] Applied 2 raw aux patches
+  agent7: running build for crate...
+  [build_systems] Starting build for project crate in /home/kaushal/backport-claw/repos/crate
+  [build_systems] Using project helper: /home/kaushal/backport-claw/helpers/crate/run_build.sh
+  [build_systems] Checking for Docker image: retrofit-crate-builder:local
+  [build_systems] Running command: docker image inspect retrofit-crate-builder:local
+  [build_systems] Working directory: /home/kaushal/backport-claw/repos/crate
+  [build_systems] Command finished with return code: 0
+  [build_systems] Docker image retrofit-crate-builder:local exists
+  [build_systems] Running command: git rev-parse --short HEAD
+  [build_systems] Working directory: /home/kaushal/backport-claw/repos/crate
+  [build_systems] Command finished with return code: 0
+  [build_systems] Running command: bash /home/kaushal/backport-claw/helpers/crate/run_build.sh
+  [build_systems] Working directory: /home/kaushal/backport-claw/repos/crate
+  [build_systems] Command finished with return code: 1
+  [build_systems] Build failed using crate-helper
+  [build_systems] Restoring repo state in /home/kaushal/backport-claw/repos/crate
+  [build_systems] Repo state restored successfully
+DONE (7.87s)
+
+  Validation: FAILED — unknown
+  Build failed (crate-helper): [ERROR] Failed to download and install JDK
+org.codehaus.plexus.archiver.ArchiverException: Error while expanding /root/.m2/jdks/OpenJDK22U-jdk_x64_linux_hotspot_22.0.2_9.t
+  results.json saved → /home/kaushal/backport-claw/tests/shadow_run_results_v3/crate/TYPE-V_3dea6f6f
+
+  ┌─ Result Summary ──────────────────────────────────────────
+  │  Total hunks          : 4
+  │  Java code hunks      : 1
+  │  Developer aux hunks  : 2
+  │  Applied (Agent 3)    : 0
+  │  Synthesized (Agent 6): 1
+  │  Failed total         : 0
+  │  Synthesis status     : success
+  │  Validation           : FAILED (unknown)
+  │  Build                : FAILED
+  │  Tokens used          : 0
+  └───────────────────────────────────────────────────────────
+  SUMMARY.md updated → /home/kaushal/backport-claw/tests/shadow_run_results_v3/SUMMARY.md
+  [pipeline] Sending updated SUMMARY.md to Telegram...
+
+================================================================
+Shadow v3 run complete. Results in /home/kaushal/backport-claw/tests/shadow_run_results_v3/
+================================================================

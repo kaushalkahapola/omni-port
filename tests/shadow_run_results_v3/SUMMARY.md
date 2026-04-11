@@ -1,6 +1,6 @@
 # Backport CLAW — Shadow Run Results (v3)
 
-**Last updated:** 2026-04-11 06:23:49  
+**Last updated:** 2026-04-11 07:16:41  
 **Total:** 55 patch(es) run, **36 passed** (65%)
 
 > **Success** = at least one fail→pass or newly-passing test observed.
@@ -58,7 +58,7 @@
 | crate | TYPE-V | `2d1d5792c5` | ✗ | ✗ | - | - | unknown |
 | crate | TYPE-V | `30abc0f980` | ✗ | ✗ | - | - | unknown |
 | crate | TYPE-V | `3d3bf8420b` | ✗ | ✗ | - | - | unknown |
-| crate | TYPE-V | `3dea6f6fb4` | ✗ | ✗ | - | - | unknown |
+| crate | TYPE-V | `3dea6f6fb4` | ✗ | ✓ | 0 / 0 / 8 | P→F: io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt0UsesExistsQuery, io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt1UsesNumTermsPerOrAndGenericFunction, io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtColumnIsNotOptimized, io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtNULLDoesNotMatch, io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGte1UsesNumTermsPerDocQuery, io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLt1IsNoMatch, io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLte0IsNoMatch, io.crate.lucene.ArrayLengthQueryBuilderTest#test_NumTermsPerDocQuery_maps_column_idents_to_oids | test_failure |
 | crate | TYPE-V | `6e18150a39` | ✗ | ✗ | - | - | unknown |
 | crate | TYPE-V | `76cab1d4a5` | ✓ | ✓ | 1 / 0 / 0 | F→P: io.crate.interval.IntervalParserTest#test_invalid_duplicate_units |  |
 | crate | TYPE-V | `a143937ad2` | ✗ | ✗ | - | - | api_mismatch |

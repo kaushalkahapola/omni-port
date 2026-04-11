@@ -109,37 +109,22 @@ def run_git_localization(repo_path: str, file_path: str, hunk: Dict[str, Any]) -
                                 end_line=start_idx + window_size,
                             )
 
-                    # Exact match failed (content drifted). Run fuzzy sliding window
-                    # to find the best-matching region and return real coordinates.
-                    if window_size > 0 and len(new_lines) >= window_size:
-                        best_ratio = 0.0
-                        best_start = -1
-                        for i in range(len(new_lines) - window_size + 1):
-                            window = "".join(new_lines[i : i + window_size])
-                            ratio = fuzz.token_sort_ratio(old_content, window) / 100.0
-                            if ratio > best_ratio:
-                                best_ratio = ratio
-                                best_start = i
-
-                        if best_start >= 0 and best_ratio >= 0.6:
-                            return LocalizationResult(
-                                method_used="git_pickaxe",
-                                confidence=min(0.9, best_ratio),
-                                context_snapshot="".join(
-                                    new_lines[best_start : best_start + window_size]
-                                ),
-                                symbol_mappings={},
-                                file_path=new_file_path,
-                                start_line=best_start + 1,
-                                end_line=best_start + window_size,
-                            )
+                    # Exact match failed. Return a sentinel result so the pipeline
+                    # updates the canonical file path and continues to stage 2.
+                    return LocalizationResult(
+                        method_used="path_redirect",
+                        confidence=0.0,
+                        context_snapshot="",
+                        symbol_mappings={},
+                        file_path=new_file_path,
+                        start_line=0,
+                        end_line=0,
+                    )
 
                 except (FileNotFoundError, IOError):
                     pass
 
-                # Fallback: file unreadable or no fuzzy match above threshold.
-                # Return None to let Stage 2+ (fuzzy, hierarchy) try; a 0.5-confidence
-                # result with bogus line-1 coordinates would block all downstream stages.
+                # Fallback: file unreadable. Return None to let subsequent stages try on original path.
                 return None
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         pass
@@ -260,13 +245,13 @@ def _grep_for_content_in_repo(
             if ratio > best_ratio:
                 best_ratio = ratio
                 best_result = LocalizationResult(
-                    method_used="git_pickaxe",
-                    confidence=min(0.85, ratio),
-                    context_snapshot=window,
+                    method_used="path_redirect",
+                    confidence=0.0,
+                    context_snapshot="",
                     symbol_mappings={},
                     file_path=rel_path,
-                    start_line=i + 1,
-                    end_line=i + window_size,
+                    start_line=0,
+                    end_line=0,
                 )
 
     if best_result and best_ratio >= 0.5:

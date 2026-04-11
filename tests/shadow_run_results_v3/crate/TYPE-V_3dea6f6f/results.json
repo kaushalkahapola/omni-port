@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T06:15:04.821301",
+  "run_timestamp": "2026-04-11T07:11:52.898187",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "3dea6f6fb4a1fabd94a442fade1747ea3d4a1915",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.84,
+      "elapsed_s": 8.23,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 2,
@@ -16,21 +16,21 @@
         {
           "hunk_index": 0,
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "method_used": "git_pickaxe",
-          "confidence": 0.867,
-          "start_line": 175,
-          "end_line": 180,
+          "method_used": "embedding",
+          "confidence": 0.86,
+          "start_line": 176,
+          "end_line": 185,
           "symbol_mappings": {}
         }
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.89,
+      "elapsed_s": 3.66,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_II",
-        "confidence": 0.87,
-        "reasoning": "The patch modifies existing logic in ArrayUpperFunction.java by adding a conditional check for nested array types and returning null in that case. This is a small structural addition but does not involve renaming methods or deep refactoring. The patch also adds test cases and updates release notes. The localization evidence shows the main code hunk was found via 'git_pickaxe' with high confidence, indicating some code drift but not a complete redesign. Therefore, the patch complexity aligns with TYPE_II, involving minor structural changes and requiring fuzzy matching rather than exact string replacement.",
+        "patch_type": "PatchType.TYPE_V",
+        "confidence": 0.86,
+        "reasoning": "The patch modifies the ArrayUpperFunction.java file by adding a new conditional branch to handle arrays of arrays differently, specifically for tables created before version 5.9. This involves understanding the data type hierarchy and fallback logic, which is a structural change but not a simple string or whitespace fix. Additionally, the patch adds new test cases and updates release notes, indicating a broader impact. The localization evidence shows the hunk was found via 'embedding' with 0.86 confidence, which typically corresponds to TYPE_V complexity, indicating a fundamentally different implementation or significant divergence from the target branch. Therefore, the patch is classified as TYPE_V with high confidence and a moderate token budget estimate to resolve the complexity.",
         "is_auto_generated": false
       }
     },
@@ -41,12 +41,12 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 4.2,
+      "elapsed_s": 0.0,
       "error": null,
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 36.01,
+      "elapsed_s": 22.38,
       "error": null,
       "refactored_count": 1
     },
@@ -59,8 +59,8 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
-          "old_string": "        }\n        int cmpVal = cmpNumber.intValue();\n\n        // For numeric types all values are stored, so the doc-value-count represents the number of not-null values\n        // Only unique values are stored for IP and TEXT types, so the doc-value-count represents the number of unique not-null  values\n        // [a, a, a]",
-          "new_string": "        int cmpVal = cmpNumber.intValue();\n\n        return toQueryUsingArrayLengthIndex(parentName, arrayRef, cmpVal);\n    }\n\n    DataType<?> innerType = ((ArrayType<?>) arrayRef.valueType()).innerType();\n    if (innerType instanceof ArrayType<?>) {\n        // Cannot utilize `_array_length_` index for arrays in tables created before 5.9\n        return null;\n    }\n\n    // For numeric types all values are stored, so the doc-value-count represents the number of not-null values\n    // Only unique values are stored for IP and TEXT types, so the doc-value-count represents the number of unique not-null  values\n    // [a, a, a]",
+          "old_string": "        int cmpVal = cmpNumber.intValue();\n\n        // For numeric types all values are stored, so the doc-value-count represents the number of not-null values\n        // Only unique values are stored for IP and TEXT types, so the doc-value-count represents the number of unique not-null  values\n        // [a, a, a]\n        //      -> docValueCount 1\n        //      -> arrayLength   3\n        // array_length([], 1)\n        //      -> NULL\n        //",
+          "new_string": "        int cmpVal = cmpNumber.intValue();\n\n        DataType<?> innerType = ((ArrayType<?>) arrayRef.valueType()).innerType();\n        if (innerType instanceof ArrayType<?>) {\n            // Cannot utilize `_array_length_` index for arrays in tables created before 5.9\n            return null;\n        }\n\n        // For numeric types all values are stored, so the doc-value-count represents the number of not-null values\n        // Only unique values are stored for IP and TEXT types, so the doc-value-count represents the number of unique not-null  values\n        // [a, a, a]\n        //      -> docValueCount 1\n        //      -> arrayLength   3\n        // array_length([], 1)\n        //      -> NULL\n        //",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -68,19 +68,63 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 119.36,
+      "elapsed_s": 254.19,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.51s), 0 error(s).\n[INFO] Scanned 79 class file(s) for forbidden API invocations (in 0.17s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.24s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.12s), 0 error(s).\n[INFO] Scanned 68 class file(s) for forbidden API invocations (in 0.12s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
+      "validation_failure_category": "test_failure",
+      "validation_error_context": "Test regressions (pass\u2192fail): ['io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt0UsesExistsQuery', 'io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt1UsesNumTermsPerOrAndGenericFunction', 'io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtColumnIsNotOptimized', 'io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtNULLDoesNotMatch', 'io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGte1UsesNumTermsPerDocQuery']",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": false,
+      "build_success": true,
       "build_mode": "crate-helper",
-      "test_success": null,
-      "test_mode": null,
-      "test_state": null,
-      "test_state_transition": null,
+      "test_success": false,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.lucene.ArrayLengthQueryBuilderTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.lucene.ArrayLengthQueryBuilderTest"
+        ],
+        "test_cases": {
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_NumTermsPerDocQuery_maps_column_idents_to_oids": "failed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtColumnIsNotOptimized": "failed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLt1IsNoMatch": "failed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_array_length_on_array_sub_columns_of_array_of_objects": "failed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtNULLDoesNotMatch": "failed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt0UsesExistsQuery": "failed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGte1UsesNumTermsPerDocQuery": "failed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLte0IsNoMatch": "failed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt1UsesNumTermsPerOrAndGenericFunction": "failed"
+        },
+        "classes": {
+          "io.crate.lucene.ArrayLengthQueryBuilderTest": "failed"
+        },
+        "summary": {
+          "passed": 0,
+          "failed": 9,
+          "skipped": 0,
+          "total": 9
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt0UsesExistsQuery",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt1UsesNumTermsPerOrAndGenericFunction",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtColumnIsNotOptimized",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtNULLDoesNotMatch",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGte1UsesNumTermsPerDocQuery",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLt1IsNoMatch",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLte0IsNoMatch",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_NumTermsPerDocQuery_maps_column_idents_to_oids"
+        ],
+        "newly_passing": [],
+        "baseline_total": 9,
+        "patched_total": 9,
+        "reason": "Invalid: Some tests regressed from pass to fail."
+      },
       "compile_errors": []
     }
   },
@@ -105,24 +149,41 @@
     "failed_hunks_total": 0,
     "retry_contexts": [
       {
-        "error_type": "unknown",
-        "error_message": "[INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.51s), 0 error(s).\n[INFO] Scanned 79 class file(s) for forbidden API invocations (in 0.17s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.24s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.12s), 0 error(s).\n[INFO] Scanned 68 class file(s) for forbidden API invocations (in 0.12s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbidden API invocations (in 0.09s), 0 error(s).\n[INFO] Scanned 573 class file(s) for forbidden API invocations (in 0.26s), 0 error(s).\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:175:9: 'if' child has incorrect indentation level 8, expected level should be 12. [Indentation]\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:177:9: 'if' child has incorrect indentation level 8, expected level should be 12. [Indentation]\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:178:5: 'if rcurly' has incorrect indentation level 4, expected level should be 8. [Indentation]\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:180:5: 'method def' child has incorrect indentation level 4, expected level should be 8. [Indentation]\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:181:5: 'if' has incorrect indentation level 4, expected level should be 8. [Indentation]\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:183:9: 'if' child has incorrect indentation level 8, expected level should be 12. [Indentation]\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:184:5: 'if rcurly' has incorrect indentation level 4, expected level should be 8. [Indentation]\n[ERROR] /repo/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java:188:5: Comment has incorrect indentation level 4, expected is 8, indentation should be the same level as line 209. [CommentsIndentation]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:check (validate) on project crate-server: Failed during checkstyle execution: There are 8 errors reported by Checkstyle 10.17.0 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server\n\u274c Build Failed",
+        "error_type": "test_failure",
+        "error_message": "a.lang.NullPointerException: Cannot invoke \"io.crate.testing.QueryTester.close()\" because \"this.queryTester\" is null\n[ERROR]   ArrayLengthQueryBuilderTest.testArrayLengthGte1UsesNumTermsPerDocQuery Multiple Failures (2 failures)\n\torg.mockito.exceptions.base.MockitoException: \nIf you're not sure why you're getting this error, please open an issue on GitHub.\nUnderlying exception : org.mockito.exceptions.base.MockitoException: Could not modify all classes [class org.elasticsearch.threadpool.ThreadPool, interface org.elasticsearch.threadpool.Scheduler, class java.lang.Object]\n\tjava.lang.NullPointerException: Cannot invoke \"io.crate.testing.QueryTester.close()\" because \"this.queryTester\" is null\n[ERROR]   ArrayLengthQueryBuilderTest.testArrayLengthLt1IsNoMatch Multiple Failures (2 failures)\n\torg.mockito.exceptions.base.MockitoException: \nIf you're not sure why you're getting this error, please open an issue on GitHub.\nUnderlying exception : org.mockito.exceptions.base.MockitoException: Could not modify all classes [class org.elasticsearch.threadpool.ThreadPool, interface org.elasticsearch.threadpool.Scheduler, class java.lang.Object]\n\tjava.lang.NullPointerException: Cannot invoke \"io.crate.testing.QueryTester.close()\" because \"this.queryTester\" is null\n[ERROR]   ArrayLengthQueryBuilderTest.testArrayLengthLte0IsNoMatch Multiple Failures (2 failures)\n\torg.mockito.exceptions.base.MockitoException: \nIf you're not sure why you're getting this error, please open an issue on GitHub.\nUnderlying exception : org.mockito.exceptions.base.MockitoException: Could not modify all classes [class org.elasticsearch.threadpool.ThreadPool, interface org.elasticsearch.threadpool.Scheduler, class java.lang.Object]\n\tjava.lang.NullPointerException: Cannot invoke \"io.crate.testing.QueryTester.close()\" because \"this.queryTester\" is null\n[ERROR]   ArrayLengthQueryBuilderTest.test_NumTermsPerDocQuery_maps_column_idents_to_oids Multiple Failures (2 failures)\n\torg.mockito.exceptions.base.MockitoException: \nIf you're not sure why you're getting this error, please open an issue on GitHub.\nUnderlying exception : org.mockito.exceptions.base.MockitoException: Could not modify all classes [class org.elasticsearch.threadpool.ThreadPool, interface org.elasticsearch.threadpool.Scheduler, class java.lang.Object]\n\tjava.lang.NullPointerException: Cannot invoke \"io.crate.testing.QueryTester.close()\" because \"this.queryTester\" is null\n[ERROR]   ArrayLengthQueryBuilderTest.test_array_length_on_array_sub_columns_of_array_of_objects Multiple Failures (2 failures)\n\torg.mockito.exceptions.base.MockitoException: \nIf you're not sure why you're getting this error, please open an issue on GitHub.\nUnderlying exception : org.mockito.exceptions.base.MockitoException: Could not modify all classes [class org.elasticsearch.threadpool.ThreadPool, interface org.elasticsearch.threadpool.Scheduler, class java.lang.Object]\n\tjava.lang.NullPointerException: Cannot invoke \"io.crate.testing.QueryTester.close()\" because \"this.queryTester\" is null\n[ERROR] Tests run: 9, Failures: 9, Errors: 0, Skipped: 0\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.3.0:test (default-test) on project crate-server: There are test failures.\n[ERROR] \n[ERROR] Please refer to /repo/server/target/surefire-reports for the individual test results.\n[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server\n\u274c Tests Failed",
         "attempt_count": 1,
-        "suggested_action": "inspect_and_retry"
+        "suggested_action": "regenerate_hunk"
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 1662,
+    "generated_patch_bytes": 1038,
     "target_patch_bytes": 2753,
     "validation_passed": false,
-    "validation_failure_category": "unknown",
-    "build_success": false,
-    "test_success": null,
-    "test_mode": null,
-    "test_transition": {},
+    "validation_failure_category": "test_failure",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
+      "pass_to_fail": [
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt0UsesExistsQuery",
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt1UsesNumTermsPerOrAndGenericFunction",
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtColumnIsNotOptimized",
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtNULLDoesNotMatch",
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGte1UsesNumTermsPerDocQuery",
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLt1IsNoMatch",
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLte0IsNoMatch",
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#test_NumTermsPerDocQuery_maps_column_idents_to_oids"
+      ],
+      "newly_passing": [],
+      "baseline_total": 9,
+      "patched_total": 9,
+      "reason": "Invalid: Some tests regressed from pass to fail."
+    },
     "fail_to_pass_count": 0,
     "newly_passing_count": 0,
-    "pass_to_fail_count": 0,
+    "pass_to_fail_count": 8,
     "backport_success": false
   }
 }
