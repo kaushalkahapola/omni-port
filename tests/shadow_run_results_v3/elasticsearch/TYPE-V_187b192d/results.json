@@ -1,0 +1,247 @@
+{
+  "run_timestamp": "2026-04-10T19:41:14.384938",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-V",
+  "original_commit": "187b192dfe7c6dc60bfa59fcd90c0ce1e6e3a857",
+  "backport_commit": "41f09bf1fcba928dd5e94f1a0bab9c747d71b312",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 19.0,
+      "error": null,
+      "java_hunks": 7,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 13,
+          "end_line": 21,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.948,
+          "start_line": 28,
+          "end_line": 33,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.921,
+          "start_line": 48,
+          "end_line": 54,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.958,
+          "start_line": 67,
+          "end_line": 75,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.845,
+          "start_line": 89,
+          "end_line": 100,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "method_used": "fuzzy",
+          "confidence": 0.888,
+          "start_line": 17,
+          "end_line": 22,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "method_used": "embedding",
+          "confidence": 0.744,
+          "start_line": 36,
+          "end_line": 45,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.73,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.85,
+        "reasoning": "The patch introduces a new deduplication mechanism for allocation stats calls, replacing direct calls to AllocationStatsService with a SingleResultDeduplicator. This involves adding new classes, changing threading models, and modifying the masterOperation method to use asynchronous listeners and executors. The changes affect multiple files and require understanding of concurrency and asynchronous execution in the codebase. The localization evidence shows mostly fuzzy matches with high confidence, indicating structural changes rather than trivial replacements. The patch is more complex than simple string replacements or whitespace changes, but it does not represent a complete redesign or deep structural refactoring, so TYPE_III is appropriate.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 23.01,
+      "error": null,
+      "adapted_count": 4
+    },
+    "agent5_structural": {
+      "elapsed_s": 64.81,
+      "error": null,
+      "refactored_count": 2
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 6,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "old_string": "import org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.core.Nullable;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.features.FeatureService;",
+          "new_string": "import org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.util.concurrent.EsExecutors;\nimport org.elasticsearch.core.Nullable;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.features.FeatureService;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "old_string": "    private final AllocationStatsService allocationStatsService;\n    private final DiskThresholdSettings diskThresholdSettings;\n    private final FeatureService featureService;",
+          "new_string": "    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;\n    private final DiskThresholdSettings diskThresholdSettings;\n    private final FeatureService featureService;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "old_string": "import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShardsAllocator;\nimport org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.util.Maps;\n\nimport java.util.Map;",
+          "new_string": "import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShardsAllocator;\nimport org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.transport.Transports;\nimport org.elasticsearch.common.util.Maps;\n\nimport java.util.Map;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "old_string": "    public Map<String, NodeAllocationStats> stats() {\n        var state = clusterService.state();\n        var info = clusterInfoService.getClusterInfo();",
+          "new_string": "    public Map<String, NodeAllocationStats> stats() {\n        assert Transports.assertNotTransportThread(\"too expensive for a transport worker\");\n\n        var state = clusterService.state();\n        var info = clusterInfoService.getClusterInfo();",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "old_string": "            clusterService,\n            threadPool,\n            actionFilters,\n            TransportGetAllocationStatsAction.Request::new,\n            TransportGetAllocationStatsAction.Response::new,\n            threadPool.executor(ThreadPool.Names.MANAGEMENT)\n        );\n        this.allocationStatsService = allocationStatsService;\n        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());",
+          "new_string": "            actionFilters,\n            TransportGetAllocationStatsAction.Request::new,\n            TransportGetAllocationStatsAction.Response::new,\n            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n            // very cheaply.\n            EsExecutors.DIRECT_EXECUTOR_SERVICE\n        );\n        final java.util.concurrent.Executor managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n            threadPool.getThreadContext(),\n            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))\n        );\n        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "old_string": "    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        listener.onResponse(\n            new Response(\n                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),\n                request.metrics().contains(Metric.FS)\n                    && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)\n                        ? diskThresholdSettings\n                        : null\n            )\n        );\n    }",
+          "new_string": "    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool\n\n        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)\n            ? SubscribableListener.newForked(allocationStatsService::stats)\n            : SubscribableListener.newSucceeded(Map.of());\n\n        allocationStatsStep.andThenApply(\n            allocationStats -> new Response(\n                allocationStats,\n                request.metrics().contains(Metric.FS)\n                    && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)\n                        ? diskThresholdSettings\n                        : null\n            )\n        ).addListener(listener);\n    }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 554.57,
+      "error": null,
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (elasticsearch-helper): ApiSpecsTask\n> Task :x-pack:plugin:esql:qa:server:single-node:processTestResources NO-SOURCE\n> Task :x-pack:plugin:esql:qa:server:single-node:testClasses\n> Task :x-pack:plugin:sql:sql-client:jar\n> Task :x-pack:plugin:sql:sql-proto:jar\n> Task :x-pack:plugin:sql:jdbc:shadowJar\n> Task :x-pack:plugin:sql:qa:jdbc:security:processTestResources\n> Task :x-pack:plugin:sql:qa:server:security:processTestResources\n\n> Task :server:compileJava\nNote: Some input files use or",
+      "validation_attempts": 1,
+      "retry_files": [
+        "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java"
+      ],
+      "build_success": false,
+      "build_mode": "elasticsearch-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "line": 68,
+          "message": "error: no suitable constructor found for TransportMasterNodeReadAction(String,TransportService,ActionFilters,TransportG[...]::new,TransportG[...]::new,ExecutorService)"
+        },
+        {
+          "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "line": 102,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 10,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 2
+    },
+    "java_production_hunks": 7,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      5,
+      6,
+      3,
+      4
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 6,
+    "failed_hunks_total": 0,
+    "retry_contexts": [
+      {
+        "error_type": "api_mismatch",
+        "error_message": "--- Building Elasticsearch for 1bf0a6b ---\n--- Container user: 1001:1001 ---\nCPU detected: 2\n--- Changing directory to /home/kaushal/omni-port/repos/elasticsearch ---\ngradle-cache-es\ngradle-wrapper-es\n--- Docker image retrofit-elasticsearch-builder:local already exists, skipping build ---\n--- Setting cache permissions ---\n--- Compiling with Gradle (assemble + testClasses, skip tests) ---\nDownloading https://services.gradle.org/distributions/gradle-8.12.1-all.zip\n.....................10%......................20%......................30%......................40%......................50%......................60%......................70%......................80%......................90%......................100%\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.12.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon will be stopped at the end of the build \n> Task :build-conventions:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: /repo/build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/LicensingPlugin.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-conventions:pluginDescriptors\n> Task :build-conventions:processResources\n> Task :build-conventions:classes\n> Task :build-conventions:jar\n> Task :build-tools:reaper:compileJava\n> Task :build-tools:reaper:processResources NO-SOURCE\n> Task :build-tools:reaper:classes\n> Task :build-tools:reaper:jar\n> Task :build-tools-internal:extractPluginRequests\n> Task :build-tools-internal:generatePluginAdapters\n> Task :build-tools-internal:pluginDescriptors\n> Task :build-tools-internal:processResources\n\n> Task :build-tools:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNot",
+        "attempt_count": 1,
+        "suggested_action": "route_to_namespace_or_structural"
+      }
+    ],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1297,
+    "target_patch_bytes": 9978,
+    "validation_passed": false,
+    "validation_failure_category": "api_mismatch",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

@@ -1,0 +1,219 @@
+commit 734dd070e719f0bac49953fbfb983fe8f19bd1de
+Author: Ievgen Degtiarenko <ievgen.degtiarenko@elastic.co>
+Date:   Thu Mar 13 10:28:15 2025 +0100
+
+    Query hot indices first (#122928)
+
+diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java
+index d806cd0b90b..5746c7dc89f 100644
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java
+@@ -17,6 +17,7 @@ import org.elasticsearch.action.search.SearchShardsRequest;
+ import org.elasticsearch.action.search.SearchShardsResponse;
+ import org.elasticsearch.action.support.TransportActions;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
++import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+ import org.elasticsearch.common.breaker.CircuitBreakingException;
+ import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
+ import org.elasticsearch.compute.operator.DriverProfile;
+@@ -36,9 +37,11 @@ import org.elasticsearch.xpack.esql.action.EsqlSearchShardsAction;
+ 
+ import java.util.ArrayList;
+ import java.util.Collections;
++import java.util.Comparator;
+ import java.util.HashMap;
+ import java.util.IdentityHashMap;
+ import java.util.Iterator;
++import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Queue;
+@@ -54,6 +57,20 @@ import java.util.concurrent.locks.ReentrantLock;
+  * and executing these computes on the data nodes.
+  */
+ abstract class DataNodeRequestSender {
++
++    /**
++     * Query order according to the
++     * <a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html">node roles</a>.
++     */
++    private static final List<String> NODE_QUERY_ORDER = List.of(
++        DiscoveryNodeRole.SEARCH_ROLE.roleName(),
++        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),
++        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),
++        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),
++        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),
++        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()
++    );
++
+     private final TransportService transportService;
+     private final Executor esqlExecutor;
+     private final CancellableTask rootTask;
+@@ -106,12 +123,39 @@ abstract class DataNodeRequestSender {
+                         nodePermits.putIfAbsent(node, new Semaphore(1));
+                     }
+                 }
+-                pendingShardIds.addAll(targetShards.shards.keySet());
++                pendingShardIds.addAll(order(targetShards));
+                 trySendingRequestsForPendingShards(targetShards, computeListener);
+             }
+         }, listener::onFailure));
+     }
+ 
++    private static List<ShardId> order(TargetShards targetShards) {
++        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();
++        var ordered = new ArrayList<>(targetShards.shards.keySet());
++        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));
++        return ordered;
++    }
++
++    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {
++        if (nodes.isEmpty()) {
++            return Integer.MAX_VALUE;
++        }
++        var order = 0;
++        for (var node : nodes) {
++            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));
++        }
++        return order;
++    }
++
++    private static int nodeOrder(DiscoveryNode node) {
++        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {
++            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {
++                return i;
++            }
++        }
++        return Integer.MAX_VALUE;
++    }
++
+     private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {
+         changed.set(true);
+         final ActionListener<Void> listener = computeListener.acquireAvoid();
+@@ -279,7 +323,7 @@ abstract class DataNodeRequestSender {
+      */
+     private List<NodeRequest> selectNodeRequests(TargetShards targetShards) {
+         assert sendingLock.isHeldByCurrentThread();
+-        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new HashMap<>();
++        final Map<DiscoveryNode, List<ShardId>> nodeToShardIds = new LinkedHashMap<>();
+         final Iterator<ShardId> shardsIt = pendingShardIds.iterator();
+ 
+         while (shardsIt.hasNext()) {
+diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java
+index d668d9d385b..badf26a3c9e 100644
+--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java
++++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSenderTests.java
+@@ -8,6 +8,7 @@
+ package org.elasticsearch.xpack.esql.plugin;
+ 
+ import org.elasticsearch.ExceptionsHelper;
++import org.elasticsearch.TransportVersion;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.NoShardAvailableActionException;
+ import org.elasticsearch.action.OriginalIndices;
+@@ -15,6 +16,7 @@ import org.elasticsearch.action.search.SearchRequest;
+ import org.elasticsearch.action.support.PlainActionFuture;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
+ import org.elasticsearch.cluster.node.DiscoveryNodeUtils;
++import org.elasticsearch.cluster.node.VersionInformation;
+ import org.elasticsearch.common.breaker.CircuitBreaker.Durability;
+ import org.elasticsearch.common.breaker.CircuitBreakingException;
+ import org.elasticsearch.common.settings.Settings;
+@@ -29,6 +31,7 @@ import org.elasticsearch.search.internal.AliasFilter;
+ import org.elasticsearch.tasks.CancellableTask;
+ import org.elasticsearch.tasks.Task;
+ import org.elasticsearch.tasks.TaskId;
++import org.elasticsearch.test.transport.MockTransportService;
+ import org.elasticsearch.threadpool.FixedExecutorBuilder;
+ import org.elasticsearch.threadpool.TestThreadPool;
+ import org.elasticsearch.transport.TransportService;
+@@ -52,14 +55,17 @@ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.function.Function;
+ import java.util.stream.Collectors;
+ 
++import static org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_COLD_NODE_ROLE;
++import static org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE;
++import static org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_HOT_NODE_ROLE;
++import static org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_WARM_NODE_ROLE;
+ import static org.elasticsearch.xpack.esql.plugin.DataNodeRequestSender.NodeRequest;
++import static org.hamcrest.Matchers.anyOf;
+ import static org.hamcrest.Matchers.containsString;
+ import static org.hamcrest.Matchers.equalTo;
+ import static org.hamcrest.Matchers.hasSize;
+ import static org.hamcrest.Matchers.in;
+ import static org.hamcrest.Matchers.not;
+-import static org.mockito.Mockito.mock;
+-import static org.mockito.Mockito.when;
+ 
+ public class DataNodeRequestSenderTests extends ComputeTestCase {
+ 
+@@ -67,11 +73,11 @@ public class DataNodeRequestSenderTests extends ComputeTestCase {
+     private Executor executor = null;
+     private static final String ESQL_TEST_EXECUTOR = "esql_test_executor";
+ 
+-    private final DiscoveryNode node1 = DiscoveryNodeUtils.create("node-1");
+-    private final DiscoveryNode node2 = DiscoveryNodeUtils.create("node-2");
+-    private final DiscoveryNode node3 = DiscoveryNodeUtils.create("node-3");
+-    private final DiscoveryNode node4 = DiscoveryNodeUtils.create("node-4");
+-    private final DiscoveryNode node5 = DiscoveryNodeUtils.create("node-5");
++    private final DiscoveryNode node1 = DiscoveryNodeUtils.builder("node-1").roles(Set.of(DATA_HOT_NODE_ROLE)).build();
++    private final DiscoveryNode node2 = DiscoveryNodeUtils.builder("node-2").roles(Set.of(DATA_HOT_NODE_ROLE)).build();
++    private final DiscoveryNode node3 = DiscoveryNodeUtils.builder("node-3").roles(Set.of(DATA_HOT_NODE_ROLE)).build();
++    private final DiscoveryNode node4 = DiscoveryNodeUtils.builder("node-4").roles(Set.of(DATA_HOT_NODE_ROLE)).build();
++    private final DiscoveryNode node5 = DiscoveryNodeUtils.builder("node-5").roles(Set.of(DATA_HOT_NODE_ROLE)).build();
+     private final ShardId shard1 = new ShardId("index", "n/a", 1);
+     private final ShardId shard2 = new ShardId("index", "n/a", 2);
+     private final ShardId shard3 = new ShardId("index", "n/a", 3);
+@@ -371,6 +377,37 @@ public class DataNodeRequestSenderTests extends ComputeTestCase {
+         assertThat(response.failedShards, equalTo(0));
+     }
+ 
++    public void testQueryHotShardsFirst() {
++        var targetShards = shuffledList(
++            List.of(
++                targetShard(shard1, node1),
++                targetShard(shard2, DiscoveryNodeUtils.builder("node-2").roles(Set.of(DATA_WARM_NODE_ROLE)).build()),
++                targetShard(shard3, DiscoveryNodeUtils.builder("node-3").roles(Set.of(DATA_COLD_NODE_ROLE)).build()),
++                targetShard(shard4, DiscoveryNodeUtils.builder("node-4").roles(Set.of(DATA_FROZEN_NODE_ROLE)).build())
++            )
++        );
++        var sent = Collections.synchronizedList(new ArrayList<String>());
++        safeGet(sendRequests(targetShards, randomBoolean(), -1, (node, shardIds, aliasFilters, listener) -> {
++            sent.add(node.getId());
++            runWithDelay(() -> listener.onResponse(new DataNodeComputeResponse(List.of(), Map.of())));
++        }));
++        assertThat(sent, equalTo(List.of("node-1", "node-2", "node-3", "node-4")));
++    }
++
++    public void testQueryHotShardsFirstWhenIlmMovesShard() {
++        var warmNode2 = DiscoveryNodeUtils.builder("node-2").roles(Set.of(DATA_WARM_NODE_ROLE)).build();
++        var targetShards = shuffledList(
++            List.of(targetShard(shard1, node1), targetShard(shard2, shuffledList(List.of(node2, warmNode2)).toArray(DiscoveryNode[]::new)))
++        );
++        var sent = ConcurrentCollections.<NodeRequest>newQueue();
++        safeGet(sendRequests(targetShards, randomBoolean(), -1, (node, shardIds, aliasFilters, listener) -> {
++            sent.add(new NodeRequest(node, shardIds, aliasFilters));
++            runWithDelay(() -> listener.onResponse(new DataNodeComputeResponse(List.of(), Map.of())));
++        }));
++        assertThat(groupRequests(sent, 1), equalTo(Map.of(node1, List.of(shard1))));
++        assertThat(groupRequests(sent, 1), anyOf(equalTo(Map.of(node2, List.of(shard2))), equalTo(Map.of(warmNode2, List.of(shard2)))));
++    }
++
+     static DataNodeRequestSender.TargetShard targetShard(ShardId shardId, DiscoveryNode... nodes) {
+         return new DataNodeRequestSender.TargetShard(shardId, new ArrayList<>(Arrays.asList(nodes)), null);
+     }
+@@ -399,8 +436,12 @@ public class DataNodeRequestSenderTests extends ComputeTestCase {
+         Sender sender
+     ) {
+         PlainActionFuture<ComputeResponse> future = new PlainActionFuture<>();
+-        TransportService transportService = mock(TransportService.class);
+-        when(transportService.getThreadPool()).thenReturn(threadPool);
++        TransportService transportService = MockTransportService.createNewService(
++            Settings.EMPTY,
++            VersionInformation.CURRENT,
++            TransportVersion.current(),
++            threadPool
++        );
+         CancellableTask task = new CancellableTask(
+             randomNonNegativeLong(),
+             "type",

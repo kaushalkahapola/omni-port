@@ -1,0 +1,70 @@
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/BaseElasticsearchInternalService.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/BaseElasticsearchInternalService.java
+index d75d9f302ce..98777e97222 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/BaseElasticsearchInternalService.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/BaseElasticsearchInternalService.java
+@@ -275,7 +275,7 @@ public abstract class BaseElasticsearchInternalService implements InferenceServi
+         return request;
+     }
+ 
+-    protected abstract boolean isDefaultId(String inferenceId);
++    abstract boolean isDefaultId(String inferenceId);
+ 
+     protected void maybeStartDeployment(
+         ElasticsearchInternalModel model,
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
+index ea3aa3201f9..bbec127f307 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
+@@ -76,6 +76,7 @@ public class ElasticsearchInternalService extends BaseElasticsearchInternalServi
+ 
+     public static final int EMBEDDING_MAX_BATCH_SIZE = 10;
+     public static final String DEFAULT_ELSER_ID = ".elser-2";
++    public static final String DEFAULT_E5_ID = ".multi-e5-small";
+ 
+     private static final Logger logger = LogManager.getLogger(ElasticsearchInternalService.class);
+     private static final DeprecationLogger DEPRECATION_LOGGER = DeprecationLogger.getLogger(ElasticsearchInternalService.class);
+@@ -805,13 +806,24 @@ public class ElasticsearchInternalService extends BaseElasticsearchInternalServi
+             ElserMlNodeTaskSettings.DEFAULT,
+             null // default chunking settings
+         );
+-
+-        return List.of(defaultElser);
++        var defaultE5 = new MultilingualE5SmallModel(
++            DEFAULT_E5_ID,
++            TaskType.TEXT_EMBEDDING,
++            NAME,
++            new MultilingualE5SmallInternalServiceSettings(
++                null,
++                1,
++                useLinuxOptimizedModel ? MULTILINGUAL_E5_SMALL_MODEL_ID_LINUX_X86 : MULTILINGUAL_E5_SMALL_MODEL_ID,
++                new AdaptiveAllocationsSettings(Boolean.TRUE, 1, 8)
++            ),
++            null // default chunking settings
++        );
++        return List.of(defaultElser, defaultE5);
+     }
+ 
+     @Override
+-    protected boolean isDefaultId(String inferenceId) {
+-        return DEFAULT_ELSER_ID.equals(inferenceId);
++    boolean isDefaultId(String inferenceId) {
++        return DEFAULT_ELSER_ID.equals(inferenceId) || DEFAULT_E5_ID.equals(inferenceId);
+     }
+ 
+     static EmbeddingRequestChunker.EmbeddingType embeddingTypeFromTaskTypeAndSettings(
+diff --git a/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/action/TransportStartTrainedModelDeploymentAction.java b/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/action/TransportStartTrainedModelDeploymentAction.java
+index e130b13f4ec..0bda2de2ce9 100644
+--- a/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/action/TransportStartTrainedModelDeploymentAction.java
++++ b/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/action/TransportStartTrainedModelDeploymentAction.java
+@@ -234,9 +234,9 @@ public class TransportStartTrainedModelDeploymentAction extends TransportMasterN
+             if (getModelResponse.getResources().results().size() > 1) {
+                 listener.onFailure(
+                     ExceptionsHelper.badRequestException(
+-                        "cannot deploy more than one models at the same time; [{}] matches [{}] models]",
++                        "cannot deploy more than one model at the same time; [{}] matches models [{}]",
+                         request.getModelId(),
+-                        getModelResponse.getResources().results().size()
++                        getModelResponse.getResources().results().stream().map(TrainedModelConfig::getModelId).toList()
+                     )
+                 );
+                 return;

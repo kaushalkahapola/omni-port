@@ -1,0 +1,17 @@
+diff --git a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+index 0d5793b550f..3cbdc3ffe78 100644
+--- a/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
++++ b/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java
+@@ -13,9 +13,12 @@ import org.elasticsearch.TransportVersions;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionRequestValidationException;
+ import org.elasticsearch.action.ActionResponse;
++import org.elasticsearch.action.ActionRunnable;
+ import org.elasticsearch.action.ActionType;
++import org.elasticsearch.action.SingleResultDeduplicator;
+ import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsRequestParameters.Metric;
+ import org.elasticsearch.action.support.ActionFilters;
++import org.elasticsearch.action.support.SubscribableListener;
+ import org.elasticsearch.action.support.master.MasterNodeReadRequest;
+ import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
+ import org.elasticsearch.cluster.ClusterState;

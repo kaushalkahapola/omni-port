@@ -1,0 +1,383 @@
+{
+  "run_timestamp": "2026-04-10T19:41:14.384938",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-V",
+  "original_commit": "deeeadc01f86d08f887cbfcb0dc40caf3b7374f4",
+  "backport_commit": "655e3ce1310196a95b154773106699d36d9fc8cb",
+  "description": "main \u2192 8.19",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 93.62,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 5,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "method_used": "embedding",
+          "confidence": 0.738,
+          "start_line": 221,
+          "end_line": 230,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "method_used": "failed",
+          "confidence": 0.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 5.67,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_V",
+        "confidence": 0.85,
+        "reasoning": "The patch introduces a new method checkConditionExpressionDataType and modifies existing methods to use it, allowing the data type NULL in filter conditions alongside BOOLEAN. This is a semantic change affecting the core verification logic of filter conditions in the ESQL plugin. The patch also adds new test cases and modifies test fixtures, indicating a non-trivial extension of functionality. The localization evidence shows that the main code changes were found via embedding with moderate confidence, suggesting significant divergence from the target branch. The patch is not a simple string or whitespace change, nor a minor structural adjustment; it involves a fundamental change in how filter conditions are validated, qualifying as a TYPE_V complexity (complete redesign or fundamentally different implementation). The confidence is high but not absolute due to some failed localization evidence. The token budget estimate is relatively high due to the complexity and the need to carefully adapt verification logic and tests.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 4.57,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 27.92,
+      "error": null,
+      "refactored_count": 1
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 1,
+      "synthesis_status": "partial",
+      "synthesized_hunks": [
+        {
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "old_string": "            }\n        });\n    }\n\n    private static void checkBinaryComparison(LogicalPlan p, Failures failures) {\n        p.forEachExpression(BinaryComparison.class, bc -> {\n            Failure f = validateBinaryComparison(bc);\n            if (f != null) {\n                failures.add(f);\n            }",
+          "new_string": "    private static void checkFilterConditionType(LogicalPlan p, Failures failures) {\n        if (p instanceof Filter) {\n            Filter f = (Filter) p;\n            Expression condition = f.condition();\n            checkConditionExpressionDataType(condition, failures);\n        }\n    }\n\n    private static void checkConditionExpressionDataType(Expression expression, Failures failures) {\n        if (expression.dataType() != NULL && expression.dataType() != BOOLEAN) {\n            failures.add(fail(expression, \"Condition expression needs to be boolean, found [{}]\", expression.dataType()));\n        }\n    }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 803.46,
+      "error": null,
+      "validation_passed": false,
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Build failed (elasticsearch-helper): ected\n        if ((leftType == DataType.UNSIGNED_LONG || rightType == DataType.UNSIGNED_LONG) && leftType != rightType) {\n        ^\n/repo/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java:353: error: class, interface, enum, or record expected\n        }\n        ^\n/repo/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java:355: error: class, interface, enum, or record expected\n    }\n    ^\n/repo/x",
+      "validation_attempts": 1,
+      "retry_files": [
+        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java"
+      ],
+      "build_success": false,
+      "build_mode": "elasticsearch-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 221,
+          "message": "error: illegal start of expression"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 234,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 235,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 241,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 243,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 245,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 246,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 247,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 251,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 253,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 255,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 256,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 257,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 259,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 261,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 270,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 279,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 281,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 284,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 285,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 286,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 288,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 290,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 291,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 292,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 293,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 294,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 295,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 296,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 297,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 299,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 307,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 309,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 312,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 317,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 328,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 330,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 340,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 342,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 343,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 353,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 355,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 362,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 369,
+          "message": "error: class, interface, enum, or record expected"
+        },
+        {
+          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+          "line": 371,
+          "message": "error: class, interface, enum, or record expected"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 6,
+    "developer_aux_hunks_from_target": 5,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 192
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 5,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "partial",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 1,
+    "failed_hunks_total": 1,
+    "retry_contexts": [
+      {
+        "error_type": "synthesis_skipped_no_localization",
+        "error_message": "Hunk unclaimed; localization failed entirely",
+        "attempt_count": 4,
+        "suggested_action": "manual_review"
+      },
+      {
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      },
+      {
+        "error_type": "context_mismatch",
+        "error_message": "--- Building Elasticsearch for 56e19e2 ---\n--- Container user: 1001:1001 ---\nCPU detected: 2\n--- Changing directory to /home/kaushal/omni-port/repos/elasticsearch ---\ngradle-cache-es\ngradle-wrapper-es\n--- Docker image retrofit-elasticsearch-builder:local already exists, skipping build ---\n--- Setting cache permissions ---\n--- Compiling with Gradle (assemble + testClasses, skip tests) ---\nDownloading https://services.gradle.org/distributions/gradle-8.13-all.zip\n......................10%......................20%......................30%......................40%......................50%......................60%......................70%.......................80%......................90%......................100%\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.13/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon JVM discovery is an incubating feature.\nDaemon will be stopped at the end of the build \n\n> Task :build-conventions:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: /repo/build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/LicensingPlugin.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-conventions:pluginDescriptors\n> Task :build-conventions:processResources\n> Task :build-conventions:classes\n> Task :build-conventions:jar\n> Task :build-tools-internal:extractPluginRequests\n> Task :build-tools-internal:generatePluginAdapters\n> Task :build-tools-internal:pluginDescriptors\n> Task :build-tools:reaper:compileJava\n> Task :build-tools:reaper:processResources NO-SOURCE\n> Task :build-tools:reaper:classes\n> Task :build-tools:reaper:jar\n> Task :build-tools-internal:processResources\n\n> Task :build-tools:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Reco",
+        "attempt_count": 1,
+        "suggested_action": "re-localize"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java",
+        "old_content": "            }\n            Expression f = fe.filter();\n            // check the filter has to be a boolean term, similar as checkFilterConditionType\n            if (f.dataType() != NULL && f.dataType() != BOOLEAN) {\n                failures.add(fail(f, \"Condition expression needs to be boolean, found [{}]\", f.dataType()));\n            }\n            // but that the filter doesn't use grouping or aggregate functions\n            fe.filter().forEachDown(c -> {\n                if (c instanceof AggregateFunction af) {\n",
+        "new_content": "            }\n            Expression f = fe.filter();\n            // check the filter has to be a boolean term, similar as checkFilterConditionType\n            checkConditionExpressionDataType(f, failures);\n            // but that the filter doesn't use grouping or aggregate functions\n            fe.filter().forEachDown(c -> {\n                if (c instanceof AggregateFunction af) {\n"
+      }
+    ],
+    "generated_patch_bytes": 0,
+    "target_patch_bytes": 9191,
+    "validation_passed": false,
+    "validation_failure_category": "context_mismatch",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

@@ -1,0 +1,132 @@
+commit deeeadc01f86d08f887cbfcb0dc40caf3b7374f4
+Author: kanoshiou <73424326+kanoshiou@users.noreply.github.com>
+Date:   Wed Jan 8 23:43:11 2025 +0800
+
+    ESQL: Allow the data type of `null` in filters (#118324)
+    
+    * Allow the data type of `null` in filters
+
+diff --git a/docs/changelog/118324.yaml b/docs/changelog/118324.yaml
+new file mode 100644
+index 00000000000..729ff56f6a2
+--- /dev/null
++++ b/docs/changelog/118324.yaml
+@@ -0,0 +1,6 @@
++pr: 118324
++summary: Allow the data type of `null` in filters
++area: ES|QL
++type: bug
++issues:
++  - 116351
+diff --git a/x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec b/x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec
+index 9914d073a58..7bf3bc7613e 100644
+--- a/x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec
++++ b/x-pack/plugin/esql/qa/testFixtures/src/main/resources/null.csv-spec
+@@ -191,3 +191,15 @@ emp_no:integer | languages:integer | height:double | x:double | y:double | z:dou
+          10020 | null              | 1.41          | 1.41     | 1.41     | 40031.0  | 40031
+          10021 | null              | 1.47          | 1.47     | 1.47     | 60408.0  | 60408
+ ;
++
++whereNull
++FROM employees
++| WHERE NULL and emp_no <= 10021
++| SORT first_name, last_name
++| EVAL fullname = CONCAT(first_name, " ", last_name)
++| KEEP fullname, job_positions, salary, salary_change
++| limit 5
++;
++
++fullname:keyword | job_positions:keyword | salary:integer | salary_change:double
++;
+diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java
+index e146b517ad1..8245d09ed69 100644
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/analysis/Verifier.java
+@@ -237,9 +237,13 @@ public class Verifier {
+     private static void checkFilterConditionType(LogicalPlan p, Set<Failure> localFailures) {
+         if (p instanceof Filter f) {
+             Expression condition = f.condition();
+-            if (condition.dataType() != BOOLEAN) {
+-                localFailures.add(fail(condition, "Condition expression needs to be boolean, found [{}]", condition.dataType()));
+-            }
++            checkConditionExpressionDataType(condition, localFailures);
++        }
++    }
++
++    private static void checkConditionExpressionDataType(Expression expression, Set<Failure> localFailures) {
++        if (expression.dataType() != NULL && expression.dataType() != BOOLEAN) {
++            localFailures.add(fail(expression, "Condition expression needs to be boolean, found [{}]", expression.dataType()));
+         }
+     }
+ 
+@@ -432,9 +436,7 @@ public class Verifier {
+             }
+             Expression f = fe.filter();
+             // check the filter has to be a boolean term, similar as checkFilterConditionType
+-            if (f.dataType() != NULL && f.dataType() != BOOLEAN) {
+-                failures.add(fail(f, "Condition expression needs to be boolean, found [{}]", f.dataType()));
+-            }
++            checkConditionExpressionDataType(f, failures);
+             // but that the filter doesn't use grouping or aggregate functions
+             fe.filter().forEachDown(c -> {
+                 if (c instanceof AggregateFunction af) {
+diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java
+index fe6d1e00e5d..b2362b5c2aa 100644
+--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java
++++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java
+@@ -945,6 +945,33 @@ public class VerifierTests extends ESTestCase {
+ 
+     public void testFilterNonBoolField() {
+         assertEquals("1:19: Condition expression needs to be boolean, found [INTEGER]", error("from test | where emp_no"));
++
++        assertEquals(
++            "1:19: Condition expression needs to be boolean, found [KEYWORD]",
++            error("from test | where concat(first_name, \"foobar\")")
++        );
++    }
++
++    public void testFilterNullField() {
++        // `where null` should return empty result set
++        query("from test | where null");
++
++        // Value null of type `BOOLEAN`
++        query("from test | where null::boolean");
++
++        // Provide `NULL` type in `EVAL`
++        query("from t | EVAL x = null | where x");
++
++        // `to_string(null)` is of `KEYWORD` type null, resulting in `to_string(null) == "abc"` being of `BOOLEAN`
++        query("from t | where to_string(null) == \"abc\"");
++
++        // Other DataTypes can contain null values
++        assertEquals("1:19: Condition expression needs to be boolean, found [KEYWORD]", error("from test | where null::string"));
++        assertEquals("1:19: Condition expression needs to be boolean, found [INTEGER]", error("from test | where null::integer"));
++        assertEquals(
++            "1:45: Condition expression needs to be boolean, found [DATETIME]",
++            error("from test | EVAL x = null::datetime | where x")
++        );
+     }
+ 
+     public void testFilterDateConstant() {
+diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java
+index d46572b7c85..4d175dea050 100644
+--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java
++++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java
+@@ -6808,4 +6808,17 @@ public class LogicalPlanOptimizerTests extends ESTestCase {
+             containsString("[MATCH] function cannot operate on [text::keyword], which is not a field from an index mapping")
+         );
+     }
++
++    public void testWhereNull() {
++        var plan = plan("""
++            from test
++            | sort salary
++            | rename emp_no as e, first_name as f
++            | keep salary, e, f
++            | where null
++            | LIMIT 12
++            """);
++        var local = as(plan, LocalRelation.class);
++        assertThat(local.supplier(), equalTo(LocalSupplier.EMPTY));
++    }
+ }
