@@ -1,0 +1,191 @@
+commit adf9854bdb9cbf08dde206c0a1e005a5ea3379c9
+Author: Sebastian Utz <su@rtme.net>
+Date:   Mon Oct 7 14:53:20 2024 +0200
+
+    Fix role granting to not loose existing privileges.
+    
+    If a role is granted of another role, it's privileges must remain.
+    
+    Fixes #16710.
+
+diff --git a/docs/appendices/release-notes/5.8.4.rst b/docs/appendices/release-notes/5.8.4.rst
+index 8efeeea306..de2df0826f 100644
+--- a/docs/appendices/release-notes/5.8.4.rst
++++ b/docs/appendices/release-notes/5.8.4.rst
+@@ -112,3 +112,7 @@ Fixes
+ 
+ - Fixed an issue which may cause a ``EXPLAIN ANALYZE`` to throw exception due
+   to internal concurrent unsafe access.
++
++- Fixed an issue causing a role to loose it's concrete privileges once it gets
++  granted another role using the :ref:`GRANT role TO role <ref-grant>`
++  statement.
+diff --git a/server/src/main/java/io/crate/role/PrivilegesModifier.java b/server/src/main/java/io/crate/role/PrivilegesModifier.java
+index 2effd6d7bf..8fdf086f88 100644
+--- a/server/src/main/java/io/crate/role/PrivilegesModifier.java
++++ b/server/src/main/java/io/crate/role/PrivilegesModifier.java
+@@ -96,7 +96,7 @@ public final class PrivilegesModifier {
+             }
+ 
+             if (affectedCount > 0) {
+-                roles.put(userName, role.with(privileges));
++                roles.put(userName, role.with(new RolePrivileges(privileges)));
+             }
+         }
+ 
+@@ -139,7 +139,7 @@ public final class PrivilegesModifier {
+                     privileges.add(privilege);
+                 }
+             }
+-            newRoles.put(entry.getKey(), role.with(privileges));
++            newRoles.put(entry.getKey(), role.with(new RolePrivileges(privileges)));
+         }
+ 
+         if (privilegesChanged) {
+@@ -171,7 +171,7 @@ public final class PrivilegesModifier {
+                     updatedPrivileges.add(privilege);
+                 }
+             }
+-            newRoles.put(role.name(), role.with(updatedPrivileges));
++            newRoles.put(role.name(), role.with(new RolePrivileges(updatedPrivileges)));
+         }
+         mdBuilder.putCustom(RolesMetadata.TYPE, new RolesMetadata(newRoles));
+         return affectedPrivileges;
+@@ -201,7 +201,7 @@ public final class PrivilegesModifier {
+                     updatedPrivileges.add(privilege);
+                 }
+             }
+-            newRoles.put(user, role.with(updatedPrivileges));
++            newRoles.put(user, role.with(new RolePrivileges(updatedPrivileges)));
+         }
+         return new RolesMetadata(newRoles);
+     }
+diff --git a/server/src/main/java/io/crate/role/Role.java b/server/src/main/java/io/crate/role/Role.java
+index a8cd7d657c..40218ffeba 100644
+--- a/server/src/main/java/io/crate/role/Role.java
++++ b/server/src/main/java/io/crate/role/Role.java
+@@ -241,8 +241,12 @@ public class Role implements Writeable, ToXContent {
+ 
+     }
+ 
+-    public Role with(Set<Privilege> privileges) {
+-        return new Role(name, new RolePrivileges(privileges), grantedRoles, properties, false);
++    public Role with(RolePrivileges privileges) {
++        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
++    }
++
++    public Role with(Set<GrantedRole> grantedRoles) {
++        return new Role(name, privileges, grantedRoles, properties, isSuperUser);
+     }
+ 
+     public Role with(@Nullable SecureHash password,
+@@ -257,7 +261,7 @@ public class Role implements Writeable, ToXContent {
+                 password,
+                 jwtProperties,
+                 sessionSettings),
+-            false
++            isSuperUser
+         );
+     }
+ 
+diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+index 7bbedb9b76..d9b16337a0 100644
+--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
++++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+@@ -239,14 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem
+             }
+         }
+         if (affectedCount > 0) {
+-            roles.put(role.name(), new Role(
+-                role.name(),
+-                role.isUser(),
+-                Set.of(),
+-                grantedRoles,
+-                role.password(),
+-                role.jwtProperties(),
+-                role.sessionSettings()));
++            roles.put(role.name(), role.with(grantedRoles));
+         }
+         return affectedCount;
+     }
+diff --git a/server/src/test/java/io/crate/role/TransportRoleActionTest.java b/server/src/test/java/io/crate/role/TransportRoleActionTest.java
+index 9783fa7307..f6febfc72f 100644
+--- a/server/src/test/java/io/crate/role/TransportRoleActionTest.java
++++ b/server/src/test/java/io/crate/role/TransportRoleActionTest.java
+@@ -170,9 +170,9 @@ public class TransportRoleActionTest extends CrateDummyClusterServiceUnitTest {
+         assertThat(res).isTrue();
+ 
+         var newFordUser = DUMMY_USERS_WITHOUT_PASSWORD.get("Ford")
+-                .with(OLD_DUMMY_USERS_PRIVILEGES.get("Ford"));
++                .with(new RolePrivileges(OLD_DUMMY_USERS_PRIVILEGES.get("Ford")));
+         var newArthurUser = DUMMY_USERS_WITHOUT_PASSWORD.get("Arthur")
+-                .with(OLD_DUMMY_USERS_PRIVILEGES.get("Arthur"))
++                .with(new RolePrivileges(OLD_DUMMY_USERS_PRIVILEGES.get("Arthur")))
+                 .with(newPasswd, null, Map.of());
+         assertThat(roles(mdBuilder)).containsExactlyInAnyOrderEntriesOf(
+             Map.of("Arthur", newArthurUser,
+diff --git a/server/src/test/java/io/crate/role/metadata/RolesMetadataTest.java b/server/src/test/java/io/crate/role/metadata/RolesMetadataTest.java
+index 8bfd7a580b..816bb380c7 100644
+--- a/server/src/test/java/io/crate/role/metadata/RolesMetadataTest.java
++++ b/server/src/test/java/io/crate/role/metadata/RolesMetadataTest.java
+@@ -54,8 +54,12 @@ import org.junit.Test;
+ import io.crate.role.GrantedRole;
+ import io.crate.role.GrantedRolesChange;
+ import io.crate.role.JwtProperties;
++import io.crate.role.Permission;
+ import io.crate.role.Policy;
++import io.crate.role.Privilege;
+ import io.crate.role.Role;
++import io.crate.role.RolePrivileges;
++import io.crate.role.Securable;
+ 
+ public class RolesMetadataTest extends ESTestCase {
+ 
+@@ -161,8 +165,8 @@ public class RolesMetadataTest extends ESTestCase {
+             new UsersPrivilegesMetadata(OLD_DUMMY_USERS_PRIVILEGES)
+         );
+         assertThat(rolesMetadata.roles()).containsExactlyInAnyOrderEntriesOf(
+-            Map.of("Arthur", DUMMY_USERS.get("Arthur").with(OLD_DUMMY_USERS_PRIVILEGES.get("Arthur")),
+-                "Ford", DUMMY_USERS.get("Ford").with(OLD_DUMMY_USERS_PRIVILEGES.get("Ford"))));
++            Map.of("Arthur", DUMMY_USERS.get("Arthur").with(new RolePrivileges(OLD_DUMMY_USERS_PRIVILEGES.get("Arthur"))),
++                "Ford", DUMMY_USERS.get("Ford").with(new RolePrivileges(OLD_DUMMY_USERS_PRIVILEGES.get("Ford")))));
+     }
+ 
+     @Test
+@@ -175,8 +179,8 @@ public class RolesMetadataTest extends ESTestCase {
+             .putCustom(RolesMetadata.TYPE, oldRolesMetadata);
+         var newRolesMetadata = RolesMetadata.of(mdBuilder, oldUsersMetadata, oldUserPrivilegesMetadata, oldRolesMetadata);
+         assertThat(newRolesMetadata.roles()).containsExactlyInAnyOrderEntriesOf(
+-            Map.of("Arthur", DUMMY_USERS.get("Arthur").with(OLD_DUMMY_USERS_PRIVILEGES.get("Arthur")),
+-                "Ford", DUMMY_USERS.get("Ford").with(OLD_DUMMY_USERS_PRIVILEGES.get("Ford"))));
++            Map.of("Arthur", DUMMY_USERS.get("Arthur").with(new RolePrivileges(OLD_DUMMY_USERS_PRIVILEGES.get("Arthur"))),
++                "Ford", DUMMY_USERS.get("Ford").with(new RolePrivileges(OLD_DUMMY_USERS_PRIVILEGES.get("Ford")))));
+     }
+ 
+     @Test
+@@ -276,4 +280,25 @@ public class RolesMetadataTest extends ESTestCase {
+             .hasMessage("failed to parse jwt, unknown property 'prop'");
+ 
+     }
++
++    @Test
++    public void test_grant_roles_do_not_loose_existing_privileges() {
++        var rolesMetadata = new RolesMetadata();
++        rolesMetadata.roles().put("Ford", userOf(
++            "Ford",
++            Set.of(new Privilege(Policy.GRANT, Permission.DQL, Securable.CLUSTER, null, "crate")),
++            Set.of(),
++            getSecureHash("fords-pwd"))
++        );
++        rolesMetadata.roles().put("role1", roleOf("role1"));
++        assertThat(rolesMetadata.roles().get("Ford").privileges().size()).isEqualTo(1);
++
++        var affectedRolePrivileges = rolesMetadata.applyRolePrivileges(List.of("Ford"), new GrantedRolesChange(
++            Policy.GRANT,
++            Set.of("role1"),
++            "theGrantor"));
++
++        assertThat(affectedRolePrivileges).isEqualTo(1);
++        assertThat(rolesMetadata.roles().get("Ford").privileges().size()).isEqualTo(1);
++    }
+ }

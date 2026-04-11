@@ -1,0 +1,225 @@
+commit 1c52ae11779a1eec20070ad25df8c89056cdb41d
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Wed Jan 17 00:10:46 2024 +0200
+
+    Fixed issue with PK filter and implicit cast
+    
+    Given the following situation:
+    ```
+    CREATE TABLE tbl(a string PRIMARY KEY);
+    INSERT INTO tbl(a) VALUES ('t');
+    REFRESH TABLE t;
+    SELECT * FROM tbl WHERE a = true;
+    ```
+    
+    Previously, when trying to filter on the PK column with equality
+    operator, but using a value of a different type (in this example
+    `boolean`), then no results where returned because the dockeys where
+    built incorrently. `ExpressionAnalyzer` creates an implicit cast on the
+    column `a`, to match the type of the value (see: #10076 which introduced
+    this concept). So the query of the `WHERE` clause becomes:
+    ```
+    a::boolean = true
+    ```
+    Because of that the value added to the dockeys is `true`, instead of `t`.
+    
+    To resolve this, we need to call `optimizeCasts()` before extracting
+    the `pkMatches` with the use of `EqualityExtractor`, so that the cast is
+    moved to the value:
+    ```
+    a = true::'string'
+    ```
+    and the `EqualityExtractor` normalizes the value to `t` which then
+    is added to the list of dockeys.
+    
+    Fixes: #15326
+
+diff --git a/docs/appendices/release-notes/5.5.3.rst b/docs/appendices/release-notes/5.5.3.rst
+index 6ac9c6099d..0ee9fd9b54 100644
+--- a/docs/appendices/release-notes/5.5.3.rst
++++ b/docs/appendices/release-notes/5.5.3.rst
+@@ -49,6 +49,13 @@ See the :ref:`version_5.5.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue, that led to no results being returned when trying to filter on
++  a :ref:`PRIMARY KEY <constraints-primary-key>` column with an implicit cast.
++  For example::
++
++    CREATE TABLE tbl(a string PRIMARY KEY);
++    SELECT * FROM tbl WHERE a = 10;
++
+ - Rejected :ref:`renaming <sql-alter-table-rename-to>` of views and tables if
+   the target table or view already exists, and return an error message.
+   Previously, such a rename was allowed which caused the existing view or table
+diff --git a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+index babf6373e1..df24d7112a 100644
+--- a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
++++ b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+@@ -117,7 +117,9 @@ public class EqualityExtractor {
+                                      boolean shortCircuitOnMatchPredicateUnknown,
+                                      TransactionContext txnCtx) {
+         var context = new ProxyInjectingVisitor.Context(columns);
+-        Symbol proxiedTree = query.accept(ProxyInjectingVisitor.INSTANCE, context);
++        // Normalize the query so that any casts on literals are evaluated
++        var normalizedQuery = normalizer.normalize(query, txnCtx);
++        Symbol proxiedTree = normalizedQuery.accept(ProxyInjectingVisitor.INSTANCE, context);
+ 
+         // Match cannot execute without Lucene
+         if (shortCircuitOnMatchPredicateUnknown && context.unknowns.size() == 1) {
+@@ -295,7 +297,7 @@ public class EqualityExtractor {
+         @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             throw new UnsupportedOperationException("writeTo not supported for " +
+-                                                    EqProxy.class.getSimpleName());
++                EqProxy.class.getSimpleName());
+         }
+ 
+         @Override
+@@ -352,7 +354,7 @@ public class EqualityExtractor {
+ 
+         private static class Context {
+ 
+-            private LinkedHashMap<ColumnIdent, Comparison> comparisons;
++            private final LinkedHashMap<ColumnIdent, Comparison> comparisons;
+             private boolean proxyBelow;
+             private final Set<Symbol> unknowns = new HashSet<>();
+ 
+diff --git a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
+index c55c3847ea..b91ae48e64 100644
+--- a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
++++ b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
+@@ -49,6 +49,7 @@ import io.crate.metadata.doc.DocSysColumns;
+ import io.crate.metadata.doc.DocTableInfo;
+ import io.crate.planner.operators.SubQueryAndParamBinder;
+ import io.crate.planner.operators.SubQueryResults;
++import io.crate.planner.optimizer.symbol.Optimizer;
+ 
+ /**
+  * Used to analyze a query for primaryKey/partition "direct access" possibilities.
+@@ -165,11 +166,15 @@ public final class WhereClauseOptimizer {
+ 
+         EqualityExtractor eqExtractor = new EqualityExtractor(normalizer);
+ 
+-        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, query, txnCtx);
++        // ExpressionAnalyzer will "blindly" add cast to the column, to match the datatype of the literal.
++        // To be able to properly extract pkMatches (and therefore dockeys), so that the cast is moved to the literal,
++        // we need to optimize the casts, before the extraction of pkMatches (and the dockeys after that)
++        var optimizedCastsQuery = Optimizer.optimizeCasts(query, txnCtx, nodeCtx);
++        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, optimizedCastsQuery, txnCtx);
+         Set<Symbol> clusteredBy = Collections.emptySet();
+         if (table.clusteredBy() != null) {
+             EqualityExtractor.EqMatches clusteredByMatches = eqExtractor.extractParentMatches(
+-                Collections.singletonList(table.clusteredBy()), query, txnCtx);
++                Collections.singletonList(table.clusteredBy()), optimizedCastsQuery, txnCtx);
+             List<List<Symbol>> clusteredBySymbols = clusteredByMatches.matches();
+             if (clusteredBySymbols != null) {
+                 clusteredBy = HashSet.newHashSet(clusteredBySymbols.size());
+@@ -185,7 +190,7 @@ public final class WhereClauseOptimizer {
+                     table.primaryKey().size() == 1 && table.clusteredBy().equals(table.primaryKey().getFirst())));
+ 
+         if (pkMatches.matches() == null && shouldUseDocKeys) {
+-            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), query, txnCtx);
++            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), optimizedCastsQuery, txnCtx);
+         }
+ 
+         if (pkMatches.matches() == null) {
+@@ -202,7 +207,7 @@ public final class WhereClauseOptimizer {
+                                   partitionIndicesWithinPks);
+         }
+         EqMatches partitionMatches = table.isPartitioned()
+-            ? eqExtractor.extractMatches(table.partitionedBy(), query, txnCtx)
++            ? eqExtractor.extractMatches(table.partitionedBy(), optimizedCastsQuery, txnCtx)
+             : EqMatches.NONE;
+ 
+         WhereClauseValidator.validate(query);
+diff --git a/server/src/test/java/io/crate/planner/SelectPlannerTest.java b/server/src/test/java/io/crate/planner/SelectPlannerTest.java
+index 1915903787..0b60a360fc 100644
+--- a/server/src/test/java/io/crate/planner/SelectPlannerTest.java
++++ b/server/src/test/java/io/crate/planner/SelectPlannerTest.java
+@@ -126,7 +126,7 @@ public class SelectPlannerTest extends CrateDummyClusterServiceUnitTest {
+ 
+         LogicalPlan plan = e.logicalPlan("select name from users where _id = 1");
+         assertThat(plan).isEqualTo(
+-            "Get[doc.users | name | DocKeys{1} | (_id = 1)]");
++            "Get[doc.users | name | DocKeys{'1'} | (_id = 1)]");
+     }
+ 
+     @Test
+diff --git a/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java b/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
+index 2e682b9116..5bccf193a1 100644
+--- a/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
++++ b/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
+@@ -30,9 +30,12 @@ import java.util.List;
+ import org.junit.Before;
+ import org.junit.Test;
+ 
++import io.crate.analyze.AnalyzedDeleteStatement;
++import io.crate.analyze.AnalyzedStatement;
+ import io.crate.analyze.QueriedSelectRelation;
+ import io.crate.analyze.relations.DocTableRelation;
+ import io.crate.expression.eval.EvaluatingNormalizer;
++import io.crate.expression.symbol.Symbol;
+ import io.crate.metadata.PartitionName;
+ import io.crate.metadata.RelationName;
+ import io.crate.metadata.RowGranularity;
+@@ -46,6 +49,7 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+     @Before
+     public void setUpExecutor() throws Exception {
+         e = SQLExecutor.builder(clusterService)
++            .addTable("create table t_pk(a string primary key)")
+             .addTable("create table bystring (name string primary key, score double) " +
+                       "clustered by (name) ")
+             .addTable("create table clustered_by_only (x int) clustered by (x)")
+@@ -78,8 +82,19 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+     }
+ 
+     private WhereClauseOptimizer.DetailedQuery optimize(String statement) {
+-        QueriedSelectRelation queriedTable = e.analyze(statement);
+-        DocTableRelation table = ((DocTableRelation) queriedTable.from().get(0));
++        AnalyzedStatement stmt = e.analyze(statement);
++        DocTableRelation table;
++        Symbol where;
++        if (stmt instanceof QueriedSelectRelation qsr) {
++            table = (DocTableRelation) qsr.from().getFirst();
++            where = qsr.where();
++        } else if (stmt instanceof AnalyzedDeleteStatement ads) {
++            table = ads.relation();
++            where = ads.query();
++        } else {
++            throw new IllegalArgumentException("Neither a select or a delete statement is provided");
++        }
++
+         EvaluatingNormalizer normalizer = new EvaluatingNormalizer(
+             e.nodeCtx,
+             RowGranularity.CLUSTER,
+@@ -88,7 +103,7 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+         );
+         return WhereClauseOptimizer.optimize(
+             normalizer,
+-            queriedTable.where(),
++            where,
+             table.tableInfo(),
+             e.getPlannerContext(clusterService.state()).transactionContext(),
+             e.nodeCtx
+@@ -184,4 +199,20 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+             "((doc.partdatebin.ts > 1682899200000::bigint) AND (month >= 1681344000000::bigint))"
+         );
+     }
++
++    @Test
++    public void test_filter_on_pk_with_implicit_cast() {
++        WhereClauseOptimizer.DetailedQuery query = optimize("select * from t_pk where a = 10 OR a = true");
++        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++        query = optimize("delete from t_pk where a = 10 OR a = true");
++        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++    }
++
++    @Test
++    public void test_filter_on_id_with_implicit_cast() {
++        WhereClauseOptimizer.DetailedQuery query = optimize("select * from t_pk where _id = 10 OR _id = true");
++        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++        query = optimize("delete from t_pk where _id = 10 OR _id = true");
++        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++    }
+ }

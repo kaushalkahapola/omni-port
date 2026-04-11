@@ -1,0 +1,344 @@
+commit d8ab5b712f2c17716f4bfd242711f27e322ee5c5
+Author: Minsoo Jee <jeeminso@gmail.com>
+Date:   Mon May 27 20:58:03 2024 -0400
+
+    Allow access to foreign table referenced by view with view owner's user mapping
+    
+    (cherry picked from commit 2c86cc10d4fc00a287e2b96f6d97984e387f6574)
+
+diff --git a/docs/appendices/release-notes/5.7.2.rst b/docs/appendices/release-notes/5.7.2.rst
+index d72eab8b0a..0da6c54997 100644
+--- a/docs/appendices/release-notes/5.7.2.rst
++++ b/docs/appendices/release-notes/5.7.2.rst
+@@ -76,6 +76,9 @@ Fixes
+   ``table_rename_pattern`` or ``table_rename_replacement``. Renamed table was
+   created but used to be empty.
+ 
++- Fixed an issue that prevented users with ``DQL`` privilege on a view to be
++  able to query the view when foreign tables are referenced by the view.
++
+ - Fixed an issue leading to a ``ArrayIndexOutOfBoundsException`` when using a
+   correlated sub-query where some of its outputs weren't used in a parent
+   query.
+diff --git a/server/src/main/java/io/crate/execution/dsl/phases/ForeignCollectPhase.java b/server/src/main/java/io/crate/execution/dsl/phases/ForeignCollectPhase.java
+index d68ac3e2b8..eff7a9bcd3 100644
+--- a/server/src/main/java/io/crate/execution/dsl/phases/ForeignCollectPhase.java
++++ b/server/src/main/java/io/crate/execution/dsl/phases/ForeignCollectPhase.java
+@@ -26,8 +26,11 @@ import java.util.Collection;
+ import java.util.List;
+ import java.util.UUID;
+ 
++import org.elasticsearch.Version;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
+ 
+ import io.crate.expression.symbol.Symbol;
+ import io.crate.expression.symbol.Symbols;
+@@ -40,6 +43,8 @@ public class ForeignCollectPhase extends AbstractProjectionsPhase implements Col
+     private final RelationName relationName;
+     private final List<Symbol> toCollect;
+     private final Symbol query;
++    @Nullable
++    private final String executeAs;
+ 
+     private DistributionInfo distributionInfo = DistributionInfo.DEFAULT_BROADCAST;
+ 
+@@ -48,13 +53,15 @@ public class ForeignCollectPhase extends AbstractProjectionsPhase implements Col
+                                String handlerNode,
+                                RelationName relationName,
+                                List<Symbol> toCollect,
+-                               Symbol query) {
++                               Symbol query,
++                               @NotNull String executeAs) {
+         super(jobId, phaseId, relationName.fqn(), null);
+         this.handlerNode = handlerNode;
+         this.relationName = relationName;
+         this.toCollect = toCollect;
+         this.outputTypes = Symbols.typeView(toCollect);
+         this.query = query;
++        this.executeAs = executeAs;
+     }
+ 
+     public ForeignCollectPhase(StreamInput in) throws IOException {
+@@ -65,6 +72,11 @@ public class ForeignCollectPhase extends AbstractProjectionsPhase implements Col
+         this.outputTypes = extractOutputTypes(toCollect, projections);
+         this.distributionInfo = new DistributionInfo(in);
+         this.query = Symbols.fromStream(in);
++        if (in.getVersion().onOrAfter(Version.V_5_7_2)) {
++            this.executeAs = in.readOptionalString();
++        } else {
++            this.executeAs = null;
++        }
+     }
+ 
+     @Override
+@@ -75,6 +87,9 @@ public class ForeignCollectPhase extends AbstractProjectionsPhase implements Col
+         Symbols.toStream(toCollect, out);
+         distributionInfo.writeTo(out);
+         Symbols.toStream(query, out);
++        if (out.getVersion().onOrAfter(Version.V_5_7_2)) {
++            out.writeOptionalString(executeAs);
++        }
+     }
+ 
+     @Override
+@@ -114,4 +129,9 @@ public class ForeignCollectPhase extends AbstractProjectionsPhase implements Col
+     public Symbol query() {
+         return query;
+     }
++
++    @Nullable
++    public String executeAs() {
++        return executeAs;
++    }
+ }
+diff --git a/server/src/main/java/io/crate/fdw/ForeignDataWrappers.java b/server/src/main/java/io/crate/fdw/ForeignDataWrappers.java
+index 31b7cfc38f..c318ff79d3 100644
+--- a/server/src/main/java/io/crate/fdw/ForeignDataWrappers.java
++++ b/server/src/main/java/io/crate/fdw/ForeignDataWrappers.java
+@@ -122,8 +122,12 @@ public class ForeignDataWrappers implements CollectSource {
+                 foreignTable.server()
+             ));
+         }
++        String executeAs = phase.executeAs();
++        if (executeAs == null) {
++            executeAs = txnCtx.sessionSettings().userName();
++        }
+         return fdw.getIterator(
+-            requireNonNull(roles.findUser(txnCtx.sessionSettings().userName()), "current user must exit"),
++            requireNonNull(roles.findUser(executeAs), "current user must exist"),
+             server,
+             foreignTable,
+             txnCtx,
+diff --git a/server/src/main/java/io/crate/fdw/JdbcForeignDataWrapper.java b/server/src/main/java/io/crate/fdw/JdbcForeignDataWrapper.java
+index ffa8685a14..768223c717 100644
+--- a/server/src/main/java/io/crate/fdw/JdbcForeignDataWrapper.java
++++ b/server/src/main/java/io/crate/fdw/JdbcForeignDataWrapper.java
+@@ -123,7 +123,7 @@ final class JdbcForeignDataWrapper implements ForeignDataWrapper {
+                                                              List<Symbol> collect,
+                                                              Symbol query) {
+         SessionSettings sessionSettings = txnCtx.sessionSettings();
+-        Settings userOptions = server.users().get(sessionSettings.userName());
++        Settings userOptions = server.users().get(currentUser.name());
+         if (userOptions == null) {
+             userOptions = Settings.EMPTY;
+         }
+diff --git a/server/src/main/java/io/crate/planner/operators/ForeignCollect.java b/server/src/main/java/io/crate/planner/operators/ForeignCollect.java
+index 02d5232eef..176b221b93 100644
+--- a/server/src/main/java/io/crate/planner/operators/ForeignCollect.java
++++ b/server/src/main/java/io/crate/planner/operators/ForeignCollect.java
+@@ -50,15 +50,18 @@ public class ForeignCollect implements LogicalPlan {
+     private final ForeignTableRelation relation;
+     private final List<Symbol> toCollect;
+     private final WhereClause where;
++    private final String executeAs;
+ 
+     public ForeignCollect(ForeignDataWrapper fdw,
+                           ForeignTableRelation relation,
+                           List<Symbol> toCollect,
+-                          WhereClause where) {
++                          WhereClause where,
++                          String executeAs) {
+         this.fdw = fdw;
+         this.relation = relation;
+         this.toCollect = toCollect;
+         this.where = where;
++        this.executeAs = executeAs;
+     }
+ 
+     @Override
+@@ -80,7 +83,8 @@ public class ForeignCollect implements LogicalPlan {
+             plannerContext.handlerNode(),
+             relation.relationName(),
+             Lists.map(toCollect, binder),
+-            where.map(binder).queryOrFallback()
++            where.map(binder).queryOrFallback(),
++            executeAs
+         );
+         return new io.crate.planner.node.dql.Collect(
+             phase,
+@@ -125,7 +129,11 @@ public class ForeignCollect implements LogicalPlan {
+         if (outputsToKeep.containsAll(toCollect)) {
+             return this;
+         }
+-        return new ForeignCollect(fdw, relation, List.copyOf(outputsToKeep), where);
++        return new ForeignCollect(fdw, relation, List.copyOf(outputsToKeep), where, executeAs);
++    }
++
++    public String executeAs() {
++        return executeAs;
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java b/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
+index 84d2c6ae0f..7352683556 100644
+--- a/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
++++ b/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
+@@ -21,6 +21,8 @@
+ 
+ package io.crate.planner.operators;
+ 
++import static java.util.Objects.requireNonNull;
++
+ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.LinkedHashSet;
+@@ -80,6 +82,7 @@ import io.crate.metadata.CoordinatorTxnCtx;
+ import io.crate.metadata.NodeContext;
+ import io.crate.metadata.Reference;
+ import io.crate.metadata.TransactionContext;
++import io.crate.metadata.settings.CoordinatorSessionSettings;
+ import io.crate.planner.DependencyCarrier;
+ import io.crate.planner.ExecutionPlan;
+ import io.crate.planner.PlannerContext;
+@@ -123,6 +126,7 @@ import io.crate.planner.optimizer.rule.RewriteGroupByKeysLimitToLimitDistinct;
+ import io.crate.planner.optimizer.rule.RewriteJoinPlan;
+ import io.crate.planner.optimizer.rule.RewriteToQueryThenFetch;
+ import io.crate.planner.optimizer.tracer.OptimizerTracer;
++import io.crate.role.Role;
+ import io.crate.types.DataTypes;
+ 
+ /**
+@@ -252,7 +256,9 @@ public class LogicalPlanner {
+             subqueryPlanner,
+             foreignDataWrappers,
+             plannerContext.planStats(),
+-            plannerContext.clusterState()
++            plannerContext.clusterState(),
++            plannerContext.transactionContext(),
++            plannerContext.nodeContext()
+         );
+         LogicalPlan plan = relation.accept(planBuilder, relation.outputs());
+ 
+@@ -300,7 +306,9 @@ public class LogicalPlanner {
+             subqueryPlanner,
+             foreignDataWrappers,
+             planStats,
+-            plannerContext.clusterState()
++            plannerContext.clusterState(),
++            coordinatorTxnCtx,
++            plannerContext.nodeContext()
+         );
+         LogicalPlan logicalPlan = relation.accept(planBuilder, relation.outputs());
+         LogicalPlan optimizedPlan = optimizer.optimize(logicalPlan, planStats, coordinatorTxnCtx, tracer);
+@@ -333,15 +341,21 @@ public class LogicalPlanner {
+         private final PlanStats planStats;
+         private final ForeignDataWrappers foreignDataWrappers;
+         private final ClusterState clusterState;
++        private final CoordinatorTxnCtx coordinatorTxnCtx;
++        private final NodeContext nodeContext;
+ 
+         private PlanBuilder(SubqueryPlanner subqueryPlanner,
+                             ForeignDataWrappers foreignDataWrappers,
+                             PlanStats planStats,
+-                            ClusterState clusterState) {
++                            ClusterState clusterState,
++                            CoordinatorTxnCtx coordinatorTxnCtx,
++                            NodeContext nodeContext) {
+             this.subqueryPlanner = subqueryPlanner;
+             this.foreignDataWrappers = foreignDataWrappers;
+             this.planStats = planStats;
+             this.clusterState = clusterState;
++            this.coordinatorTxnCtx = coordinatorTxnCtx;
++            this.nodeContext = nodeContext;
+         }
+ 
+         @Override
+@@ -382,7 +396,8 @@ public class LogicalPlanner {
+                 foreignDataWrapper,
+                 relation,
+                 outputs,
+-                WhereClause.MATCH_ALL
++                WhereClause.MATCH_ALL,
++                coordinatorTxnCtx.sessionSettings().userName()
+             );
+         }
+ 
+@@ -403,8 +418,12 @@ public class LogicalPlanner {
+ 
+         @Override
+         public LogicalPlan visitView(AnalyzedView view, List<Symbol> outputs) {
++            CoordinatorSessionSettings sessionSettings = coordinatorTxnCtx.sessionSettings();
++            Role sessionUser = sessionSettings.sessionUser();
++            sessionSettings.setSessionUser(requireNonNull(nodeContext.roles().findUser(view.owner()), "view owner must exist"));
+             var child = view.relation();
+             var source = child.accept(this, child.outputs());
++            sessionSettings.setSessionUser(sessionUser);
+             return new Rename(view.outputs(), view.relationName(), view, source);
+         }
+ 
+diff --git a/server/src/main/java/io/crate/planner/optimizer/rule/MergeFilterAndForeignCollect.java b/server/src/main/java/io/crate/planner/optimizer/rule/MergeFilterAndForeignCollect.java
+index e6b03d7496..c148a78afe 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/rule/MergeFilterAndForeignCollect.java
++++ b/server/src/main/java/io/crate/planner/optimizer/rule/MergeFilterAndForeignCollect.java
+@@ -74,7 +74,8 @@ public class MergeFilterAndForeignCollect implements Rule<Filter> {
+                 collect.fdw(),
+                 collect.relation(),
+                 collect.outputs(),
+-                collect.where().add(filter.query())
++                collect.where().add(filter.query()),
++                collect.executeAs()
+             );
+         }
+         return null;
+diff --git a/server/src/test/java/io/crate/integrationtests/ForeignDataWrapperITest.java b/server/src/test/java/io/crate/integrationtests/ForeignDataWrapperITest.java
+index 944b1d3d83..53c4f5530d 100644
+--- a/server/src/test/java/io/crate/integrationtests/ForeignDataWrapperITest.java
++++ b/server/src/test/java/io/crate/integrationtests/ForeignDataWrapperITest.java
+@@ -376,4 +376,54 @@ public class ForeignDataWrapperITest extends IntegTestCase {
+         execute("drop user mapping for trillian server pg");
+         assertThat(execute("select * from information_schema.user_mapping_options where option_name = 'password'")).isEmpty();
+     }
++
++    @Test
++    public void test_users_with_dql_on_view_can_access_foreign_table_via_view_with_view_owners_user_mapping() {
++        PostgresNetty postgresNetty = cluster().getInstance(PostgresNetty.class);
++        int port = postgresNetty.boundAddress().publishAddress().getPort();
++        String url = "jdbc:postgresql://127.0.0.1:" + port + '/';
++
++        execute("create user user_a with (password = 'fooa')");
++        execute("grant al to user_a");
++        execute("grant ddl, dql on schema doc to user_a"); // required for the create-view stmt
++        var roles = cluster().getInstance(Roles.class);
++        Role user_a = roles.getUser("user_a");
++        sqlExecutor.executeAs(
++            String.format("CREATE SERVER pg FOREIGN DATA WRAPPER jdbc OPTIONS (url '%s')", url),
++            user_a);
++        sqlExecutor.executeAs("""
++            CREATE FOREIGN TABLE doc.remote_documents (name text)
++            SERVER pg
++            OPTIONS (schema_name 'public', table_name 'documents');
++            """, user_a);
++        sqlExecutor.executeAs("""
++            CREATE USER MAPPING FOR user_a
++            SERVER pg
++            OPTIONS ("user" 'foreign-user-a', password 'foreign-pw');
++            """, user_a);
++        sqlExecutor.executeAs(
++            "CREATE VIEW doc.remote_documents_view AS SELECT * FROM doc.remote_documents",
++            user_a);
++
++        execute("create user user_b with (password = 'foob')");
++        execute("grant dql on view doc.remote_documents_view to user_b");
++        Role user_b = roles.getUser("user_b");
++        assertThatThrownBy(
++            () -> sqlExecutor.executeAs("SELECT * FROM doc.remote_documents_view", user_b))
++            .isExactlyInstanceOf(RuntimeException.class)
++            // Notice that when 'user_b' accesses the foreign table implicitly via the view,
++            // 'foreign-user-a' is used which is mapped to 'user_a'(the view owner)
++            .hasMessageContaining("FATAL: trust authentication failed for user \"foreign-user-a\"");
++
++        // even when 'user-b' has its own mapping to the foreign server, 'foreign-user-a' is used
++        sqlExecutor.executeAs("""
++            CREATE USER MAPPING FOR user_b
++            SERVER pg
++            OPTIONS ("user" 'foreign-user-b', password 'foreign-pw');
++            """, user_a);
++        assertThatThrownBy(
++            () -> sqlExecutor.executeAs("SELECT * FROM doc.remote_documents_view", user_b))
++            .isExactlyInstanceOf(RuntimeException.class)
++            .hasMessageContaining("FATAL: trust authentication failed for user \"foreign-user-a\"");
++    }
+ }

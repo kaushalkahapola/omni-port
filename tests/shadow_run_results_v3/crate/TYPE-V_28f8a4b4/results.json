@@ -1,0 +1,144 @@
+{
+  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "28f8a4b4765ab933f6f4efebaf5bbadb61ff7b9b",
+  "backport_commit": "f768cc51f7843584e0b8569a5b0cea997d51ef6e",
+  "description": "master \u2192 5.5",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.89,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 21,
+          "end_line": 27,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 53,
+          "end_line": 96,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.62,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies the UnnestFunction.java file with changes that are not exact string replacements but involve adjustments to type signatures and method implementations. The first hunk is an exact match with high confidence, but the second hunk involves changes found via 'git_pickaxe' indicating some formatting and structural adjustments without deep refactoring. The patch also updates tests and documentation accordingly. Overall, the patch requires fuzzy matching due to type signature changes and some structural adjustments but does not involve deep structural refactoring or redesign, fitting TYPE_II complexity.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 9.76,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 65.2,
+      "error": null,
+      "refactored_count": 1
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java",
+          "old_string": "        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"E\")\n                )\n                .withTypeVariableConstraints(typeVariable(\"E\")),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?\n                    new RowType(List.of(boundSignature.returnType())) :\n                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))\n        );\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariable(\"E\"), typeVariableOfAnyType(\"N\"))\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                var argTypes = boundSignature.argTypes();\n                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());\n                for (int i = 0; i < argTypes.size(); i++) {\n                    DataType<?> dataType = argTypes.get(i);\n                    fieldTypes.add(ArrayType.unnest(dataType));\n                }\n                var returnType = new RowType(fieldTypes);\n                // the return type of the bound signature has to be resolved\n                // and created explicitly based on the arguments of the bounded\n                // signature, such as we cannot resolve correctly the field types\n                // of the record type from the array of any type with variable arity.\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    new BoundSignature(boundSignature.argTypes(), returnType),\n                    returnType\n                );\n            }\n        );",
+          "new_string": "        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"E\")\n                )\n                .withTypeVariableConstraints(typeVariable(\"E\")),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?\n                    new RowType(List.of(boundSignature.returnType())) :\n                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))\n        );\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariableOfAnyType(\"N\"))\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                var argTypes = boundSignature.argTypes();\n                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());\n                for (int i = 0; i < argTypes.size(); i++) {\n                    DataType<?> dataType = argTypes.get(i);\n                    fieldTypes.add(ArrayType.unnest(dataType));\n                }\n\n                boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());\n                List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName\n                    ? List.of(NAME)\n                    : List.of();\n                RowType returnType = new RowType(fieldTypes, fieldNames);\n\n                BoundSignature newBoundSignature = new BoundSignature(\n                    boundSignature.argTypes(),\n                    fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType\n                );\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    newBoundSignature,\n                    returnType\n                );\n            }\n        );",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 111.36,
+      "error": null,
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper):    rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 7,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 235
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "retry_contexts": [
+      {
+        "error_type": "api_mismatch",
+        "error_message": "--- Building code for 1e6fb65 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               ",
+        "attempt_count": 1,
+        "suggested_action": "route_to_namespace_or_structural"
+      }
+    ],
+    "failed_hunks": [],
+    "generated_patch_bytes": 634,
+    "target_patch_bytes": 7606,
+    "validation_passed": false,
+    "validation_failure_category": "api_mismatch",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

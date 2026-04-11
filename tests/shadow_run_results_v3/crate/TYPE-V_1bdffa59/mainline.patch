@@ -1,0 +1,675 @@
+commit 1bdffa597776b5b71f290448017985319e670a91
+Author: Sebastian Utz <su@rtme.net>
+Date:   Tue May 27 17:23:08 2025 +0200
+
+    Expose indices with non-active primary shards in publications
+    
+    Once an index is restored on the subscriber side, it must always
+    be included in the publication state response, otherwise it
+    will be treat as dropped, which in turn causes the tracking to
+    stop and turn the table into a normal writable one.
+    Such, the index must even be exposed when it has some non-active
+    primary shards.
+    But indices with non-active primary shards will fail on restoring,
+    so each index will contain a marker setting to express this.
+    This way, such an index will not be tried to restore, and
+    already subscriped tables will continue to be tracked (retry).
+    
+    Fixes #17734.
+    Supersedes #17830.
+    Follow up of #15108.
+
+diff --git a/docs/appendices/release-notes/5.10.8.rst b/docs/appendices/release-notes/5.10.8.rst
+index d15ecf1905..497dfa5e34 100644
+--- a/docs/appendices/release-notes/5.10.8.rst
++++ b/docs/appendices/release-notes/5.10.8.rst
+@@ -47,4 +47,9 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
+-None
++- Fixed a regression introduced in :ref:`version_5.6.0` that caused the logical
++  replication to stop if the publisher source table has some non-active primary
++  shards, for example when restarting a node. Please upgrade a subscriber
++  cluster before upgrading a publisher cluster to apply the fix correctly.
++  This fix will only work if both, the publisher and subscriber clusters, are
++  running with :ref:`version_5.10.8` or higher.
+diff --git a/server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java b/server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java
+index 0f1afc50a5..93012b0720 100644
+--- a/server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java
++++ b/server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java
+@@ -51,6 +51,7 @@ import org.elasticsearch.action.support.master.AcknowledgedResponse;
+ import org.elasticsearch.client.Client;
+ import org.elasticsearch.cluster.ClusterChangedEvent;
+ import org.elasticsearch.cluster.ClusterStateListener;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.cluster.routing.allocation.AllocationService;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.Strings;
+@@ -266,9 +267,10 @@ public class LogicalReplicationService implements ClusterStateListener, Closeabl
+             );
+             throw new RelationAlreadyExists(relation, message);
+         };
+-        for (var index : stateResponse.concreteIndices()) {
+-            if (metadata.hasIndex(index)) {
+-                onExists.accept(RelationName.fromIndexName(index));
++        for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {
++            String indexName = indexMetadata.getIndex().getName();
++            if (metadata.hasIndex(indexName)) {
++                onExists.accept(RelationName.fromIndexName(indexName));
+             }
+         }
+         for (var template : stateResponse.concreteTemplates()) {
+diff --git a/server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java b/server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java
+index 11e05e2d93..2138aa808d 100644
+--- a/server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java
++++ b/server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java
+@@ -102,6 +102,17 @@ public class LogicalReplicationSettings {
+         Setting.Property.IndexScope
+     );
+ 
++    /**
++     * Internal index setting to mark the index as active (all primary shards active) and such can be restored.
++     * It should be filtered out on the subscriber cluster when restoring or tracking indices.
++     */
++    public static final Setting<Boolean> REPLICATION_INDEX_ROUTING_ACTIVE = Setting.boolSetting(
++        "index.replication.logical.source_routing_active",
++        true,
++        Setting.Property.InternalIndex,
++        Setting.Property.IndexScope
++    );
++
+     /**
+      * These settings are not suitable to replicate between subscribed/replicated indices
+      */
+@@ -146,7 +157,8 @@ public class LogicalReplicationSettings {
+         MergeSchedulerConfig.AUTO_THROTTLE_SETTING,
+         MergeSchedulerConfig.MAX_MERGE_COUNT_SETTING,
+         MergeSchedulerConfig.MAX_THREAD_COUNT_SETTING,
+-        EngineConfig.INDEX_CODEC_SETTING
++        EngineConfig.INDEX_CODEC_SETTING,
++        REPLICATION_INDEX_ROUTING_ACTIVE
+     );
+ 
+     private int batchSize;
+diff --git a/server/src/main/java/io/crate/replication/logical/MetadataTracker.java b/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
+index 7226e61bb0..768fcdcc70 100644
+--- a/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
++++ b/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
+@@ -23,6 +23,7 @@ package io.crate.replication.logical;
+ 
+ import static io.crate.replication.logical.LogicalReplicationSettings.NON_REPLICATED_SETTINGS;
+ import static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;
++import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;
+ 
+ import java.io.Closeable;
+ import java.io.IOException;
+@@ -425,8 +426,8 @@ public final class MetadataTracker implements Closeable {
+         Set<RelationName> currentlyReplicatedTables = subscription.relations().keySet();
+ 
+         Set<RelationName> existingRelations = publisherStateResponse.concreteIndices().stream()
+-            .filter(index -> metadata.hasIndex(index))
+-            .map(index -> RelationName.fromIndexName(index))
++            .filter(im -> metadata.hasIndex(im.getIndex().getName()))
++            .map(im -> RelationName.fromIndexName(im.getIndex().getName()))
+             .filter(relationName -> currentlyReplicatedTables.contains(relationName) == false)
+             .collect(Collectors.toSet());
+ 
+@@ -457,16 +458,26 @@ public final class MetadataTracker implements Closeable {
+         HashSet<RelationName> relationNamesForStateUpdate = new HashSet<>();
+         ArrayList<TableOrPartition> toRestore = new ArrayList<>();
+         Metadata subscriberMetadata = subscriberState.metadata();
+-        for (var indexName : stateResponse.concreteIndices()) {
++        for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {
++            String indexName = indexMetadata.getIndex().getName();
+             IndexParts indexParts = IndexName.decode(indexName);
+             RelationName relationName = indexParts.toRelationName();
++            if (subscribedRelations.get(relationName) == null) {
++                relationNamesForStateUpdate.add(relationName);
++            }
++            if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {
++                // If the index is not active, we cannot restore it
++                if (LOGGER.isDebugEnabled()) {
++                    LOGGER.debug("Skipping index {} for subscription {} as it is not active", indexName, subscription);
++                }
++                continue;
++            }
+             if (!subscriberMetadata.hasIndex(indexName)) {
+                 String partitionIdent = indexParts.isPartitioned() ? indexParts.partitionIdent() : null;
+                 toRestore.add(new TableOrPartition(relationName, partitionIdent));
+                 relationNamesForStateUpdate.add(relationName);
+-            } else if (subscribedRelations.get(relationName) == null) {
+-                relationNamesForStateUpdate.add(relationName);
+             }
++
+         }
+         for (var templateName : stateResponse.concreteTemplates()) {
+             var indexParts = IndexName.decode(templateName);
+diff --git a/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java b/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
+index d9914c03aa..430c2efb80 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
+@@ -39,6 +39,7 @@ import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
+ import org.elasticsearch.cluster.ClusterState;
+ import org.elasticsearch.cluster.block.ClusterBlockException;
+ import org.elasticsearch.cluster.block.ClusterBlockLevel;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.inject.Inject;
+ import org.elasticsearch.common.inject.Singleton;
+@@ -218,10 +219,9 @@ public class PublicationsStateAction extends ActionType<PublicationsStateAction.
+             return "Response{" + "relationsInPublications:" + relationsInPublications + '.' + "unknownPublications:" + unknownPublications + '}';
+         }
+ 
+-        public List<String> concreteIndices() {
++        public List<IndexMetadata> concreteIndices() {
+             return relationsInPublications.values().stream()
+                 .flatMap(x -> x.indices().stream())
+-                .map(x -> x.getIndex().getName())
+                 .toList();
+         }
+ 
+diff --git a/server/src/main/java/io/crate/replication/logical/metadata/Publication.java b/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
+index f106528c94..5278cf6fe8 100644
+--- a/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
++++ b/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
+@@ -21,22 +21,27 @@
+ 
+ package io.crate.replication.logical.metadata;
+ 
++import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;
++
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+-import java.util.function.Predicate;
++import java.util.function.Function;
+ import java.util.stream.Collectors;
+ 
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.elasticsearch.cluster.ClusterState;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.cluster.metadata.Metadata;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
+ import org.elasticsearch.common.io.stream.Writeable;
++import org.elasticsearch.common.settings.Settings;
++import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.metadata.IndexName;
+ import io.crate.metadata.IndexParts;
+@@ -119,18 +124,6 @@ public class Publication implements Writeable {
+                                                                        Role publicationOwner,
+                                                                        Role subscriber,
+                                                                        String publicationName) {
+-        // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned
+-        Predicate<String> indexFilter = indexName -> {
+-            var indexMetadata = state.metadata().index(indexName);
+-            if (indexMetadata != null) {
+-                var routingTable = state.routingTable().index(indexName);
+-                assert routingTable != null : "routingTable must not be null";
+-                return routingTable.allPrimaryShardsActive();
+-
+-            }
+-            // Partitioned table case (template, no index).
+-            return true;
+-        };
+ 
+         var relations = new HashSet<RelationName>();
+ 
+@@ -161,14 +154,28 @@ public class Publication implements Writeable {
+         }
+ 
+         return relations.stream()
+-            .filter(relationName -> indexFilter.test(relationName.indexNameOrAlias()))
+             .filter(relationName -> userCanPublish(roles, relationName, publicationOwner, publicationName))
+             .filter(relationName -> subscriberCanRead(roles, relationName, subscriber, publicationName))
+-            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), indexFilter))
++            .map(relationName -> RelationMetadata.fromMetadata(relationName, state.metadata(), applyCustomIndexSettings(state)))
+             .collect(Collectors.toMap(RelationMetadata::name, x -> x));
+ 
+     }
+ 
++    @VisibleForTesting
++    public static Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {
++        // mark indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned
++        return im -> {
++            var routingTable = state.routingTable().index(im.getIndex());
++            assert routingTable != null : "routingTable must not be null";
++            boolean isActive = routingTable.allPrimaryShardsActive();
++            IndexMetadata.Builder builder = IndexMetadata.builder(im);
++            return builder.settings(Settings.builder()
++                    .put(im.getSettings())
++                    .put(REPLICATION_INDEX_ROUTING_ACTIVE.getKey(), isActive))
++                .build();
++        };
++    }
++
+     private static boolean subscriberCanRead(Roles roles, RelationName relationName, Role subscriber, String publicationName) {
+         boolean canRead = roles.hasPrivilege(subscriber, Permission.DQL, Securable.TABLE, relationName.fqn());
+         if (canRead == false) {
+diff --git a/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java b/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java
+index e26916a648..fd912fdb71 100644
+--- a/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java
++++ b/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java
+@@ -24,7 +24,7 @@ package io.crate.replication.logical.metadata;
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.List;
+-import java.util.function.Predicate;
++import java.util.function.Function;
+ 
+ import org.elasticsearch.action.support.IndicesOptions;
+ import org.elasticsearch.cluster.metadata.IndexMetadata;
+@@ -58,7 +58,9 @@ public record RelationMetadata(RelationName name,
+         out.writeOptionalWriteable(template);
+     }
+ 
+-    public static RelationMetadata fromMetadata(RelationName table, Metadata metadata, Predicate<String> filter) {
++    public static RelationMetadata fromMetadata(RelationName table,
++                                                Metadata metadata,
++                                                Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings) {
+         String indexNameOrAlias = table.indexNameOrAlias();
+         var indexMetadata = metadata.index(indexNameOrAlias);
+         if (indexMetadata == null) {
+@@ -71,12 +73,14 @@ public record RelationMetadata(RelationName name,
+             );
+             ArrayList<IndexMetadata> indicesMetadata = new ArrayList<>(concreteIndices.length);
+             for (String concreteIndex : concreteIndices) {
+-                if (filter.test(concreteIndex)) {
+-                    indicesMetadata.add(metadata.index(concreteIndex));
++                IndexMetadata concreteIndexMetadata = metadata.index(concreteIndex);
++                if (concreteIndexMetadata == null) {
++                    continue;
+                 }
++                indicesMetadata.add(applyCustomIndexSettings.apply(concreteIndexMetadata));
+             }
+             return new RelationMetadata(table, indicesMetadata, templateMetadata);
+         }
+-        return new RelationMetadata(table, List.of(indexMetadata), null);
++        return new RelationMetadata(table, List.of(applyCustomIndexSettings.apply(indexMetadata)), null);
+     }
+ }
+diff --git a/server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java b/server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java
+index c7a5223ea7..d72ffd91c8 100644
+--- a/server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java
++++ b/server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java
+@@ -22,6 +22,7 @@
+ package io.crate.replication.logical.repository;
+ 
+ import static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;
++import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;
+ import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_SUBSCRIPTION_NAME;
+ 
+ import java.io.IOException;
+@@ -152,7 +153,14 @@ public class LogicalReplicationRepository extends AbstractLifecycleComponent imp
+         assert SNAPSHOT_ID.equals(snapshotId) : "SubscriptionRepository only supports " + SNAPSHOT_ID + " as the SnapshotId";
+         return getPublicationsState()
+             .thenApply(stateResponse ->
+-                new SnapshotInfo(snapshotId, stateResponse.concreteIndices(), SnapshotState.SUCCESS, Version.CURRENT));
++                new SnapshotInfo(
++                    snapshotId,
++                    stateResponse.concreteIndices().stream()
++                        .filter(im -> REPLICATION_INDEX_ROUTING_ACTIVE.get(im.getSettings()))
++                        .map(im -> im.getIndex().getName()).toList(),
++                    SnapshotState.SUCCESS,
++                    Version.CURRENT
++                ));
+     }
+ 
+     @Override
+@@ -219,9 +227,11 @@ public class LogicalReplicationRepository extends AbstractLifecycleComponent imp
+                 builder.put(REPLICATION_SUBSCRIPTION_NAME.getKey(), subscriptionName);
+                 // Store publishers original index UUID to be able to resolve the original index later on
+                 builder.put(PUBLISHER_INDEX_UUID.getKey(), indexMetadata.getIndexUUID());
++                // Remove source routing active setting, it is only used as a marker to not restore these indices (yet)
++                builder.remove(REPLICATION_INDEX_ROUTING_ACTIVE.getKey());
+ 
+                 var indexMdBuilder = IndexMetadata.builder(indexMetadata).settings(builder);
+-                indexMetadata.getAliases().valuesIt().forEachRemaining(a -> indexMdBuilder.putAlias(a));
++                indexMetadata.getAliases().valuesIt().forEachRemaining(indexMdBuilder::putAlias);
+                 result.add(indexMdBuilder.build());
+             }
+             return result;
+diff --git a/server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java b/server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java
+index dedf66905e..5afd243eac 100644
+--- a/server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java
++++ b/server/src/test/java/io/crate/integrationtests/LogicalReplicationITest.java
+@@ -23,6 +23,7 @@ package io.crate.integrationtests;
+ 
+ import static io.crate.testing.Asserts.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import static org.elasticsearch.node.Node.NODE_NAME_SETTING;
+ 
+ import java.util.ArrayList;
+ import java.util.List;
+@@ -32,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.concurrent.atomic.AtomicLong;
+ 
+ import org.elasticsearch.cluster.metadata.Metadata;
++import org.elasticsearch.cluster.node.DiscoveryNode;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.junit.Rule;
+ import org.junit.Test;
+@@ -247,6 +249,102 @@ public class LogicalReplicationITest extends LogicalReplicationITestCase {
+         );
+     }
+ 
++    @Test
++    public void test_subscribing_to_publication_containing_index_with_non_active_shards_wont_be_restored() throws Exception {
++        // Create two tables, one should be restored successfully, ensuring that the restore works correctly
++        executeOnPublisher("CREATE TABLE doc.t1 (id INT) CLUSTERED INTO 10 shards WITH(" +
++                           defaultTableSettings() +
++                           ")");
++        executeOnPublisher("CREATE TABLE doc.t2 (id INT) CLUSTERED INTO 1 shards WITH(" +
++                           defaultTableSettings() +
++                           ")");
++        executeOnPublisher("INSERT INTO doc.t1 (id) VALUES (1), (2)");
++        executeOnPublisher("INSERT INTO doc.t2 (id) VALUES (1), (2)");
++        createPublication("pub1", false, List.of("doc.t1", "doc.t2"));
++
++        var response = executeOnPublisher("SELECT id, node['name'] FROM sys.shards WHERE table_name = 't2' AND primary = true ORDER BY id LIMIT 1");
++        String nodeName = (String) response.rows()[0][1];
++
++        // stop a node, but not the one holding the primary shard of doc.t2 -> make sure that only t1 has a non-active shard
++        publisherCluster.stopRandomNode(settings -> DiscoveryNode.isDataNode(settings) && NODE_NAME_SETTING.get(settings).equals(nodeName) == false);
++
++        assertBusy(() -> {
++            var response1 = executeOnPublisher(
++                "SELECT health, count(*) FROM sys.health GROUP BY 1 ORDER BY 1 DESC");
++            assertThat(response1.rows()[0][0]).isEqualTo("RED");
++        }, 30, TimeUnit.SECONDS);
++
++        createSubscription("sub1", "pub1");
++
++        executeOnSubscriber("REFRESH TABLE doc.t2");
++        response = executeOnSubscriber("SELECT * FROM doc.t2 ORDER BY id");
++        assertThat(response).hasRows(
++            "1",
++            "2"
++        );
++
++        // doc.t1 must not be restored as it has a non-active shard
++        response = executeOnSubscriber("SELECT table_name FROM information_schema.tables WHERE table_name = 't1'");
++        assertThat(response.rows().length).isZero();
++
++        // also, doc.t1 must not be listed inside the subscription state/metadata
++        var res = executeOnSubscriber(
++            "SELECT" +
++                " s.subname, r.relname, sr.srsubstate, sr.srsubstate_reason" +
++                " FROM pg_subscription s" +
++                " JOIN pg_subscription_rel sr ON s.oid = sr.srsubid" +
++                " JOIN pg_class r ON sr.srrelid = r.oid");
++        assertThat(res).hasRows("sub1| t2| r| NULL");
++    }
++
++    @Test
++    public void test__to_publication_containing_index_with_non_active_shards_wont_be() throws Exception {
++        // Create two tables, one should be restored successfully, ensuring that the restore works correctly
++        executeOnPublisher("CREATE TABLE doc.t1 (id INT) CLUSTERED INTO 10 shards WITH(" +
++            defaultTableSettings() +
++            ")");
++        executeOnPublisher("CREATE TABLE doc.t2 (id INT) CLUSTERED INTO 1 shards WITH(" +
++            defaultTableSettings() +
++            ")");
++        executeOnPublisher("INSERT INTO doc.t1 (id) VALUES (1), (2)");
++        executeOnPublisher("INSERT INTO doc.t2 (id) VALUES (1), (2)");
++        createPublication("pub1", false, List.of("doc.t1", "doc.t2"));
++
++        var response = executeOnPublisher("SELECT id, node['name'] FROM sys.shards WHERE table_name = 't2' AND primary = true ORDER BY id LIMIT 1");
++        String nodeName = (String) response.rows()[0][1];
++
++        // stop a node, but not the one holding the primary shard of doc.t2 -> make sure that only t1 has a non-active shard
++        publisherCluster.stopRandomNode(settings -> DiscoveryNode.isDataNode(settings) && NODE_NAME_SETTING.get(settings).equals(nodeName) == false);
++
++        assertBusy(() -> {
++            var response1 = executeOnPublisher(
++                "SELECT health, count(*) FROM sys.health GROUP BY 1 ORDER BY 1 DESC");
++            assertThat(response1.rows()[0][0]).isEqualTo("RED");
++        }, 30, TimeUnit.SECONDS);
++
++        createSubscription("sub1", "pub1");
++
++        executeOnSubscriber("REFRESH TABLE doc.t2");
++        response = executeOnSubscriber("SELECT * FROM doc.t2 ORDER BY id");
++        assertThat(response).hasRows(
++            "1",
++            "2"
++        );
++
++        // doc.t1 must not be restored as it has a non-active shard
++        response = executeOnSubscriber("SELECT table_name FROM information_schema.tables WHERE table_name = 't1'");
++        assertThat(response.rows().length).isZero();
++
++        // also, doc.t1 must not be listed inside the subscription state/metadata
++        var res = executeOnSubscriber(
++            "SELECT" +
++                " s.subname, r.relname, sr.srsubstate, sr.srsubstate_reason" +
++                " FROM pg_subscription s" +
++                " JOIN pg_subscription_rel sr ON s.oid = sr.srsubid" +
++                " JOIN pg_class r ON sr.srrelid = r.oid");
++        assertThat(res).hasRows("sub1| t2| r| NULL");
++    }
++
+     @Test
+     public void test_subscribing_to_unknown_publication_raises_error() throws Exception {
+         createPublication("pub1", true, List.of());
+diff --git a/server/src/test/java/io/crate/integrationtests/MetadataTrackerITest.java b/server/src/test/java/io/crate/integrationtests/MetadataTrackerITest.java
+index 7f89dabbed..77c26bbfac 100644
+--- a/server/src/test/java/io/crate/integrationtests/MetadataTrackerITest.java
++++ b/server/src/test/java/io/crate/integrationtests/MetadataTrackerITest.java
+@@ -22,6 +22,7 @@
+ package io.crate.integrationtests;
+ 
+ import static io.crate.testing.Asserts.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ 
+ import java.lang.reflect.Field;
+ import java.util.ArrayList;
+@@ -402,6 +403,44 @@ public class MetadataTrackerITest extends LogicalReplicationITestCase {
+         );
+     }
+ 
++    @Test
++    public void test_table_will_not_be_removed_from_subscription_if_a_source_shard_become_inactive() throws Exception {
++        // Create two tables, one should be restored successfully, ensuring that the restore works correctly
++        executeOnPublisher("CREATE TABLE doc.t1 (id INT) CLUSTERED INTO 10 shards WITH(" +
++            defaultTableSettings() +
++            ")");
++        executeOnPublisher("INSERT INTO doc.t1 (id) VALUES (1), (2)");
++        createPublication("pub1", false, List.of("doc.t1"));
++
++        createSubscription("sub1", "pub1");
++
++        // Wait until tables are restored and tracker is active
++        assertBusy(() -> assertThat(isTrackerActive()).isTrue());
++
++        executeOnSubscriber("REFRESH TABLE doc.t1");
++        var response = executeOnSubscriber("SELECT * FROM doc.t1 ORDER BY id");
++        assertThat(response).hasRows(
++            "1",
++            "2"
++        );
++
++        // stop a data node -> make sure that t1 has a non-active shard
++        publisherCluster.stopRandomDataNode();
++
++        // doc.t1 must still be listed inside the subscription state/metadata
++        var res = executeOnSubscriber(
++            "SELECT" +
++                " s.subname, r.relname, sr.srsubstate, sr.srsubstate_reason" +
++                " FROM pg_subscription s" +
++                " JOIN pg_subscription_rel sr ON s.oid = sr.srsubid" +
++                " JOIN pg_class r ON sr.srrelid = r.oid");
++        assertThat(res).hasRows("sub1| t1| r| NULL");
++
++        // write to doc.t1 should still not work on the subscriber
++        assertThatThrownBy(() -> executeOnSubscriber("INSERT INTO doc.t1 (id) VALUES (3)"))
++            .hasMessageContaining("The relation \"doc.t1\" doesn't allow INSERT operations, because it is included in a logical replication subscription.");
++    }
++
+     private boolean isTrackerActive() throws Exception {
+         var replicationService = subscriberCluster.getInstance(LogicalReplicationService.class, subscriberCluster.getMasterName());
+         Field m = replicationService.getClass().getDeclaredField("metadataTracker");
+diff --git a/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java b/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java
+index 44d262c336..67e7c7078a 100644
+--- a/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java
++++ b/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java
+@@ -251,7 +251,7 @@ public class MetadataTrackerTest extends ESTestCase {
+         testTable = new RelationName("doc", "test");
+         publicationsStateResponse = new Response(Map.of(
+             testTable,
+-            RelationMetadata.fromMetadata(testTable, PUBLISHER_CLUSTER_STATE.metadata(), _ -> true)), List.of());
++            RelationMetadata.fromMetadata(testTable, PUBLISHER_CLUSTER_STATE.metadata(), Publication.applyCustomIndexSettings(PUBLISHER_CLUSTER_STATE))), List.of());
+ 
+         SUBSCRIBER_CLUSTER_STATE = new Builder("subscriber")
+             .addReplicatingTable("sub1", "test", Map.of("1", "one"), Settings.EMPTY)
+@@ -281,7 +281,7 @@ public class MetadataTrackerTest extends ESTestCase {
+         var updatedResponse = new Response(
+             Map.of(
+                 testTable,
+-                RelationMetadata.fromMetadata(testTable, updatedPublisherClusterState.metadata(), _ -> true)
++                RelationMetadata.fromMetadata(testTable, updatedPublisherClusterState.metadata(), Publication.applyCustomIndexSettings(updatedPublisherClusterState))
+             ),
+             List.of()
+         );
+@@ -311,7 +311,7 @@ public class MetadataTrackerTest extends ESTestCase {
+         var updatedResponse = new Response(
+             Map.of(
+                 testTable,
+-                RelationMetadata.fromMetadata(testTable, updatedPublisherClusterState.metadata(), _ -> true)
++                RelationMetadata.fromMetadata(testTable, updatedPublisherClusterState.metadata(), Publication.applyCustomIndexSettings(updatedPublisherClusterState))
+             ),
+             List.of()
+         );
+@@ -338,7 +338,7 @@ public class MetadataTrackerTest extends ESTestCase {
+         var updatedResponse = new Response(
+             Map.of(
+                 testTable,
+-                RelationMetadata.fromMetadata(testTable, updatedPublisherClusterState.metadata(), _ -> true)
++                RelationMetadata.fromMetadata(testTable, updatedPublisherClusterState.metadata(), Publication.applyCustomIndexSettings(updatedPublisherClusterState))
+             ),
+             List.of()
+         );
+@@ -364,7 +364,7 @@ public class MetadataTrackerTest extends ESTestCase {
+         var updatedResponse = new Response(
+             Map.of(
+                 testTable,
+-                RelationMetadata.fromMetadata(testTable, updatedPublisherClusterState.metadata(), _ -> true)
++                RelationMetadata.fromMetadata(testTable, updatedPublisherClusterState.metadata(), Publication.applyCustomIndexSettings(updatedPublisherClusterState))
+             ),
+             List.of()
+         );
+@@ -406,7 +406,7 @@ public class MetadataTrackerTest extends ESTestCase {
+         var updatedResponse = new Response(
+             Map.of(
+                 table,
+-                RelationMetadata.fromMetadata(table, publisherState.metadata(), _ -> true)
++                RelationMetadata.fromMetadata(table, publisherState.metadata(), Publication.applyCustomIndexSettings(publisherState))
+             ),
+             List.of()
+         );
+@@ -433,7 +433,7 @@ public class MetadataTrackerTest extends ESTestCase {
+             .addPublication("pub1", List.of(p1.indexNameOrAlias()))
+             .build();
+         var publisherStateResponse = new Response(
+-            Map.of(p1, RelationMetadata.fromMetadata(p1, publisherState.metadata(), _ -> true)),
++            Map.of(p1, RelationMetadata.fromMetadata(p1, publisherState.metadata(), Publication.applyCustomIndexSettings(publisherState))),
+             List.of()
+         );
+ 
+@@ -459,7 +459,7 @@ public class MetadataTrackerTest extends ESTestCase {
+             .addPublication("pub1", List.of(newRelation.indexNameOrAlias()))
+             .addPartitionedTable(newRelation, List.of(newPartitionName))
+             .build();
+-        RelationMetadata relationMetadata = RelationMetadata.fromMetadata(newRelation, publisherState.metadata(), _ -> true);
++        RelationMetadata relationMetadata = RelationMetadata.fromMetadata(newRelation, publisherState.metadata(), Publication.applyCustomIndexSettings(publisherState));
+         var publisherStateResponse = new Response(Map.of(newRelation, relationMetadata), List.of());
+ 
+         var restoreDiff = MetadataTracker.getRestoreDiff(
+@@ -486,7 +486,7 @@ public class MetadataTrackerTest extends ESTestCase {
+             .addPublication("pub1", List.of(relationName.indexNameOrAlias()))
+             .addPartitionedTable(relationName, List.of(newPartitionName))
+             .build();
+-        RelationMetadata relationMetadata = RelationMetadata.fromMetadata(relationName, publisherState.metadata(), _ -> true);
++        RelationMetadata relationMetadata = RelationMetadata.fromMetadata(relationName, publisherState.metadata(), Publication.applyCustomIndexSettings(publisherState));
+         var publisherStateResponse = new Response(Map.of(relationName, relationMetadata), List.of());
+ 
+         var restoreDiff = MetadataTracker.getRestoreDiff(
+diff --git a/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java b/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java
+index e8dacf4294..56f0cb7e11 100644
+--- a/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java
++++ b/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.replication.logical.action;
+ 
++import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;
+ import static io.crate.role.metadata.RolesHelper.userOf;
+ import static java.util.Collections.singletonList;
+ import static org.assertj.core.api.Assertions.assertThat;
+@@ -29,6 +30,7 @@ import java.util.Collection;
+ import java.util.List;
+ 
+ import org.apache.logging.log4j.LogManager;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.common.logging.Loggers;
+ import org.elasticsearch.test.MockLogAppender;
+ import org.jetbrains.annotations.Nullable;
+@@ -212,7 +214,7 @@ public class PublicationsStateActionTest extends CrateDummyClusterServiceUnitTes
+     }
+ 
+     @Test
+-    public void test_resolve_relation_names_for_concrete_tables_ignores_table_with_non_active_primary_shards() throws Exception {
++    public void test_resolve_relation_names_for_concrete_tables_marks_table_with_non_active_primary_shards() throws Exception {
+         var user = userOf("dummy");
+         Roles roles = new Roles() {
+             @Override
+@@ -244,11 +246,17 @@ public class PublicationsStateActionTest extends CrateDummyClusterServiceUnitTes
+             "dummy"
+         );
+ 
+-        assertThat(resolvedRelations.keySet()).contains(new RelationName("doc", "t1"));
++        RelationMetadata relationMetadata_t1 = resolvedRelations.get(new RelationName("doc", "t1"));
++        IndexMetadata indexMetadata_t1 = relationMetadata_t1.indices().getFirst();
++        assertThat(REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata_t1.getSettings())).isTrue();
++
++        RelationMetadata relationMetadata_t2 = resolvedRelations.get(new RelationName("doc", "t2"));
++        IndexMetadata indexMetadata_t2 = relationMetadata_t2.indices().getFirst();
++        assertThat(REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata_t2.getSettings())).isFalse();
+     }
+ 
+     @Test
+-    public void test_resolve_relation_names_for_all_tables_ignores_partition_with_non_active_primary_shards() throws Exception {
++    public void test_resolve_relation_names_for_all_tables_marks_partition_with_non_active_primary_shards() throws Exception {
+         var user = userOf("dummy");
+         Roles roles = new Roles() {
+             @Override
+@@ -277,11 +285,12 @@ public class PublicationsStateActionTest extends CrateDummyClusterServiceUnitTes
+             "dummy"
+         );
+         RelationMetadata relationMetadata = resolvedRelations.get(new RelationName("doc", "p1"));
+-        assertThat(relationMetadata.indices()).isEmpty();
++        IndexMetadata indexMetadata = relationMetadata.indices().getFirst();
++        assertThat(REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings())).isFalse();
+     }
+ 
+     @Test
+-    public void test_resolve_relation_names_for_concrete_tables_ignores_partition_with_non_active_primary_shards() throws Exception {
++    public void test_resolve_relation_names_for_concrete_tables_marks_partition_with_non_active_primary_shards() throws Exception {
+         var user = userOf("dummy");
+         Roles roles = new Roles() {
+             @Override
+@@ -314,6 +323,7 @@ public class PublicationsStateActionTest extends CrateDummyClusterServiceUnitTes
+             "dummy"
+         );
+         RelationMetadata relationMetadata = resolvedRelations.get(new RelationName("doc", "p1"));
+-        assertThat(relationMetadata.indices()).isEmpty();
++        IndexMetadata indexMetadata = relationMetadata.indices().getFirst();
++        assertThat(REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings())).isFalse();
+     }
+ }

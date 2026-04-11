@@ -1,0 +1,21 @@
+diff --git a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
+index 7f9cd25444..16d57bbd5a 100644
+--- a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
++++ b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
+@@ -49,6 +49,7 @@ import io.crate.metadata.doc.DocSysColumns;
+ import io.crate.metadata.doc.DocTableInfo;
+ import io.crate.planner.operators.SubQueryAndParamBinder;
+ import io.crate.planner.operators.SubQueryResults;
++import io.crate.planner.optimizer.symbol.Optimizer;
+ 
+ /**
+  * Used to analyze a query for primaryKey/partition "direct access" possibilities.
+@@ -203,7 +204,7 @@ public final class WhereClauseOptimizer {
+                                   partitionIndicesWithinPks);
+         }
+         EqMatches partitionMatches = table.isPartitioned()
+-            ? eqExtractor.extractMatches(table.partitionedBy(), query, txnCtx)
++            ? eqExtractor.extractMatches(table.partitionedBy(), optimizedCastsQuery, txnCtx)
+             : EqMatches.NONE;
+ 
+         WhereClauseValidator.validate(query);

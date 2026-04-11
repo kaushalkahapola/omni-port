@@ -1,0 +1,217 @@
+diff --git a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
+index 83615af1f4..d8710927c6 100644
+--- a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
+@@ -60,6 +60,7 @@ import io.crate.exceptions.ColumnUnknownException;
+ import io.crate.exceptions.ConversionException;
+ import io.crate.execution.engine.aggregation.impl.CollectSetAggregation;
+ import io.crate.expression.eval.EvaluatingNormalizer;
++import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.AndOperator;
+ import io.crate.expression.operator.EqOperator;
+ import io.crate.expression.operator.ExistsOperator;
+@@ -68,7 +69,6 @@ import io.crate.expression.operator.Operator;
+ import io.crate.expression.operator.OrOperator;
+ import io.crate.expression.operator.RegexpMatchCaseInsensitiveOperator;
+ import io.crate.expression.operator.RegexpMatchOperator;
+-import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.any.AnyOperator;
+ import io.crate.expression.predicate.NotPredicate;
+ import io.crate.expression.scalar.ArraySliceFunction;
+@@ -841,7 +841,7 @@ public class ExpressionAnalyzer {
+             Symbol arraySymbol = node.getValue().accept(this, context);
+             Symbol leftSymbol = node.getPattern().accept(this, context);
+             return allocateFunction(
+-                LikeOperators.arrayOperatorName(node.inverse(), node.ignoreCase()),
++                LikeOperators.arrayOperatorName(node.quantifier(), node.inverse(), node.ignoreCase()),
+                 List.of(leftSymbol, arraySymbol),
+                 context);
+         }
+diff --git a/server/src/main/java/io/crate/expression/operator/LikeOperators.java b/server/src/main/java/io/crate/expression/operator/LikeOperators.java
+index b73a865da7..38dfb6e6aa 100644
+--- a/server/src/main/java/io/crate/expression/operator/LikeOperators.java
++++ b/server/src/main/java/io/crate/expression/operator/LikeOperators.java
+@@ -29,6 +29,9 @@ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.WildcardQuery;
+ import org.jetbrains.annotations.Nullable;
+ 
++import io.crate.expression.operator.all.AllLikeOperator;
++import io.crate.expression.operator.all.AllNotLikeOperator;
++import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.any.AnyLikeOperator;
+ import io.crate.expression.operator.any.AnyNotLikeOperator;
+ import io.crate.expression.operator.any.AnyOperator;
+@@ -36,6 +39,7 @@ import io.crate.lucene.match.CrateRegexQuery;
+ import io.crate.metadata.Functions;
+ import io.crate.metadata.Scalar;
+ import io.crate.metadata.functions.Signature;
++import io.crate.sql.tree.ArrayComparison;
+ import io.crate.types.DataTypes;
+ 
+ public class LikeOperators {
+@@ -47,6 +51,11 @@ public class LikeOperators {
+     public static final String ANY_NOT_LIKE = AnyOperator.OPERATOR_PREFIX + "not_like";
+     public static final String ANY_NOT_ILIKE = AnyOperator.OPERATOR_PREFIX + "not_ilike";
+ 
++    public static final String ALL_LIKE = AllOperator.OPERATOR_PREFIX + "like";
++    public static final String ALL_ILIKE = AllOperator.OPERATOR_PREFIX + "ilike";
++    public static final String ALL_NOT_LIKE = AllOperator.OPERATOR_PREFIX + "not_like";
++    public static final String ALL_NOT_ILIKE = AllOperator.OPERATOR_PREFIX + "not_ilike";
++
+     public static final Character DEFAULT_ESCAPE = '\\';
+     /**
+      *  To avoid creating a String out of {@link #DEFAULT_ESCAPE} every time
+@@ -58,12 +67,24 @@ public class LikeOperators {
+         return ignoreCase ? OP_ILIKE : OP_LIKE;
+     }
+ 
+-    public static String arrayOperatorName(boolean negate, boolean ignoreCase) {
++    public static String arrayOperatorName(ArrayComparison.Quantifier q, boolean negate, boolean ignoreCase) {
+         String name;
+-        if (negate) {
+-            name = ignoreCase ? ANY_NOT_ILIKE : ANY_NOT_LIKE;
+-        } else {
+-            name = ignoreCase ? ANY_ILIKE : ANY_LIKE;
++        switch (q) {
++            case ANY -> {
++                if (negate) {
++                    name = ignoreCase ? ANY_NOT_ILIKE : ANY_NOT_LIKE;
++                } else {
++                    name = ignoreCase ? ANY_ILIKE : ANY_LIKE;
++                }
++            }
++            case ALL -> {
++                if (negate) {
++                    name = ignoreCase ? ALL_NOT_ILIKE : ALL_NOT_LIKE;
++                } else {
++                    name = ignoreCase ? ALL_ILIKE : ALL_LIKE;
++                }
++            }
++            default -> throw new IllegalStateException("An invalid array operator: " + q);
+         }
+         return name;
+     }
+diff --git a/server/src/main/java/io/crate/expression/operator/all/AllOperator.java b/server/src/main/java/io/crate/expression/operator/all/AllOperator.java
+index 562ca19d4b..6fc68b2830 100644
+--- a/server/src/main/java/io/crate/expression/operator/all/AllOperator.java
++++ b/server/src/main/java/io/crate/expression/operator/all/AllOperator.java
+@@ -27,6 +27,7 @@ import java.util.List;
+ import org.apache.lucene.search.Query;
+ 
+ import io.crate.data.Input;
++import io.crate.expression.operator.LikeOperators;
+ import io.crate.expression.operator.Operator;
+ import io.crate.expression.scalar.ArrayUnnestFunction;
+ import io.crate.expression.symbol.Function;
+@@ -44,7 +45,7 @@ import io.crate.metadata.functions.TypeVariableConstraint;
+ import io.crate.types.DataType;
+ import io.crate.types.TypeSignature;
+ 
+-public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOperator, AllNeqOperator, AllRangeOperator {
++public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOperator, AllLikeOperator, AllNeqOperator, AllNotLikeOperator, AllRangeOperator {
+ 
+     public static final String OPERATOR_PREFIX = "_all_";
+     public static final List<String> OPERATOR_NAMES = List.of(
+@@ -53,7 +54,11 @@ public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOpe
+         AllRangeOperator.Comparison.GT.opName(),
+         AllRangeOperator.Comparison.GTE.opName(),
+         AllRangeOperator.Comparison.LT.opName(),
+-        AllRangeOperator.Comparison.LTE.opName()
++        AllRangeOperator.Comparison.LTE.opName(),
++        LikeOperators.ALL_LIKE,
++        LikeOperators.ALL_ILIKE,
++        LikeOperators.ALL_NOT_LIKE,
++        LikeOperators.ALL_NOT_ILIKE
+     );
+ 
+     protected final DataType<Object> leftType;
+@@ -114,11 +119,11 @@ public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOpe
+             if (rightValue == null) {
+                 anyNulls = true;
+                 matches++;
+-                continue;
+-            }
+-            validateRightArg(rightValue);
+-            if (matches(leftValue, rightValue)) {
+-                matches++;
++            } else {
++                validateRightArg(rightValue);
++                if (matches(leftValue, rightValue)) {
++                    matches++;
++                }
+             }
+         }
+         if (matches == rightValues.size()) {
+@@ -128,17 +133,16 @@ public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOpe
+         }
+     }
+ 
+-    @SuppressWarnings("unchecked")
+     @Override
+     public Query toQuery(Function function, LuceneQueryBuilder.Context context) {
+         List<Symbol> args = function.arguments();
+         Symbol probe = args.get(0);
+         Symbol candidates = args.get(1);
+         while (candidates instanceof Function fn && fn.signature().equals(ArrayUnnestFunction.SIGNATURE)) {
+-            candidates = fn.arguments().get(0);
++            candidates = fn.arguments().getFirst();
+         }
+         if (probe instanceof Literal<?> literal && candidates instanceof Reference ref) {
+-            return literalMatchesAllArrayRef(function, (Literal<T>) literal, ref, context);
++            return literalMatchesAllArrayRef(function, literal, ref, context);
+         } else if (probe instanceof Reference ref && candidates instanceof Literal<?> literal) {
+             return refMatchesAllArrayLiteral(function, ref, literal, context);
+         } else {
+diff --git a/server/src/main/java/io/crate/expression/symbol/Function.java b/server/src/main/java/io/crate/expression/symbol/Function.java
+index 575bf55445..6d011ec802 100644
+--- a/server/src/main/java/io/crate/expression/symbol/Function.java
++++ b/server/src/main/java/io/crate/expression/symbol/Function.java
+@@ -39,6 +39,7 @@ import io.crate.exceptions.ConversionException;
+ import io.crate.execution.engine.aggregation.impl.CountAggregation;
+ import io.crate.expression.operator.ExistsOperator;
+ import io.crate.expression.operator.Operator;
++import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.any.AnyOperator;
+ import io.crate.expression.predicate.IsNullPredicate;
+ import io.crate.expression.predicate.MatchPredicate;
+@@ -378,6 +379,8 @@ public class Function implements Symbol, Cloneable {
+             default:
+                 if (AnyOperator.OPERATOR_NAMES.contains(name)) {
+                     printAnyOperator(builder, style);
++                } else if (AllOperator.OPERATOR_NAMES.contains(name)) {
++                    printAllOperator(builder, style);
+                 } else if (isCast()) {
+                     printCastFunction(builder, style);
+                 } else if (name.startsWith(Operator.PREFIX)) {
+@@ -412,7 +415,7 @@ public class Function implements Symbol, Cloneable {
+         String name = signature.getName().name();
+         assert name.startsWith(AnyOperator.OPERATOR_PREFIX) : "function for printAnyOperator must start with any prefix";
+         assert arguments.size() == 2 : "function's number of arguments must be 2";
+-        String operatorName = name.substring(4).replace('_', ' ').toUpperCase(Locale.ENGLISH);
++        String operatorName = name.substring(AnyOperator.OPERATOR_PREFIX.length()).replace('_', ' ').toUpperCase(Locale.ENGLISH);
+         builder
+             .append("(") // wrap operator in parens to ensure precedence
+             .append(arguments.get(0).toString(style))
+@@ -424,6 +427,22 @@ public class Function implements Symbol, Cloneable {
+             .append("))");
+     }
+ 
++    private void printAllOperator(StringBuilder builder, Style style) {
++        String name = signature.getName().name();
++        assert name.startsWith(AllOperator.OPERATOR_PREFIX) : "function for printAllOperator must start with all prefix";
++        assert arguments.size() == 2 : "function's number of arguments must be 2";
++        String operatorName = name.substring(AllOperator.OPERATOR_PREFIX.length()).replace('_', ' ').toUpperCase(Locale.ENGLISH);
++        builder
++            .append("(") // wrap operator in parens to ensure precedence
++            .append(arguments.get(0).toString(style))
++            .append(" ")
++            .append(operatorName)
++            .append(" ")
++            .append("ALL(")
++            .append(arguments.get(1).toString(style))
++            .append("))");
++    }
++
+     private void printCastFunction(StringBuilder builder, Style style) {
+         var name = signature.getName().name();
+         assert arguments.size() == 2 : "Expecting 2 arguments for function " + name;

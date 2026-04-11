@@ -1,0 +1,156 @@
+commit 8705dc06bad61b8f65d9b20d3b35832ef103379a
+Author: Sebastian Utz <su@rtme.net>
+Date:   Wed Sep 25 09:32:19 2024 +0200
+
+    Fix streaming of numeric values with arbitrary scale
+    
+    Fixes #16647.
+    
+    (cherry picked from commit 1edca7858962888226af9a1be317cb38e237908d)
+
+diff --git a/docs/appendices/release-notes/5.8.4.rst b/docs/appendices/release-notes/5.8.4.rst
+index 0a7e54a23a..ba54de1f3d 100644
+--- a/docs/appendices/release-notes/5.8.4.rst
++++ b/docs/appendices/release-notes/5.8.4.rst
+@@ -60,3 +60,7 @@ Fixes
+ - Fixed an issue that caused filtering by :ref:`ALL <all_array_comparison>`
+   operator on :ref:`REAL <type-real>` array columns against literals to return
+   invalid results.
++
++- Fixed an issue that caused cast to :ref:`NUMERIC <type-numeric>` to return
++  incorrect results, with missing ``scale``. This issue has only affected
++  multi-node cluster installations.
+diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageStateType.java b/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageStateType.java
+index d104106aa4..5658f84da6 100644
+--- a/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageStateType.java
++++ b/server/src/main/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageStateType.java
+@@ -21,15 +21,16 @@
+ 
+ package io.crate.execution.engine.aggregation.impl.average.numeric;
+ 
++import java.io.IOException;
++import java.math.BigDecimal;
++
++import org.elasticsearch.common.io.stream.StreamInput;
++import org.elasticsearch.common.io.stream.StreamOutput;
++
+ import io.crate.Streamer;
+ import io.crate.execution.engine.aggregation.impl.util.BigDecimalValueWrapper;
+ import io.crate.types.DataType;
+ import io.crate.types.NumericType;
+-import org.elasticsearch.common.io.stream.StreamInput;
+-import org.elasticsearch.common.io.stream.StreamOutput;
+-
+-import java.io.IOException;
+-import java.math.BigDecimal;
+ 
+ @SuppressWarnings("rawtypes")
+ public class NumericAverageStateType extends DataType<NumericAverageState> implements Streamer<NumericAverageState> {
+@@ -73,8 +74,9 @@ public class NumericAverageStateType extends DataType<NumericAverageState> imple
+     public NumericAverageState readValueFrom(StreamInput in) throws IOException {
+         // Cannot use NumericType.INSTANCE as it has default precision and scale values
+         // which might not be equal to written BigDecimal's precision and scale.
++        var type = new NumericType(in);
+         return new NumericAverageState<>(
+-            new BigDecimalValueWrapper(NumericType.of(in.readInt(), in.readInt()).readValueFrom(in)),
++            new BigDecimalValueWrapper(type.readValueFrom(in)),
+             in.readVLong()
+         );
+     }
+@@ -83,9 +85,9 @@ public class NumericAverageStateType extends DataType<NumericAverageState> imple
+     public void writeValueTo(StreamOutput out, NumericAverageState v) throws IOException {
+         // We want to preserve the scale and precision
+         // from the numeric argument type for the return type.
+-        out.writeInt(v.sum.value().precision());
+-        out.writeInt(v.sum.value().scale());
+-        NumericType.INSTANCE.writeValueTo(out, v.sum.value()); // NumericType.INSTANCE writes unscaled value
++        var type = new NumericType(v.sum.value().precision(), v.sum.value().scale());
++        type.writeTo(out);
++        type.writeValueTo(out, v.sum.value());
+         out.writeVLong(v.count);
+     }
+ 
+diff --git a/server/src/main/java/io/crate/types/NumericType.java b/server/src/main/java/io/crate/types/NumericType.java
+index 959d0418f9..5e4a29c595 100644
+--- a/server/src/main/java/io/crate/types/NumericType.java
++++ b/server/src/main/java/io/crate/types/NumericType.java
+@@ -30,13 +30,14 @@ import java.util.List;
+ import java.util.Objects;
+ 
+ import org.apache.lucene.util.RamUsageEstimator;
++import org.elasticsearch.Version;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
++import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.Streamer;
+-import org.jetbrains.annotations.VisibleForTesting;
+ 
+ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDecimal> {
+ 
+@@ -70,7 +71,7 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
+     @Nullable
+     private final Integer precision;
+ 
+-    private NumericType(@Nullable Integer precision, @Nullable Integer scale) {
++    public NumericType(@Nullable Integer precision, @Nullable Integer scale) {
+         this.precision = precision;
+         this.scale = scale;
+     }
+@@ -221,9 +222,14 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
+     public BigDecimal readValueFrom(StreamInput in) throws IOException {
+         if (in.readBoolean()) {
+             byte[] bytes = in.readByteArray();
++            int scale = this.scale == null ? 0 : this.scale;
++            if (in.getVersion().onOrAfter(Version.V_5_8_4) && in.readBoolean()) {
++                scale = in.readVInt();
++                assert this.scale == null || this.scale == scale : "streamed value scale differs from type scale";
++            }
+             return new BigDecimal(
+                 new BigInteger(bytes),
+-                scale == null ? 0 : scale,
++                scale,
+                 mathContextOrDefault()
+             );
+         } else {
+@@ -236,6 +242,14 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
+         if (v != null) {
+             out.writeBoolean(true);
+             out.writeByteArray(v.unscaledValue().toByteArray());
++            if (out.getVersion().onOrAfter(Version.V_5_8_4)) {
++                if (scale == null) {
++                    out.writeBoolean(true);
++                    out.writeVInt(v.scale());
++                } else {
++                    out.writeBoolean(false);
++                }
++            }
+         } else {
+             out.writeBoolean(false);
+         }
+diff --git a/server/src/test/java/io/crate/types/NumericTypeTest.java b/server/src/test/java/io/crate/types/NumericTypeTest.java
+index e0237665c7..ce5a30ba25 100644
+--- a/server/src/test/java/io/crate/types/NumericTypeTest.java
++++ b/server/src/test/java/io/crate/types/NumericTypeTest.java
+@@ -163,6 +163,19 @@ public class NumericTypeTest extends ESTestCase {
+         assertThat(expected).isEqualTo(actual);
+     }
+ 
++    @Test
++    public void test_numeric_value_streaming_does_not_loose_scale() throws IOException {
++        BigDecimal expected = BigDecimal.valueOf(1234, 2);
++
++        BytesStreamOutput out = new BytesStreamOutput();
++        NumericType.INSTANCE.writeValueTo(out, expected);
++
++        StreamInput in = out.bytes().streamInput();
++        BigDecimal actual = NumericType.INSTANCE.readValueFrom(in);
++
++        assertThat(expected).isEqualTo(actual);
++    }
++
+     @Test
+     public void test_unscaled_numeric_serialization_round_trip() throws IOException {
+         var out = new BytesStreamOutput();

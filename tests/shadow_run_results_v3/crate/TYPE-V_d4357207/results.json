@@ -1,0 +1,169 @@
+{
+  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "d4357207c043d54e9caa7ee075ef00cbe8dae0c0",
+  "backport_commit": "fd4bf11db217fe49cd4bda5b51310d736fccbcd0",
+  "description": "master \u2192 5.7",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 2.02,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.89,
+          "start_line": 46,
+          "end_line": 53,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.17,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch involves a small change in the Java source code where a nullable feature flag is removed from a function signature, a minor update in a release notes documentation file, and an addition of a test case in a test file. The localization evidence indicates the main code hunk was found via fuzzy matching with high confidence (0.89), suggesting some whitespace or minor formatting differences rather than structural changes. There are no indications of method renaming or deep refactoring. The patch is more than a trivial exact string replacement but does not involve structural or API changes, fitting the TYPE_II classification. The token budget estimate accounts for the need to carefully apply the patch with some fuzzy matching and validation of the test addition.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 3.71,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 7.85,
+      "error": null,
+      "refactored_count": 1
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java",
+          "old_string": "                DataTypes.INTEGER.getTypeSignature(),\n                DataTypes.INTEGER.getTypeSignature(),\n                DataTypes.STRING.getTypeSignature()\n            ).withFeature(Feature.NULLABLE),\n            FormatTypeFunction::new\n        );\n    }",
+          "new_string": "                DataTypes.INTEGER.getTypeSignature(),\n                DataTypes.INTEGER.getTypeSignature(),\n                DataTypes.STRING.getTypeSignature()\n            ).withFeature(Feature.DETERMINISTIC),\n            FormatTypeFunction::new\n        );\n    }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 267.09,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.lucene.ThreeValuedLogicQueryBuilderTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest"
+        ],
+        "test_cases": {
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_with_three_valued_logic": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_and_three_value_query": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWith3vl": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_encoding_to_char": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNotAnyEqWithout3vl": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_format_type_with_three_valued_logic": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testComplexOperatorTreeWith3vlAndIgnore3vl": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#testNullIsReplacedWithFalseToCreateOptimizedQuery": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_nullif": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_partkeydef": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_pg_get_function_result": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_not_on_current_setting": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_or": "passed",
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest#test_negated_concat_ws_with_three_valued_logic": "passed"
+        },
+        "classes": {
+          "io.crate.lucene.ThreeValuedLogicQueryBuilderTest": "passed"
+        },
+        "summary": {
+          "passed": 14,
+          "failed": 0,
+          "skipped": 0,
+          "total": 14
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 14,
+        "patched_total": 14,
+        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 3,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 14
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 0,
+    "target_patch_bytes": 3274,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 14,
+      "patched_total": 14,
+      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

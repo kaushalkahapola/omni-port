@@ -1,0 +1,273 @@
+commit db3e8a70896ad69ae637c137e2e2f5986da085a4
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Tue Jun 11 16:59:47 2024 +0300
+
+    Fix: allow users with DDL on table to run ALTER TABLE REROUTE
+    
+    In docs, we don't mention any exception for the REROUTE statements,
+    we've just missed to check for the correct privileges for this type
+    of statements.
+    
+    - Add the required methods to the access to
+    `AccessControlImpl#StatementVisitor`.
+    
+    - Add `ident()` to `ShardedTable` iface used in the corresponding
+      analyzed statements.
+    
+    - Extracted a method which ensures DDL on table, as it's being used
+      in multiple places
+    
+    Fixes: #15891
+    (cherry picked from commit 3b37290a2c63624c6b87247031811dcd37828866)
+    
+    # Conflicts:
+    #       server/src/main/java/io/crate/auth/AccessControlImpl.java
+
+diff --git a/docs/appendices/release-notes/5.7.2.rst b/docs/appendices/release-notes/5.7.2.rst
+index 3129164dcd..d7a3cff4c2 100644
+--- a/docs/appendices/release-notes/5.7.2.rst
++++ b/docs/appendices/release-notes/5.7.2.rst
+@@ -52,6 +52,10 @@ Security Fixes
+ Fixes
+ =====
+ 
++- Fixed an issue that prevented users with :ref:`DDL <privilege_types>`
++  privileges on table to execute
++  :ref:`ALTER TABLE t REROUTE... <ddl_reroute_shards>` statements.
++
+ - Fixed an issue that could lead to requests getting stuck when trying to
+   download a blob via HTTPS.
+ 
+diff --git a/server/src/main/java/io/crate/auth/AccessControlImpl.java b/server/src/main/java/io/crate/auth/AccessControlImpl.java
+index 5015abe2c2..686a010008 100644
+--- a/server/src/main/java/io/crate/auth/AccessControlImpl.java
++++ b/server/src/main/java/io/crate/auth/AccessControlImpl.java
+@@ -70,7 +70,11 @@ import io.crate.analyze.AnalyzedInsertStatement;
+ import io.crate.analyze.AnalyzedKill;
+ import io.crate.analyze.AnalyzedOptimizeTable;
+ import io.crate.analyze.AnalyzedPrivileges;
++import io.crate.analyze.AnalyzedPromoteReplica;
+ import io.crate.analyze.AnalyzedRefreshTable;
++import io.crate.analyze.AnalyzedRerouteAllocateReplicaShard;
++import io.crate.analyze.AnalyzedRerouteCancelShard;
++import io.crate.analyze.AnalyzedRerouteMoveShard;
+ import io.crate.analyze.AnalyzedRerouteRetryFailed;
+ import io.crate.analyze.AnalyzedResetStatement;
+ import io.crate.analyze.AnalyzedRestoreSnapshot;
+@@ -378,13 +382,7 @@ public final class AccessControlImpl implements AccessControl {
+ 
+         @Override
+         public Void visitAlterTable(AnalyzedAlterTable alterTable, Role user) {
+-            Privileges.ensureUserHasPrivilege(
+-                relationVisitor.roles,
+-                user,
+-                Permission.DDL,
+-                Securable.TABLE,
+-                alterTable.tableInfo().ident().toString()
+-            );
++            ensureDDLOnTable(user, alterTable.tableInfo().ident().fqn());
+             return null;
+         }
+ 
+@@ -508,13 +506,7 @@ public final class AccessControlImpl implements AccessControl {
+         public Void visitDropTable(AnalyzedDropTable<?> dropTable, Role user) {
+             TableInfo table = dropTable.table();
+             if (table != null) {
+-                Privileges.ensureUserHasPrivilege(
+-                    relationVisitor.roles,
+-                    user,
+-                    Permission.DDL,
+-                    Securable.TABLE,
+-                    table.ident().toString()
+-                );
++                ensureDDLOnTable(user, table.ident().fqn());
+             }
+             return null;
+         }
+@@ -559,13 +551,7 @@ public final class AccessControlImpl implements AccessControl {
+ 
+         @Override
+         public Void visitAnalyzedAlterTableRenameTable(AnalyzedAlterTableRenameTable analysis, Role user) {
+-            Privileges.ensureUserHasPrivilege(
+-                relationVisitor.roles,
+-                user,
+-                Permission.DDL,
+-                Securable.TABLE,
+-                analysis.sourceName().fqn()
+-            );
++            ensureDDLOnTable(user, analysis.sourceName().fqn());
+             return null;
+         }
+ 
+@@ -610,62 +596,32 @@ public final class AccessControlImpl implements AccessControl {
+ 
+         @Override
+         public Void visitAlterTableAddColumn(AnalyzedAlterTableAddColumn analysis, Role user) {
+-            Privileges.ensureUserHasPrivilege(
+-                relationVisitor.roles,
+-                user,
+-                Permission.DDL,
+-                Securable.TABLE,
+-                analysis.table().ident().toString()
+-            );
++            ensureDDLOnTable(user, analysis.table().ident().fqn());
+             return null;
+         }
+ 
+         @Override
+         public Void visitAlterTableDropColumn(AnalyzedAlterTableDropColumn analysis, Role user) {
+-            Privileges.ensureUserHasPrivilege(
+-                relationVisitor.roles,
+-                user,
+-                Permission.DDL,
+-                Securable.TABLE,
+-                analysis.table().ident().toString()
+-            );
++            ensureDDLOnTable(user, analysis.table().ident().fqn());
+             return null;
+         }
+ 
+         @Override
+         public Void visitAlterTableRenameColumn(AnalyzedAlterTableRenameColumn analysis, Role user) {
+-            Privileges.ensureUserHasPrivilege(
+-                relationVisitor.roles,
+-                user,
+-                Permission.DDL,
+-                Securable.TABLE,
+-                analysis.table().toString()
+-            );
++            ensureDDLOnTable(user, analysis.table().fqn());
+             return null;
+         }
+ 
+         @Override
+         public Void visitAlterTableDropCheckConstraint(AnalyzedAlterTableDropCheckConstraint dropCheckConstraint,
+-                                                      Role user) {
+-            Privileges.ensureUserHasPrivilege(
+-                relationVisitor.roles,
+-                user,
+-                Permission.DDL,
+-                Securable.TABLE,
+-                dropCheckConstraint.tableInfo().ident().toString()
+-            );
++                                                       Role user) {
++            ensureDDLOnTable(user, dropCheckConstraint.tableInfo().ident().fqn());
+             return null;
+         }
+ 
+         @Override
+         public Void visitAnalyzedAlterTableOpenClose(AnalyzedAlterTableOpenClose analysis, Role user) {
+-            Privileges.ensureUserHasPrivilege(
+-                relationVisitor.roles,
+-                user,
+-                Permission.DDL,
+-                Securable.TABLE,
+-                analysis.tableInfo().ident().toString()
+-            );
++            ensureDDLOnTable(user, analysis.tableInfo().ident().fqn());
+             return null;
+         }
+ 
+@@ -828,6 +784,30 @@ public final class AccessControlImpl implements AccessControl {
+             return null;
+         }
+ 
++        @Override
++        protected Void visitRerouteMoveShard(AnalyzedRerouteMoveShard analysis, Role user) {
++            ensureDDLOnTable(user, analysis.shardedTable().ident().fqn());
++            return null;
++        }
++
++        @Override
++        protected Void visitRerouteAllocateReplicaShard(AnalyzedRerouteAllocateReplicaShard analysis, Role user) {
++            ensureDDLOnTable(user, analysis.shardedTable().ident().fqn());
++            return null;
++        }
++
++        @Override
++        protected Void visitRerouteCancelShard(AnalyzedRerouteCancelShard analysis, Role user) {
++            ensureDDLOnTable(user, analysis.shardedTable().ident().fqn());
++            return null;
++        }
++
++        @Override
++        public Void visitReroutePromoteReplica(AnalyzedPromoteReplica analysis, Role user) {
++            ensureDDLOnTable(user, analysis.shardedTable().ident().fqn());
++            return null;
++        }
++
+         @Override
+         public Void visitDropView(AnalyzedDropView dropView, Role user) {
+             for (RelationName name : dropView.views()) {
+@@ -855,13 +835,7 @@ public final class AccessControlImpl implements AccessControl {
+         @Override
+         public Void visitOptimizeTableStatement(AnalyzedOptimizeTable optimizeTable, Role user) {
+             for (TableInfo table : optimizeTable.tables().values()) {
+-                Privileges.ensureUserHasPrivilege(
+-                    relationVisitor.roles,
+-                    user,
+-                    Permission.DDL,
+-                    Securable.TABLE,
+-                    table.ident().toString()
+-                );
++                ensureDDLOnTable(user, table.ident().fqn());
+             }
+             return null;
+         }
+@@ -1047,6 +1021,16 @@ public final class AccessControlImpl implements AccessControl {
+             }
+             return null;
+         }
++
++        private void ensureDDLOnTable(Role user, String tableFqn) {
++            Privileges.ensureUserHasPrivilege(
++                relationVisitor.roles,
++                user,
++                Permission.DDL,
++                Securable.TABLE,
++                tableFqn
++            );
++        }
+     }
+ 
+     private static class MaskSensitiveExceptions extends CrateExceptionVisitor<Role, Void> {
+diff --git a/server/src/main/java/io/crate/metadata/table/ShardedTable.java b/server/src/main/java/io/crate/metadata/table/ShardedTable.java
+index bc9fea2a14..481088e881 100644
+--- a/server/src/main/java/io/crate/metadata/table/ShardedTable.java
++++ b/server/src/main/java/io/crate/metadata/table/ShardedTable.java
+@@ -24,9 +24,12 @@ package io.crate.metadata.table;
+ import org.elasticsearch.cluster.metadata.Metadata;
+ 
+ import io.crate.metadata.ColumnIdent;
++import io.crate.metadata.RelationName;
+ 
+ public interface ShardedTable {
+ 
++    RelationName ident();
++
+     int numberOfShards();
+ 
+     String numberOfReplicas();
+diff --git a/server/src/test/java/io/crate/auth/AccessControlMayExecuteTest.java b/server/src/test/java/io/crate/auth/AccessControlMayExecuteTest.java
+index 5102940fdb..7657a3e9de 100644
+--- a/server/src/test/java/io/crate/auth/AccessControlMayExecuteTest.java
++++ b/server/src/test/java/io/crate/auth/AccessControlMayExecuteTest.java
+@@ -480,6 +480,18 @@ public class AccessControlMayExecuteTest extends CrateDummyClusterServiceUnitTes
+         assertAskedForTable(Permission.DDL, "doc.users");
+     }
+ 
++    @Test
++    public void test_alter_table_reroute() throws Exception {
++        analyze("alter table users reroute MOVE SHARD 1 FROM 'node1' TO 'node2'");
++        assertAskedForTable(Permission.DDL, "doc.users");
++        analyze("alter table users reroute ALLOCATE REPLICA SHARD 1 ON 'node1'");
++        assertAskedForTable(Permission.DDL, "doc.users");
++        analyze("alter table users reroute PROMOTE REPLICA SHARD 1 ON 'node1'");
++        assertAskedForTable(Permission.DDL, "doc.users");
++        analyze("alter table users reroute CANCEL SHARD 1 ON 'node1'");
++        assertAskedForTable(Permission.DDL, "doc.users");
++    }
++
+     @Test
+     public void testShowTable() throws Exception {
+         analyze("show create table users");

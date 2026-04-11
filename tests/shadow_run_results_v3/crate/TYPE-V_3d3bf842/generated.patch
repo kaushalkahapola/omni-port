@@ -1,0 +1,383 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
+index b4ce983f2e..0cc747e1fb 100644
+--- a/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
++++ b/server/src/main/java/io/crate/execution/dml/upsert/ShardUpsertRequest.java
+@@ -47,8 +47,6 @@ import io.crate.expression.symbol.Symbol;
+ import io.crate.expression.symbol.Symbols;
+ import io.crate.metadata.Reference;
+ import io.crate.metadata.settings.SessionSettings;
+-import io.crate.metadata.table.TableInfo;
+-import io.crate.statistics.Stats;
+ import io.crate.types.DataType;
+ 
+ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, ShardUpsertRequest.Item> {
+@@ -84,7 +82,6 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+     @Nullable
+     private Symbol[] returnValues;
+ 
+-
+     public ShardUpsertRequest(
+         ShardId shardId,
+         UUID jobId,
+@@ -309,14 +306,16 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+          */
+         private transient long usedBytes = -1L;
+ 
++        /// @param fullDocSizeEstimate the expected number of bytes
++        /// the full document has when loaded from disk
+         public static Item forUpdate(String id,
+                                      Symbol[] assignments,
+                                      long requiredVersion,
+                                      long seqNo,
+                                      long primaryTerm,
+-                                     long sizeEstimate) {
++                                     long fullDocSizeEstimate) {
+             long usedBytes = SHALLOW_SIZE;
+-            usedBytes += sizeEstimate;
++            usedBytes += fullDocSizeEstimate;
+             usedBytes += RamUsageEstimator.sizeOf(id);
+             for (var assignment : assignments) {
+                 usedBytes += assignment.ramBytesUsed();
+@@ -364,6 +363,7 @@ public final class ShardUpsertRequest extends ShardRequest<ShardUpsertRequest, S
+                 }
+             }
+             if (onConflictAssignments != null) {
++                usedBytes += fullDocSizeEstimate;
+                 for (var assignment : onConflictAssignments) {
+                     usedBytes += assignment.ramBytesUsed();
+                 }
+diff --git a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
+index 5467841b09..dda25a072d 100644
+--- a/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
++++ b/server/src/main/java/io/crate/execution/dsl/projection/ColumnIndexWriterProjection.java
+@@ -52,6 +52,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+      */
+     private final List<? extends Symbol> outputs;
+ 
++    private final long fullDocSizeEstimate;
++
+     /**
+      * List of values or expressions used to be retrieved from the inserted/updated rows,
+      * empty if no values should be returned. The types of the returnValues need
+@@ -77,7 +79,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+                                        Settings settings,
+                                        boolean autoCreateIndices,
+                                        List<? extends Symbol> outputs,
+-                                       List<Symbol> returnValues) {
++                                       List<Symbol> returnValues,
++                                       long fullDocSizeEstimate) {
+ 
+         super(relationName, partitionIdent, primaryKeys, clusteredByColumn, settings, primaryKeySymbols, autoCreateIndices);
+         assert partitionedBySymbols.stream().noneMatch(s -> s.any(Symbol.IS_COLUMN))
+@@ -89,12 +92,12 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+         this.clusteredBySymbol = clusteredBySymbol;
+         this.outputs = outputs;
+         this.returnValues = returnValues;
++        this.fullDocSizeEstimate = fullDocSizeEstimate;
+     }
+ 
+     ColumnIndexWriterProjection(StreamInput in) throws IOException {
+         super(in);
+ 
+-
+         if (in.getVersion().before(Version.V_5_5_0)) {
+             if (in.readBoolean()) {
+                 // Ignore targetColsSymbolsExclPartition
+@@ -153,7 +156,15 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+             outputs = List.of();
+             allTargetColumns = List.of();
+         }
++        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
++            fullDocSizeEstimate = in.readLong();
++        } else {
++            fullDocSizeEstimate = 0;
++        }
++    }
+ 
++    public long fullDocSizeEstimate() {
++        return fullDocSizeEstimate;
+     }
+ 
+     public List<? extends Symbol> outputs() {
+@@ -168,8 +179,6 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+         return allTargetColumns;
+     }
+ 
+-
+-
+     public boolean isIgnoreDuplicateKeys() {
+         return ignoreDuplicateKeys;
+     }
+@@ -198,7 +207,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+         return onDuplicateKeyAssignments.equals(that.onDuplicateKeyAssignments) &&
+                allTargetColumns.equals(that.allTargetColumns) &&
+                Objects.equals(outputs, that.outputs) &&
+-               Objects.equals(returnValues, that.returnValues);
++               Objects.equals(returnValues, that.returnValues) &&
++               Objects.equals(fullDocSizeEstimate, that.fullDocSizeEstimate);
+     }
+ 
+     @Override
+@@ -207,7 +217,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+                             onDuplicateKeyAssignments,
+                             allTargetColumns,
+                             outputs,
+-                            returnValues);
++                            returnValues,
++                            fullDocSizeEstimate);
+     }
+ 
+     @Override
+@@ -251,6 +262,9 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+                 Symbol.toStream(returnValue, out);
+             }
+         }
++        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
++            out.writeLong(fullDocSizeEstimate);
++        }
+     }
+ 
+     public ColumnIndexWriterProjection bind(Function<? super Symbol, Symbol> binder) {
+@@ -276,7 +290,8 @@ public class ColumnIndexWriterProjection extends AbstractIndexWriterProjection {
+             Settings.EMPTY,
+             autoCreateIndices(),
+             outputs,
+-            returnValues
++            returnValues,
++            fullDocSizeEstimate
+             );
+     }
+ }
+diff --git a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
+index aafbae9fc4..8a2405e84b 100644
+--- a/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
++++ b/server/src/main/java/io/crate/execution/dsl/projection/UpdateProjection.java
+@@ -52,12 +52,15 @@ public class UpdateProjection extends Projection {
+     @Nullable
+     private Long requiredVersion;
+ 
++    private final long fullDocSizeEstimate;
++
+     public UpdateProjection(Symbol uidSymbol,
+                             String[] assignmentsColumns,
+                             Symbol[] assignments,
+                             Symbol[] outputs,
+                             @Nullable Symbol[] returnValues,
+-                            @Nullable Long requiredVersion) {
++                            @Nullable Long requiredVersion,
++                            long fullDocSizeEstimate) {
+         this.uidSymbol = uidSymbol;
+         this.assignmentsColumns = assignmentsColumns;
+         this.assignments = assignments;
+@@ -66,6 +69,7 @@ public class UpdateProjection extends Projection {
+             : "Cannot operate on Reference, Field or SelectSymbol symbols: " + outputs;
+         this.outputs = outputs;
+         this.requiredVersion = requiredVersion;
++        this.fullDocSizeEstimate = fullDocSizeEstimate;
+     }
+ 
+     public UpdateProjection(StreamInput in) throws IOException {
+@@ -102,6 +106,15 @@ public class UpdateProjection extends Projection {
+             //the default value in pre 4.1 was a long for a count
+             outputs = new Symbol[]{new InputColumn(0, DataTypes.LONG)};
+         }
++        if (in.getVersion().onOrAfter(Version.V_5_10_5)) {
++            this.fullDocSizeEstimate = in.readLong();
++        } else {
++            this.fullDocSizeEstimate = 0;
++        }
++    }
++
++    public long fullDocSizeEstimate() {
++        return fullDocSizeEstimate;
+     }
+ 
+     public Symbol uidSymbol() {
+@@ -207,5 +220,8 @@ public class UpdateProjection extends Projection {
+                 out.writeVInt(0);
+             }
+         }
++        if (out.getVersion().onOrAfter(Version.V_5_10_5)) {
++            out.writeLong(fullDocSizeEstimate);
++        }
+     }
+ }
+diff --git a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
+index 2825a9c1fe..6b8e92159a 100644
+--- a/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
++++ b/server/src/main/java/io/crate/execution/engine/indexing/ColumnIndexWriterProjector.java
+@@ -85,7 +85,8 @@ public class ColumnIndexWriterProjector implements Projector {
+                                       int bulkActions,
+                                       boolean autoCreateIndices,
+                                       List<Symbol> returnValues,
+-                                      UUID jobId
++                                      UUID jobId,
++                                      long fullDocSizeEstimate
+                                       ) {
+         RowShardResolver rowShardResolver = new RowShardResolver(
+             txnCtx, nodeCtx, primaryKeyIdents, primaryKeySymbols, clusteredByColumn, routingSymbol);
+@@ -116,14 +117,17 @@ public class ColumnIndexWriterProjector implements Projector {
+         );
+ 
+         InputRow insertValues = new InputRow(insertInputs);
+-        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> ShardUpsertRequest.Item.forInsert(
+-            id,
+-            pkValues,
+-            autoGeneratedTimestamp,
+-            insertColumns,
+-            insertValues.materialize(),
+-            onConflictAssignments
+-        );
++        ItemFactory<ShardUpsertRequest.Item> itemFactory = (id, pkValues, autoGeneratedTimestamp) -> {
++            return ShardUpsertRequest.Item.forInsert(
++                id,
++                pkValues,
++                autoGeneratedTimestamp,
++                insertColumns,
++                insertValues.materialize(),
++                onConflictAssignments,
++                fullDocSizeEstimate
++            );
++        };
+ 
+         var upsertResultContext = returnValues.isEmpty() ? UpsertResultContext.forRowCount() : UpsertResultContext.forResultRows();
+ 
+diff --git a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
+index 24cf0ec297..d8b29ed410 100644
+--- a/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
++++ b/server/src/main/java/io/crate/execution/engine/indexing/IndexWriterProjector.java
+@@ -123,7 +123,8 @@ public class IndexWriterProjector implements Projector {
+             autoGeneratedTimestamp,
+             missingAssignmentsColumns,
+             new Object[]{source.value()},
+-            null
++            null,
++            0
+         );
+ 
+         Predicate<UpsertResults> earlyTerminationCondition = results -> failFast && results.containsErrors();
+@@ -153,7 +154,6 @@ public class IndexWriterProjector implements Projector {
+         );
+     }
+ 
+-
+     @Override
+     public BatchIterator<Row> apply(BatchIterator<Row> batchIterator) {
+         return CollectingBatchIterator.newInstance(batchIterator, shardingUpsertExecutor, batchIterator.hasLazyResultSet());
+diff --git a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
+index 880bb53eee..a69a080945 100644
+--- a/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
++++ b/server/src/main/java/io/crate/planner/consumer/InsertFromSubQueryPlanner.java
+@@ -40,7 +40,6 @@ import io.crate.planner.operators.LogicalPlan;
+ import io.crate.planner.operators.LogicalPlanner;
+ import io.crate.types.DataTypes;
+ 
+-
+ public final class InsertFromSubQueryPlanner {
+ 
+     public static final String RETURNING_VERSION_ERROR_MSG =
+@@ -58,8 +57,6 @@ public final class InsertFromSubQueryPlanner {
+             throw new UnsupportedFeatureException(RETURNING_VERSION_ERROR_MSG);
+         }
+ 
+-
+-
+         // if fields are null default to number of rows imported
+         var outputs = statement.outputs() == null ? List.of(new InputColumn(0, DataTypes.LONG)) : statement.outputs();
+ 
+@@ -77,7 +74,8 @@ public final class InsertFromSubQueryPlanner {
+             Settings.EMPTY,
+             statement.tableInfo().isPartitioned(),
+             outputs,
+-            statement.outputs() == null ? List.of() : statement.outputs()
++            statement.outputs() == null ? List.of() : statement.outputs(),
++            plannerContext.nodeContext().tableStats().estimatedSizePerRow(statement.tableInfo())
+         );
+         LogicalPlan plannedSubQuery = logicalPlanner.plan(
+             statement.subQueryRelation(),
+diff --git a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
+index 14f14396d5..8c846e62dc 100644
+--- a/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
++++ b/server/src/main/java/io/crate/planner/consumer/UpdatePlanner.java
+@@ -270,13 +270,16 @@ public final class UpdatePlanner {
+                 outputSymbols[i] = new InputColumn(i, returnValues.get(i).valueType());
+             }
+         }
++
+         UpdateProjection updateProjection = new UpdateProjection(
+             new InputColumn(0, idReference.valueType()),
+             assignments.targetNames(),
+             assignmentSources,
+             outputSymbols,
+             returnValues == null ? null : returnValues.toArray(new Symbol[0]),
+-            null);
++            null,
++            plannerCtx.nodeContext().tableStats().estimatedSizePerRow(tableInfo)
++        );
+ 
+         WhereClause where = detailedQuery.toBoundWhereClause(
+             tableInfo, params, subQueryResults, plannerCtx.transactionContext(), plannerCtx.nodeContext(), plannerCtx.clusterState().metadata());
+diff --git a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+index 3204716803..cd2364f14a 100644
+--- a/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
++++ b/server/src/main/java/io/crate/planner/operators/InsertFromValues.java
+@@ -113,7 +113,6 @@ import io.crate.planner.ExecutionPlan;
+ import io.crate.planner.PlannerContext;
+ import io.crate.types.DataType;
+ 
+-
+ public class InsertFromValues implements LogicalPlan {
+ 
+     private final TableFunctionRelation tableFunctionRelation;
+@@ -383,7 +382,6 @@ public class InsertFromValues implements LogicalPlan {
+             writerProjection.allTargetColumns()
+         );
+ 
+-
+         var bulkResponse = new BulkResponse(bulkParams.size());
+         IntArrayList bulkIndices = new IntArrayList();
+         CompletableFuture<BulkResponse> result = new CompletableFuture<>();
+@@ -477,7 +475,8 @@ public class InsertFromValues implements LogicalPlan {
+                 autoGeneratedTimestamp,
+                 writerProjection.allTargetColumns().toArray(Reference[]::new),
+                 insertValues.materialize(),
+-                onConflictAssignments
++                onConflictAssignments,
++                0
+             );
+ 
+         var rowShardResolver = new RowShardResolver(
+diff --git a/server/src/main/java/io/crate/statistics/TableStats.java b/server/src/main/java/io/crate/statistics/TableStats.java
+index b7fd9e6668..15bc7a83b1 100644
+--- a/server/src/main/java/io/crate/statistics/TableStats.java
++++ b/server/src/main/java/io/crate/statistics/TableStats.java
+@@ -22,6 +22,7 @@
+ package io.crate.statistics;
+ 
+ import io.crate.metadata.RelationName;
++import io.crate.metadata.table.TableInfo;
+ 
+ import java.util.HashMap;
+ import java.util.Map;
+@@ -62,6 +63,21 @@ public class TableStats {
+         return tableStats.getOrDefault(relationName, Stats.EMPTY).averageSizePerRowInBytes();
+     }
+ 
++    /**
++     * Returns an estimation (avg) size of each row of the table in bytes or if no stats are available
++     * for the given table an estimate (avg) based on the column types of the table.
++     */
++    public long estimatedSizePerRow(TableInfo tableInfo) {
++        Stats stats = tableStats.get(tableInfo.ident());
++        if (stats == null) {
++            // if stats are not available we fall back to estimate the size based on
++            // column types. Therefore we need to get the column information.
++            return Stats.EMPTY.estimateSizeForColumns(tableInfo);
++        } else {
++            return stats.averageSizePerRowInBytes();
++        }
++    }
++
+     public Iterable<ColumnStatsEntry> statsEntries() {
+         Set<Map.Entry<RelationName, Stats>> entries = tableStats.entrySet();
+         return () -> entries.stream()

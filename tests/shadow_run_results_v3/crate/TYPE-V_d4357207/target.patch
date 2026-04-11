@@ -1,0 +1,69 @@
+commit fd4bf11db217fe49cd4bda5b51310d736fccbcd0
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Tue Jun 25 14:05:40 2024 +0300
+
+    Fixed nullability for `format_type` scalar
+    
+    The 2nd argument is ignored, so even if it's `null` the function can
+    return `???` as a result (only based on the 1st argument.
+    
+    Fixes: #16225
+    (cherry picked from commit d4357207c043d54e9caa7ee075ef00cbe8dae0c0)
+    
+    # Conflicts:
+    #       server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java
+    #       server/src/test/java/io/crate/lucene/ThreeValuedLogicQueryBuilderTest.java
+
+diff --git a/docs/appendices/release-notes/5.7.3.rst b/docs/appendices/release-notes/5.7.3.rst
+index 9a4f54bffc..a66b991853 100644
+--- a/docs/appendices/release-notes/5.7.3.rst
++++ b/docs/appendices/release-notes/5.7.3.rst
+@@ -48,6 +48,10 @@ See the :ref:`version_5.7.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that caused queries to incorrectly filter out rows when the
++  ``WHERE`` clause contained :ref:`scalar-format_type` function under ``NOT`` or
++  ``!=`` operators.
++
+ - Fixed an issue that resulted in an ``unsupported ExecutionNode`` error if
+   joining a foreign table with another table that's sharded across many nodes.
+ 
+diff --git a/server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java b/server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java
+index 31c2385dc8..20a9df635d 100644
+--- a/server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/systeminformation/FormatTypeFunction.java
+@@ -46,7 +46,7 @@ public final class FormatTypeFunction extends Scalar<String, Object> {
+                 DataTypes.INTEGER.getTypeSignature(),
+                 DataTypes.INTEGER.getTypeSignature(),
+                 DataTypes.STRING.getTypeSignature()
+-            ).withFeature(Feature.NULLABLE),
++            ),
+             FormatTypeFunction::new
+         );
+     }
+diff --git a/server/src/test/java/io/crate/lucene/ThreeValuedLogicQueryBuilderTest.java b/server/src/test/java/io/crate/lucene/ThreeValuedLogicQueryBuilderTest.java
+index fc3f74bbd8..dd7a00cf91 100644
+--- a/server/src/test/java/io/crate/lucene/ThreeValuedLogicQueryBuilderTest.java
++++ b/server/src/test/java/io/crate/lucene/ThreeValuedLogicQueryBuilderTest.java
+@@ -21,7 +21,8 @@
+ 
+ package io.crate.lucene;
+ 
+-import static org.assertj.core.api.Assertions.assertThat;
++
++import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+ 
+ import org.apache.lucene.search.Query;
+ import org.junit.Test;
+@@ -119,4 +120,10 @@ public class ThreeValuedLogicQueryBuilderTest extends LuceneQueryBuilderTest {
+         assertThat(convert("NOT (CURRENT_SETTING(name, true))"))
+             .hasToString("+(+*:* -pg_catalog.current_setting(name, true)) #(NOT pg_catalog.current_setting(name, true))");
+     }
++
++    @Test
++    public void test_negated_format_type_with_three_valued_logic() {
++        assertThat(convert("NOT pg_catalog.format_type(x, null)")).hasToString(
++            "+(+*:* -pg_catalog.format_type(x, NULL)) #(NOT pg_catalog.format_type(x, NULL))");
++    }
+ }

@@ -1,0 +1,94 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java b/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
+index 4f6f6a123f..4066ba9d7a 100644
+--- a/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
+@@ -46,6 +46,8 @@ import io.crate.types.StorageSupport;
+ 
+ public class ArrayIndexer<T> implements ValueIndexer<List<T>> {
+ 
++    public static final Version ARRAY_LENGTH_FIELD_SUPPORTED_VERSION = Version.V_5_9_0;
++
+     public static Query arrayLengthTermQuery(Reference arrayRef, int length, Function<ColumnIdent, Reference> getRef) {
+         return IntPoint.newExactQuery(toArrayLengthFieldName(arrayRef, getRef), length);
+     }
+diff --git a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
+index 395776c479..cb8c3fa7f5 100644
+--- a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
++++ b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.expression.predicate;
+ 
++import static io.crate.execution.dml.ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION;
+ import static io.crate.lucene.LuceneQueryBuilder.genericFunctionFilter;
+ import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
+ 
+@@ -35,7 +36,6 @@ import org.apache.lucene.search.FieldExistsQuery;
+ import org.apache.lucene.search.MatchNoDocsQuery;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.TermQuery;
+-import org.elasticsearch.Version;
+ import org.elasticsearch.common.lucene.search.Queries;
+ import org.jetbrains.annotations.Nullable;
+ 
+@@ -117,14 +117,13 @@ public class IsNullPredicate<T> extends Scalar<Boolean, T> {
+         return null;
+     }
+ 
+-
+     @Nullable
+     public static Query refExistsQuery(Reference ref, Context context) {
+         String field = ref.storageIdent();
+         DataType<?> valueType = ref.valueType();
+         boolean canUseFieldsExist = ref.hasDocValues() || ref.indexType() == IndexType.FULLTEXT;
+         if (valueType instanceof ArrayType<?>) {
+-            if (context.tableInfo().versionCreated().onOrAfter(Version.V_5_9_0)) {
++            if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {
+                 // Array columns in tables on and after 5.9 indexes _array_length_ fields. For null rows, nothing is indexed
+                 // such that FieldExistsQuery can be used.
+                 return ArrayIndexer.arrayLengthExistsQuery(ref, context.tableInfo()::getReference);
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+index eb84e7f1c9..d5354f3ca2 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.expression.scalar;
+ 
++import static io.crate.execution.dml.ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION;
+ import static io.crate.expression.scalar.array.ArrayArgumentValidators.ensureInnerTypeIsNotUndefined;
+ import static io.crate.lucene.LuceneQueryBuilder.genericFunctionFilter;
+ import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
+@@ -32,7 +33,6 @@ import org.apache.lucene.search.BooleanClause;
+ import org.apache.lucene.search.BooleanQuery;
+ import org.apache.lucene.search.MatchNoDocsQuery;
+ import org.apache.lucene.search.Query;
+-import org.elasticsearch.Version;
+ import org.jetbrains.annotations.Nullable;
+ 
+ import io.crate.data.Input;
+@@ -85,7 +85,6 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         }
+     }
+ 
+-
+     private ArrayUpperFunction(Signature signature, BoundSignature boundSignature) {
+         super(signature, boundSignature);
+         ensureInnerTypeIsNotUndefined(boundSignature.argTypes(), signature.getName().name());
+@@ -135,7 +134,6 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         }
+     }
+ 
+-
+     /**
+      * <pre>
+      * {@code
+@@ -179,7 +177,7 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         int cmpVal = cmpNumber.intValue();
+         // If the array col is from a table created on or after 5.9, we can utilize '_array_length_' indexes,
+         // see ArrayIndexer for details
+-        if (context.tableInfo().versionCreated().onOrAfter(Version.V_5_9_0)) {
++        if (context.tableInfo().versionCreated().onOrAfter(ARRAY_LENGTH_FIELD_SUPPORTED_VERSION)) {
+             return toQueryUsingArrayLengthIndex(parentName, arrayRef, cmpVal, context.tableInfo()::getReference);
+         }
+ 

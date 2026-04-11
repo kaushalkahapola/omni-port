@@ -1,0 +1,242 @@
+{
+  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "e046b311fc71b35e8a1c52f53eabd35af3d09e24",
+  "backport_commit": "c9177d67b9b875475a7e1e6af204ab21385d4c6c",
+  "description": "master \u2192 5.9",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 1.48,
+      "error": null,
+      "java_hunks": 3,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 22,
+          "end_line": 27,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.897,
+          "start_line": 261,
+          "end_line": 267,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.753,
+          "start_line": 736,
+          "end_line": 763,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.67,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.9,
+        "reasoning": "The patch involves a small refactor of a method by removing a version check and unifying the logic for all versions, as well as a minor import change. The changes are mostly whitespace and formatting with some slight logic rearrangement but no deep structural changes or API redesign. The localization evidence shows the hunks were found via 'git_exact' and 'git_pickaxe' with high confidence, indicating the patch applies with minor adjustments. Therefore, this patch fits TYPE_II complexity, requiring fuzzy matching due to minor code rearrangements and formatting changes.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 14.11,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 22.2,
+      "error": null,
+      "refactored_count": 1
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 2,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "old_string": "        leafNamesByOid = new HashMap<>();\n        Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n            .filter(r -> r.oid() != Metadata.COLUMN_OID_UNASSIGNED)\n            .forEach(r -> leafNamesByOid.put(Long.toString(r.oid()), r.column().leafName()));\n        this.analyzers = analyzers;\n        this.ident = ident;\n        this.pkConstraintName = pkConstraintName;",
+          "new_string": "        leafNamesByOid = new HashMap<>();\n        Stream.concat(Stream.concat(this.references.values().stream(), indexColumns.values().stream()), droppedColumns.stream())\n            .filter(r -> r.oid() != COLUMN_OID_UNASSIGNED)\n            .forEach(r -> leafNamesByOid.put(Long.toString(r.oid()), r.column().leafName()));\n        this.analyzers = analyzers;\n        this.ident = ident;\n        this.pkConstraintName = pkConstraintName;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "old_string": "        return notNullColumns;\n    }\n\n    /**\n     * Starting from 5.5 column OID-s are used as source keys.\n     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n     * <ul>\n     *  <li>OBJECT (IGNORED) sub-columns</li>\n     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n     * </ul>\n     */\n    public UnaryOperator<String> lookupNameBySourceKey() {\n        if (versionCreated.onOrAfter(Version.V_5_5_0)) {\n            return oidOrName -> {\n                String name = leafNamesByOid.get(oidOrName);\n                if (name == null) {\n                    if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n                        assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n                        return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                    }\n                    return oidOrName;\n                }\n                return name;\n            };\n        } else {\n            return UnaryOperator.identity();\n        }\n    }",
+          "new_string": "        return notNullColumns;\n    }\n\n    /**\n     * Starting from 5.5 column OID-s are used as source keys.\n     * Even of 5.5, there are no OIDs (and thus no source key rewrite happening) for:\n     * <ul>\n     *  <li>OBJECT (IGNORED) sub-columns</li>\n     *  <li>Internal object keys of the geo shape column, such as \"coordinates\", \"type\"</li>\n     * </ul>\n     */\n    public UnaryOperator<String> lookupNameBySourceKey() {\n        return oidOrName -> {\n            String name = leafNamesByOid.get(oidOrName);\n            if (name == null) {\n                if (oidOrName.startsWith(UNKNOWN_COLUMN_PREFIX)) {\n                    assert oidOrName.length() >= UNKNOWN_COLUMN_PREFIX.length() + 1 : \"Column name must consist of at least one character\";\n                    return oidOrName.substring(UNKNOWN_COLUMN_PREFIX.length());\n                }\n                return oidOrName;\n            }\n            return name;\n        };\n    }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 277.45,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.metadata.doc.DocTableInfoTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.metadata.doc.DocTableInfoTest"
+        ],
+        "test_cases": {
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_returns_null_for_deleted_columns": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent": "passed"
+        },
+        "classes": {
+          "io.crate.metadata.doc.DocTableInfoTest": "passed"
+        },
+        "summary": {
+          "passed": 17,
+          "failed": 0,
+          "skipped": 0,
+          "total": 17
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent",
+          "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column",
+          "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref",
+          "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references",
+          "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_returns_null_for_deleted_columns",
+          "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0",
+          "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions"
+        ],
+        "baseline_total": 0,
+        "patched_total": 17,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 3,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 2,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1353,
+    "target_patch_bytes": 5277,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo",
+        "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent",
+        "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents",
+        "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table",
+        "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column",
+        "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents",
+        "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns",
+        "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents",
+        "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref",
+        "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references",
+        "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_returns_null_for_deleted_columns",
+        "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0",
+        "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents",
+        "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template",
+        "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template",
+        "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices",
+        "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions"
+      ],
+      "baseline_total": 0,
+      "patched_total": 17,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 17,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

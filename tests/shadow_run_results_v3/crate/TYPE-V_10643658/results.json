@@ -1,0 +1,209 @@
+{
+  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "106436589bb5bde52346e54d66f681117fbc5a8d",
+  "backport_commit": "884f41f152d1b2892076f8e1adc4e15705c3d063",
+  "description": "master \u2192 5.8",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 14.12,
+      "error": null,
+      "java_hunks": 5,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 60,
+          "end_line": 66,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.659,
+          "start_line": 113,
+          "end_line": 119,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 132,
+          "end_line": 138,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "method_used": "embedding",
+          "confidence": 0.834,
+          "start_line": 161,
+          "end_line": 170,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "method_used": "failed",
+          "confidence": 0.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.5,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.85,
+        "reasoning": "The patch introduces synchronized methods to make QueryProfiler thread-safe, which is a structural change affecting method synchronization and access control. Additionally, method visibility modifiers are changed from protected to private, indicating a structural refactor. The patch also adds a new test class to verify thread safety, increasing complexity. Localization evidence shows the patch was found with moderate to high confidence but some hunks required embedding or failed localization, indicating structural differences. Overall, this is beyond simple string or whitespace changes, but not a deep API redesign, fitting TYPE_III complexity.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 17.28,
+      "error": null,
+      "adapted_count": 4
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 4,
+      "failed_count": 1,
+      "synthesis_status": "partial",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "old_string": "    /**\n     * Returns a {@link QueryProfileBreakdown} for a scoring query.  Scoring queries (e.g. those\n     * that are past the rewrite phase and are now being wrapped by createWeight() ) follow\n     * a recursive progression.  We can track the dependency tree by a simple stack\n     *\n     * The only hiccup is that the first scoring query will be identical to the last rewritten\n     * query, so we need to take special care to fix that\n     *\n     * @param query The scoring query we wish to profile\n     * @return      A ProfileBreakdown for this query\n     */\n    public PB getProfileBreakdown(E query) {\n        int token = currentToken;\n\n        boolean stackEmpty = stack.isEmpty();",
+          "new_string": "    /**\n     * Returns a {@link QueryProfileBreakdown} for a scoring query.  Scoring queries (e.g. those\n     * that are past the rewrite phase and are now being wrapped by createWeight() ) follow\n     * a recursive progression.  We can track the dependency tree by a simple stack\n     *\n     * The only hiccup is that the first scoring query will be identical to the last rewritten\n     * query, so we need to take special care to fix that\n     *\n     * @param query The scoring query we wish to profile\n     * @return      A ProfileBreakdown for this query\n     */\n    public synchronized PB getProfileBreakdown(E query) {\n        int token = currentToken;\n\n        boolean stackEmpty = stack.isEmpty();",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "old_string": "    protected abstract PB createProfileBreakdown();",
+          "new_string": "    private PB createProfileBreakdown() {\n        return new QueryProfileBreakdown();\n    }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "old_string": "    public List<ProfileResult> getTree() {\n        ArrayList<ProfileResult> results = new ArrayList<>(5);\n        for (Integer root : roots) {\n            results.add(doGetTree(root));",
+          "new_string": "    public synchronized List<ProfileResult> getTree() {\n        ArrayList<ProfileResult> results = new ArrayList<>(5);\n        for (Integer root : roots) {\n            results.add(doGetTree(root));",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
+          "old_string": "    protected abstract String getTypeFromElement(E element);",
+          "new_string": "    private String getTypeFromElement(Query query) {\n        // Anonymous classes won't have a name,\n        // we need to get the super class\n        if (query.getClass().getSimpleName().isEmpty()) {",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 48.14,
+      "error": null,
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper): te && apt-get install -y     git     rsync     && rm -rf /var/lib/apt/lists/*\n#6 CACHED\n\n#7 [3/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 7,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 1
+    },
+    "java_production_hunks": 5,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "partial",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 4,
+    "failed_hunks_total": 1,
+    "retry_contexts": [
+      {
+        "error_type": "synthesis_skipped_no_localization",
+        "error_message": "Hunk unclaimed; localization failed entirely",
+        "attempt_count": 4,
+        "suggested_action": "manual_review"
+      },
+      {
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "--- Building code for b4ce56b ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      ",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java",
+        "old_content": "        return query.getClass().getSimpleName();\n    }\n\n    protected String getDescriptionFromElement(Query query) {\n        return query.toString();\n    }\n\n-- /dev/null\n",
+        "new_content": "        return query.getClass().getSimpleName();\n    }\n\n    private String getDescriptionFromElement(Query query) {\n        return query.toString();\n    }\n\n"
+      }
+    ],
+    "generated_patch_bytes": 0,
+    "target_patch_bytes": 6856,
+    "validation_passed": false,
+    "validation_failure_category": "unknown",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

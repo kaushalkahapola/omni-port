@@ -1,0 +1,184 @@
+commit 20840290fefcb20a549fe8240dfe3ffc1b4c7b82
+Author: Mathias Fussenegger <f.mathias@zignar.net>
+Date:   Wed Sep 4 15:43:40 2024 +0200
+
+    Fix race allowing to insert conflicting value/types into object(dynamic) columns
+    
+    Closes https://github.com/crate/crate/issues/16562
+    
+    The `ObjectIndexer` changed itself immediately when detecting new
+    columns. This was a problem if concurrently another shard created the
+    same column with a different type:
+    
+        shard 1: Detects obj['x'] as long, modifies itself
+        shard 2: Detects obj['x'] as double, modifies itself
+        shard 1: add column request a)
+        shard 2: add column request b)
+        add column request a) succeeds. cluster state updated to obj['x'] = long
+        shard 1: receives success, continues
+        shard 2: receives add column failure, skips 1 item due to the failure but continues with remaining items
+        shard 2: remaining items are inserted as obj['x'] = double
+    
+    To fix this, this changed the `ObjectIndexer` to not immediately update
+    its children on `collectSchemaUpdates`, but on `updateTargets`, which is
+    only called after a add-column request succeeded
+    
+    (cherry picked from commit dcbd23f6208c99f85aa82d287d75a8eb5955000f)
+    
+    # Conflicts:
+    #       server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+    #       server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java
+
+diff --git a/docs/appendices/release-notes/5.8.3.rst b/docs/appendices/release-notes/5.8.3.rst
+index 7750b210d4..2abaa4e114 100644
+--- a/docs/appendices/release-notes/5.8.3.rst
++++ b/docs/appendices/release-notes/5.8.3.rst
+@@ -47,6 +47,10 @@ See the :ref:`version_5.8.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed a race condition that could allow ``INSERT INTO`` statements to write
++  values with conflicting types into a table within an ``OBJECT (DYNAMIC)``
++  column if the insert needed to create a new sub-column dynamically.
++
+ - Fixed an issue that caused ``WHERE`` clause to filter out all rows when the
+   clause contained a :ref:`LIKE or ILIKE<sql_dql_like>` operator on a column
+   declared with :ref:`INDEX OFF<sql_ddl_index_off>` and the pattern was an empty
+diff --git a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+index 9aafe63987..c0d0f54cc0 100644
+--- a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+@@ -179,6 +179,9 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+ 
+     @Override
+     public void updateTargets(Function<ColumnIdent, Reference> getRef) {
++        ColumnIdent objectColumn = ref.column();
++        Reference updatedSelf = getRef.apply(objectColumn);
++        ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());
+         for (Map.Entry<String, Reference> entry : childColumns.entrySet()) {
+             var innerName = entry.getKey();
+             var oldChildRef = entry.getValue();
+@@ -199,6 +202,19 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+         for (var indexer : innerIndexers.values()) {
+             indexer.updateTargets(getRef);
+         }
++        for (String innerColumn : objectType.innerTypes().keySet()) {
++            if (!innerIndexers.containsKey(innerColumn)) {
++                Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));
++                @SuppressWarnings("unchecked")
++                ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(
++                    table,
++                    childRef,
++                    getRef
++                );
++                innerIndexers.put(innerColumn, childIndexer);
++                childColumns.put(innerColumn, childRef);
++            }
++        }
+     }
+ 
+     @SuppressWarnings("unchecked")
+@@ -261,8 +277,6 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+                 newColumn,
+                 getRef
+             );
+-            innerIndexers.put(innerName, valueIndexer);
+-            childColumns.put(innerName, newColumn);
+             valueIndexer.collectSchemaUpdates(
+                 innerValue,
+                 onDynamicColumn,
+diff --git a/server/src/test/java/io/crate/execution/dml/IndexerTest.java b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+index 1f3e10cad2..527fed1076 100644
+--- a/server/src/test/java/io/crate/execution/dml/IndexerTest.java
++++ b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+@@ -26,6 +26,7 @@ import static io.crate.types.GeoShapeType.Names.TREE_BKD;
+ import static io.crate.types.GeoShapeType.Names.TREE_GEOHASH;
+ import static io.crate.types.GeoShapeType.Names.TREE_LEGACY_QUADTREE;
+ import static io.crate.types.GeoShapeType.Names.TREE_QUADTREE;
++import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ import static org.elasticsearch.cluster.metadata.Metadata.COLUMN_OID_UNASSIGNED;
+ 
+@@ -1309,6 +1310,40 @@ public class IndexerTest extends CrateDummyClusterServiceUnitTest {
+         assertTranslogParses(doc, table);
+     }
+ 
++    @Test
++    public void test_handles_type_conflicts_in_dynamic_nested_objects() throws Exception {
++        var sqlExecutor = SQLExecutor.of(clusterService)
++            .addTable("create table tbl (o object(dynamic))");
++        DocTableInfo table = sqlExecutor.resolveTableInfo("tbl");
++        Indexer indexer = getIndexer(sqlExecutor, "tbl", "o");
++
++        Map<String, List<Map<String, Integer>>> value1 = Map.of("name", List.of(Map.of("a", 1)));
++        Map<String, Map<String, Integer>> value2 = Map.of("name", Map.of("a", 1));
++
++        List<Reference> newColumns = indexer.collectSchemaUpdates(item(value1));
++
++        assertThat(newColumns).satisfiesExactly(
++            x -> assertThat(x).isReference().hasName("o['name']"),
++            x -> assertThat(x).isReference().hasName("o['name']['a']")
++        );
++
++
++        newColumns = indexer.collectSchemaUpdates(item(value2));
++        assertThat(newColumns).as("collectSchemaUpdates must not apply the updates immediately").satisfiesExactly(
++            x -> assertThat(x).isReference().hasName("o['name']"),
++            x -> assertThat(x).isReference().hasName("o['name']['a']")
++        );
++
++        DocTableInfo newTable = addColumns(sqlExecutor, table, newColumns);
++
++        indexer.updateTargets(newTable::getReference);
++        newColumns = indexer.collectSchemaUpdates(item(value2));
++        assertThat(newColumns).isEmpty();
++
++        assertThatThrownBy(() -> indexer.index(item(value1)))
++            .isExactlyInstanceOf(ClassCastException.class);
++    }
++
+     public static void assertTranslogParses(ParsedDocument doc, DocTableInfo info) throws Exception {
+         TranslogIndexer ti = new TranslogIndexer(info);
+         ParsedDocument d = ti.index(doc.id(), doc.source());
+diff --git a/server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java b/server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java
+index b78ae2f731..c2bf7e8fa9 100644
+--- a/server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java
++++ b/server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java
+@@ -35,6 +35,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ import java.util.UUID;
++import java.util.stream.Stream;
+ 
+ import org.elasticsearch.test.IntegTestCase;
+ import org.jetbrains.annotations.Nullable;
+@@ -464,4 +465,29 @@ public class DynamicMappingUpdateITest extends IntegTestCase {
+             () -> execute("insert into t (n) values ([[1, 2], [3, 4]])")
+         ).hasMessageContaining("Dynamic nested arrays are not supported");
+     }
++
++    @Test
++    public void test_conflicting_object_updates_do_not_allow_inserting_incompatible_values() throws Exception {
++        execute("""
++            CREATE TABLE exp1 (id TEXT PRIMARY KEY, doc OBJECT(dynamic))
++            """);
++        execute(
++            """
++            INSERT INTO exp1 (id, doc)
++            VALUES
++                ('4', {"name" = [{ "a" = 1 }]}),
++                ('1', {"name" = { "a" = 1 }}),
++                ('2', {"name" = { "a" = 2 }}),
++                ('3', {"name" = { "a" = null }})
++            ;
++              """
++        );
++        execute("REFRESH TABLE exp1");
++        execute("SELECT id FROM exp1 order by id");
++        List<Integer> ids = Stream.of(response.rows()).map(row -> Integer.parseInt(row[0].toString())).toList();
++        assertThat(ids).satisfiesAnyOf(
++            xs -> assertThat(xs).isEqualTo(List.of(1, 2, 3)),
++            xs -> assertThat(xs).isEqualTo(List.of(4))
++        );
++    }
+ }

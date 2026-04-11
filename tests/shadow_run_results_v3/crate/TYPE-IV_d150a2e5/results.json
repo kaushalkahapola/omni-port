@@ -1,0 +1,190 @@
+{
+  "run_timestamp": "2026-04-10T19:22:05.162206",
+  "repo": "crate",
+  "patch_type": "TYPE-IV",
+  "original_commit": "d150a2e57f8a6da80bacf146f934d8e0cd87466b",
+  "backport_commit": "007682aa53eebc124e6406977dd03a50d3433630",
+  "description": "master \u2192 5.9",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 23.87,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.85,
+          "start_line": 62,
+          "end_line": 73,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 122,
+          "end_line": 132,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.44,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.9,
+        "reasoning": "The patch involves adding a runtime check and exception throw when adding a sub-column to an OBJECT(IGNORED) parent if the table is not empty. This is a behavioral change requiring fuzzy matching since the exact code location and structure may differ slightly in the target branch. The patch also includes test additions and release notes updates, which are straightforward. The main code change is not a simple string replacement but does not involve deep structural refactoring or redesign, so it fits TYPE_II complexity. The localization evidence shows the main code hunk was found via 'git_pickaxe' with 0.85 confidence, indicating some fuzziness in matching. Overall, the patch is moderately complex but not structurally deep, so TYPE_II with high confidence is appropriate.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 5.78,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/AlterTableOperation.java",
+          "old_string": "import io.crate.execution.support.ChainableActions;\nimport io.crate.metadata.GeneratedReference;\nimport io.crate.metadata.PartitionName;\nimport io.crate.metadata.RelationName;\nimport io.crate.metadata.table.TableInfo;\nimport io.crate.replication.logical.LogicalReplicationService;\nimport io.crate.replication.logical.metadata.Publication;\n\n@Singleton\npublic class AlterTableOperation {",
+          "new_string": "import io.crate.execution.support.ChainableActions;\nimport io.crate.metadata.GeneratedReference;\nimport io.crate.metadata.PartitionName;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.RelationName;\nimport io.crate.metadata.table.TableInfo;\nimport io.crate.replication.logical.LogicalReplicationService;\nimport io.crate.replication.logical.metadata.Publication;\nimport io.crate.sql.tree.ColumnPolicy;\n\n@Singleton\npublic class AlterTableOperation {",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 308.02,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.integrationtests.AlterTableIntegrationTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.integrationtests.AlterTableIntegrationTest"
+        ],
+        "test_cases": {
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_table_drop_simple_column_view_updated": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_create_soft_delete_setting_for_partitioned_tables": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_table_drop_column_dropped_meanwhile": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_can_add_sub_column_to_ignored_parent_if_table_is_empty": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_cannot_add_sub_column_to_ignored_parent_if_table_is_not_empty": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_partitioned_table_drop_column_can_add_again": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_rename_columns": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_table_drop_leaf_subcolumn_with_parent_object_array": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_table_drop_column_can_add_again": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_partitioned_table_drop_simple_column": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_table_drop_subcolumn_with_children": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_drop_sub_column_readd_and_update": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_table_can_add_column_after_dropping_column_with_max_known_position": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_table_drop_leaf_subcolumn": "passed",
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_alter_table_drop_simple_column": "passed"
+        },
+        "classes": {
+          "io.crate.integrationtests.AlterTableIntegrationTest": "passed"
+        },
+        "summary": {
+          "passed": 15,
+          "failed": 0,
+          "skipped": 0,
+          "total": 15
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.integrationtests.AlterTableIntegrationTest#test_cannot_add_sub_column_to_ignored_parent_if_table_is_not_empty"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 15,
+        "patched_total": 15,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 15
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      1,
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1331,
+    "target_patch_bytes": 5591,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.integrationtests.AlterTableIntegrationTest#test_cannot_add_sub_column_to_ignored_parent_if_table_is_not_empty"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 15,
+      "patched_total": 15,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

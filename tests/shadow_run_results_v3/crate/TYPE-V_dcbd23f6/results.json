@@ -1,0 +1,146 @@
+{
+  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "dcbd23f6208c99f85aa82d287d75a8eb5955000f",
+  "backport_commit": "20840290fefcb20a549fe8240dfe3ffc1b4c7b82",
+  "description": "master \u2192 5.8",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 1.53,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
+          "method_used": "gumtree_ast",
+          "confidence": 0.75,
+          "start_line": 107,
+          "end_line": 202,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
+          "method_used": "fuzzy",
+          "confidence": 0.821,
+          "start_line": 262,
+          "end_line": 268,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 5.68,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.85,
+        "reasoning": "The patch modifies the ObjectIndexer class by changing when and how it updates its children references, moving from immediate updates during collectSchemaUpdates to deferred updates during updateTargets. This involves structural changes to the class's internal state management and method logic, including adding new loops and conditional logic. The patch also updates test cases and release notes accordingly. The localization evidence shows the main code changes were found via 'gumtree_ast' and 'fuzzy' methods with moderate confidence, indicating structural changes rather than trivial string replacements or formatting fixes. Therefore, the patch complexity aligns with TYPE_III, involving structural changes but not deep refactoring or complete redesign.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 17.0,
+      "error": null,
+      "adapted_count": 2
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 2,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
+          "old_string": "                           Map<ColumnIdent, Indexer.ColumnConstraint> checks) throws IOException {\n        xContentBuilder.startObject();\n        for (var entry : childColumns.entrySet()) {\n            var childRef = entry.getValue();\n            String innerName = entry.getKey();\n            DataType<?> type = childRef.valueType();\n            ColumnIdent innerColumn = column.getChild(innerName);\n            Object innerValue = null;\n            if (value == null || value.containsKey(innerName) == false) {\n                Input<Object> synthetic = synthetics.get(innerColumn);\n                if (synthetic != null) {\n                    innerValue = synthetic.value();\n                }\n            } else {\n                innerValue = value.get(innerName);\n            }\n            ColumnConstraint check = checks.get(innerColumn);\n            if (check != null) {\n                check.verify(innerValue);\n            }\n            if (innerValue == null) {\n                continue;\n            }\n            var valueIndexer = innerIndexers.get(innerName);\n            // valueIndexer is null for partitioned columns\n            if (valueIndexer != null) {\n                valueIndexer.indexValue(\n                    type.sanitizeValue(innerValue),\n                    childRef.storageIdentLeafName(),\n                    xContentBuilder,\n                    addField,\n                    synthetics,\n                    checks\n                );\n            }\n        }\n\n        if (value != null) {\n            indexUnknownColumns(value, xContentBuilder);\n        }\n        xContentBuilder.endObject();\n    }\n\n    @Override\n    public void collectSchemaUpdates(@Nullable Map<String, Object> value,\n                                     Consumer<? super Reference> onDynamicColumn,\n                                     Synthetics synthetics) throws IOException {\n        for (var entry : childColumns.entrySet()) {\n            var childRef = entry.getValue();\n            String innerName = entry.getKey();\n            DataType<?> type = childRef.valueType();\n            ColumnIdent innerColumn = column.getChild(innerName);\n            Object innerValue = null;\n            if (value == null || value.containsKey(innerName) == false) {\n                Input<Object> synthetic = synthetics.get(innerColumn);\n                if (synthetic != null) {\n                    innerValue = synthetic.value();\n                }\n            } else {\n                innerValue = value.get(innerName);\n            }\n            var valueIndexer = innerIndexers.get(innerName);\n            // valueIndexer is null for partitioned columns\n            if (valueIndexer != null) {\n                valueIndexer.collectSchemaUpdates(\n                    type.sanitizeValue(innerValue),\n                    onDynamicColumn,\n                    synthetics\n                );\n            }\n        }\n        if (value != null) {\n            addNewColumns(value, onDynamicColumn, synthetics);\n        }\n    }\n\n    @Override\n    public void updateTargets(Function<ColumnIdent, Reference> getRef) {\n        for (Map.Entry<String, Reference> entry : childColumns.entrySet()) {\n            var innerName = entry.getKey();\n            var oldChildRef = entry.getValue();\n            var newChildRef = getRef.apply(oldChildRef.column());\n            if (oldChildRef.equals(newChildRef) == false) {\n                entry.setValue(newChildRef);\n                if (newChildRef.granularity() != RowGranularity.PARTITION) {\n                    //noinspection unchecked\n                    ValueIndexer<Object> newIndexer = (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(\n                            newChildRef.ident().tableIdent(),\n                            newChildRef,\n                            getRef\n                    );\n                    innerIndexers.put(innerName, newIndexer);\n                }\n            }\n        }\n        for (var indexer : innerIndexers.values()) {\n            indexer.updateTargets(getRef);\n        }\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private void addNewColumns(Map<String, Object> value,\n",
+          "new_string": "                           Map<ColumnIdent, Indexer.ColumnConstraint> checks) throws IOException {\n        xContentBuilder.startObject();\n        for (var entry : childColumns.entrySet()) {\n            var childRef = entry.getValue();\n            String innerName = entry.getKey();\n            DataType<?> type = childRef.valueType();\n@Override\npublic void updateTargets(Function<ColumnIdent, Reference> getRef) {\n    ColumnIdent objectColumn = ref.column();\n    Reference updatedSelf = getRef.apply(objectColumn);\n    ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());\n    for (Map.Entry<String, Reference> entry : childColumns.entrySet()) {\n        String innerName = entry.getKey();\n        Reference oldChildRef = entry.getValue();\n        Reference newChildRef = getRef.apply(oldChildRef.column());\n        if (oldChildRef.equals(newChildRef) == false) {\n            entry.setValue(newChildRef);\n            if (newChildRef.granularity() != RowGranularity.PARTITION) {\n                //noinspection unchecked\n                ValueIndexer<Object> newIndexer = (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(\n                    table,\n                    newChildRef,\n                    getRef\n                );\n                innerIndexers.put(innerName, newIndexer);\n            }\n        }\n    }\n    for (var indexer : innerIndexers.values()) {\n        indexer.updateTargets(getRef);\n    }\n    for (String innerColumn : objectType.innerTypes().keySet()) {\n        if (!childColumns.containsKey(innerColumn)) {\n            Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));\n            //noinspection unchecked\n            ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(\n                table,\n                childRef,\n                getRef\n            );\n            childColumns.put(innerColumn, childRef);\n            innerIndexers.put(innerColumn, childIndexer);\n        }\n    }\n}\n            indexer.updateTargets(getRef);\n        }\n    }\n\n    @SuppressWarnings(\"unchecked\")\n    private void addNewColumns(Map<String, Object> value,\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
+          "old_string": "            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(\n                table,\n                newColumn,\n                getRef\n            );\n            innerIndexers.put(innerName, valueIndexer);\n            childColumns.put(innerName, newColumn);\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n                synthetics\n            );\n        }\n",
+          "new_string": "            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(\n                table,\n                newColumn,\n                getRef\n            );\n            innerIndexers.put(innerName, valueIndexer);\n                getRef\n            );\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n                synthetics\n            );\n        }\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 71.51,
+      "error": null,
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper):    rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 8,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 56
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 2,
+    "failed_hunks_total": 0,
+    "retry_contexts": [
+      {
+        "error_type": "unknown",
+        "error_message": "--- Building code for fe6a722 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      ",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
+      }
+    ],
+    "failed_hunks": [],
+    "generated_patch_bytes": 0,
+    "target_patch_bytes": 8918,
+    "validation_passed": false,
+    "validation_failure_category": "unknown",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

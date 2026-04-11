@@ -1,0 +1,351 @@
+{
+  "run_timestamp": "2026-04-10T19:14:52.480369",
+  "repo": "crate",
+  "patch_type": "TYPE-III",
+  "original_commit": "adf9854bdb9cbf08dde206c0a1e005a5ea3379c9",
+  "backport_commit": "b92b08dc1f9d9ffd4c84a68d21ccb08dfe85a1c8",
+  "description": "master \u2192 5.8",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 23.55,
+      "error": null,
+      "java_hunks": 7,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 96,
+          "end_line": 102,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 139,
+          "end_line": 145,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 171,
+          "end_line": 177,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 201,
+          "end_line": 207,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 184,
+          "end_line": 191,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "method_used": "failed",
+          "confidence": 0.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.613,
+          "start_line": 238,
+          "end_line": 251,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.21,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch consists primarily of exact string replacements and method signature changes that are straightforward and localized within the same files and methods. Most hunks were found via 'git_exact' with high confidence, indicating minimal structural changes or refactoring. Although one hunk in RolesMetadata.java was found with lower confidence via 'git_pickaxe', the overall patch complexity remains low as it involves simple method calls and object construction changes without deep structural refactoring or redesign. The patch does not introduce new classes or major API changes, so it fits the TYPE_I classification for trivial backporting.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 5,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/Role.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 3.29,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 1,
+      "synthesis_status": "partial",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "old_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n        }",
+          "new_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), role.with(grantedRoles));\n        }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 302.79,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.role.TransportRoleActionTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.role.metadata.RolesMetadataTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.role.TransportRoleActionTest",
+          "io.crate.role.metadata.RolesMetadataTest"
+        ],
+        "test_cases": {
+          "io.crate.role.TransportRoleActionTest#test_alter_user_reset_jwt_and_password": "passed",
+          "io.crate.role.TransportRoleActionTest#testCreateFirstUser": "passed",
+          "io.crate.role.TransportRoleActionTest#test_cannot_drop_user_mapped_to_foreign_servers": "passed",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_with_old_users_metadata": "passed",
+          "io.crate.role.TransportRoleActionTest#test_create_user_with_old_users_metadata": "passed",
+          "io.crate.role.TransportRoleActionTest#test_create_user_with_matching_jwt_props_exists": "passed",
+          "io.crate.role.TransportRoleActionTest#testCreateUser": "passed",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_cannot_set_password_to_role": "passed",
+          "io.crate.role.TransportRoleActionTest#test_drop_role_with_children_is_not_allowed": "passed",
+          "io.crate.role.TransportRoleActionTest#testCreateUserAlreadyExists": "passed",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_throws_error_on_jwt_properties_clash": "passed",
+          "io.crate.role.TransportRoleActionTest#testDropNonExistingUser": "passed",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_change_jwt_and_keep_password": "passed",
+          "io.crate.role.TransportRoleActionTest#testDropUser": "passed",
+          "io.crate.role.TransportRoleActionTest#test_drop_user_with_old_users_metadata": "passed",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_change_or_reset_password_and_keep_jwt": "passed",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_cannot_set_jwt_to_role": "passed",
+          "io.crate.role.TransportRoleActionTest#testDropUserNoUsersAtAll": "passed",
+          "io.crate.role.TransportRoleActionTest#test_create_user_with_existing_name_but_different_jwt_props": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_jwt_properties_from_invalid_x_content": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_without_attributes_to_xcontent": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_revoke_roles_from_user": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_to_x_content": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_streaming": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_do_not_loose_existing_privileges": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_add_old_users_metadata_to_roles_metadata": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_with_attributes_streaming": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_to_user": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_from_cluster_state": "passed"
+        },
+        "classes": {
+          "io.crate.role.TransportRoleActionTest": "passed",
+          "io.crate.role.metadata.RolesMetadataTest": "passed"
+        },
+        "summary": {
+          "passed": 29,
+          "failed": 0,
+          "skipped": 0,
+          "total": 29
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.role.TransportRoleActionTest#testCreateFirstUser",
+          "io.crate.role.TransportRoleActionTest#testCreateUser",
+          "io.crate.role.TransportRoleActionTest#testCreateUserAlreadyExists",
+          "io.crate.role.TransportRoleActionTest#testDropNonExistingUser",
+          "io.crate.role.TransportRoleActionTest#testDropUser",
+          "io.crate.role.TransportRoleActionTest#testDropUserNoUsersAtAll",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_cannot_set_jwt_to_role",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_cannot_set_password_to_role",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_change_jwt_and_keep_password",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_change_or_reset_password_and_keep_jwt",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_reset_jwt_and_password",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_throws_error_on_jwt_properties_clash",
+          "io.crate.role.TransportRoleActionTest#test_alter_user_with_old_users_metadata",
+          "io.crate.role.TransportRoleActionTest#test_cannot_drop_user_mapped_to_foreign_servers",
+          "io.crate.role.TransportRoleActionTest#test_create_user_with_existing_name_but_different_jwt_props",
+          "io.crate.role.TransportRoleActionTest#test_create_user_with_matching_jwt_props_exists",
+          "io.crate.role.TransportRoleActionTest#test_create_user_with_old_users_metadata",
+          "io.crate.role.TransportRoleActionTest#test_drop_role_with_children_is_not_allowed",
+          "io.crate.role.TransportRoleActionTest#test_drop_user_with_old_users_metadata",
+          "io.crate.role.metadata.RolesMetadataTest#test_add_old_users_metadata_to_roles_metadata",
+          "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_do_not_loose_existing_privileges",
+          "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_to_user",
+          "io.crate.role.metadata.RolesMetadataTest#test_jwt_properties_from_invalid_x_content",
+          "io.crate.role.metadata.RolesMetadataTest#test_revoke_roles_from_user",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_from_cluster_state",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_streaming",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_to_x_content",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_with_attributes_streaming",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_without_attributes_to_xcontent"
+        ],
+        "baseline_total": 0,
+        "patched_total": 29,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 13,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 7,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "partial",
+    "applied_on_disk_ag3": 5,
+    "synthesized_count": 1,
+    "failed_hunks_total": 1,
+    "retry_contexts": [
+      {
+        "error_type": "synthesis_skipped_no_localization",
+        "error_message": "Hunk unclaimed; localization failed entirely",
+        "attempt_count": 4,
+        "suggested_action": "manual_review"
+      },
+      {
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/io/crate/role/Role.java",
+        "old_content": "                password,\n                jwtProperties,\n                sessionSettings),\n            false\n        );\n    }\n\n",
+        "new_content": "                password,\n                jwtProperties,\n                sessionSettings),\n            isSuperUser\n        );\n    }\n\n"
+      }
+    ],
+    "generated_patch_bytes": 2721,
+    "target_patch_bytes": 8988,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.role.TransportRoleActionTest#testCreateFirstUser",
+        "io.crate.role.TransportRoleActionTest#testCreateUser",
+        "io.crate.role.TransportRoleActionTest#testCreateUserAlreadyExists",
+        "io.crate.role.TransportRoleActionTest#testDropNonExistingUser",
+        "io.crate.role.TransportRoleActionTest#testDropUser",
+        "io.crate.role.TransportRoleActionTest#testDropUserNoUsersAtAll",
+        "io.crate.role.TransportRoleActionTest#test_alter_user_cannot_set_jwt_to_role",
+        "io.crate.role.TransportRoleActionTest#test_alter_user_cannot_set_password_to_role",
+        "io.crate.role.TransportRoleActionTest#test_alter_user_change_jwt_and_keep_password",
+        "io.crate.role.TransportRoleActionTest#test_alter_user_change_or_reset_password_and_keep_jwt",
+        "io.crate.role.TransportRoleActionTest#test_alter_user_reset_jwt_and_password",
+        "io.crate.role.TransportRoleActionTest#test_alter_user_throws_error_on_jwt_properties_clash",
+        "io.crate.role.TransportRoleActionTest#test_alter_user_with_old_users_metadata",
+        "io.crate.role.TransportRoleActionTest#test_cannot_drop_user_mapped_to_foreign_servers",
+        "io.crate.role.TransportRoleActionTest#test_create_user_with_existing_name_but_different_jwt_props",
+        "io.crate.role.TransportRoleActionTest#test_create_user_with_matching_jwt_props_exists",
+        "io.crate.role.TransportRoleActionTest#test_create_user_with_old_users_metadata",
+        "io.crate.role.TransportRoleActionTest#test_drop_role_with_children_is_not_allowed",
+        "io.crate.role.TransportRoleActionTest#test_drop_user_with_old_users_metadata",
+        "io.crate.role.metadata.RolesMetadataTest#test_add_old_users_metadata_to_roles_metadata",
+        "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_do_not_loose_existing_privileges",
+        "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_to_user",
+        "io.crate.role.metadata.RolesMetadataTest#test_jwt_properties_from_invalid_x_content",
+        "io.crate.role.metadata.RolesMetadataTest#test_revoke_roles_from_user",
+        "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_from_cluster_state",
+        "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_streaming",
+        "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_to_x_content",
+        "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_with_attributes_streaming",
+        "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_without_attributes_to_xcontent"
+      ],
+      "baseline_total": 0,
+      "patched_total": 29,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 29,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

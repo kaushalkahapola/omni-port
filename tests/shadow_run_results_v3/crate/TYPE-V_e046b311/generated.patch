@@ -1,0 +1,36 @@
+diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+index fcd37cbd7c..c457f21b85 100644
+--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
++++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+@@ -22,6 +22,7 @@
+ package io.crate.metadata.doc;
+ 
+ import static io.crate.expression.reference.doc.lucene.SourceParser.UNKNOWN_COLUMN_PREFIX;
++import static org.elasticsearch.cluster.metadata.Metadata.COLUMN_OID_UNASSIGNED;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
+@@ -116,7 +117,6 @@ import io.crate.types.DataType;
+ import io.crate.types.DataTypes;
+ import io.crate.types.ObjectType;
+ 
+-
+ /**
+  * Represents a user table.
+  * <p>
+@@ -587,7 +587,6 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+         return result;
+     }
+ 
+-
+     /**
+      * returns <code>true</code> if this table is a partitioned table,
+      * <code>false</code> otherwise
+@@ -762,7 +761,6 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+         }
+     }
+ 
+-
+     private void validateDropColumns(List<DropColumn> dropColumns) {
+         var leftOverCols = columns().stream().map(Reference::column).collect(Collectors.toSet());
+         for (int i = 0 ; i < dropColumns.size(); i++) {
