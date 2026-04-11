@@ -1,5 +1,5 @@
 diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
-index 93c005532e0..37db5c00d83 100644
+index 93c005532e0..f37b541483b 100644
 --- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
 +++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
 @@ -24,6 +24,7 @@ import org.elasticsearch.action.admin.indices.readonly.AddIndexBlockResponse;
@@ -10,7 +10,45 @@ index 93c005532e0..37db5c00d83 100644
  import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
  import org.elasticsearch.action.bulk.BulkItemResponse;
  import org.elasticsearch.action.search.SearchRequest;
-@@ -171,6 +172,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+@@ -59,11 +60,13 @@ import org.elasticsearch.xpack.core.deprecation.DeprecatedIndexPredicate;
+ import org.elasticsearch.xpack.core.frozen.action.FreezeIndexAction;
+ import org.elasticsearch.xpack.migrate.MigrateTemplateRegistry;
+ 
++import java.util.Arrays;
+ import java.util.Locale;
+ import java.util.Map;
+ import java.util.Objects;
+ 
+-import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.WRITE;
++import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.METADATA;
++import static org.elasticsearch.cluster.metadata.IndexMetadata.APIBlock.READ_ONLY;
+ 
+ public class ReindexDataStreamIndexTransportAction extends HandledTransportAction<
+     ReindexDataStreamIndexAction.Request,
+@@ -149,20 +152,11 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+             );
+         }
+ 
+-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_READ, false)) {
+-            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a read block.", destIndexName);
+-            listener.onFailure(new ElasticsearchException(errorMessage));
+-            return;
+-        }
+-        if (settingsBefore.getAsBoolean(IndexMetadata.SETTING_BLOCKS_METADATA, false)) {
+-            var errorMessage = String.format(Locale.ROOT, "Cannot reindex index [%s] which has a metadata block.", destIndexName);
+-            listener.onFailure(new ElasticsearchException(errorMessage));
+-            return;
+-        }
+         final boolean wasClosed = isClosed(sourceIndex);
+         SubscribableListener.<FreezeResponse>newForked(l -> unfreezeIfFrozen(sourceIndexName, sourceIndex, l, taskId))
+-            .<AcknowledgedResponse>andThen(l -> setBlockWrites(sourceIndexName, l, taskId))
++            .<AcknowledgedResponse>andThen(l -> removeMetadataBlocks(sourceIndexName, taskId, l))
+             .<OpenIndexResponse>andThen(l -> openIndexIfClosed(sourceIndexName, wasClosed, l, taskId))
++            .<AcknowledgedResponse>andThen(l -> setReadOnly(sourceIndexName, l, taskId))
+             .<BroadcastResponse>andThen(l -> refresh(sourceIndexName, l, taskId))
+             .<AcknowledgedResponse>andThen(l -> deleteDestIfExists(destIndexName, l, taskId))
+             .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))
+@@ -171,6 +165,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
              .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))
              .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))
              .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))
@@ -18,7 +56,20 @@ index 93c005532e0..37db5c00d83 100644
              .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))
              .addListener(listener);
      }
-@@ -420,6 +422,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+@@ -222,9 +217,9 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+         }
+     }
+ 
+-    private void setBlockWrites(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {
+-        logger.debug("Setting write block on source index [{}]", sourceIndexName);
+-        addBlockToIndex(WRITE, sourceIndexName, new ActionListener<>() {
++    private void setReadOnly(String sourceIndexName, ActionListener<AcknowledgedResponse> listener, TaskId parentTaskId) {
++        logger.debug("Setting read-only on source index [{}]", sourceIndexName);
++        addBlockToIndex(READ_ONLY, sourceIndexName, new ActionListener<>() {
+             @Override
+             public void onResponse(AddIndexBlockResponse response) {
+                 if (response.isAcknowledged()) {
+@@ -420,6 +415,29 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
          client.admin().indices().execute(TransportAddIndexBlockAction.TYPE, addIndexBlockRequest, listener);
      }
  

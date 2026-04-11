@@ -12,10 +12,17 @@ index ae6140a1caf..4a44ad2f360 100644
              @Override
              public IndexOptions parseIndexOptions(String fieldName, Map<String, ?> indexOptionsMap) {
 diff --git a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
-index 2855fe8bcf0..8df798669b4 100644
+index 2855fe8bcf0..184bc3024aa 100644
 --- a/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
 +++ b/server/src/main/java/org/elasticsearch/search/vectors/KnnScoreDocQuery.java
-@@ -23,6 +23,7 @@ import org.apache.lucene.search.Weight;
+@@ -17,12 +17,14 @@ import org.apache.lucene.search.IndexSearcher;
+ import org.apache.lucene.search.MatchNoDocsQuery;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.QueryVisitor;
++import org.apache.lucene.search.ScoreDoc;
+ import org.apache.lucene.search.ScoreMode;
+ import org.apache.lucene.search.Scorer;
+ import org.apache.lucene.search.Weight;
  
  import java.io.IOException;
  import java.util.Arrays;
@@ -23,7 +30,7 @@ index 2855fe8bcf0..8df798669b4 100644
  import java.util.Objects;
  
  import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
-@@ -30,9 +31,8 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+@@ -30,9 +32,8 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
  /**
   * A query that matches the provided docs with their scores.
   *
@@ -34,7 +41,7 @@ index 2855fe8bcf0..8df798669b4 100644
   */
  public class KnnScoreDocQuery extends Query {
      private final int[] docs;
-@@ -49,13 +49,18 @@ public class KnnScoreDocQuery extends Query {
+@@ -49,13 +50,18 @@ public class KnnScoreDocQuery extends Query {
      /**
       * Creates a query.
       *
@@ -80,7 +87,7 @@ index 6fa83ccfb6a..1a81f4b984e 100644
  
      @Override
 diff --git a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
-index 967f310f935..f736fba3d7f 100644
+index 967f310f935..ff6e869b071 100644
 --- a/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
 +++ b/server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java
 @@ -16,14 +16,12 @@ import org.apache.lucene.search.DoubleValuesSource;
@@ -98,3 +105,21 @@ index 967f310f935..f736fba3d7f 100644
  import java.util.Objects;
  
  /**
+@@ -60,16 +58,7 @@ public class RescoreKnnVectorQuery extends Query implements QueryProfilerProvide
+         // Retrieve top k documents from the rescored query
+         TopDocs topDocs = searcher.search(query, k);
+         vectorOperations = topDocs.totalHits.value;
+-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+-        Arrays.sort(scoreDocs, Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
+-        int[] docIds = new int[scoreDocs.length];
+-        float[] scores = new float[scoreDocs.length];
+-        for (int i = 0; i < scoreDocs.length; i++) {
+-            docIds[i] = scoreDocs[i].doc;
+-            scores[i] = scoreDocs[i].score;
+-        }
+-
+-        return new KnnScoreDocQuery(docIds, scores, searcher.getIndexReader());
++        return new KnnScoreDocQuery(topDocs.scoreDocs, searcher.getIndexReader());
+     }
+ 
+     public Query innerQuery() {

@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:41:14.384938",
+  "run_timestamp": "2026-04-11T17:00:56.497881",
   "repo": "elasticsearch",
   "patch_type": "TYPE-V",
   "original_commit": "734dd070e719f0bac49953fbfb983fe8f19bd1de",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 8.13,
+      "elapsed_s": 10.37,
       "error": null,
       "java_hunks": 5,
       "aux_hunks": 1,
@@ -61,12 +61,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.02,
+      "elapsed_s": 2.37,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.9,
-        "reasoning": "The patch introduces new methods and a new constant list to define a query order for node roles, modifies existing methods to use this ordering, and changes data structures (HashMap to LinkedHashMap) to preserve order. It also updates test code to reflect these changes. The changes involve structural modifications to the class, including sorting logic and role-based prioritization, which is more complex than simple string replacements or whitespace changes but does not constitute a deep refactoring or complete redesign. The localization evidence shows the hunks were found mostly via fuzzy matching with high confidence, indicating some structural differences. Overall, this patch fits the TYPE_III classification for structural changes with renamed methods and added logic.",
+        "reasoning": "The patch introduces new logic to order shard queries based on node roles, adding new methods and modifying existing ones. It changes data structures (HashMap to LinkedHashMap) and sorting logic, indicating structural changes rather than simple string replacements or formatting. The patch was found mostly via fuzzy matching with high confidence, except one hunk found exactly, supporting the structural change classification. The changes are non-trivial but not a deep refactoring or complete redesign, fitting TYPE_III complexity.",
         "is_auto_generated": false
       }
     },
@@ -83,14 +83,14 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 20.21,
+      "elapsed_s": 15.36,
       "error": null,
-      "adapted_count": 3
+      "adapted_count": 2
     },
     "agent5_structural": {
-      "elapsed_s": 24.15,
+      "elapsed_s": 96.15,
       "error": null,
-      "refactored_count": 1
+      "refactored_count": 2
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
@@ -109,7 +109,7 @@
         },
         {
           "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "old_string": "import java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.HashMap;\nimport java.util.HashSet;\nimport java.util.IdentityHashMap;\nimport java.util.Iterator;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Queue;",
+          "old_string": "\nimport java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.HashMap;\nimport java.util.HashSet;\nimport java.util.IdentityHashMap;\nimport java.util.Iterator;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Queue;",
           "new_string": "import java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.Comparator;\nimport java.util.HashMap;\nimport java.util.HashSet;\nimport java.util.IdentityHashMap;\nimport java.util.Iterator;\nimport java.util.LinkedHashMap;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Queue;",
           "confidence": 1.0,
           "context_lines_included": 0,
@@ -117,515 +117,98 @@
         },
         {
           "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "old_string": "                pendingShardIds.addAll(targetShards.shards.keySet());",
-          "new_string": "                pendingShardIds.addAll(order(targetShards));\n    \n    private static List<ShardId> order(TargetShards targetShards) {\n        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n        var ordered = new ArrayList<>(targetShards.shards.keySet());\n        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n        return ordered;\n    }\n    \n    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {\n        if (nodes.isEmpty()) {\n            return Integer.MAX_VALUE;\n        }\n        var order = 0;\n        for (var node : nodes) {\n            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));\n        }\n        return order;\n    }\n    \n    private static int nodeOrder(DiscoveryNode node) {\n        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {\n            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {\n                return i;\n            }\n        }\n        return Integer.MAX_VALUE;\n    }",
+          "old_string": "abstract class DataNodeRequestSender {\n\n    private final ClusterService clusterService;\n    private final TransportService transportService;\n    private final Executor esqlExecutor;\n    private final CancellableTask rootTask;",
+          "new_string": "abstract class DataNodeRequestSender {\n\n    /**\n     * Query order according to the\n     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n     */\n    private static final List<String> NODE_QUERY_ORDER = List.of(\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n    );\n\n    private final ClusterService clusterService;\n    private final TransportService transportService;\n    private final Executor esqlExecutor;\n    private final CancellableTask rootTask;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "old_string": "abstract class DataNodeRequestSender {\n\n    private final ClusterService clusterService;\n    private final TransportService transportService;\n    private final Executor esqlExecutor;\n    private final CancellableTask rootTask;",
-          "new_string": "abstract class DataNodeRequestSender {\n\n    /**\n     * Query order according to the\n     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n     */\n    private static final java.util.List<String> NODE_QUERY_ORDER = java.util.List.of(\n        DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n        DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n    );\n\n    private final TransportService transportService;\n    private final Executor esqlExecutor;\n    private final CancellableTask rootTask;",
+          "old_string": "                    )\n                )\n            ) {\n                pendingShardIds.addAll(targetShards.shards.keySet());\n                trySendingRequestsForPendingShards(targetShards, computeListener);\n            }\n        }, listener::onFailure));\n    }\n\n    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {\n        changed.set(true);\n        final ActionListener<Void> listener = computeListener.acquireAvoid();",
+          "new_string": "                    )\n                )\n            ) {\n                pendingShardIds.addAll(order(targetShards));\n                trySendingRequestsForPendingShards(targetShards, computeListener);\n            }\n        }, listener::onFailure));\n    }\n\n    private static List<ShardId> order(TargetShards targetShards) {\n        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n        var ordered = new ArrayList<>(targetShards.shards.keySet());\n        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n        return ordered;\n    }\n\n    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {\n        if (nodes.isEmpty()) {\n            return Integer.MAX_VALUE;\n        }\n        var order = 0;\n        for (var node : nodes) {\n            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));\n        }\n        return order;\n    }\n\n    private static int nodeOrder(DiscoveryNode node) {\n        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {\n            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {\n                return i;\n            }\n        }\n        return Integer.MAX_VALUE;\n    }\n\n    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {\n        changed.set(true);\n        final ActionListener<Void> listener = computeListener.acquireAvoid();",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         }
       ]
     },
-    "agent7_validator": {
-      "elapsed_s": 860.31,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.07,
       "error": null,
-      "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Build failed (elasticsearch-helper): e, enum, or record expected\n                        break;\n                        ^\n/repo/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:415: error: class, interface, enum, or record expected\n                    } else if (concurrentRequests != null) {\n                    ^\n/repo/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java:417: error: class, interface, enum, ",
-      "validation_attempts": 1,
-      "retry_files": [
-        "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java"
-      ],
-      "build_success": false,
-      "build_mode": "elasticsearch-helper",
-      "test_success": null,
-      "test_mode": null,
-      "test_state": null,
-      "test_state_transition": null,
-      "compile_errors": [
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 146,
-          "message": "error: illegal start of expression"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 172,
-          "message": "error: invalid method declaration; return type required"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 174,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 175,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 179,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 180,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 185,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 187,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 191,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 197,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 209,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 214,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 215,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 218,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 222,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 226,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 231,
-          "message": "error: as of release 1.4, 'assert' is a keyword, and may not be used as an identifier"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 232,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 233,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 234,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 236,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 238,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 240,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 245,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 246,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 247,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 248,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 249,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 250,
-          "message": "error: illegal start of type"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 252,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 254,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 258,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 259,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 260,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 262,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 265,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 266,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 269,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 271,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 273,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 274,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 277,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 282,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 285,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 286,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 287,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 288,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 290,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 293,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 296,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 297,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 299,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 302,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 304,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 306,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 308,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 311,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 313,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 323,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 325,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 327,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 329,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 333,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 334,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 335,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 336,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 338,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 346,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 347,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 360,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 374,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 383,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 384,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 386,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 388,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 389,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 391,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 392,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 394,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 395,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 397,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 398,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 400,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 401,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 402,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 403,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 408,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 409,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 411,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 412,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 414,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 415,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 417,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 422,
-          "message": "error: class, interface, enum, or record expected"
-        },
-        {
-          "file": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
-          "line": 423,
-          "message": "error: class, interface, enum, or record expected"
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "outcome": "clean"
         }
-      ]
+      ],
+      "synthesized_count_after_repair": 4
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/omni-port/repos/elasticsearch/x-pack/plugin/esql/build/test-results/test/TEST-org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryMultipleMovedShards": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testDoesNotRetryMovedShardIndefinitely": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testDoNotRetryOnRequestLevelFailure": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testNonFatalFailedOnAllNodes": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirst": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testOnePass": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryUnassignedShardWithPartialResults": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryButFail": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testEmpty": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testSkipRemovesPriorNonFatalErrors": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testLimitConcurrentNodes": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirstWhenIlmMovesShard": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testAllowPartialResults": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testSkipNodes": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryOnlyMovedShards": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryUnassignedShardWithoutPartialResults": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testDoNotRetryCircuitBreakerException": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testNonFatalErrorIsRetriedOnAnotherShard": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryThenSuccess": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testMissingShards": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryMovedShard": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests": "passed"
+        },
+        "summary": {
+          "passed": 21,
+          "failed": 0,
+          "skipped": 0,
+          "total": 21
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirst",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirstWhenIlmMovesShard"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 21,
+        "patched_total": 21,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
     }
   },
   "summary": {
@@ -634,7 +217,7 @@
     "phase0_baseline": {
       "mode": "baseline-elasticsearch-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 21
     },
     "java_production_hunks": 5,
@@ -643,34 +226,41 @@
       4,
       0,
       1,
-      3,
-      2
+      2,
+      3
     ],
     "tokens_used": 0,
     "synthesis_status": "success",
     "applied_on_disk_ag3": 1,
     "synthesized_count": 4,
     "failed_hunks_total": 0,
-    "retry_contexts": [
-      {
-        "error_type": "context_mismatch",
-        "error_message": "--- Building Elasticsearch for d7fb0e2 ---\n--- Container user: 1001:1001 ---\nCPU detected: 2\n--- Changing directory to /home/kaushal/omni-port/repos/elasticsearch ---\ngradle-cache-es\ngradle-wrapper-es\n--- Docker image retrofit-elasticsearch-builder:local already exists, skipping build ---\n--- Setting cache permissions ---\n--- Compiling with Gradle (assemble + testClasses, skip tests) ---\nDownloading https://services.gradle.org/distributions/gradle-8.14.1-all.zip\n.....................10%.....................20%......................30%.....................40%......................50%.....................60%.....................70%......................80%.....................90%......................100%\nTo honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.\nDaemon JVM discovery is an incubating feature.\nDaemon will be stopped at the end of the build \n\n> Task :build-conventions:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: /repo/build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/LicensingPlugin.java uses unchecked or unsafe operations.\nNote: Recompile with -Xlint:unchecked for details.\n\n> Task :build-conventions:pluginDescriptors\n> Task :build-conventions:processResources\n> Task :build-conventions:classes\n> Task :build-conventions:jar\n> Task :build-tools:reaper:compileJava\n> Task :build-tools:reaper:processResources NO-SOURCE\n> Task :build-tools:reaper:classes\n> Task :build-tools:reaper:jar\n> Task :build-tools-internal:extractPluginRequests\n> Task :build-tools-internal:generatePluginAdapters\n> Task :build-tools-internal:pluginDescriptors\n\n> Task :build-tools:compileJava\nNote: Some input files use or override a deprecated API.\nNote: Recompile with -Xlint:deprecation for details.\nNote: ",
-        "attempt_count": 1,
-        "suggested_action": "re-localize"
-      }
-    ],
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 933,
+    "generated_patch_bytes": 4728,
     "target_patch_bytes": 11789,
-    "validation_passed": false,
-    "validation_failure_category": "context_mismatch",
-    "build_success": false,
-    "test_success": null,
-    "test_mode": null,
-    "test_transition": {},
-    "fail_to_pass_count": 0,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirst",
+        "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirstWhenIlmMovesShard"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 21,
+      "patched_total": 21,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 2,
     "newly_passing_count": 0,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }
