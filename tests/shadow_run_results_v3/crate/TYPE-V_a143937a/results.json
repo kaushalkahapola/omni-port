@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T11:04:45.673276",
+  "run_timestamp": "2026-04-11T16:04:33.302350",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "a143937ad274018991f53e8839a56249f7fdb9d4",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.36,
+      "elapsed_s": 0.81,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 2,
@@ -25,12 +25,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.6,
+      "elapsed_s": 3.59,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.85,
-        "reasoning": "The patch involves adding a conditional check in an existing method to skip non equi-join parts in join condition extraction. This is a small logical addition without structural changes or API modifications. The test addition is straightforward and does not indicate complex refactoring. The patch was found via 'git_pickaxe' with moderate confidence, indicating some minor code drift or formatting differences. Overall, this is a whitespace/formatting drift or minor logic addition requiring fuzzy matching, consistent with TYPE_II complexity.",
+        "reasoning": "The patch involves adding a conditional check in an existing method to skip non equi-join parts and adding a new test case. The changes are localized and do not involve structural or API changes. The patch was found via 'git_pickaxe' with moderate confidence, indicating some minor drift or adaptation may be needed. Overall, this is a whitespace/formatting or minor logic adjustment patch, fitting TYPE_II complexity.",
         "is_auto_generated": false
       }
     },
@@ -41,14 +41,14 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 4.86,
+      "elapsed_s": 3.52,
       "error": null,
-      "adapted_count": 1
+      "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 52.33,
       "error": null,
-      "refactored_count": 0
+      "refactored_count": 1
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
@@ -59,17 +59,28 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/lucene/LuceneQueryBuilder.java",
-          "old_string": "\n        @Override\n        public Query visitFunction(Function function, Context context) {\n            assert function != null : \"function must not be null\";",
-          "new_string": "        @Override\n        public Query visitFunction(Function function, Context context) {\n            assert function != null : \"function must not be null\";\n\n            // A join condition maybe an equi-join condition but its parts may not be.\n            // For example, consider `t1.a = t2.a AND t1.a = t1.a + t2.b`, as a whole\n            // it is an equi-join condition due to `t1.a = t2.b`\n            // but `t1.a = t1.a + t2.b` by itself is not an equi-join condition.\n            if (!EquiJoinDetector.isEquiJoin(function)) {\n                return null;\n            }",
+          "old_string": "\n    static class Visitor extends SymbolVisitor<Context, Query> {\n\n        @Override\n        public Query visitFunction(Function function, Context context) {\n            assert function != null : \"function must not be null\";",
+          "new_string": "    static class Visitor extends SymbolVisitor<Context, Query> {\n\n        @Override\n        public Query visitFunction(Function function, Context context) {\n            assert function != null : \"function must not be null\";\n\n            // A join condition maybe an equi-join condition but its parts may not be.\n            // For example, consider `t1.a = t2.a AND t1.a = t1.a + t2.b`, as a whole\n            // it is an equi-join condition due to `t1.a = t2.b`\n            // but `t1.a = t1.a + t2.b` by itself is not an equi-join condition.\n            if (!EquiJoinDetector.isEquiJoin(function)) {\n                return null;\n            }",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         }
       ]
     },
-    "agent7_validator": {
-      "elapsed_s": 141.38,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.03,
       "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/lucene/LuceneQueryBuilder.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
       "validation_passed": false,
       "validation_failure_category": "api_mismatch",
       "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/lucene/LuceneQueryBuilder.java:232: error: cannot find symbol",
@@ -90,6 +101,158 @@
           "message": "error: cannot find symbol"
         }
       ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "failed",
+      "fallback_attempts": 1,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/lucene/LuceneQueryBuilder.java",
+          "what_changed": "Added a preliminary check in the visitFunction method to verify if the given function represents an equi-join condition before proceeding with further processing.",
+          "where_in_code": "Visitor class, visitFunction(Function function, Context context) method",
+          "intent": "To ensure that only functions representing equi-join conditions are processed further, preventing incorrect handling of non-equi-join parts within join conditions and improving the accuracy of join condition detection.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "visitFunction",
+            "EquiJoinDetector.isEquiJoin"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:60: error: cannot find symbol\nserver/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:68: error: cannot find symbol\nserver/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:77: error: cannot find symbol\nserver/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:",
+      "validation_attempts": 2,
+      "retry_files": [
+        "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 60,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 68,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 77,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 89,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 102,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 115,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 125,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/lucene/LuceneQueryBuilder.java",
+          "what_changed": "Added a preliminary check in the visitFunction method to verify if the given function represents an equi-join condition before proceeding with further processing.",
+          "where_in_code": "Visitor class, visitFunction(Function function, Context context) method",
+          "intent": "To ensure that only functions representing equi-join conditions are processed further, preventing incorrect handling of non-equi-join parts within a join condition.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "visitFunction",
+            "EquiJoinDetector.isEquiJoin"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry2": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:60: error: cannot find symbol\nserver/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:68: error: cannot find symbol\nserver/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:77: error: cannot find symbol\nserver/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:",
+      "validation_attempts": 3,
+      "retry_files": [
+        "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 60,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 68,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 77,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 89,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 102,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 115,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java",
+          "line": 125,
+          "message": "error: cannot find symbol"
+        }
+      ]
     }
   },
   "summary": {
@@ -106,21 +269,36 @@
     "processed_hunk_indices": [
       0
     ],
-    "tokens_used": 0,
+    "tokens_used": 7235,
     "synthesis_status": "success",
     "applied_on_disk_ag3": 0,
-    "synthesized_count": 1,
+    "synthesized_count": 0,
     "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 2,
     "retry_contexts": [
       {
         "error_type": "api_mismatch",
         "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/lucene/LuceneQueryBuilder.java:[232,17] error: cannot find symbol\n  symbol:   variable EquiJoinDetector\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project crate-server: Compilation failure\n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/lucene/LuceneQueryBuilder.java:[232,17] error: cannot find symbol\n[ERROR]   symbol:   variable EquiJoinDetector\n[ERROR]   location: class Visitor\n[ERROR] \n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
         "suggested_action": "route_to_namespace_or_structural"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[60,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[68,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[77,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[89,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[102,12] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[115,12] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[125,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 2,
+        "suggested_action": "route_to_namespace_or_structural"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[60,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[68,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[77,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[89,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[102,12] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[115,12] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] /repo/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java:[125,61] error: cannot find symbol\n[ERROR]   symbol:   variable JoinConditionSymbolsExtractor\n[ERROR]   location: class HashJoinConditionSymbolsExtractorTest\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 3,
+        "suggested_action": "route_to_namespace_or_structural"
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 1141,
+    "generated_patch_bytes": 1159,
     "target_patch_bytes": 10303,
     "validation_passed": false,
     "validation_failure_category": "api_mismatch",

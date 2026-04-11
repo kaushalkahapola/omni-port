@@ -47,24 +47,15 @@ index 2effd6d7bf..ea62ab5958 100644
          return new RolesMetadata(newRoles);
      }
 diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
-index bbcaf64b09..5e54848960 100644
+index bbcaf64b09..b468dc833a 100644
 --- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
 +++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
-@@ -238,14 +238,9 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem
-                 }
+@@ -239,7 +239,7 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem
              }
          }
--        if (affectedCount > 0) {
+         if (affectedCount > 0) {
 -            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));
--        }
--        return affectedCount;
--    }
--
--    @Override
--    public EnumSet<Metadata.XContentContext> context() {
-+            if (affectedCount > 0) {
-+                roles.put(role.name(), role.with(grantedRoles));
-+            }
-         return EnumSet.of(Metadata.XContentContext.GATEWAY, Metadata.XContentContext.SNAPSHOT);
++            roles.put(role.name(), role.with(grantedRoles));
+         }
+         return affectedCount;
      }
- 

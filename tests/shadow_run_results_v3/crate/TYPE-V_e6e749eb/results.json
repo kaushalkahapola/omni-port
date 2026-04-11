@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T15:46:45.394643",
+  "run_timestamp": "2026-04-11T16:04:33.302350",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "e6e749ebf12d618322696d0b45f86211efbfed17",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 14.95,
+      "elapsed_s": 15.41,
       "error": null,
       "java_hunks": 3,
       "aux_hunks": 2,
@@ -43,12 +43,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.84,
+      "elapsed_s": 4.91,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_III",
-        "confidence": 0.75,
-        "reasoning": "The patch modifies the NumericType.java file by adding version checks and conditional logic around reading and writing scale values for BigDecimal streaming. This involves structural changes to the serialization logic, including the introduction of version-dependent behavior and conditional branches. The patch is not a simple string replacement or whitespace fix, nor is it a deep refactoring or complete redesign. The presence of version checks and conditional logic indicates structural changes to the method implementations, consistent with TYPE_III complexity. The localization evidence shows mixed confidence and methods, with some hunks found via embedding (which often indicates structural changes) and one via git_pickaxe. Overall, the patch complexity aligns best with TYPE_III.",
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch modifies the NumericType.java file by adding version checks and adjusting how the scale is read and written during streaming. The changes involve conditional logic based on version and slight rearrangement of existing code, but the overall structure and logic remain similar. The localization evidence shows that some hunks were found via 'embedding' with moderate confidence, indicating some divergence but not deep structural changes. This suggests the patch requires fuzzy matching due to minor code shifts and version-based conditionals, fitting TYPE_II complexity. The token budget is moderate due to the need to handle version checks and conditional logic carefully.",
         "is_auto_generated": false
       }
     },
@@ -59,26 +59,34 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 13.39,
+      "elapsed_s": 15.66,
       "error": null,
-      "adapted_count": 1
+      "adapted_count": 2
     },
     "agent5_structural": {
-      "elapsed_s": 151.32,
+      "elapsed_s": 32.74,
       "error": null,
-      "refactored_count": 2
+      "refactored_count": 1
     },
     "agent6_synthesizer": {
-      "elapsed_s": 24.69,
+      "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 2,
-      "failed_count": 1,
-      "synthesis_status": "partial",
+      "synthesized_count": 3,
+      "failed_count": 0,
+      "synthesis_status": "success",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
           "old_string": "\nimport org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
-          "new_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
+          "new_string": "\nimport org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\n\nimport io.crate.Streamer;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+          "old_string": "            byte[] bytes = in.readByteArray();\n            return new BigDecimal(\n                new BigInteger(bytes),\n                scale == null ? 0 : scale,\n                mathContextOrDefault()\n            );",
+          "new_string": "            byte[] bytes = in.readByteArray();\n            int scale = scale == null ? 0 : scale;\n            if (in.getVersion().onOrAfter(Version.V_5_9_0) && in.readBoolean()) {\n                scale = in.readVInt();\n                assert this.scale == null || this.scale == scale : \"streamed value scale differs from type scale\";\n            }\n            return new BigDecimal(\n                new BigInteger(bytes),\n                scale,\n                mathContextOrDefault()\n            );",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -94,7 +102,7 @@
       ]
     },
     "agent8_syntax_repair": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.05,
       "error": null,
       "syntax_repair_status": "clean",
       "syntax_repair_attempts": 0,
@@ -102,14 +110,18 @@
         {
           "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
           "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+          "outcome": "clean"
         }
       ],
-      "synthesized_count_after_repair": 1
+      "synthesized_count_after_repair": 3
     },
     "agent7_validator": {
       "validation_passed": false,
       "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/types/IntegerType.java:28: Unused import - org.elasticsearch.Version. [UnusedImports]",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/types/IntegerType.java:29: Unused import - org.elasticsearch.Version. [UnusedImports]",
       "validation_attempts": 1,
       "retry_files": [
         "server/src/main/java/io/crate/types/IntegerType.java"
@@ -123,7 +135,7 @@
       "compile_errors": [
         {
           "file": "server/src/main/java/io/crate/types/IntegerType.java",
-          "line": 28,
+          "line": 29,
           "message": "Unused import - org.elasticsearch.Version. [UnusedImports]"
         }
       ]
@@ -131,14 +143,14 @@
     "agent9_fallback_1": {
       "fallback_status": "failed",
       "fallback_attempts": 1,
-      "synthesized_count": 0,
+      "synthesized_count": 2,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
           "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
           "what_changed": "Added an import for Elasticsearch Version class to the imports list.",
-          "where_in_code": "IntegerType class, import section",
-          "intent": "To enable version-aware logic by importing the Version class from Elasticsearch.",
+          "where_in_code": "IntegerType class, import statements",
+          "intent": "To enable version-aware serialization logic by referencing Elasticsearch version constants.",
           "change_type": "modify_import",
           "key_symbols": [
             "Version"
@@ -147,9 +159,9 @@
         {
           "hunk_index": 1,
           "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-          "what_changed": "Modified the readValueFrom method to conditionally read the scale based on the stream version, only reading scale if the input stream version is 5.9.0 or newer.",
+          "what_changed": "Modified the readValueFrom method to conditionally read the scale value based on the stream version, only reading scale if the stream version is 5.9.0 or newer.",
           "where_in_code": "NumericType class, readValueFrom(StreamInput) method",
-          "intent": "To maintain backward compatibility by reading the scale only for newer stream versions, ensuring correct deserialization of BigDecimal values with scale information when supported.",
+          "intent": "To maintain backward compatibility with older serialized data formats by only reading scale information when supported by the stream version.",
           "change_type": "modify_logic",
           "key_symbols": [
             "readValueFrom",
@@ -159,9 +171,9 @@
         {
           "hunk_index": 2,
           "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-          "what_changed": "Updated the writeValueTo method to write the scale information conditionally based on the output stream version, only writing scale if the stream version is 5.9.0 or newer.",
+          "what_changed": "Updated the writeValueTo method to write scale information conditionally based on the stream version, only writing scale if the stream version is 5.9.0 or newer.",
           "where_in_code": "NumericType class, writeValueTo(StreamOutput, BigDecimal) method",
-          "intent": "To ensure backward compatibility by writing scale information only for newer stream versions, preventing older versions from receiving unsupported data.",
+          "intent": "To ensure serialization writes scale data only when the receiving side supports it, preserving compatibility with older versions.",
           "change_type": "modify_logic",
           "key_symbols": [
             "writeValueTo",
@@ -171,15 +183,99 @@
       ]
     },
     "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/types/NumericType.java:224: error: bad operand types for binary operator '=='\nserver/src/main/java/io/crate/types/NumericType.java:225: error: cannot find symbol\nserver/src/main/java/io/crate/types/NumericType.java:244: error: cannot find symbol",
+      "validation_attempts": 2,
+      "retry_files": [
+        "server/src/main/java/io/crate/types/NumericType.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/types/NumericType.java",
+          "line": 224,
+          "message": "error: bad operand types for binary operator '=='"
+        },
+        {
+          "file": "server/src/main/java/io/crate/types/NumericType.java",
+          "line": 225,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/types/NumericType.java",
+          "line": 244,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
+          "what_changed": "Added an import for Elasticsearch's Version class to the existing imports.",
+          "where_in_code": "IntegerType class (imports section)",
+          "intent": "To enable version-aware logic by using the Version class in this file.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Version"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+          "what_changed": "Modified the deserialization logic of BigDecimal values to conditionally read the scale only if the stream version is 5.9.0 or newer.",
+          "where_in_code": "NumericType class, readValueFrom(StreamInput) method",
+          "intent": "To maintain backward compatibility by reading the scale field only for newer stream versions, preventing errors when reading older serialized data.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "readValueFrom",
+            "BigDecimal"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+          "what_changed": "Updated the serialization logic of BigDecimal values to write the scale information only if the stream version is 5.9.0 or newer.",
+          "where_in_code": "NumericType class, writeValueTo(StreamOutput) method",
+          "intent": "To ensure compatibility with older versions by conditionally writing scale data based on the stream version, avoiding breaking changes in serialization format.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "writeValueTo",
+            "BigDecimal"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
       "syntax_repair_status": "skipped",
       "syntax_repair_attempts": 0,
       "syntax_repair_log": []
     },
-    "agent7_validator_retry1": {
+    "agent7_validator_retry2": {
       "validation_passed": true,
       "validation_failure_category": "",
       "validation_error_context": "",
-      "validation_attempts": 2,
+      "validation_attempts": 3,
       "retry_files": [],
       "build_success": true,
       "build_mode": "crate-helper",
@@ -196,27 +292,27 @@
         "test_cases": {
           "io.crate.protocols.postgres.types.NumericTypeTest#test_read_and_write_numeric_binary_value": "passed",
           "io.crate.protocols.postgres.types.NumericTypeTest#test_read_and_write_numeric_text_value": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_null_value": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_to_itself": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_unscaled_numeric": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision_and_scale": "passed",
-          "io.crate.types.NumericTypeTest#test_numeric_value_streaming": "passed",
-          "io.crate.types.NumericTypeTest#test_cast_array_to_numeric_throws_exception": "passed",
-          "io.crate.types.NumericTypeTest#test_numeric_null_value_streaming": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision_and_scale": "passed",
           "io.crate.types.NumericTypeTest#test_numeric_with_precision_and_scale_serialization_round_trip": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_unscaled_numeric": "passed",
           "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision_and_scale": "passed",
-          "io.crate.types.NumericTypeTest#test_cast_object_to_smallint_throws_exception": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_text_to_unscaled_numeric": "passed",
-          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_unscaled_numeric": "passed",
-          "io.crate.types.NumericTypeTest#test_cast_row_to_numeric_throws_exception": "passed",
-          "io.crate.types.NumericTypeTest#test_unscaled_numeric_serialization_round_trip": "passed",
           "io.crate.types.NumericTypeTest#test_sanitize_numeric_value": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_to_unscaled_numeric": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_to_itself": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision_and_scale": "passed",
+          "io.crate.types.NumericTypeTest#test_unscaled_numeric_serialization_round_trip": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision_and_scale": "passed",
           "io.crate.types.NumericTypeTest#test_numeric_value_streaming_does_not_loose_scale": "failed",
-          "io.crate.types.NumericTypeTest#test_cast_boolean_to_smallint_throws_exception": "passed"
+          "io.crate.types.NumericTypeTest#test_cast_array_to_numeric_throws_exception": "passed",
+          "io.crate.types.NumericTypeTest#test_numeric_value_streaming": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_text_types_to_numeric_with_precision": "passed",
+          "io.crate.types.NumericTypeTest#test_numeric_null_value_streaming": "passed",
+          "io.crate.types.NumericTypeTest#test_cast_object_to_smallint_throws_exception": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_unscaled_numeric": "passed",
+          "io.crate.types.NumericTypeTest#test_cast_boolean_to_smallint_throws_exception": "passed",
+          "io.crate.types.NumericTypeTest#test_cast_row_to_numeric_throws_exception": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_decimal_types_to_numeric_with_precision": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_null_value": "passed",
+          "io.crate.types.NumericTypeTest#test_implicit_cast_floating_point_to_numeric_with_precision": "passed"
         },
         "classes": {
           "io.crate.protocols.postgres.types.NumericTypeTest": "passed",
@@ -280,42 +376,30 @@
       1,
       2
     ],
-    "tokens_used": 1149,
-    "synthesis_status": "partial",
+    "tokens_used": 5417,
+    "synthesis_status": "success",
     "applied_on_disk_ag3": 0,
     "synthesized_count": 0,
-    "failed_hunks_total": 1,
+    "failed_hunks_total": 0,
     "syntax_repair_status": "skipped",
     "fallback_status": "failed",
-    "fallback_attempts": 1,
+    "fallback_attempts": 2,
     "retry_contexts": [
       {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
         "error_type": "unknown",
-        "error_message": "[ERROR] /repo/server/src/main/java/io/crate/types/IntegerType.java:28:8: Unused import - org.elasticsearch.Version. [UnusedImports]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:check (validate) on project crate-server: Failed during checkstyle execution: There is 1 error reported by Checkstyle 10.17.0 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "[ERROR] /repo/server/src/main/java/io/crate/types/IntegerType.java:29:8: Unused import - org.elasticsearch.Version. [UnusedImports]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:check (validate) on project crate-server: Failed during checkstyle execution: There is 1 error reported by Checkstyle 10.17.0 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
         "suggested_action": "inspect_and_retry"
-      }
-    ],
-    "failed_hunks": [
+      },
       {
-        "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-        "old_content": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);\n",
-        "new_content": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {\n                // Stream per-value scale only when the type itself does not define a fixed scale.\n                if (scale == null) {\n                    out.writeBoolean(true);\n                    out.writeVInt(v.scale());\n                } else {\n                    out.writeBoolean(false);\n                }\n            }\n        } else {\n            out.writeBoolean(false);\n        }\n    }",
-        "is_new_file": false,
-        "is_del_file": false,
-        "file_operation": "MODIFIED",
-        "refactored": true,
-        "semantic_confidence": 0.64,
-        "loc_index": 1
+        "error_type": "api_mismatch",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/types/NumericType.java:[224,30] error: bad operand types for binary operator '=='\n[ERROR] /repo/server/src/main/java/io/crate/types/NumericType.java:[225,42] error: cannot find symbol\n  symbol:   variable Version\n[ERROR] /repo/server/src/main/java/io/crate/types/NumericType.java:[244,43] error: cannot find symbol\n  symbol:   variable Version\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/types/NumericType.java:[224,30] error: bad operand types for binary operator '=='\n[ERROR]   first type:  int\n[ERROR]   second type: <null>\n[ERROR] /repo/server/src/main/java/io/crate/types/NumericType.java:[225,42] error: cannot find symbol\n[ERROR]   symbol:   variable Version\n[ERROR]   location: class NumericType\n[ERROR] /repo/server/src/main/java/io/crate/types/NumericType.java:[244,43] error: cannot find symbol\n[ERROR]   symbol:   variable Version\n[ERROR]   location: class NumericType\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 2,
+        "suggested_action": "route_to_namespace_or_structural"
       }
     ],
-    "generated_patch_bytes": 615,
+    "failed_hunks": [],
+    "generated_patch_bytes": 2215,
     "target_patch_bytes": 7207,
     "validation_passed": true,
     "validation_failure_category": "",

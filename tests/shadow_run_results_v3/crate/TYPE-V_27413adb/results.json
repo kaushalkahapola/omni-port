@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T11:04:45.673276",
+  "run_timestamp": "2026-04-11T16:04:33.302350",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "27413adb352fbfcb967c8c6900e8123446232307",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 49.83,
+      "elapsed_s": 28.04,
       "error": null,
       "java_hunks": 10,
       "aux_hunks": 2,
@@ -106,12 +106,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.05,
+      "elapsed_s": 4.26,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.85,
-        "reasoning": "The patch involves removing the STRICTNULL feature flag from multiple array scalar functions and refactoring their implementation from using UnaryScalar to a new Scalar subclass with overridden evaluate methods. This is a structural change affecting method signatures and class usage patterns, not just simple string replacements or formatting changes. The localization evidence shows a mix of fuzzy, javaparser, and embedding methods with moderate to high confidence, indicating some structural differences in the target branch. The changes are consistent across multiple related classes, indicating a moderate complexity structural refactor rather than a deep API redesign or trivial fix. Therefore, the patch is classified as TYPE_III with good confidence and a moderate token budget estimate to handle the structural changes during backporting.",
+        "reasoning": "The patch involves removing the STRICTNULL feature flag from multiple array scalar functions and refactoring their implementation from using UnaryScalar to a new Scalar subclass with overridden evaluate methods. This is a structural change affecting method implementations and class usage patterns, not just simple string replacements or formatting changes. The localization evidence shows the hunks were found with varying confidence using fuzzy, javaparser, and embedding methods, indicating some structural differences in the target branch. The changes are consistent across multiple related classes, indicating a moderate complexity refactor but not a deep API redesign or complete rewrite. Hence, the patch is classified as TYPE_III with high confidence and a moderate token budget estimate to handle the structural backporting work.",
         "is_auto_generated": false
       }
     },
@@ -122,26 +122,34 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 60.34,
+      "elapsed_s": 80.66,
       "error": null,
-      "adapted_count": 8
+      "adapted_count": 9
     },
     "agent5_structural": {
-      "elapsed_s": 67.19,
+      "elapsed_s": 67.0,
       "error": null,
-      "refactored_count": 2
+      "refactored_count": 0
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
       "error": null,
       "synthesized_count": 9,
       "failed_count": 1,
-      "synthesis_status": "partial",
+      "synthesis_status": "success",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java",
           "old_string": "\nimport org.jetbrains.annotations.Nullable;\n\nimport io.crate.expression.scalar.array.ArraySummationFunctions;\nimport io.crate.metadata.Functions;\nimport io.crate.metadata.Scalar;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataTypes;",
-          "new_string": "import org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.metadata.NodeContext;\nimport io.crate.metadata.TransactionContext;\nimport io.crate.expression.scalar.array.ArraySummationFunctions;\nimport io.crate.metadata.Functions;\nimport io.crate.metadata.Scalar;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataTypes;",
+          "new_string": "import org.jetbrains.annotations.Nullable;\n\nimport io.crate.data.Input;\nimport io.crate.metadata.NodeContext;\nimport io.crate.metadata.TransactionContext;\n\nimport io.crate.expression.scalar.array.ArraySummationFunctions;\nimport io.crate.metadata.Functions;\nimport io.crate.metadata.Scalar;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataTypes;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java",
+          "old_string": "                builder.add(\n                    Signature.scalar(\n                        NAME,\n                        new ArrayType<>(supportedType).getTypeSignature(),\n                        DataTypes.NUMERIC.getTypeSignature()\n                    ).withFeature(Scalar.Feature.NULLABLE),\n                    (signature, boundSignature) -> new UnaryScalar<>(\n                        signature,\n                        boundSignature,\n                        new ArrayType<>(supportedType),\n                        ArrayAvgFunction::avgNumber\n                    )\n                );",
+          "new_string": "                builder.add(\n                    Signature.scalar(\n                        NAME,\n                        new ArrayType<>(supportedType).getTypeSignature(),\n                        DataTypes.NUMERIC.getTypeSignature()\n                    ).withFeature(Scalar.Feature.NULLABLE),\n                    (signature, boundSignature) -> new Scalar<>(\n                        signature,\n                        boundSignature\n                    ) {\n                        @SafeVarargs\n                        @Override\n                        public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {\n                            return avgNumber(new ArrayType<>(supportedType).sanitizeValue(args[0].value()));\n                        }\n                    }\n                );",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -157,33 +165,33 @@
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java",
           "old_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMaxFunction::new\n        );",
-          "new_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                ),\n            ArrayMaxFunction::new\n        );",
+          "new_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMaxFunction::new\n        );",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java",
-          "old_string": "        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMaxFunction::new\n        );\n\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n            module.add(\n                Signature.scalar(\n                    NAME,\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n",
-          "new_string": "        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n            module.add(\n                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n                    )\n                    .withFeature(Feature.DETERMINISTIC),\n                    ArrayMaxFunction::new\n                );\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n            module.add(\n                Signature.scalar(\n                    NAME,\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n",
+          "old_string": "            module.add(\n                Signature.scalar(\n                    NAME,\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n                ArrayMaxFunction::new\n            );",
+          "new_string": "            module.add(\n                Signature.scalar(\n                    NAME,\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n                ArrayMaxFunction::new\n            );",
           "confidence": 1.0,
-          "context_lines_included": 3,
+          "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java",
-          "old_string": "\n    private final DataType dataType;\n\n    public static void register(Functions.Builder module) {\n\n        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMinFunction::new\n        );\n\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n",
-          "new_string": "\n    private final DataType dataType;\n\n    public static void register(Functions.Builder module) {\n\n        module.add(\nmodule.add(\n    Signature.scalar(\n            NAME,\n            new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n            DataTypes.NUMERIC.getTypeSignature()\n        )\n        .withFeature(Feature.DETERMINISTIC),\n    ArrayMinFunction::new\n);\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMinFunction::new\n        );\n\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n",
+          "old_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMinFunction::new",
+          "new_string": "            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.DETERMINISTIC),\n            ArrayMinFunction::new",
           "confidence": 1.0,
-          "context_lines_included": 3,
+          "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java",
-          "old_string": "        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                .withFeature(Feature.NULLABLE),\n            ArrayMinFunction::new\n        );\n\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n            module.add(\n                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n",
-          "new_string": "        module.add(\n            Signature.scalar(\n                    NAME,\n                    new ArrayType(DataTypes.NUMERIC).getTypeSignature(),\n                    DataTypes.NUMERIC.getTypeSignature()\n                )\n                    new ArrayType(supportedType).getTypeSignature(),\n                    supportedType.getTypeSignature()\n                )\n                .withFeature(Feature.DETERMINISTIC),\n            ArrayMinFunction::new\n        );\n        for (var supportedType : DataTypes.PRIMITIVE_TYPES) {\n            module.add(\n                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n",
+          "old_string": "                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n                    )\n                    .withFeature(Feature.NULLABLE),\n                ArrayMinFunction::new\n            );",
+          "new_string": "                Signature.scalar(\n                        NAME,\n                        new ArrayType(supportedType).getTypeSignature(),\n                        supportedType.getTypeSignature()\n                    )\n                    .withFeature(Feature.NULLABLE),\n                ArrayMinFunction::new\n            );",
           "confidence": 1.0,
-          "context_lines_included": 3,
+          "context_lines_included": 0,
           "verified": true
         },
         {
@@ -201,31 +209,89 @@
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java",
-          "old_string": "                builder.add(\n                    Signature.scalar(\n                        NAME,\n                        new ArrayType<>(supportedType).getTypeSignature(),\n                        DataTypes.NUMERIC.getTypeSignature()\n                    ).withFeature(Scalar.Feature.NULLABLE),\n                    (signature, boundSignature) -> new UnaryScalar<>(\n                        signature,\n                        boundSignature,\n                        new ArrayType<>(supportedType),\n                        ArrayAvgFunction::avgNumber\n                    )\n                );\n            }",
-          "new_string": "                builder.add(\n                    Signature.scalar(\n                        NAME,\n                        new ArrayType<>(supportedType).getTypeSignature(),\n                        DataTypes.NUMERIC.getTypeSignature()\n                    ).withFeature(Scalar.Feature.NULLABLE),\n                    (signature, boundSignature) -> new Scalar<>(\n                        signature,\n                        boundSignature\n                    ) {\n                        @SafeVarargs\n                        @Override\n                        public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {\n                            return avgNumber(new ArrayType<>(supportedType).sanitizeValue(args[0].value()));\n                        }\n                    }\n                );\n            }",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
         }
       ]
     },
-    "agent7_validator": {
-      "elapsed_s": 74.59,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.07,
       "error": null,
-      "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper): [INFO] Scanned 14 class file(s) for forbidden API invocations (in 0.56s), 0 error(s).\n[INFO] Scanned 272 class file(s) for forbidden API invocations (in 0.25s), 0 error(s).\n[INFO] Scanned 80 class file(s) for forbidden API invocations (in 0.12s), 0 error(s).\n[INFO] Scanned 8 class file(s) for forbidden API invocations (in 0.09s), 0 error(s).\n[INFO] Scanned 68 class file(s) for forbidden API invocations (in 0.14s), 0 error(s).\n[INFO] Scanned 62 class file(s) for forbi",
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 7
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": false,
+      "build_success": true,
       "build_mode": "crate-helper",
-      "test_success": null,
-      "test_mode": null,
-      "test_state": null,
-      "test_state_transition": null,
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.predicate.NotPredicateTest.xml"
+        ],
+        "target_classes": [
+          "NotPredicateTest"
+        ],
+        "test_cases": {
+          "io.crate.expression.predicate.NotPredicateTest#testEvaluate": "passed",
+          "io.crate.expression.predicate.NotPredicateTest#test_not_on_case_uses_strict_3vl": "passed",
+          "io.crate.expression.predicate.NotPredicateTest#test_neq_on_array_scalars_that_evaluate_non_null_inputs_to_nulls": "passed",
+          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbol": "passed",
+          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolBoolean": "passed",
+          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolNull": "passed"
+        },
+        "classes": {
+          "io.crate.expression.predicate.NotPredicateTest": "passed"
+        },
+        "summary": {
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0,
+          "total": 6
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.expression.predicate.NotPredicateTest#testEvaluate",
+          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbol",
+          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolBoolean",
+          "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolNull",
+          "io.crate.expression.predicate.NotPredicateTest#test_neq_on_array_scalars_that_evaluate_non_null_inputs_to_nulls",
+          "io.crate.expression.predicate.NotPredicateTest#test_not_on_case_uses_strict_3vl"
+        ],
+        "baseline_total": 0,
+        "patched_total": 6,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
       "compile_errors": []
     }
   },
@@ -242,6 +308,7 @@
     "developer_aux_hunks": 2,
     "processed_hunk_indices": [
       0,
+      2,
       3,
       4,
       5,
@@ -249,52 +316,61 @@
       7,
       8,
       9,
-      1,
-      2
+      1
     ],
     "tokens_used": 0,
-    "synthesis_status": "partial",
+    "synthesis_status": "success",
     "applied_on_disk_ag3": 0,
     "synthesized_count": 7,
     "failed_hunks_total": 1,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
     "retry_contexts": [
       {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
-        "error_type": "unknown",
-        "error_message": "[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.1:check (validate) on project crate-server: Failed during checkstyle configuration: Exception was thrown while processing /repo/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java: IllegalStateException occurred while parsing file /repo/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java. 48:18: mismatched input '(' expecting ';': InputMismatchException -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
-        "attempt_count": 1,
-        "suggested_action": "inspect_and_retry"
+        "error_type": "structural_refactor_failed",
+        "error_message": "confidence=0.45",
+        "attempt_count": 3,
+        "suggested_action": "manual_review"
       }
     ],
     "failed_hunks": [
       {
         "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java",
         "old_content": "            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.NUMERIC).getTypeSignature())\n                .returnType(DataTypes.NUMERIC.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)\n                .build(),\n            (signature, boundSignature) -> new UnaryScalar<>(\n                signature,\n                boundSignature,\n                new ArrayType<>(DataTypes.NUMERIC),\n                ArrayAvgFunction::avgBigDecimal\n            )\n        );\n\n        builder.add(\n            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.FLOAT).getTypeSignature())\n                .returnType(DataTypes.FLOAT.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)\n                .build(),\n            (signature, boundSignature) -> new UnaryScalar<>(\n                signature,\n                boundSignature,\n                new ArrayType<>(DataTypes.FLOAT),\n                ArrayAvgFunction::avgFloat\n            )\n        );\n\n        builder.add(\n            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.DOUBLE).getTypeSignature())\n                .returnType(DataTypes.DOUBLE.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)\n                .build(),\n            (signature, boundSignature) -> new UnaryScalar<>(\n                signature,\n                boundSignature,\n                new ArrayType<>(DataTypes.DOUBLE),\n                ArrayAvgFunction::avgDouble\n            )\n        );\n\n\n",
-        "new_content": "            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.NUMERIC).getTypeSignature())\n                .returnType(DataTypes.NUMERIC.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC)\n                .build(),\n            (signature, boundSignature) -> new Scalar<>(\n                signature,\n                boundSignature\n            ) {\n                @SafeVarargs\n                @Override\n                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {\n                    return avgBigDecimal(new ArrayType<>(DataTypes.NUMERIC).sanitizeValue(args[0].value()));\n                }\n            }\n        );\n\n        builder.add(\n            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.FLOAT).getTypeSignature())\n                .returnType(DataTypes.FLOAT.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC)\n                .build(),\n            (signature, boundSignature) -> new Scalar<>(\n                signature,\n                boundSignature\n            ) {\n                @SafeVarargs\n                @Override\n                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {\n                    return avgFloat(new ArrayType<>(DataTypes.FLOAT).sanitizeValue(args[0].value()));\n                }\n            }\n        );\n\n        builder.add(\n            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.DOUBLE).getTypeSignature())\n                .returnType(DataTypes.DOUBLE.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC)\n                .build(),\n            (signature, boundSignature) -> new Scalar<>(\n                signature,\n                boundSignature\n            ) {\n                @SafeVarargs\n                @Override\n                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {\n                    return avgDouble(new ArrayType<>(DataTypes.DOUBLE).sanitizeValue(args[0].value()));\n                }\n            }\n        );",
+        "new_content": "            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.NUMERIC).getTypeSignature())\n                .returnType(DataTypes.NUMERIC.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC)\n                .build(),\n            (signature, boundSignature) -> new Scalar<>(\n                signature,\n                boundSignature\n            ) {\n                @SafeVarargs\n                @Override\n                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {\n                    return avgBigDecimal(new ArrayType<>(DataTypes.NUMERIC).sanitizeValue(args[0].value()));\n                }\n            }\n        );\n\n        builder.add(\n            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.FLOAT).getTypeSignature())\n                .returnType(DataTypes.FLOAT.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC)\n                .build(),\n            (signature, boundSignature) -> new Scalar<>(\n                signature,\n                boundSignature\n            ) {\n                @SafeVarargs\n                @Override\n                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {\n                    return avgFloat(new ArrayType<>(DataTypes.FLOAT).sanitizeValue(args[0].value()));\n                }\n            }\n        );\n\n        builder.add(\n            Signature.builder(NAME, FunctionType.SCALAR)\n                .argumentTypes(new ArrayType<>(DataTypes.DOUBLE).getTypeSignature())\n                .returnType(DataTypes.DOUBLE.getTypeSignature())\n                .features(Scalar.Feature.DETERMINISTIC)\n                .build(),\n            (signature, boundSignature) -> new Scalar<>(\n                signature,\n                boundSignature\n            ) {\n                @SafeVarargs\n                @Override\n                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {\n                    return avgDouble(new ArrayType<>(DataTypes.DOUBLE).sanitizeValue(args[0].value()));\n                }\n            }\n        );\n\n\n",
         "is_new_file": false,
         "is_del_file": false,
         "file_operation": "MODIFIED",
-        "refactored": true,
-        "semantic_confidence": 0.66,
-        "loc_index": 1
+        "error": "Low semantic confidence: 0.45"
       }
     ],
-    "generated_patch_bytes": 4085,
+    "generated_patch_bytes": 3031,
     "target_patch_bytes": 13789,
-    "validation_passed": false,
-    "validation_failure_category": "unknown",
-    "build_success": false,
-    "test_success": null,
-    "test_mode": null,
-    "test_transition": {},
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.expression.predicate.NotPredicateTest#testEvaluate",
+        "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbol",
+        "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolBoolean",
+        "io.crate.expression.predicate.NotPredicateTest#testNormalizeSymbolNull",
+        "io.crate.expression.predicate.NotPredicateTest#test_neq_on_array_scalars_that_evaluate_non_null_inputs_to_nulls",
+        "io.crate.expression.predicate.NotPredicateTest#test_not_on_case_uses_strict_3vl"
+      ],
+      "baseline_total": 0,
+      "patched_total": 6,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 6,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

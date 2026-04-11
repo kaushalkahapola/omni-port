@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T11:04:45.673276",
+  "run_timestamp": "2026-04-11T16:04:33.302350",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "76cab1d4a51cda3329cf429e1ac6086dcbeb595e",
@@ -15,12 +15,12 @@
       "localization_results": []
     },
     "agent2_classifier": {
-      "elapsed_s": 3.34,
+      "elapsed_s": 2.94,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.9,
-        "reasoning": "The patch introduces new logic to disallow duplicate units in PostgreSQL style INTERVAL strings, which involves adding new boolean flags to track parsed units and throwing exceptions on duplicates. This is a structural change to the parsing logic, modifying control flow and state management within the PGIntervalParser class. Additionally, the patch updates test cases to cover the new validation behavior and modifies release notes. These changes go beyond simple string replacements or formatting adjustments, indicating a structural modification to the codebase, consistent with TYPE_III complexity. The confidence is high due to the clear structural changes, but not absolute since the overall design remains similar and no deep refactoring or redesign is involved.",
+        "reasoning": "The patch introduces new logic to detect and disallow duplicate units in PostgreSQL style INTERVAL strings. It modifies the parsing logic by adding new boolean flags to track if certain units have already been parsed and throws exceptions on duplicates. This is a structural change to the parsing method, involving control flow and state tracking, rather than a simple string replacement or formatting fix. Additionally, the patch adds new test cases to verify the behavior. These changes indicate a structural modification to the code, consistent with TYPE_III complexity. The confidence is high because the changes are clearly structural but not a deep refactor or redesign.",
         "is_auto_generated": false
       }
     },
@@ -48,9 +48,15 @@
       "synthesis_status": "success",
       "synthesized_hunks": []
     },
-    "agent7_validator": {
-      "elapsed_s": 266.7,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
       "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
       "validation_passed": true,
       "validation_failure_category": "",
       "validation_error_context": "",
@@ -68,36 +74,36 @@
           "IntervalParserTest"
         ],
         "test_cases": {
-          "io.crate.interval.IntervalParserTest#parse_year_month_hours_minutes": "passed",
-          "io.crate.interval.IntervalParserTest#parse_hours_minutes": "passed",
-          "io.crate.interval.IntervalParserTest#parse_days_seconds": "passed",
-          "io.crate.interval.IntervalParserTest#test_normalization": "passed",
-          "io.crate.interval.IntervalParserTest#parse_hours_minutes_seconds": "passed",
-          "io.crate.interval.IntervalParserTest#test_psql_compact_format_from_string": "passed",
-          "io.crate.interval.IntervalParserTest#parse_invalid_input_2": "passed",
           "io.crate.interval.IntervalParserTest#parse_negative_days_negative_hours_minutes_seconds": "passed",
-          "io.crate.interval.IntervalParserTest#test_psql_verbose_format_from_string_with_ago": "passed",
-          "io.crate.interval.IntervalParserTest#parse_negative_year_month": "passed",
-          "io.crate.interval.IntervalParserTest#parse_invalid_input_0": "passed",
-          "io.crate.interval.IntervalParserTest#test_invalid_types": "passed",
-          "io.crate.interval.IntervalParserTest#test_invalid_duplicate_units": "passed",
-          "io.crate.interval.IntervalParserTest#parse_year_month": "passed",
-          "io.crate.interval.IntervalParserTest#parse_negative_year_month_negative_day": "passed",
-          "io.crate.interval.IntervalParserTest#parse_year_month_day_hours_minutes": "passed",
+          "io.crate.interval.IntervalParserTest#parse_year_month_day": "passed",
           "io.crate.interval.IntervalParserTest#test_weeks": "passed",
-          "io.crate.interval.IntervalParserTest#test_psql_verbose_format_from_string_with_negative_values": "passed",
-          "io.crate.interval.IntervalParserTest#negative_parse_year_month_negative_day_negative_hours_minutes": "passed",
           "io.crate.interval.IntervalParserTest#test_invalid_values": "passed",
-          "io.crate.interval.IntervalParserTest#test_psql_verbose_format_from_string_with_negative_values_and_ago": "passed",
+          "io.crate.interval.IntervalParserTest#parse_hours_minutes": "passed",
+          "io.crate.interval.IntervalParserTest#parse_invalid_input_0": "passed",
+          "io.crate.interval.IntervalParserTest#negative_parse_year_month_negative_day_negative_hours_minutes": "passed",
+          "io.crate.interval.IntervalParserTest#parse_days_seconds": "passed",
+          "io.crate.interval.IntervalParserTest#parse_year_month_day_hours_minutes": "passed",
           "io.crate.interval.IntervalParserTest#parse_invalid_input_3": "passed",
           "io.crate.interval.IntervalParserTest#test_psql_format_from_string": "passed",
-          "io.crate.interval.IntervalParserTest#parse_year_month_day": "passed",
+          "io.crate.interval.IntervalParserTest#parse_year_month_hours_minutes": "passed",
+          "io.crate.interval.IntervalParserTest#parse_hours_minutes_seconds": "passed",
+          "io.crate.interval.IntervalParserTest#parse_negative_days_negative_seconds": "passed",
+          "io.crate.interval.IntervalParserTest#test_invalid_duplicate_units": "passed",
           "io.crate.interval.IntervalParserTest#parse_seconds": "passed",
-          "io.crate.interval.IntervalParserTest#parse_invalid_input_4": "passed",
+          "io.crate.interval.IntervalParserTest#test_invalid_types": "passed",
+          "io.crate.interval.IntervalParserTest#test_normalization": "passed",
+          "io.crate.interval.IntervalParserTest#test_psql_compact_format_from_string": "passed",
+          "io.crate.interval.IntervalParserTest#parse_negative_year_month_negative_day": "passed",
           "io.crate.interval.IntervalParserTest#parse_invalid_input_1": "passed",
+          "io.crate.interval.IntervalParserTest#test_psql_verbose_format_from_string_with_ago": "passed",
+          "io.crate.interval.IntervalParserTest#test_psql_verbose_format_from_string_with_negative_values_and_ago": "passed",
+          "io.crate.interval.IntervalParserTest#parse_year_month": "passed",
+          "io.crate.interval.IntervalParserTest#test_psql_verbose_format_from_string_with_negative_values": "passed",
           "io.crate.interval.IntervalParserTest#parse_negative_hours_minutes": "passed",
+          "io.crate.interval.IntervalParserTest#parse_invalid_input_2": "passed",
+          "io.crate.interval.IntervalParserTest#parse_negative_year_month": "passed",
           "io.crate.interval.IntervalParserTest#parse_days_hours_minutes_seconds": "passed",
-          "io.crate.interval.IntervalParserTest#parse_negative_days_negative_seconds": "passed"
+          "io.crate.interval.IntervalParserTest#parse_invalid_input_4": "passed"
         },
         "classes": {
           "io.crate.interval.IntervalParserTest": "passed"
@@ -140,6 +146,9 @@
     "applied_on_disk_ag3": 0,
     "synthesized_count": 0,
     "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
     "retry_contexts": [],
     "failed_hunks": [],
     "generated_patch_bytes": 0,

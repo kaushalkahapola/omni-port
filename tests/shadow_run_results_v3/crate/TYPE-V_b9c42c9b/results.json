@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-11T11:04:45.673276",
+  "run_timestamp": "2026-04-11T16:04:33.302350",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "b9c42c9bbc08a39b51c7205a98da6972b56ce612",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.12,
+      "elapsed_s": 0.29,
       "error": null,
       "java_hunks": 11,
       "aux_hunks": 4,
@@ -115,12 +115,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.67,
+      "elapsed_s": 2.87,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_III",
+        "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch involves multiple source files with structural changes, including modifications to class fields, method logic, and control flow in Java classes related to session and result consumption handling. The changes are not simple string replacements or whitespace fixes but involve adding new logic to handle portal suspension and resumption, managing CompletableFutures, and updating session execution flow. The patch also includes new test cases and logging statements, indicating a moderate complexity level. All hunks were found via 'git_exact' with high confidence, suggesting the patch applies cleanly but involves structural code changes rather than trivial edits. Therefore, the patch is best classified as TYPE_III (structural changes).",
+        "reasoning": "All hunks in the patch were found in the target branch via 'git_exact' with high confidence (1.00), indicating that the patch applies as exact matches or very close to the original code. The changes are mostly additions and minor refactorings without structural or API changes, consistent with a TYPE_I classification. The patch involves multiple files but the changes are straightforward and localized, so the token budget estimate is moderate.",
         "is_auto_generated": false
       }
     },
@@ -204,9 +204,15 @@
       "synthesis_status": "success",
       "synthesized_hunks": []
     },
-    "agent7_validator": {
-      "elapsed_s": 187.46,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
       "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
       "validation_passed": false,
       "validation_failure_category": "api_mismatch",
       "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:110: error: cannot find symbol\nserver/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:118: error: cannot find symbol",
@@ -230,6 +236,410 @@
           "file": "server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java",
           "line": 118,
           "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "applied",
+      "fallback_attempts": 1,
+      "synthesized_count": 2,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "what_changed": "Reordered import statements to group related imports together.",
+          "where_in_code": "Portal class imports",
+          "intent": "Improve code organization and readability by grouping imports logically.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Portal",
+            "import"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "what_changed": "Added the 'consumer' field to the Portal's toString representation.",
+          "where_in_code": "Portal.toString() method",
+          "intent": "Enhance debugging and logging by including the consumer field in the string output.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "Portal",
+            "toString",
+            "consumer"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Replaced the 'activeIt' field with a new 'suspendedIt' CompletableFuture to track suspended iterators.",
+          "where_in_code": "RowConsumerToResultReceiver fields and constructor",
+          "intent": "Enable asynchronous handling of suspended batch iterators using CompletableFuture for better control flow.",
+          "change_type": "add_field",
+          "key_symbols": [
+            "RowConsumerToResultReceiver",
+            "suspendedIt",
+            "activeIt"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Refactored iteration logic to use 'suspendedIt' CompletableFuture for suspending and resuming iteration, replacing 'activeIt'. Added logic to reset 'suspendedIt' and 'rowCount' upon resumption.",
+          "where_in_code": "RowConsumerToResultReceiver.consumeIt(BatchIterator<Row>) method",
+          "intent": "Improve suspension and resumption mechanism for row consumption to support asynchronous flow and proper state reset.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "consumeIt",
+            "suspendedIt",
+            "rowCount"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Changed lambda parameter name from (r, f) to (_, f) in a whenComplete callback to indicate the first parameter is unused.",
+          "where_in_code": "RowConsumerToResultReceiver.consumeIt method's nextBatch.whenComplete callback",
+          "intent": "Clarify code by marking unused lambda parameter explicitly, improving readability.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "nextBatch",
+            "whenComplete"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Replaced usage of 'activeIt' with 'suspendedIt' CompletableFuture in methods closeAndFinishIfSuspended(), suspended(), and related logic.",
+          "where_in_code": "RowConsumerToResultReceiver.closeAndFinishIfSuspended(), suspended() methods",
+          "intent": "Adapt suspension tracking to use CompletableFuture for better asynchronous handling and state management.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "closeAndFinishIfSuspended",
+            "suspendedIt",
+            "suspended"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Rewrote the resume() method to retrieve the suspended iterator from 'suspendedIt' CompletableFuture, reset state, and handle exceptions by closing iterator and failing the receiver.",
+          "where_in_code": "RowConsumerToResultReceiver.resume() method",
+          "intent": "Implement robust asynchronous resumption logic that safely resumes iteration and handles errors gracefully.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "resume",
+            "suspendedIt",
+            "consumeIt"
+          ]
+        },
+        {
+          "hunk_index": 7,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Updated toString() method to replace 'activeIt' field with 'suspendedIt' CompletableFuture in the output.",
+          "where_in_code": "RowConsumerToResultReceiver.toString() method",
+          "intent": "Reflect internal state changes in string representation for accurate debugging information.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "toString",
+            "suspendedIt"
+          ]
+        },
+        {
+          "hunk_index": 8,
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "what_changed": "Added a debug log statement to log the current activeExecution when it is not null in the sync method.",
+          "where_in_code": "Session.sync() method",
+          "intent": "Improve observability by logging active execution state during synchronization.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "sync",
+            "activeExecution",
+            "LOGGER"
+          ]
+        },
+        {
+          "hunk_index": 9,
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "what_changed": "Introduced a local variable to hold the size of deferredExecutionsByStmt and logged this count before the switch statement.",
+          "where_in_code": "Session.triggerDeferredExecutions(boolean) method",
+          "intent": "Enhance logging clarity by explicitly logging the number of deferred executions before branching logic.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "triggerDeferredExecutions",
+            "deferredExecutionsByStmt",
+            "LOGGER"
+          ]
+        },
+        {
+          "hunk_index": 10,
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "what_changed": "Corrected a typo in a comment from 'defered' to 'deferred'.",
+          "where_in_code": "Session.triggerDeferredExecutions(boolean) method",
+          "intent": "Fix comment spelling to improve code quality and readability.",
+          "change_type": "other",
+          "key_symbols": [
+            "triggerDeferredExecutions",
+            "comment"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:84: error: cannot find symbol\nserver/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:93: error: cannot find symbol\nserver/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:138: error: cannot find symbol\nserver/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:139: error: cannot find symbol\nserver/src/main/java/io/crate/session/RowConsume",
+      "validation_attempts": 2,
+      "retry_files": [
+        "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 84,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 93,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 138,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 139,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 148,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 162,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 163,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 164,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 174,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "applied",
+      "fallback_attempts": 2,
+      "synthesized_count": 6,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "what_changed": "Reordered import statements to group related imports together.",
+          "where_in_code": "Portal class imports",
+          "intent": "Improve code organization and readability by grouping imports logically.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Portal",
+            "import"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "what_changed": "Added the 'consumer' field to the Portal's toString representation.",
+          "where_in_code": "Portal.toString() method",
+          "intent": "Enhance debugging and logging by including the consumer field in the string output.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "Portal",
+            "toString",
+            "consumer"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Replaced the 'activeIt' field with a new 'suspendedIt' CompletableFuture to track suspended iterators.",
+          "where_in_code": "RowConsumerToResultReceiver class fields and constructor",
+          "intent": "Enable asynchronous handling of suspended batch iterators using CompletableFuture for better concurrency control.",
+          "change_type": "add_field",
+          "key_symbols": [
+            "RowConsumerToResultReceiver",
+            "suspendedIt",
+            "activeIt"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Refactored iteration logic to use 'suspendedIt' CompletableFuture for suspending and resuming iteration, replacing 'activeIt'. Added logic to reset 'suspendedIt' and 'rowCount' upon resumption.",
+          "where_in_code": "RowConsumerToResultReceiver.consumeIt(BatchIterator<Row>) method",
+          "intent": "Improve suspension and resumption of row consumption by leveraging CompletableFuture, allowing more robust asynchronous flow control.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "consumeIt",
+            "suspendedIt",
+            "rowCount"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Changed lambda parameter name from (r, f) to (_, f) in nextBatch.whenComplete callback to indicate the first parameter is unused.",
+          "where_in_code": "RowConsumerToResultReceiver.consumeIt method, nextBatch.whenComplete callback",
+          "intent": "Clarify code by marking unused lambda parameter explicitly, improving readability.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "nextBatch",
+            "whenComplete"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Replaced usage of 'activeIt' with 'suspendedIt' CompletableFuture in closeAndFinishIfSuspended(), suspended(), and related logic.",
+          "where_in_code": "RowConsumerToResultReceiver.closeAndFinishIfSuspended(), suspended() methods",
+          "intent": "Adapt suspension state tracking to the new CompletableFuture-based approach for managing suspended iterators.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "closeAndFinishIfSuspended",
+            "suspendedIt",
+            "suspended"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Rewrote resume() method to retrieve the suspended iterator from 'suspendedIt' CompletableFuture, reset suspension state, and handle exceptions by closing iterator and failing the resultReceiver.",
+          "where_in_code": "RowConsumerToResultReceiver.resume() method",
+          "intent": "Implement robust resumption of suspended iteration using CompletableFuture, ensuring proper error handling and resource cleanup.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "resume",
+            "suspendedIt",
+            "consumeIt"
+          ]
+        },
+        {
+          "hunk_index": 7,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "what_changed": "Updated toString() method to replace 'activeIt' field with 'suspendedIt' CompletableFuture in the output.",
+          "where_in_code": "RowConsumerToResultReceiver.toString() method",
+          "intent": "Reflect the new suspension tracking mechanism in the string representation for accurate debugging information.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "toString",
+            "suspendedIt"
+          ]
+        },
+        {
+          "hunk_index": 8,
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "what_changed": "Added debug logging to output the current activeExecution when it is not null in the sync method.",
+          "where_in_code": "Session.sync() method",
+          "intent": "Improve observability by logging active execution state during synchronization for easier troubleshooting.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "sync",
+            "activeExecution",
+            "LOGGER"
+          ]
+        },
+        {
+          "hunk_index": 9,
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "what_changed": "Introduced a local variable to hold the size of deferredExecutionsByStmt and logged this count before the switch statement.",
+          "where_in_code": "Session.triggerDeferredExecutions(boolean) method",
+          "intent": "Enhance logging clarity by explicitly logging the number of deferred executions before branching logic.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "triggerDeferredExecutions",
+            "deferredExecutionsByStmt",
+            "LOGGER"
+          ]
+        },
+        {
+          "hunk_index": 10,
+          "file_path": "server/src/main/java/io/crate/session/Session.java",
+          "what_changed": "Corrected a comment typo from 'defered' to 'deferred' in the default case of the switch statement.",
+          "where_in_code": "Session.triggerDeferredExecutions(boolean) method, default case comment",
+          "intent": "Fix spelling in comments to maintain code quality and clarity.",
+          "change_type": "other",
+          "key_symbols": [
+            "triggerDeferredExecutions",
+            "comment"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/Portal.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry2": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:174: error: variable iterator might not have been initialized",
+      "validation_attempts": 3,
+      "retry_files": [
+        "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "line": 174,
+          "message": "error: variable iterator might not have been initialized"
         }
       ]
     }
@@ -258,24 +668,39 @@
       9,
       10
     ],
-    "tokens_used": 0,
+    "tokens_used": 8577,
     "synthesis_status": "success",
     "applied_on_disk_ag3": 11,
-    "synthesized_count": 0,
+    "synthesized_count": 6,
     "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "applied",
+    "fallback_attempts": 2,
     "retry_contexts": [
       {
         "error_type": "api_mismatch",
         "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[110,32] error: cannot find symbol\n  symbol:   method waitingForWrite()\n[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[118,32] error: cannot find symbol\n  symbol:   method waitingForWrite()\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:testCompile (default-testCompile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[110,32] error: cannot find symbol\n[ERROR]   symbol:   method waitingForWrite()\n[ERROR]   location: variable batchConsumer of type RowConsumerToResultReceiver\n[ERROR] /repo/server/src/test/java/io/crate/session/RowConsumerToResultReceiverTest.java:[118,32] error: cannot find symbol\n[ERROR]   symbol:   method waitingForWrite()\n[ERROR]   location: variable batchConsumer of type RowConsumerToResultReceiver\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
         "suggested_action": "route_to_namespace_or_structural"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "not find symbol\n  symbol:   variable activeIt\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[163,42] error: cannot find symbol\n  symbol: variable activeIt\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[164,12] error: cannot find symbol\n  symbol: variable activeIt\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[174,31] error: cannot find symbol\n  symbol:   variable activeIt\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[84,24] error: cannot find symbol\n[ERROR]   symbol:   variable activeIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[93,24] error: cannot find symbol\n[ERROR]   symbol:   variable activeIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[138,12] error: cannot find symbol\n[ERROR]   symbol:   variable activeIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[139,12] error: cannot find symbol\n[ERROR]   symbol:   variable activeIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[148,15] error: cannot find symbol\n[ERROR]   symbol:   variable activeIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[162,15] error: cannot find symbol\n[ERROR]   symbol:   variable activeIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[163,42] error: cannot find symbol\n[ERROR]   symbol: variable activeIt\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[164,12] error: cannot find symbol\n[ERROR]   symbol: variable activeIt\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[174,31] error: cannot find symbol\n[ERROR]   symbol:   variable activeIt\n[ERROR]   location: class RowConsumerToResultReceiver\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 2,
+        "suggested_action": "route_to_namespace_or_structural"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[174,16] error: variable iterator might not have been initialized\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure\n[ERROR] /repo/server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java:[174,16] error: variable iterator might not have been initialized\n[ERROR] \n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 3,
+        "suggested_action": "inspect_and_retry"
       }
     ],
     "failed_hunks": [],
     "generated_patch_bytes": 8536,
     "target_patch_bytes": 22747,
     "validation_passed": false,
-    "validation_failure_category": "api_mismatch",
+    "validation_failure_category": "unknown",
     "build_success": false,
     "test_success": null,
     "test_mode": null,

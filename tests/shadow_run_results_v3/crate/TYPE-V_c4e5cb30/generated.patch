@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java b/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
-index 4f6f6a123f..7ae6f97182 100644
+index 4f6f6a123f..9256bdfc57 100644
 --- a/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
 +++ b/server/src/main/java/io/crate/execution/dml/ArrayIndexer.java
 @@ -46,6 +46,8 @@ import io.crate.types.StorageSupport;
@@ -11,22 +11,15 @@ index 4f6f6a123f..7ae6f97182 100644
      public static Query arrayLengthTermQuery(Reference arrayRef, int length, Function<ColumnIdent, Reference> getRef) {
          return IntPoint.newExactQuery(toArrayLengthFieldName(arrayRef, getRef), length);
      }
-@@ -108,10 +110,13 @@ public class ArrayIndexer<T> implements ValueIndexer<List<T>> {
-         this.arrayLengthFieldName = toArrayLengthFieldName(reference, getRef);
-         this.reference = reference;
-     }
--
-+    
+@@ -112,6 +114,7 @@ public class ArrayIndexer<T> implements ValueIndexer<List<T>> {
      @Override
      public void indexValue(@NotNull List<T> values, IndexDocumentBuilder docBuilder) throws IOException {
          docBuilder.translogWriter().startArray();
-+        // use a nested document builder for array elements so we don't add stored fields
-+        // or array-length fields for each nested value
-+        docBuilder = docBuilder.noStoredField().noArrayLengthField();
++        IndexDocumentBuilder nestedDocBuilder = docBuilder.noStoredField().noArrayLengthField();
          for (T value : values) {
              if (value == null) {
                  docBuilder.translogWriter().writeNull();
-@@ -119,7 +124,7 @@ public class ArrayIndexer<T> implements ValueIndexer<List<T>> {
+@@ -119,7 +122,7 @@ public class ArrayIndexer<T> implements ValueIndexer<List<T>> {
                  innerIndexer.indexValue(value, docBuilder);
              }
          }
