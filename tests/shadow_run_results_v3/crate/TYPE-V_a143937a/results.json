@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "run_timestamp": "2026-04-11T04:04:21.586995",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "a143937ad274018991f53e8839a56249f7fdb9d4",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.79,
+      "elapsed_s": 0.89,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 2,
@@ -25,12 +25,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.24,
+      "elapsed_s": 4.22,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.85,
-        "reasoning": "The patch introduces a conditional check in the JoinConditionSymbolsExtractor class to skip non equi-join parts of a join condition. This is a small structural addition without changing existing method signatures or class structures, indicating a minor logic refinement. The test addition verifies this behavior. The patch does not involve deep refactoring or redesign, but it is more than a trivial string replacement, involving some fuzzy matching to apply correctly. The localization evidence shows a moderate confidence match via 'git_pickaxe', supporting a TYPE_II classification. The token budget estimate reflects the moderate complexity of understanding and applying this patch.",
+        "reasoning": "The patch involves adding a conditional check inside an existing method to skip non equi-join parts in join condition extraction. The change is localized and does not involve structural or API changes, but it requires understanding of the join condition logic and careful integration. The test addition is straightforward. The patch was found via 'git_pickaxe' with moderate confidence, indicating some minor drift or fuzzy matching. Overall, this is a whitespace/formatting drift or minor logic addition patch, classified as TYPE_II.",
         "is_auto_generated": false
       }
     },
@@ -41,14 +41,14 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 5.71,
+      "elapsed_s": 5.27,
       "error": null,
-      "adapted_count": 1
+      "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 31.49,
       "error": null,
-      "refactored_count": 0
+      "refactored_count": 1
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
@@ -59,24 +59,24 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/lucene/LuceneQueryBuilder.java",
-          "old_string": "        }\n    }\n\n\n    static class Visitor extends SymbolVisitor<Context, Query> {\n\n        @Override\n        public Query visitFunction(Function function, Context context) {\n            assert function != null : \"function must not be null\";\n            if (fieldIgnored(function, context)) {\n                return new MatchAllDocsQuery();\n            }\n",
-          "new_string": "        }\n    }\n\n\n    static class Visitor extends SymbolVisitor<Context, Query> {\n\n@Override\npublic Query visitFunction(Function function, Context context) {\n    assert function != null : \"function must not be null\";\n    // A join condition maybe an equi-join condition but its parts may not be.\n    // For example, consider `t1.a = t2.a AND t1.a = t1.a + t2.b`, as a whole\n    // it is an equi-join condition due to `t1.a = t2.b`\n    // but `t1.a = t1.a + t2.b` by itself is not an equi-join condition.\n    if (!EquiJoinDetector.isEquiJoin(function)) {\n        return null;\n    }\n        @Override\n        public Query visitFunction(Function function, Context context) {\n            assert function != null : \"function must not be null\";\n            if (fieldIgnored(function, context)) {\n                return new MatchAllDocsQuery();\n            }\n",
+          "old_string": "\n    static class Visitor extends SymbolVisitor<Context, Query> {\n\n        @Override\n        public Query visitFunction(Function function, Context context) {\n            assert function != null : \"function must not be null\";",
+          "new_string": "    static class Visitor extends SymbolVisitor<Context, Void> {\n\n        @Override\n        public Void visitFunction(Function function, Context context) {\n            // A join condition maybe an equi-join condition but its parts may not be.\n            // For example, consider `t1.a = t2.a AND t1.a = t1.a + t2.b`, as a whole\n            // it is an equi-join condition due to `t1.a = t2.b`\n            // but `t1.a = t1.a + t2.b` by itself is not an equi-join condition.\n            if (!EquiJoinDetector.isEquiJoin(function)) {\n                return null;\n            }\n\n            String functionName = function.name();\n            switch (functionName) {\n                case AndOperator.NAME:",
           "confidence": 1.0,
-          "context_lines_included": 3,
+          "context_lines_included": 0,
           "verified": true
         }
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 62.97,
+      "elapsed_s": 0.32,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper):    rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Aux hunk application failed: aux patch apply failed for docs/appendices/release-notes/5.6.3.rst: [git-strict] error: patch failed: docs/appendices/release-notes/5.6.3.rst:100\nerror: docs/appendices/release-notes/5.6.3.rst: patch does not apply\n[git-tolerant] error: patch failed: docs/appendices/release-notes/5.6.3.rst:100\nerror: docs/appendices/release-notes/5.6.3.rst: patch does not apply\n[gnu-patch-dry-run] checking file docs/appendices/release-notes/5.6.3.rst\nReversed (or previously applied) ",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": false,
-      "build_mode": "crate-helper",
+      "build_success": null,
+      "build_mode": null,
       "test_success": null,
       "test_mode": null,
       "test_state": null,
@@ -90,7 +90,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 1,
@@ -105,18 +105,18 @@
     "failed_hunks_total": 0,
     "retry_contexts": [
       {
-        "error_type": "unknown",
-        "error_message": "--- Building code for ab1c036 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               ",
+        "error_type": "context_mismatch",
+        "error_message": "aux patch apply failed for docs/appendices/release-notes/5.6.3.rst: [git-strict] error: patch failed: docs/appendices/release-notes/5.6.3.rst:100\nerror: docs/appendices/release-notes/5.6.3.rst: patch does not apply\n[git-tolerant] error: patch failed: docs/appendices/release-notes/5.6.3.rst:100\nerror: docs/appendices/release-notes/5.6.3.rst: patch does not apply\n[gnu-patch-dry-run] checking file docs/appendices/release-notes/5.6.3.rst\nReversed (or previously applied) patch detected!  Skipping patch.\n1 out of 1 hunk ignored",
         "attempt_count": 1,
-        "suggested_action": "inspect_and_retry"
+        "suggested_action": "re-localize"
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 0,
+    "generated_patch_bytes": 1426,
     "target_patch_bytes": 10303,
     "validation_passed": false,
-    "validation_failure_category": "unknown",
-    "build_success": false,
+    "validation_failure_category": "context_mismatch",
+    "build_success": null,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

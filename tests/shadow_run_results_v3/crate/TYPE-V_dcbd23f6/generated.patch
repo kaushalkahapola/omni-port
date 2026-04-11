@@ -1,0 +1,155 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+index c82e9b405f..a7db9d9e04 100644
+--- a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+@@ -107,112 +107,36 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+                     // directly modify the map so that containing types will see the value
+                     // if they need to write stored fields
+                     value.put(innerName, synth);
+-                }
+-            }
+-            var innerValue = value.get(innerName);
+-            docBuilder.checkColumnConstraint(child.ident(), innerValue);
+-            if (innerValue == null) {
+-                continue;
+-            }
+-            var valueIndexer = child.indexer;
+-            // valueIndexer is null for partitioned columns
+-            if (valueIndexer != null) {
+-                innerValue = child.reference.valueType().sanitizeValue(innerValue);
+-                docBuilder.translogWriter().writeFieldName(child.reference.storageIdentLeafName());
+-                valueIndexer.indexValue(innerValue, docBuilder);
+-                value.put(innerName, innerValue);
+-            }
+-        }
+-        Map<String, Object> columnsToStore = new HashMap<>();
+-        value.forEach((k, v) -> {
+-            if (children.containsKey(k) == false) {
+-                translogWriter.writeFieldName(this.unknownColumnPrefix + k);
+-                translogWriter.writeValue(v);
+-                columnsToStore.put(k, v);
+-            }
+-            if (v == null) {
+-                columnsToStore.put(k, null);
+-            }
+-        });
+-        if (docBuilder.maybeAddStoredField()) {
+-            if (columnsToStore.isEmpty() == false) {
+-                // We have unknown or null values that can't be reconstructed from doc values
+-                // at read time, so we need to store them explicitly
+-                docBuilder.addField(new StoredField(
+-                    ref.storageIdentLeafName(),
+-                    toBytes(columnsToStore, docBuilder.getTableVersionCreated()).toBytesRef()
+-                ));
+-            } else if (value.isEmpty()) {
+-                // A completely empty object doesn't store anything in doc values, so we need to
+-                // store a marker here to reconstruct it at read time and distinguish it from a
+-                // null value
+-                docBuilder.addField(new StoredField(
+-                    ref.storageIdentLeafName(),
+-                    toBytes(value, docBuilder.getTableVersionCreated()).toBytesRef()
+-                ));
+-            }
+-        }
+-        translogWriter.endObject();
+-    }
+-
+-    private BytesReference toBytes(Map<String, Object> v, Version version) {
+-        try (BytesStreamOutput out = new BytesStreamOutput()) {
+-            out.setVersion(version);
+-            out.writeMap(v, StreamOutput::writeString, StreamOutput::writeGenericValue);
+-            return out.bytes();
+-        } catch (IOException e) {
+-            throw new UncheckedIOException(e);
++@Override
++public void updateTargets(Function<ColumnIdent, Reference> getRef) {
++    ColumnIdent objectColumn = ref.column();
++    Reference updatedSelf = getRef.apply(objectColumn);
++    ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());
++    for (var entry : children.entrySet()) {
++        Child child = entry.getValue();
++        var newChildRef = getRef.apply(child.ident());
++        if (Objects.equals(child.reference, newChildRef) == false) {
++            @SuppressWarnings("unchecked")
++            ValueIndexer<Object> indexer = newChildRef.granularity() == RowGranularity.PARTITION
++                ? null
++                : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(table, newChildRef, getRef);
++            children.put(entry.getKey(), new Child(newChildRef, indexer));
+         }
++        child.indexer.updateTargets(getRef);
+     }
+-
+-    @Override
+-    public void collectSchemaUpdates(@Nullable Map<String, Object> value,
+-                                     Consumer<? super Reference> onDynamicColumn,
+-                                     Synthetics synthetics) throws IOException {
+-        for (var entry : children.entrySet()) {
+-            String innerName = entry.getKey();
+-            Child child = entry.getValue();
+-            Object innerValue = null;
+-            if (value == null || value.containsKey(innerName) == false) {
+-                Input<Object> synthetic = synthetics.get(child.ident());
+-                if (synthetic != null) {
+-                    innerValue = synthetic.value();
+-                }
+-            } else {
+-                innerValue = value.get(innerName);
+-            }
+-            // valueIndexer is null for partitioned columns
+-            if (child.indexer != null) {
+-                var type = child.reference.valueType();
+-                try {
+-                    innerValue = type.sanitizeValue(innerValue);
+-                } catch (ClassCastException | IllegalArgumentException e) {
+-                    throw new ConversionException(innerValue, type);
+-                }
+-
+-                child.indexer.collectSchemaUpdates(
+-                    innerValue,
+-                    onDynamicColumn,
+-                    synthetics
+-                );
+-            }
+-        }
+-        if (value != null) {
+-            addNewColumns(value, onDynamicColumn, synthetics);
++    for (String innerColumn : objectType.innerTypes().keySet()) {
++        if (!children.containsKey(innerColumn)) {
++            Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));
++            @SuppressWarnings("unchecked")
++            ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(
++                table,
++                childRef,
++                getRef
++            );
++            children.put(innerColumn, new Child(childRef, childIndexer));
+         }
+     }
+-
+-    @Override
+-    public void updateTargets(Function<ColumnIdent, Reference> getRef) {
+-        ColumnIdent objectColumn = ref.column();
+-        Reference updatedSelf = getRef.apply(objectColumn);
+-        ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());
+-        for (var entry : children.entrySet()) {
+-            Child child = entry.getValue();
+-            var newChildRef = getRef.apply(child.ident());
+-            if (Objects.equals(child.reference, newChildRef) == false) {
+-                @SuppressWarnings("unchecked")
+-                ValueIndexer<Object> indexer = newChildRef.granularity() == RowGranularity.PARTITION
++}
+                     ? null
+                     : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(table, newChildRef, getRef);
+ 
+@@ -271,10 +195,7 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+                 COLUMN_OID_UNASSIGNED
+             );
+             position--;
+-            onDynamicColumn.accept(newColumn);
+-            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(
+-                table,
+-                newColumn,
++
+                 getRef
+             );
+             innerValue = type.sanitizeValue(innerValue);

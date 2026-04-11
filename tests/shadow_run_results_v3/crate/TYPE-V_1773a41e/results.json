@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "run_timestamp": "2026-04-11T02:43:27.588245",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "1773a41e1d9171fe62e1a5e0aed7cbb3754eea99",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.21,
+      "elapsed_s": 1.49,
       "error": null,
       "java_hunks": 25,
       "aux_hunks": 8,
@@ -241,12 +241,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 5.22,
+      "elapsed_s": 5.15,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_IV",
         "confidence": 0.95,
-        "reasoning": "The patch involves deep structural changes to the version compatibility and handshake logic in the transport layer of the system. It modifies the Version class to compute minimum compatibility versions dynamically, changes handshake request and response handling to include minimum compatibility versions, and updates multiple classes (InboundDecoder, OutboundHandler, TcpTransport, TcpTransportChannel, TransportHandshaker) to support this new handshake protocol. The changes affect core transport communication and version compatibility checks, indicating significant API divergence and refactoring rather than simple string replacements or formatting changes. The patch also includes extensive test updates to verify the new compatibility logic. Given the scope and depth of these changes, the patch is classified as TYPE_IV (deep structural refactoring) with high confidence. The token budget estimate is high due to the complexity and number of files involved.",
+        "reasoning": "The patch involves deep structural changes and refactoring related to version compatibility and handshake logic between different major versions. It modifies core version compatibility logic in the Version class, changes handshake request and response handling in TransportHandshaker, and updates multiple transport-related classes to handle the new version compatibility checks. The patch also includes updates to tests to cover the new compatibility logic. These changes go beyond simple string replacements or minor formatting adjustments and involve significant API and protocol logic changes, indicating a TYPE_IV complexity. The confidence is high due to exact and pickaxe localization evidence and the nature of the changes. The token budget estimate is high due to the complexity and number of files affected.",
         "is_auto_generated": false
       }
     },
@@ -368,42 +368,26 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 18.13,
+      "elapsed_s": 9.54,
       "error": null,
-      "adapted_count": 2
+      "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 44.23,
+      "elapsed_s": 23.6,
       "error": null,
       "refactored_count": 1
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 3,
-      "failed_count": 0,
-      "synthesis_status": "success",
+      "synthesized_count": 1,
+      "failed_count": 1,
+      "synthesis_status": "partial",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/org/elasticsearch/Version.java",
-          "old_string": "    public static final Version V_5_9_5 = new Version(8_09_05_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_6 = new Version(8_09_06_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_7 = new Version(8_09_07_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_8 = new Version(8_09_08_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n\n    public static final Version V_5_10_0 = new Version(8_10_00_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_1 = new Version(8_10_01_99, true, org.apache.lucene.util.Version.LUCENE_9_12_0);\n\n    public static final Version CURRENT = V_5_10_1;\n\n    private static final ImmutableOpenIntMap<Version> ID_TO_VERSION;\n    private static final ImmutableOpenMap<String, Version> STRING_TO_VERSION;\n",
-          "new_string": "    public static final Version V_5_9_5 = new Version(8_09_05_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_6 = new Version(8_09_06_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_7 = new Version(8_09_07_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n    public static final Version V_5_9_8 = new Version(8_09_08_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n\n    public static final Version V_5_10_0 = new Version(8_10_00_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_9_8 = new Version(8_09_08_99, false, org.apache.lucene.util.Version.LUCENE_9_11_1);\n\n    public static final Version V_5_10_0 = new Version(8_10_00_99, false, org.apache.lucene.util.Version.LUCENE_9_12_0);\n    public static final Version V_5_10_1 = new Version(8_10_01_99, true, org.apache.lucene.util.Version.LUCENE_9_12_0);\n\n    public static final Version CURRENT = V_5_10_1;\n    public static final Version V_5_10_1 = new Version(8_10_01_99, true, org.apache.lucene.util.Version.LUCENE_9_12_0);\n\n    public static final Version CURRENT = V_5_10_1;\n\n    private static final ImmutableOpenIntMap<Version> ID_TO_VERSION;\n    private static final ImmutableOpenMap<String, Version> STRING_TO_VERSION;\n",
-          "confidence": 1.0,
-          "context_lines_included": 3,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/org/elasticsearch/Version.java",
-          "old_string": "     * is not cheap. Since computing the minimum compatibility version can occur often, we use this holder to compute the declared versions\n     * lazily once.\n     */\n    private static class DeclaredVersionsHolder {\n        static final List<Version> DECLARED_VERSIONS = Collections.unmodifiableList(getDeclaredVersions(Version.class));\n    }\n\n    /**\n     * Returns the minimum compatible version based on the current\n     * version. Ie a node needs to have at least the return version in order\n     * to communicate with a node running the current version. The returned version\n     * is in most of the cases the smallest major version release unless the current version\n     * is a beta or RC release then the version itself is returned.\n",
-          "new_string": "     * is not cheap. Since computing the minimum compatibility version can occur often, we use this holder to compute the declared versions\n     * lazily once.\n     */\n    private static class DeclaredVersionsHolder {\n        static final List<Version> DECLARED_VERSIONS = Collections.unmodifiableList(getDeclaredVersions(Version.class));\n    }\n        static final List<Version> DECLARED_VERSIONS = Collections.unmodifiableList(getDeclaredVersions(Version.class));\n    }\n\n    /**\n     * Returns the minimum compatible version based on the current\n     * version. Ie a node needs to have at least the return version in order\n    /**\n     * Returns the minimum compatible version based on the current\n     * version. Ie a node needs to have at least the return version in order\n     * to communicate with a node running the current version. The returned version\n     * is in most of the cases the smallest major version release unless the current version\n     * is a beta or RC release then the version itself is returned.\n",
-          "confidence": 1.0,
-          "context_lines_included": 3,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/org/elasticsearch/Version.java",
           "old_string": "     * is a beta or RC release then the version itself is returned.\n     */\n    public Version minimumCompatibilityVersion() {\n        return V_4_0_0;\n    }\n\n    /**",
-          "new_string": "    /**\n     * is a beta or RC release then the version itself is returned.\n     */\n    public Version minimumCompatibilityVersion() {\n        Version res = minCompatVersion;\n        if (res == null) {\n            res = computeMinCompatVersion();\n            minCompatVersion = res;\n        }\n        return res;\n    }\n\n    private volatile Version minCompatVersion;\n\n    private Version computeMinCompatVersion() {\n        int crateDBMajor = major - (INTERNAL_OFFSET / 1_00_00_00);\n        assert crateDBMajor >= 2 : \"only CrateDB 2.x and later versions are supported\";\n\n        if (crateDBMajor == 2) {\n            return Version.fromString(\"1.1.0\");\n        } else if (crateDBMajor == 3) {\n            return Version.fromString(\"2.3.0\");\n        } else if (crateDBMajor == 4) {\n            if (minor >= 1) {\n                // CrateDB >= 4.1 is only compatible with CrateDB 4.0, while 4.0 is compatible with 3.x (default)\n                return V_4_0_0;\n            }\n        } else if (crateDBMajor == 6) {\n            // CrateDB 6 is only compatible with CrateDB 5.10.1 onwards due to a handshake compatibility issue\n            return Version.fromString(\"5.10.1\");\n        }\n\n        // By default, CrateDB is always compatible with the previous major initial (x.0.0) version release\n        return Version.fromId((major - 1) * 1000000 + 99);\n    }\n\n    /**",
+          "new_string": "    /**\n     * is a beta or RC release then the version itself is returned.\n     */\n    public Version minimumCompatibilityVersion() {\n        Version res = minCompatVersion;\n        if (res == null) {\n            res = computeMinCompatVersion();\n            minCompatVersion = res;\n        }\n        return res;\n    }\n\n    private Version computeMinCompatVersion() {\n        int crateDBMajor = major - (INTERNAL_OFFSET / 1_00_00_00);\n        assert crateDBMajor >= 2 : \"only CrateDB 2.x and later versions are supported\";\n\n        if (crateDBMajor == 2) {\n            return Version.fromString(\"1.1.0\");\n        } else if (crateDBMajor == 3) {\n            return Version.fromString(\"2.3.0\");\n        } else if (crateDBMajor == 4) {\n            if (minor >= 1) {\n                // CrateDB >= 4.1 is only compatible with CrateDB 4.0, while 4.0 is compatible with 3.x (default)\n                return Version.V_4_0_0;\n            }\n        } else if (crateDBMajor == 6) {\n            // CrateDB 6 is only compatible with CrateDB 5.10.1 onwards due to a handshake compatibility issue\n            return Version.V_5_10_1;\n        }\n\n        // By default, CrateDB is always compatible with the previous major initial (x.0.0) version release\n        return Version.fromId((major - 1) * 1000000 + 99);\n    }\n\n    /**",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -411,19 +395,142 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 45.97,
+      "elapsed_s": 298.36,
       "error": null,
-      "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper):  CACHED\n\n#7 [2/5] RUN apt-get update && apt-get install -y     git     rsync     && rm -rf /var/lib/apt/lists/*\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": false,
+      "build_success": true,
       "build_mode": "crate-helper",
-      "test_success": null,
-      "test_mode": null,
-      "test_state": null,
-      "test_state_transition": null,
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.VersionTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.transport.InboundDecoderTests.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.transport.InboundHandlerTests.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.transport.InboundPipelineTests.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.transport.OutboundHandlerTests.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.transport.TransportActionProxyTests.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.transport.TransportHandshakerTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.VersionTest",
+          "org.elasticsearch.transport.InboundDecoderTests",
+          "org.elasticsearch.transport.InboundHandlerTests",
+          "org.elasticsearch.transport.InboundPipelineTests",
+          "org.elasticsearch.transport.OutboundHandlerTests",
+          "org.elasticsearch.transport.TransportActionProxyTests",
+          "org.elasticsearch.transport.TransportHandshakerTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.VersionTest#test_min_version_is_4_0_0": "passed",
+          "org.elasticsearch.VersionTest#test_can_parse_next_minor_release_version": "passed",
+          "org.elasticsearch.VersionTest#test_can_parse_next_patch_release_version": "passed",
+          "org.elasticsearch.VersionTest#test_can_parse_next_major_release_version": "passed",
+          "org.elasticsearch.VersionTest#test_version_minimum_compatibility": "passed",
+          "org.elasticsearch.VersionTest#test_compatible_current_version_is_compatible_to_4_0_0": "passed",
+          "org.elasticsearch.VersionTest#test_compatible_current_version": "passed",
+          "org.elasticsearch.transport.InboundDecoderTests#testDecode": "passed",
+          "org.elasticsearch.transport.InboundDecoderTests#testCompressedDecodeHandshakeCompatibility": "passed",
+          "org.elasticsearch.transport.InboundDecoderTests#testDecodeHandshakeCompatibility": "passed",
+          "org.elasticsearch.transport.InboundDecoderTests#testDecodePreHeaderSizeVariableInt": "passed",
+          "org.elasticsearch.transport.InboundDecoderTests#testCompressedDecode": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests#testClosesChannelOnErrorInHandshakeWithIncompatibleVersion": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests#testRequestAndResponse": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests#testSendsErrorResponseToHandshakeFromCompatibleVersion": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests#testLogsSlowInboundProcessing": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests#test_handshake_precedes_stream_version_for_compatibility": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests#test_handshake_error_if_version_and_minimum_compatible_version_is_not_compatible": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests#testPing": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests#test_handshake_checks_minimum_compatible_version_if_normal_version_is_not_compatible": "passed",
+          "org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased": "passed",
+          "org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated": "passed",
+          "org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling": "passed",
+          "org.elasticsearch.transport.OutboundHandlerTests#testSendResponse": "passed",
+          "org.elasticsearch.transport.OutboundHandlerTests#testSendRawBytes": "passed",
+          "org.elasticsearch.transport.OutboundHandlerTests#testErrorResponse": "passed",
+          "org.elasticsearch.transport.OutboundHandlerTests#testSendRequest": "passed",
+          "org.elasticsearch.transport.TransportActionProxyTests#testGetAction": "passed",
+          "org.elasticsearch.transport.TransportActionProxyTests#testSendMessage": "passed",
+          "org.elasticsearch.transport.TransportActionProxyTests#testException": "passed",
+          "org.elasticsearch.transport.TransportActionProxyTests#testIsProxyRequest": "passed",
+          "org.elasticsearch.transport.TransportActionProxyTests#testIsProxyAction": "passed",
+          "org.elasticsearch.transport.TransportActionProxyTests#testUnwrap": "passed",
+          "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestFutureVersionsCompatibility": "passed",
+          "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeError": "passed",
+          "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeTimeout": "passed",
+          "org.elasticsearch.transport.TransportHandshakerTests#test_handshake_request_includes_minimumCompatibilityVersion": "passed",
+          "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestAndResponse": "passed",
+          "org.elasticsearch.transport.TransportHandshakerTests#testSendRequestThrowsException": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.VersionTest": "passed",
+          "org.elasticsearch.transport.InboundDecoderTests": "passed",
+          "org.elasticsearch.transport.InboundHandlerTests": "passed",
+          "org.elasticsearch.transport.InboundPipelineTests": "passed",
+          "org.elasticsearch.transport.OutboundHandlerTests": "passed",
+          "org.elasticsearch.transport.TransportActionProxyTests": "passed",
+          "org.elasticsearch.transport.TransportHandshakerTests": "passed"
+        },
+        "summary": {
+          "passed": 39,
+          "failed": 0,
+          "skipped": 0,
+          "total": 39
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "org.elasticsearch.VersionTest#test_can_parse_next_major_release_version",
+          "org.elasticsearch.VersionTest#test_can_parse_next_minor_release_version",
+          "org.elasticsearch.VersionTest#test_can_parse_next_patch_release_version",
+          "org.elasticsearch.VersionTest#test_compatible_current_version",
+          "org.elasticsearch.VersionTest#test_compatible_current_version_is_compatible_to_4_0_0",
+          "org.elasticsearch.VersionTest#test_min_version_is_4_0_0",
+          "org.elasticsearch.VersionTest#test_version_minimum_compatibility",
+          "org.elasticsearch.transport.InboundDecoderTests#testCompressedDecode",
+          "org.elasticsearch.transport.InboundDecoderTests#testCompressedDecodeHandshakeCompatibility",
+          "org.elasticsearch.transport.InboundDecoderTests#testDecode",
+          "org.elasticsearch.transport.InboundDecoderTests#testDecodeHandshakeCompatibility",
+          "org.elasticsearch.transport.InboundDecoderTests#testDecodePreHeaderSizeVariableInt",
+          "org.elasticsearch.transport.InboundHandlerTests#testClosesChannelOnErrorInHandshakeWithIncompatibleVersion",
+          "org.elasticsearch.transport.InboundHandlerTests#testLogsSlowInboundProcessing",
+          "org.elasticsearch.transport.InboundHandlerTests#testPing",
+          "org.elasticsearch.transport.InboundHandlerTests#testRequestAndResponse",
+          "org.elasticsearch.transport.InboundHandlerTests#testSendsErrorResponseToHandshakeFromCompatibleVersion",
+          "org.elasticsearch.transport.InboundHandlerTests#test_handshake_checks_minimum_compatible_version_if_normal_version_is_not_compatible",
+          "org.elasticsearch.transport.InboundHandlerTests#test_handshake_error_if_version_and_minimum_compatible_version_is_not_compatible",
+          "org.elasticsearch.transport.InboundHandlerTests#test_handshake_precedes_stream_version_for_compatibility",
+          "org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated",
+          "org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased",
+          "org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling",
+          "org.elasticsearch.transport.OutboundHandlerTests#testErrorResponse",
+          "org.elasticsearch.transport.OutboundHandlerTests#testSendRawBytes",
+          "org.elasticsearch.transport.OutboundHandlerTests#testSendRequest",
+          "org.elasticsearch.transport.OutboundHandlerTests#testSendResponse",
+          "org.elasticsearch.transport.TransportActionProxyTests#testException",
+          "org.elasticsearch.transport.TransportActionProxyTests#testGetAction",
+          "org.elasticsearch.transport.TransportActionProxyTests#testIsProxyAction",
+          "org.elasticsearch.transport.TransportActionProxyTests#testIsProxyRequest",
+          "org.elasticsearch.transport.TransportActionProxyTests#testSendMessage",
+          "org.elasticsearch.transport.TransportActionProxyTests#testUnwrap",
+          "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeError",
+          "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestAndResponse",
+          "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestFutureVersionsCompatibility",
+          "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeTimeout",
+          "org.elasticsearch.transport.TransportHandshakerTests#testSendRequestThrowsException",
+          "org.elasticsearch.transport.TransportHandshakerTests#test_handshake_request_includes_minimumCompatibilityVersion"
+        ],
+        "baseline_total": 0,
+        "patched_total": 39,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
       "compile_errors": []
     }
   },
@@ -433,7 +540,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 25,
@@ -466,30 +573,88 @@
       4
     ],
     "tokens_used": 0,
-    "synthesis_status": "success",
+    "synthesis_status": "partial",
     "applied_on_disk_ag3": 22,
-    "synthesized_count": 3,
-    "failed_hunks_total": 0,
+    "synthesized_count": 1,
+    "failed_hunks_total": 1,
     "retry_contexts": [
       {
-        "error_type": "unknown",
-        "error_message": "--- Building code for 8f7fc54 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] crate-libs-azure-testing                                           [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-copy-azure                                                   ",
-        "attempt_count": 1,
-        "suggested_action": "inspect_and_retry"
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
       }
     ],
-    "failed_hunks": [],
-    "generated_patch_bytes": 21973,
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/org/elasticsearch/Version.java",
+        "old_content": "        static final List<Version> DECLARED_VERSIONS = Collections.unmodifiableList(getDeclaredVersions(Version.class));\n    }\n\n\n    /**\n     * Returns the minimum compatible version based on the current\n     * version. Ie a node needs to have at least the return version in order",
+        "new_content": "        static final List<Version> DECLARED_VERSIONS = Collections.unmodifiableList(getDeclaredVersions(Version.class));\n    }\n\n\n    /**\n     * Returns the minimum compatible version based on the current\n     * version. Ie a node needs to have at least the return version in order",
+        "imports_added": [],
+        "imports_removed": [],
+        "adapted": true,
+        "loc_index": 3
+      }
+    ],
+    "generated_patch_bytes": 23526,
     "target_patch_bytes": 49582,
-    "validation_passed": false,
-    "validation_failure_category": "unknown",
-    "build_success": false,
-    "test_success": null,
-    "test_mode": null,
-    "test_transition": {},
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "org.elasticsearch.VersionTest#test_can_parse_next_major_release_version",
+        "org.elasticsearch.VersionTest#test_can_parse_next_minor_release_version",
+        "org.elasticsearch.VersionTest#test_can_parse_next_patch_release_version",
+        "org.elasticsearch.VersionTest#test_compatible_current_version",
+        "org.elasticsearch.VersionTest#test_compatible_current_version_is_compatible_to_4_0_0",
+        "org.elasticsearch.VersionTest#test_min_version_is_4_0_0",
+        "org.elasticsearch.VersionTest#test_version_minimum_compatibility",
+        "org.elasticsearch.transport.InboundDecoderTests#testCompressedDecode",
+        "org.elasticsearch.transport.InboundDecoderTests#testCompressedDecodeHandshakeCompatibility",
+        "org.elasticsearch.transport.InboundDecoderTests#testDecode",
+        "org.elasticsearch.transport.InboundDecoderTests#testDecodeHandshakeCompatibility",
+        "org.elasticsearch.transport.InboundDecoderTests#testDecodePreHeaderSizeVariableInt",
+        "org.elasticsearch.transport.InboundHandlerTests#testClosesChannelOnErrorInHandshakeWithIncompatibleVersion",
+        "org.elasticsearch.transport.InboundHandlerTests#testLogsSlowInboundProcessing",
+        "org.elasticsearch.transport.InboundHandlerTests#testPing",
+        "org.elasticsearch.transport.InboundHandlerTests#testRequestAndResponse",
+        "org.elasticsearch.transport.InboundHandlerTests#testSendsErrorResponseToHandshakeFromCompatibleVersion",
+        "org.elasticsearch.transport.InboundHandlerTests#test_handshake_checks_minimum_compatible_version_if_normal_version_is_not_compatible",
+        "org.elasticsearch.transport.InboundHandlerTests#test_handshake_error_if_version_and_minimum_compatible_version_is_not_compatible",
+        "org.elasticsearch.transport.InboundHandlerTests#test_handshake_precedes_stream_version_for_compatibility",
+        "org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated",
+        "org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased",
+        "org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling",
+        "org.elasticsearch.transport.OutboundHandlerTests#testErrorResponse",
+        "org.elasticsearch.transport.OutboundHandlerTests#testSendRawBytes",
+        "org.elasticsearch.transport.OutboundHandlerTests#testSendRequest",
+        "org.elasticsearch.transport.OutboundHandlerTests#testSendResponse",
+        "org.elasticsearch.transport.TransportActionProxyTests#testException",
+        "org.elasticsearch.transport.TransportActionProxyTests#testGetAction",
+        "org.elasticsearch.transport.TransportActionProxyTests#testIsProxyAction",
+        "org.elasticsearch.transport.TransportActionProxyTests#testIsProxyRequest",
+        "org.elasticsearch.transport.TransportActionProxyTests#testSendMessage",
+        "org.elasticsearch.transport.TransportActionProxyTests#testUnwrap",
+        "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeError",
+        "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestAndResponse",
+        "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeRequestFutureVersionsCompatibility",
+        "org.elasticsearch.transport.TransportHandshakerTests#testHandshakeTimeout",
+        "org.elasticsearch.transport.TransportHandshakerTests#testSendRequestThrowsException",
+        "org.elasticsearch.transport.TransportHandshakerTests#test_handshake_request_includes_minimumCompatibilityVersion"
+      ],
+      "baseline_total": 0,
+      "patched_total": 39,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 39,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

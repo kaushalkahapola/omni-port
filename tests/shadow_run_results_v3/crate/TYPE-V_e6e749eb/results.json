@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "run_timestamp": "2026-04-11T04:04:41.828609",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "e6e749ebf12d618322696d0b45f86211efbfed17",
@@ -8,18 +8,18 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 19.45,
+      "elapsed_s": 25.49,
       "error": null,
       "java_hunks": 3,
       "aux_hunks": 2,
       "localization_results": [
         {
           "hunk_index": 0,
-          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-          "method_used": "fuzzy",
-          "confidence": 0.924,
-          "start_line": 30,
-          "end_line": 35,
+          "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.823,
+          "start_line": 27,
+          "end_line": 32,
           "symbol_mappings": {}
         },
         {
@@ -43,12 +43,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.21,
+      "elapsed_s": 3.79,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.MIXED",
+        "patch_type": "PatchType.TYPE_III",
         "confidence": 0.85,
-        "reasoning": "The patch modifies the NumericType.java file by adjusting serialization and deserialization logic with version checks. The first hunk was found with high confidence via fuzzy matching, indicating minor structural or formatting changes (TYPE_II). However, the subsequent hunks were found via embedding with lower confidence, suggesting more complex structural changes or API divergence (TYPE_IV). Given the mix of fuzzy and embedding matches and the nature of the changes involving version-dependent serialization logic, the patch complexity is mixed, combining moderate and deeper structural changes. The token budget estimate reflects the need to handle both straightforward and more complex backporting tasks.",
+        "reasoning": "The patch modifies the NumericType.java file by adding version checks and conditional logic around reading and writing scale values for BigDecimal streaming. It introduces new imports and changes the control flow based on the version of the stream, which indicates structural changes rather than simple string replacements or formatting fixes. The localization evidence shows mixed methods of discovery, including 'git_pickaxe' and 'embedding', with moderate confidence, supporting the assessment that the patch involves structural changes but not deep refactoring or complete redesign. Therefore, TYPE_III is appropriate with high confidence and a moderate token budget estimate to handle the structural adjustments and version compatibility logic.",
         "is_auto_generated": false
       }
     },
@@ -59,58 +59,50 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 13.8,
+      "elapsed_s": 13.85,
       "error": null,
-      "adapted_count": 1
+      "adapted_count": 2
     },
     "agent5_structural": {
-      "elapsed_s": 67.02,
+      "elapsed_s": 112.76,
       "error": null,
-      "refactored_count": 2
+      "refactored_count": 1
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 3,
-      "failed_count": 0,
-      "synthesis_status": "success",
+      "synthesized_count": 2,
+      "failed_count": 1,
+      "synthesis_status": "partial",
       "synthesized_hunks": [
         {
-          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-          "old_string": "import java.util.Objects;\n\nimport org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.jetbrains.annotations.NotNull;",
-          "new_string": "import java.util.Objects;\n\nimport org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.jetbrains.annotations.NotNull;",
+          "file_path": "server/src/main/java/io/crate/types/IntegerType.java",
+          "old_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;",
+          "new_string": "import org.apache.lucene.util.RamUsageEstimator;\nimport org.elasticsearch.Version;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
         },
         {
           "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-          "old_string": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);",
-          "new_string": "    public BigDecimal readValueFrom(StreamInput in) throws IOException {\n        if (in.readBoolean()) {\n            byte[] bytes = in.readByteArray();\n            int scale = this.scale == null ? 0 : this.scale;\n            if (in.getVersion().onOrAfter(Version.V_5_9_0) && in.readBoolean()) {\n                scale = in.readVInt();\n                assert this.scale == null || this.scale == scale : \"streamed value scale differs from type scale\";\n            }\n            return new BigDecimal(new BigInteger(bytes), scale);\n        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);\n        }\n    }",
+          "old_string": "        return precision == null;\n    }\n\n    @Override\n    public TypeSignature getTypeSignature() {\n        if (unscaled()) {\n            return super.getTypeSignature();\n        } else {\n            ArrayList<TypeSignature> parameters = new ArrayList<>();\n            parameters.add(TypeSignature.of(precision));\n            if (scale != null) {\n                parameters.add(TypeSignature.of(scale));\n            }\n            return new TypeSignature(getName(), parameters);\n        }\n    }\n\n",
+          "new_string": "        return precision == null;\n    }\n\n    @Override\n    public TypeSignature getTypeSignature() {\n        if (unscaled()) {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {\n                if (scale == null) {\n                    out.writeBoolean(true);\n                    out.writeVInt(v.scale());\n                } else {\n                    out.writeBoolean(false);\n                }\n            }\n        } else {\n            out.writeBoolean(false);\n        }\n                parameters.add(TypeSignature.of(scale));\n            }\n            return new TypeSignature(getName(), parameters);\n        }\n    }\n\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/types/NumericType.java",
-          "old_string": "        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);\n        }\n    }\n\n    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        out.writeOptionalVInt(precision);",
-          "new_string": "        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            out.writeOptionalVInt(scale);\n        } else {\n            out.writeBoolean(false);\n        }\n    }\n\n    @Override\n    public void writeTo(StreamOutput out) throws IOException {\n        out.writeOptionalVInt(precision);",
-          "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         }
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 80.08,
+      "elapsed_s": 0.3,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper):    rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Aux hunk application failed: aux patch apply failed for docs/appendices/release-notes/5.8.4.rst: [git-strict] error: patch failed: docs/appendices/release-notes/5.8.4.rst:60\nerror: docs/appendices/release-notes/5.8.4.rst: patch does not apply\n[git-tolerant] error: patch failed: docs/appendices/release-notes/5.8.4.rst:60\nerror: docs/appendices/release-notes/5.8.4.rst: patch does not apply\n[gnu-patch-dry-run] checking file docs/appendices/release-notes/5.8.4.rst\nHunk #1 FAILED at 60.\n1 out of 1 hu",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": false,
-      "build_mode": "crate-helper",
+      "build_success": null,
+      "build_mode": null,
       "test_success": null,
       "test_mode": null,
       "test_state": null,
@@ -124,35 +116,50 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 9571
     },
     "java_production_hunks": 3,
     "developer_aux_hunks": 2,
     "processed_hunk_indices": [
       0,
-      1,
-      2
+      2,
+      1
     ],
     "tokens_used": 0,
-    "synthesis_status": "success",
+    "synthesis_status": "partial",
     "applied_on_disk_ag3": 0,
-    "synthesized_count": 3,
-    "failed_hunks_total": 0,
+    "synthesized_count": 2,
+    "failed_hunks_total": 1,
     "retry_contexts": [
       {
-        "error_type": "unknown",
-        "error_message": "--- Building code for 96fc693 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      ",
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      },
+      {
+        "error_type": "context_mismatch",
+        "error_message": "aux patch apply failed for docs/appendices/release-notes/5.8.4.rst: [git-strict] error: patch failed: docs/appendices/release-notes/5.8.4.rst:60\nerror: docs/appendices/release-notes/5.8.4.rst: patch does not apply\n[git-tolerant] error: patch failed: docs/appendices/release-notes/5.8.4.rst:60\nerror: docs/appendices/release-notes/5.8.4.rst: patch does not apply\n[gnu-patch-dry-run] checking file docs/appendices/release-notes/5.8.4.rst\nHunk #1 FAILED at 60.\n1 out of 1 hunk FAILED",
         "attempt_count": 1,
-        "suggested_action": "inspect_and_retry"
+        "suggested_action": "re-localize"
       }
     ],
-    "failed_hunks": [],
-    "generated_patch_bytes": 0,
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/io/crate/types/NumericType.java",
+        "old_content": "        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n        } else {\n            out.writeBoolean(false);\n",
+        "new_content": "    public BigDecimal readValueFrom(StreamInput in) throws IOException {\n        if (in.readBoolean()) {\n            byte[] bytes = in.readByteArray();\n            int scale = this.scale == null ? 0 : this.scale;\n            if (in.getVersion().onOrAfter(Version.V_5_9_0) && in.readBoolean()) {\n                scale = in.readVInt();\n                assert this.scale == null || this.scale == scale : \"streamed value scale differs from type scale\";\n            }\n            return new BigDecimal(\n                new BigInteger(bytes),\n                scale\n            );\n        } else {\n            return null;\n        }\n    }\n\n    @Override\n    public void writeValueTo(StreamOutput out, BigDecimal v) throws IOException {\n        if (v != null) {\n            out.writeBoolean(true);\n            out.writeByteArray(v.unscaledValue().toByteArray());\n            if (out.getVersion().onOrAfter(Version.V_5_9_0)) {\n                if (this.scale == null) {\n                    out.writeBoolean(true);\n                    out.writeVInt(v.scale());\n                } else {\n                    out.writeBoolean(false);\n                }\n            }\n        } else {\n            out.writeBoolean(false);\n        }\n    }",
+        "refactored": true,
+        "semantic_confidence": 0.55,
+        "loc_index": 1
+      }
+    ],
+    "generated_patch_bytes": 1867,
     "target_patch_bytes": 7207,
     "validation_passed": false,
-    "validation_failure_category": "unknown",
-    "build_success": false,
+    "validation_failure_category": "context_mismatch",
+    "build_success": null,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

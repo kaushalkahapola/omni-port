@@ -14,11 +14,63 @@ NOTE: applied_hunks from Agent 3 are already written to disk and must NOT be
 re-synthesized or re-applied here.
 """
 
+import re
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
+
+# Matches Java member-declaration lvalues:  [modifiers] Type name =
+# Captures the declared name so we can detect duplicates introduced by new_string.
+_JAVA_DECL_NAME_RE = re.compile(
+    r"(?:public|private|protected|static|final|volatile|transient"
+    r"|synchronized|abstract|native|strictfp)(?:\s+(?:public|private|protected"
+    r"|static|final|volatile|transient|synchronized|abstract|native|strictfp))*"
+    r"\s+[\w<>\[\],\s]+?\s+(\w+)\s*(?:=|[{(])",
+    re.MULTILINE,
+)
+
+
+def _declared_names(code: str) -> set:
+    """Return the set of Java identifier names declared in *code*."""
+    return {m.group(1) for m in _JAVA_DECL_NAME_RE.finditer(code)}
+
+
+def _new_string_introduces_duplicates(
+    file_content: str,
+    old_string: str,
+    new_string: str,
+) -> bool:
+    """
+    Return True if *new_string* would introduce duplicate Java declarations.
+
+    Two distinct failure modes are caught:
+
+    1. Internal duplicates in new_string itself — the LLM echoed the same
+       declaration twice (e.g. two ``public static final Version V_5_10_1``
+       inside new_string).  These are always compile errors.
+
+    2. Cross-file duplicates — new_string introduces a name that is NOT being
+       replaced (not in old_string) but already exists elsewhere in the file
+       (e.g. a constant that was already backported independently).
+    """
+    # ── Check 1: internal duplicates inside new_string ────────────────────────
+    matches = list(_JAVA_DECL_NAME_RE.finditer(new_string))
+    seen: set = set()
+    for m in matches:
+        name = m.group(1)
+        if name in seen:
+            return True
+        seen.add(name)
+
+    # ── Check 2: cross-file duplicates (new names already in the remainder) ───
+    introduced = _declared_names(new_string) - _declared_names(old_string)
+    if not introduced:
+        return False
+    remaining = file_content.replace(old_string, "", 1)
+    existing = _declared_names(remaining)
+    return bool(introduced & existing)
 
 
 # ── Data models ───────────────────────────────────────────────────────────────
@@ -160,6 +212,15 @@ class HunkSynthesizer:
         # Attempt 0: raw old_string.
         verified, confidence = self.verify_old_string_exists(file_content, old_string)
         if verified:
+            if _new_string_introduces_duplicates(file_content, old_string, new_string):
+                return SynthesizedHunk(
+                    file_path=file_path,
+                    old_string=old_string,
+                    new_string=new_string,
+                    confidence=0.0,
+                    context_lines_included=0,
+                    verified=False,
+                )
             return SynthesizedHunk(
                 file_path=file_path,
                 old_string=old_string,
@@ -196,6 +257,15 @@ class HunkSynthesizer:
                 )
                 expanded_new = context_before + new_string + "\n" + context_after
 
+                if _new_string_introduces_duplicates(file_content, expanded_old, expanded_new):
+                    return SynthesizedHunk(
+                        file_path=file_path,
+                        old_string=expanded_old,
+                        new_string=expanded_new,
+                        confidence=0.0,
+                        context_lines_included=context_lines,
+                        verified=False,
+                    )
                 return SynthesizedHunk(
                     file_path=file_path,
                     old_string=expanded_old,
@@ -218,6 +288,57 @@ class HunkSynthesizer:
             confidence=0.0,
             context_lines_included=0,
             verified=False,
+        )
+
+    def synthesize_pure_addition(
+        self,
+        hunk: Dict[str, Any],
+        file_path: str,
+    ) -> SynthesizedHunk:
+        """
+        For hunks with empty old_content (pure insertion of new method/block).
+        Inserts before the final closing brace of the file (end of class body).
+        Only used when localization failed entirely and old_content is empty.
+        Confidence is 0.7 to flag for review — heuristic insertion point.
+        """
+        new_string = hunk.get("new_content", "").rstrip("\n")
+        if not new_string:
+            return SynthesizedHunk(
+                file_path=file_path, old_string="", new_string="",
+                confidence=0.0, context_lines_included=0, verified=False,
+            )
+
+        file_content = self.read_file(file_path)
+        if not file_content:
+            return SynthesizedHunk(
+                file_path=file_path, old_string="", new_string="",
+                confidence=0.0, context_lines_included=0, verified=False,
+            )
+
+        # Find the last line that is exactly `}` — the outermost class closing brace.
+        lines = file_content.splitlines(keepends=True)
+        for i in range(len(lines) - 1, -1, -1):
+            stripped = lines[i].strip()
+            if stripped == "}":
+                # Use the closing brace + a few lines of context as the anchor
+                # to ensure uniqueness (bare `}` may not be unique on its own).
+                context_start = max(0, i - 2)
+                anchor = "".join(lines[context_start : i + 1])
+                if anchor in file_content:
+                    expanded_new = "".join(lines[context_start:i]) + new_string + "\n" + lines[i]
+                    return SynthesizedHunk(
+                        file_path=file_path,
+                        old_string=anchor,
+                        new_string=expanded_new,
+                        confidence=0.7,
+                        context_lines_included=0,
+                        verified=True,
+                    )
+                break
+
+        return SynthesizedHunk(
+            file_path=file_path, old_string="", new_string="",
+            confidence=0.0, context_lines_included=0, verified=False,
         )
 
     def synthesize_batch(
@@ -305,11 +426,21 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
             if loc_result.method_used != "failed" and loc_result.file_path:
                 passthrough.append((i, h))
             else:
+                # Before dropping: check if this is a pure-addition hunk (empty old_content).
+                # For pure additions, localization can't find an anchor (nothing to match),
+                # but we still know the target file. Attempt end-of-class insertion.
+                hunk_file = h.get("file_path") or h.get("target_file") or ""
+                old_content = h.get("old_content", "")
+                if not old_content and hunk_file:
+                    result = synthesizer.synthesize_pure_addition(h, hunk_file)
+                    if result.verified:
+                        all_synthesized.append(result.model_dump())
+                        continue
                 all_failed.append(h)
                 retry_contexts.append(
                     PatchRetryContext(
                         error_type="synthesis_skipped_no_localization",
-                        error_message=f"Hunk unclaimed; localization failed entirely",
+                        error_message="Hunk unclaimed; localization failed entirely",
                         attempt_count=state.get("current_attempt", 1),
                         suggested_action="manual_review",
                     )

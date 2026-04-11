@@ -1,5 +1,86 @@
+diff --git a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+index 6c93c40e2d..1f9c66d5db 100644
+--- a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
++++ b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+@@ -116,7 +116,9 @@ public class EqualityExtractor {
+                                      boolean shortCircuitOnMatchPredicateUnknown,
+                                      @Nullable TransactionContext transactionContext) {
+         var context = new ProxyInjectingVisitor.Context(columns);
+-        Symbol proxiedTree = symbol.accept(ProxyInjectingVisitor.INSTANCE, context);
++        // Normalize the query so that any casts on literals are evaluated
++        var normalizedQuery = normalizer.normalize(symbol, transactionContext);
++        Symbol proxiedTree = normalizedQuery.accept(ProxyInjectingVisitor.INSTANCE, context);
+ 
+         // Match cannot execute without Lucene
+         if (shortCircuitOnMatchPredicateUnknown && context.unknowns.size() == 1) {
+@@ -293,7 +295,7 @@ public class EqualityExtractor {
+         @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             throw new UnsupportedOperationException("writeTo not supported for " +
+-                                                    EqProxy.class.getSimpleName());
++                EqProxy.class.getSimpleName());
+         }
+ 
+         public String forDisplay() {
+@@ -368,7 +370,7 @@ public class EqualityExtractor {
+ 
+         static class Context {
+ 
+-            private LinkedHashMap<ColumnIdent, Comparison> comparisons;
++            private final LinkedHashMap<ColumnIdent, Comparison> comparisons;
+             private boolean proxyBelow;
+             private final Set<Symbol> unknowns = new HashSet<>();
+ 
+diff --git a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
+index 3b12d842c0..3f73343d65 100644
+--- a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
++++ b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.expression.predicate;
+ 
++import static io.crate.execution.dml.ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION;
+ import static io.crate.lucene.LuceneQueryBuilder.genericFunctionFilter;
+ import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
+ 
+@@ -113,7 +114,6 @@ public class IsNullPredicate<T> extends Scalar<Boolean, T> {
+         return null;
+     }
+ 
+-
+     @Nullable
+     public static Query refExistsQuery(Reference ref, Context context, boolean countEmptyArrays) {
+         String field = ref.storageIdent();
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+index 7dd2f7c54b..59ad90905d 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.expression.scalar;
+ 
++import static io.crate.execution.dml.ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION;
+ import static io.crate.expression.scalar.array.ArrayArgumentValidators.ensureInnerTypeIsNotUndefined;
+ import static io.crate.lucene.LuceneQueryBuilder.genericFunctionFilter;
+ import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
+@@ -77,7 +78,6 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         }
+     }
+ 
+-
+     private ArrayUpperFunction(Signature signature, BoundSignature boundSignature) {
+         super(signature, boundSignature);
+         ensureInnerTypeIsNotUndefined(boundSignature.argTypes(), signature.getName().name());
+@@ -127,7 +127,6 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         }
+     }
+ 
+-
+     /**
+      * <pre>
+      * {@code
 diff --git a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
-index 7f9cd25444..16d57bbd5a 100644
+index 7f9cd25444..32f7ba0395 100644
 --- a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
 +++ b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
 @@ -49,6 +49,7 @@ import io.crate.metadata.doc.DocSysColumns;
@@ -10,7 +91,34 @@ index 7f9cd25444..16d57bbd5a 100644
  
  /**
   * Used to analyze a query for primaryKey/partition "direct access" possibilities.
-@@ -203,7 +204,7 @@ public final class WhereClauseOptimizer {
+@@ -166,11 +167,15 @@ public final class WhereClauseOptimizer {
+ 
+         EqualityExtractor eqExtractor = new EqualityExtractor(normalizer);
+ 
+-        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, query, txnCtx);
++        // ExpressionAnalyzer will "blindly" add cast to the column, to match the datatype of the literal.
++        // To be able to properly extract pkMatches (and therefore dockeys), so that the cast is moved to the literal,
++        // we need to optimize the casts, before the extraction of pkMatches (and the dockeys after that)
++        var optimizedCastsQuery = Optimizer.optimizeCasts(query, txnCtx, nodeCtx);
++        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, optimizedCastsQuery, txnCtx);
+         Set<Symbol> clusteredBy = Collections.emptySet();
+         if (table.clusteredBy() != null) {
+             EqualityExtractor.EqMatches clusteredByMatches = eqExtractor.extractParentMatches(
+-                Collections.singletonList(table.clusteredBy()), query, txnCtx);
++                Collections.singletonList(table.clusteredBy()), optimizedCastsQuery, txnCtx);
+             List<List<Symbol>> clusteredBySymbols = clusteredByMatches.matches();
+             if (clusteredBySymbols != null) {
+                 clusteredBy = new HashSet<>(clusteredBySymbols.size());
+@@ -186,7 +191,7 @@ public final class WhereClauseOptimizer {
+                     table.primaryKey().size() == 1 && table.clusteredBy().equals(table.primaryKey().get(0))));
+ 
+         if (pkMatches.matches() == null && shouldUseDocKeys) {
+-            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), query, txnCtx);
++            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), optimizedCastsQuery, txnCtx);
+         }
+ 
+         if (pkMatches.matches() == null) {
+@@ -203,7 +208,7 @@ public final class WhereClauseOptimizer {
                                    partitionIndicesWithinPks);
          }
          EqMatches partitionMatches = table.isPartitioned()

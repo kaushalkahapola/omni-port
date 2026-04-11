@@ -549,8 +549,16 @@ def run_validation(state: BackportState) -> BackportState:
         restore_repo_state(repo_path)
 
     # ── Step 2: Apply synthesized hunks (CLAW) ────────────────────────────────
-    print(f"  agent7: applying {len(synthesized_hunks)} synthesized hunk(s)...")
-    synth_result = _apply_synthesized_hunks(repo_path, synthesized_hunks)
+    # If the pipeline already applied synthesized hunks to disk before capturing
+    # generated.patch (synthesized_hunks_pre_applied=True), skip re-application on
+    # the first attempt. On retries the repo is restored first, so we must re-apply.
+    pre_applied = state.get("synthesized_hunks_pre_applied", False) and attempts == 0
+    if pre_applied:
+        print(f"  agent7: synthesized hunks already on disk (pre-applied), skipping apply step")
+        synth_result = {"success": True, "output": "pre-applied by pipeline", "applied_files": []}
+    else:
+        print(f"  agent7: applying {len(synthesized_hunks)} synthesized hunk(s)...")
+        synth_result = _apply_synthesized_hunks(repo_path, synthesized_hunks)
     validation_results["hunk_application"] = {
         "success": synth_result["success"],
         "raw": synth_result["output"],
@@ -617,10 +625,22 @@ def run_validation(state: BackportState) -> BackportState:
         restore_repo_state(repo_path)
         ctx = _build_retry_context(mapped_category, build_res.output, attempts + 1)
         state["validation_passed"] = False
-        state["validation_error_context"] = (
-            f"Build failed ({build_res.mode}): "
-            + (build_res.output[-2000:] if len(build_res.output) > 2000 else build_res.output)
-        )
+        if compile_errors:
+            error_summary = "\n".join(
+                f"{e.file_path}:{e.line}: {e.message}" for e in compile_errors[:20]
+            )
+            state["validation_error_context"] = (
+                f"Build failed ({build_res.mode}) — compile errors:\n{error_summary}"
+            )
+        else:
+            error_lines = [
+                l for l in build_res.output.splitlines()
+                if "error" in l.lower() and l.strip()
+            ]
+            excerpt = "\n".join(error_lines[-30:]) if error_lines else build_res.output[-2000:]
+            state["validation_error_context"] = (
+                f"Build failed ({build_res.mode}): {excerpt[-2000:]}"
+            )
         state["validation_failure_category"] = mapped_category
         state["validation_retry_files"] = retry_files
         state["validation_attempts"] = attempts + 1

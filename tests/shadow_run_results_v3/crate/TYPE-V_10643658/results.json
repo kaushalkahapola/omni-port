@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "run_timestamp": "2026-04-11T02:19:42.478173",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "106436589bb5bde52346e54d66f681117fbc5a8d",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 14.12,
+      "elapsed_s": 15.33,
       "error": null,
       "java_hunks": 5,
       "aux_hunks": 2,
@@ -61,12 +61,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.5,
+      "elapsed_s": 4.06,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.85,
-        "reasoning": "The patch introduces synchronized methods to make QueryProfiler thread-safe, which is a structural change affecting method synchronization and access control. Additionally, method visibility modifiers are changed from protected to private, indicating a structural refactor. The patch also adds a new test class to verify thread safety, increasing complexity. Localization evidence shows the patch was found with moderate to high confidence but some hunks required embedding or failed localization, indicating structural differences. Overall, this is beyond simple string or whitespace changes, but not a deep API redesign, fitting TYPE_III complexity.",
+        "reasoning": "The patch introduces synchronized methods to ensure thread safety in the QueryProfiler class, which is a structural change affecting method behavior and concurrency control. Additionally, method visibility is changed from protected to private, indicating a refactoring of class internals. The patch also adds a new test class to verify thread safety, which increases complexity. The localization evidence shows moderate to high confidence in matching the patch to the target branch, but some hunks have lower confidence or failed localization, suggesting some structural divergence. Overall, the patch is more than a simple string or whitespace change (TYPE_I or TYPE_II) but does not represent a deep API refactoring or complete redesign (TYPE_IV or TYPE_V). Hence, TYPE_III is appropriate with good confidence and a moderate token budget estimate to handle the structural changes and test additions.",
         "is_auto_generated": false
       }
     },
@@ -77,19 +77,19 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 17.28,
+      "elapsed_s": 7.82,
       "error": null,
-      "adapted_count": 4
+      "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 10.74,
       "error": null,
-      "refactored_count": 0
+      "refactored_count": 1
     },
     "agent6_synthesizer": {
       "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 4,
+      "synthesized_count": 2,
       "failed_count": 1,
       "synthesis_status": "partial",
       "synthesized_hunks": [
@@ -103,24 +103,8 @@
         },
         {
           "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
-          "old_string": "    protected abstract PB createProfileBreakdown();",
-          "new_string": "    private PB createProfileBreakdown() {\n        return new QueryProfileBreakdown();\n    }",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
-          "old_string": "    public List<ProfileResult> getTree() {\n        ArrayList<ProfileResult> results = new ArrayList<>(5);\n        for (Integer root : roots) {\n            results.add(doGetTree(root));",
-          "new_string": "    public synchronized List<ProfileResult> getTree() {\n        ArrayList<ProfileResult> results = new ArrayList<>(5);\n        for (Integer root : roots) {\n            results.add(doGetTree(root));",
-          "confidence": 1.0,
-          "context_lines_included": 0,
-          "verified": true
-        },
-        {
-          "file_path": "server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java",
-          "old_string": "    protected abstract String getTypeFromElement(E element);",
-          "new_string": "    private String getTypeFromElement(Query query) {\n        // Anonymous classes won't have a name,\n        // we need to get the super class\n        if (query.getClass().getSimpleName().isEmpty()) {",
+          "old_string": "     *\n     * @return a hierarchical representation of the profiled query tree\n     */\n    public List<ProfileResult> getTree() {\n        ArrayList<ProfileResult> results = new ArrayList<>(5);\n        for (Integer root : roots) {\n            results.add(doGetTree(root));",
+          "new_string": "     *\n     * @return a hierarchical representation of the profiled query tree\n     */\n    public synchronized List<ProfileResult> getTree() {\n        ArrayList<ProfileResult> results = new ArrayList<>(roots.size());\n        for (Integer root : roots) {\n            results.add(doGetTree(root));",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -128,19 +112,48 @@
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 48.14,
+      "elapsed_s": 341.53,
       "error": null,
-      "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper): te && apt-get install -y     git     rsync     && rm -rf /var/lib/apt/lists/*\n#6 CACHED\n\n#7 [3/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": false,
+      "build_success": true,
       "build_mode": "crate-helper",
-      "test_success": null,
-      "test_mode": null,
-      "test_state": null,
-      "test_state_transition": null,
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.search.profile.query.QueryProfilerTest.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.search.profile.query.QueryProfilerTest"
+        ],
+        "test_cases": {
+          "org.elasticsearch.search.profile.query.QueryProfilerTest#test_ensure_thread_safety": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.search.profile.query.QueryProfilerTest": "passed"
+        },
+        "summary": {
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0,
+          "total": 1
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.search.profile.query.QueryProfilerTest#test_ensure_thread_safety"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 1,
+        "patched_total": 1,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
       "compile_errors": []
     }
   },
@@ -150,7 +163,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 1
     },
     "java_production_hunks": 5,
@@ -158,13 +171,13 @@
     "processed_hunk_indices": [
       0,
       1,
-      2,
-      3
+      3,
+      2
     ],
     "tokens_used": 0,
     "synthesis_status": "partial",
     "applied_on_disk_ag3": 0,
-    "synthesized_count": 4,
+    "synthesized_count": 2,
     "failed_hunks_total": 1,
     "retry_contexts": [
       {
@@ -178,12 +191,6 @@
         "error_message": "Could not verify exact string in target file",
         "attempt_count": 4,
         "suggested_action": "relocalize"
-      },
-      {
-        "error_type": "unknown",
-        "error_message": "--- Building code for b4ce56b ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] repository-gcs                                                     [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      ",
-        "attempt_count": 1,
-        "suggested_action": "inspect_and_retry"
       }
     ],
     "failed_hunks": [
@@ -193,17 +200,27 @@
         "new_content": "        return query.getClass().getSimpleName();\n    }\n\n    private String getDescriptionFromElement(Query query) {\n        return query.toString();\n    }\n\n"
       }
     ],
-    "generated_patch_bytes": 0,
+    "generated_patch_bytes": 1344,
     "target_patch_bytes": 6856,
-    "validation_passed": false,
-    "validation_failure_category": "unknown",
-    "build_success": false,
-    "test_success": null,
-    "test_mode": null,
-    "test_transition": {},
-    "fail_to_pass_count": 0,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.search.profile.query.QueryProfilerTest#test_ensure_thread_safety"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 1,
+      "patched_total": 1,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
     "newly_passing_count": 0,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

@@ -1,12 +1,312 @@
+diff --git a/docs/appendices/release-notes/5.5.3.rst b/docs/appendices/release-notes/5.5.3.rst
+index 6ac9c6099d..0ee9fd9b54 100644
+--- a/docs/appendices/release-notes/5.5.3.rst
++++ b/docs/appendices/release-notes/5.5.3.rst
+@@ -49,6 +49,13 @@ See the :ref:`version_5.5.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue, that led to no results being returned when trying to filter on
++  a :ref:`PRIMARY KEY <constraints-primary-key>` column with an implicit cast.
++  For example::
++
++    CREATE TABLE tbl(a string PRIMARY KEY);
++    SELECT * FROM tbl WHERE a = 10;
++
+ - Rejected :ref:`renaming <sql-alter-table-rename-to>` of views and tables if
+   the target table or view already exists, and return an error message.
+   Previously, such a rename was allowed which caused the existing view or table
+diff --git a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+index 6c93c40e2d..1f9c66d5db 100644
+--- a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
++++ b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+@@ -116,7 +116,9 @@ public class EqualityExtractor {
+                                      boolean shortCircuitOnMatchPredicateUnknown,
+                                      @Nullable TransactionContext transactionContext) {
+         var context = new ProxyInjectingVisitor.Context(columns);
+-        Symbol proxiedTree = symbol.accept(ProxyInjectingVisitor.INSTANCE, context);
++        // Normalize the query so that any casts on literals are evaluated
++        var normalizedQuery = normalizer.normalize(symbol, transactionContext);
++        Symbol proxiedTree = normalizedQuery.accept(ProxyInjectingVisitor.INSTANCE, context);
+ 
+         // Match cannot execute without Lucene
+         if (shortCircuitOnMatchPredicateUnknown && context.unknowns.size() == 1) {
+@@ -293,7 +295,7 @@ public class EqualityExtractor {
+         @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             throw new UnsupportedOperationException("writeTo not supported for " +
+-                                                    EqProxy.class.getSimpleName());
++                EqProxy.class.getSimpleName());
+         }
+ 
+         public String forDisplay() {
+@@ -368,7 +370,7 @@ public class EqualityExtractor {
+ 
+         static class Context {
+ 
+-            private LinkedHashMap<ColumnIdent, Comparison> comparisons;
++            private final LinkedHashMap<ColumnIdent, Comparison> comparisons;
+             private boolean proxyBelow;
+             private final Set<Symbol> unknowns = new HashSet<>();
+ 
+diff --git a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
+index 3b12d842c0..3f73343d65 100644
+--- a/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
++++ b/server/src/main/java/io/crate/expression/predicate/IsNullPredicate.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.expression.predicate;
+ 
++import static io.crate.execution.dml.ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION;
+ import static io.crate.lucene.LuceneQueryBuilder.genericFunctionFilter;
+ import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
+ 
+@@ -113,7 +114,6 @@ public class IsNullPredicate<T> extends Scalar<Boolean, T> {
+         return null;
+     }
+ 
+-
+     @Nullable
+     public static Query refExistsQuery(Reference ref, Context context, boolean countEmptyArrays) {
+         String field = ref.storageIdent();
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+index 7dd2f7c54b..59ad90905d 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.expression.scalar;
+ 
++import static io.crate.execution.dml.ArrayIndexer.ARRAY_LENGTH_FIELD_SUPPORTED_VERSION;
+ import static io.crate.expression.scalar.array.ArrayArgumentValidators.ensureInnerTypeIsNotUndefined;
+ import static io.crate.lucene.LuceneQueryBuilder.genericFunctionFilter;
+ import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
+@@ -77,7 +78,6 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         }
+     }
+ 
+-
+     private ArrayUpperFunction(Signature signature, BoundSignature boundSignature) {
+         super(signature, boundSignature);
+         ensureInnerTypeIsNotUndefined(boundSignature.argTypes(), signature.getName().name());
+@@ -127,7 +127,6 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         }
+     }
+ 
+-
+     /**
+      * <pre>
+      * {@code
 diff --git a/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java b/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
-index f4b2e57713..8ec4ca706a 100644
+index 3ef699c70c..e82320c67c 100644
 --- a/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
 +++ b/server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java
-@@ -21,7 +21,6 @@
+@@ -49,6 +49,25 @@ public class UnnestFunction {
+     public static final String NAME = "unnest";
  
- package io.crate.expression.tablefunctions;
+     public static void register(TableFunctionModule module) {
++        module.register(
++            Signature
++                .table(
++                    NAME,
++        module.register(
++            Signature
++                .table(
++                    NAME,
++                    TypeSignature.parse("array(E)"),
++                    TypeSignature.parse("E")
++                )
++                .withTypeVariableConstraints(io.crate.metadata.functions.TypeVariableConstraint.typeVariable("E")),
++            (signature, boundSignature) -> new UnnestTableFunctionImplementation(
++                signature,
++                boundSignature,
++                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?
++                    new RowType(List.of(boundSignature.returnType())) :
++                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))
++        );
+         module.register(
+             Signature
+                 .table(
+@@ -57,19 +76,21 @@ public class UnnestFunction {
+                     RowType.EMPTY.getTypeSignature()
+                 )
+                 .withTypeVariableConstraints(typeVariableOfAnyType("N"))
++                .withFeature(Scalar.Feature.NON_NULLABLE)
+                 .withVariableArity(),
+             (signature, boundSignature) -> {
+-                List<DataType<?>> fieldTypes = Lists2.map(boundSignature.argTypes(), ArrayType::unnest);
+-                Boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());
++                var argTypes = boundSignature.argTypes();
++                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());
++                for (int i = 0; i < argTypes.size(); i++) {
++                    DataType<?> dataType = argTypes.get(i);
++                    fieldTypes.add(ArrayType.unnest(dataType));
++                }
++                boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());
+                 List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName
+                     ? List.of(NAME)
+                     : List.of();
+                 RowType returnType = new RowType(fieldTypes, fieldNames);
  
--import static io.crate.metadata.functions.TypeVariableConstraint.typeVariable;
- import static io.crate.metadata.functions.TypeVariableConstraint.typeVariableOfAnyType;
+-                /**
+-                 * See class javadoc of {@link TableFunctionImplementation}
+-                 * Single return value is promoted/unwrapped from Row
+-                 **/
+                 BoundSignature newBoundSignature = new BoundSignature(
+                     boundSignature.argTypes(),
+                     fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType
+@@ -81,16 +102,6 @@ public class UnnestFunction {
+                 );
+             }
+         );
+-        // unnest() to keep it compatible with previous versions
+-        module.register(
+-            Signature.table(
+-                NAME,
+-                DataTypes.UNTYPED_OBJECT.getTypeSignature()
+-            ),
+-            (signature, boundSignature) -> new UnnestTableFunctionImplementation(
+-                signature,
+-                boundSignature,
+-                RowType.EMPTY)
+         );
+     }
  
- import java.util.ArrayList;
+diff --git a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
+index 7f9cd25444..32f7ba0395 100644
+--- a/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
++++ b/server/src/main/java/io/crate/planner/WhereClauseOptimizer.java
+@@ -49,6 +49,7 @@ import io.crate.metadata.doc.DocSysColumns;
+ import io.crate.metadata.doc.DocTableInfo;
+ import io.crate.planner.operators.SubQueryAndParamBinder;
+ import io.crate.planner.operators.SubQueryResults;
++import io.crate.planner.optimizer.symbol.Optimizer;
+ 
+ /**
+  * Used to analyze a query for primaryKey/partition "direct access" possibilities.
+@@ -166,11 +167,15 @@ public final class WhereClauseOptimizer {
+ 
+         EqualityExtractor eqExtractor = new EqualityExtractor(normalizer);
+ 
+-        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, query, txnCtx);
++        // ExpressionAnalyzer will "blindly" add cast to the column, to match the datatype of the literal.
++        // To be able to properly extract pkMatches (and therefore dockeys), so that the cast is moved to the literal,
++        // we need to optimize the casts, before the extraction of pkMatches (and the dockeys after that)
++        var optimizedCastsQuery = Optimizer.optimizeCasts(query, txnCtx, nodeCtx);
++        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, optimizedCastsQuery, txnCtx);
+         Set<Symbol> clusteredBy = Collections.emptySet();
+         if (table.clusteredBy() != null) {
+             EqualityExtractor.EqMatches clusteredByMatches = eqExtractor.extractParentMatches(
+-                Collections.singletonList(table.clusteredBy()), query, txnCtx);
++                Collections.singletonList(table.clusteredBy()), optimizedCastsQuery, txnCtx);
+             List<List<Symbol>> clusteredBySymbols = clusteredByMatches.matches();
+             if (clusteredBySymbols != null) {
+                 clusteredBy = new HashSet<>(clusteredBySymbols.size());
+@@ -186,7 +191,7 @@ public final class WhereClauseOptimizer {
+                     table.primaryKey().size() == 1 && table.clusteredBy().equals(table.primaryKey().get(0))));
+ 
+         if (pkMatches.matches() == null && shouldUseDocKeys) {
+-            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), query, txnCtx);
++            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), optimizedCastsQuery, txnCtx);
+         }
+ 
+         if (pkMatches.matches() == null) {
+@@ -203,7 +208,7 @@ public final class WhereClauseOptimizer {
+                                   partitionIndicesWithinPks);
+         }
+         EqMatches partitionMatches = table.isPartitioned()
+-            ? eqExtractor.extractMatches(table.partitionedBy(), query, txnCtx)
++            ? eqExtractor.extractMatches(table.partitionedBy(), optimizedCastsQuery, txnCtx)
+             : EqMatches.NONE;
+ 
+         WhereClauseValidator.validate(query);
+diff --git a/server/src/test/java/io/crate/planner/SelectPlannerTest.java b/server/src/test/java/io/crate/planner/SelectPlannerTest.java
+index 54ad212070..8d49799889 100644
+--- a/server/src/test/java/io/crate/planner/SelectPlannerTest.java
++++ b/server/src/test/java/io/crate/planner/SelectPlannerTest.java
+@@ -126,7 +126,7 @@ public class SelectPlannerTest extends CrateDummyClusterServiceUnitTest {
+ 
+         LogicalPlan plan = e.logicalPlan("select name from users where _id = 1");
+         assertThat(plan).isEqualTo(
+-            "Get[doc.users | name | DocKeys{1} | (_id = 1)]");
++            "Get[doc.users | name | DocKeys{'1'} | (_id = 1)]");
+     }
+ 
+     @Test
+diff --git a/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java b/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
+index 16a0c9dffb..30998cd0ee 100644
+--- a/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
++++ b/server/src/test/java/io/crate/planner/WhereClauseOptimizerTest.java
+@@ -30,9 +30,12 @@ import java.util.List;
+ import org.junit.Before;
+ import org.junit.Test;
+ 
++import io.crate.analyze.AnalyzedDeleteStatement;
++import io.crate.analyze.AnalyzedStatement;
+ import io.crate.analyze.QueriedSelectRelation;
+ import io.crate.analyze.relations.DocTableRelation;
+ import io.crate.expression.eval.EvaluatingNormalizer;
++import io.crate.expression.symbol.Symbol;
+ import io.crate.metadata.PartitionName;
+ import io.crate.metadata.RelationName;
+ import io.crate.metadata.RowGranularity;
+@@ -46,6 +49,7 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+     @Before
+     public void setUpExecutor() throws Exception {
+         e = SQLExecutor.builder(clusterService)
++            .addTable("create table t_pk(a string primary key)")
+             .addTable("create table bystring (name string primary key, score double) " +
+                       "clustered by (name) ")
+             .addTable("create table clustered_by_only (x int) clustered by (x)")
+@@ -78,8 +82,19 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+     }
+ 
+     private WhereClauseOptimizer.DetailedQuery optimize(String statement) {
+-        QueriedSelectRelation queriedTable = e.analyze(statement);
+-        DocTableRelation table = ((DocTableRelation) queriedTable.from().get(0));
++        AnalyzedStatement stmt = e.analyze(statement);
++        DocTableRelation table;
++        Symbol where;
++        if (stmt instanceof QueriedSelectRelation qsr) {
++            table = (DocTableRelation) qsr.from().getFirst();
++            where = qsr.where();
++        } else if (stmt instanceof AnalyzedDeleteStatement ads) {
++            table = ads.relation();
++            where = ads.query();
++        } else {
++            throw new IllegalArgumentException("Neither a select or a delete statement is provided");
++        }
++
+         EvaluatingNormalizer normalizer = new EvaluatingNormalizer(
+             e.nodeCtx,
+             RowGranularity.CLUSTER,
+@@ -88,7 +103,7 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+         );
+         return WhereClauseOptimizer.optimize(
+             normalizer,
+-            queriedTable.where(),
++            where,
+             table.tableInfo(),
+             e.getPlannerContext(clusterService.state()).transactionContext(),
+             e.nodeCtx
+@@ -184,4 +199,20 @@ public class WhereClauseOptimizerTest extends CrateDummyClusterServiceUnitTest {
+             "((doc.partdatebin.ts > 1682899200000::bigint) AND (month AS date_bin('P28D'::interval, ts, 0::bigint) >= 1681344000000::bigint))"
+         );
+     }
++
++    @Test
++    public void test_filter_on_pk_with_implicit_cast() {
++        WhereClauseOptimizer.DetailedQuery query = optimize("select * from t_pk where a = 10 OR a = true");
++        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++        query = optimize("delete from t_pk where a = 10 OR a = true");
++        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++    }
++
++    @Test
++    public void test_filter_on_id_with_implicit_cast() {
++        WhereClauseOptimizer.DetailedQuery query = optimize("select * from t_pk where _id = 10 OR _id = true");
++        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++        query = optimize("delete from t_pk where _id = 10 OR _id = true");
++        assertThat(query.docKeys()).hasToString("Optional[DocKeys{'10'; 't'}]");
++    }
+ }

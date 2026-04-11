@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T19:35:39.252488",
+  "run_timestamp": "2026-04-11T04:07:30.357970",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "28f8a4b4765ab933f6f4efebaf5bbadb61ff7b9b",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.89,
+      "elapsed_s": 0.96,
       "error": null,
       "java_hunks": 2,
       "aux_hunks": 3,
@@ -34,12 +34,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.62,
+      "elapsed_s": 3.48,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.95,
-        "reasoning": "The patch modifies the UnnestFunction.java file with changes that are not exact string replacements but involve adjustments to type signatures and method implementations. The first hunk is an exact match with high confidence, but the second hunk involves changes found via 'git_pickaxe' indicating some formatting and structural adjustments without deep refactoring. The patch also updates tests and documentation accordingly. Overall, the patch requires fuzzy matching due to type signature changes and some structural adjustments but does not involve deep structural refactoring or redesign, fitting TYPE_II complexity.",
+        "reasoning": "The patch modifies the UnnestFunction.java file with changes that involve type signature adjustments and some restructuring of the function implementation. The first hunk is an exact match, but the second hunk involves changes found via 'git_pickaxe' indicating some formatting and structural adjustments but not deep refactoring or redesign. The patch also includes test additions and documentation updates which are straightforward. Overall, the patch requires fuzzy matching due to the signature and minor structural changes but does not involve deep structural refactoring or redesign, fitting TYPE_II complexity.",
         "is_auto_generated": false
       }
     },
@@ -56,12 +56,12 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 9.76,
+      "elapsed_s": 8.45,
       "error": null,
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 65.2,
+      "elapsed_s": 61.38,
       "error": null,
       "refactored_count": 1
     },
@@ -74,24 +74,24 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/expression/tablefunctions/UnnestFunction.java",
-          "old_string": "        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"E\")\n                )\n                .withTypeVariableConstraints(typeVariable(\"E\")),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?\n                    new RowType(List.of(boundSignature.returnType())) :\n                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))\n        );\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariable(\"E\"), typeVariableOfAnyType(\"N\"))\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                var argTypes = boundSignature.argTypes();\n                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());\n                for (int i = 0; i < argTypes.size(); i++) {\n                    DataType<?> dataType = argTypes.get(i);\n                    fieldTypes.add(ArrayType.unnest(dataType));\n                }\n                var returnType = new RowType(fieldTypes);\n                // the return type of the bound signature has to be resolved\n                // and created explicitly based on the arguments of the bounded\n                // signature, such as we cannot resolve correctly the field types\n                // of the record type from the array of any type with variable arity.\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    new BoundSignature(boundSignature.argTypes(), returnType),\n                    returnType\n                );\n            }\n        );",
-          "new_string": "        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"E\")\n                )\n                .withTypeVariableConstraints(typeVariable(\"E\")),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?\n                    new RowType(List.of(boundSignature.returnType())) :\n                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))\n        );\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariableOfAnyType(\"N\"))\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                var argTypes = boundSignature.argTypes();\n                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());\n                for (int i = 0; i < argTypes.size(); i++) {\n                    DataType<?> dataType = argTypes.get(i);\n                    fieldTypes.add(ArrayType.unnest(dataType));\n                }\n\n                boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());\n                List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName\n                    ? List.of(NAME)\n                    : List.of();\n                RowType returnType = new RowType(fieldTypes, fieldNames);\n\n                BoundSignature newBoundSignature = new BoundSignature(\n                    boundSignature.argTypes(),\n                    fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType\n                );\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    newBoundSignature,\n                    returnType\n                );\n            }\n        );",
+          "old_string": "\n    public static void register(TableFunctionModule module) {\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariableOfAnyType(\"N\"))\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                List<DataType<?>> fieldTypes = Lists2.map(boundSignature.argTypes(), ArrayType::unnest);\n                Boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());\n                List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName\n                    ? List.of(NAME)\n                    : List.of();\n                RowType returnType = new RowType(fieldTypes, fieldNames);\n\n                /**\n                 * See class javadoc of {@link TableFunctionImplementation}\n                 * Single return value is promoted/unwrapped from Row\n                 **/\n                BoundSignature newBoundSignature = new BoundSignature(\n                    boundSignature.argTypes(),\n                    fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType\n                );\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    newBoundSignature,\n                    returnType\n                );\n            }\n        );\n        // unnest() to keep it compatible with previous versions\n        module.register(\n            Signature.table(\n                NAME,\n                DataTypes.UNTYPED_OBJECT.getTypeSignature()\n            ),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                RowType.EMPTY)\n        );\n    }\n\n    static class UnnestTableFunctionImplementation extends TableFunctionImplementation<List<Object>> {\n\n        private final RowType returnType;\n",
+          "new_string": "\n    public static void register(TableFunctionModule module) {\n        module.register(\n            Signature\n                .table(\n                    NAME,\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(E)\"),\n                    TypeSignature.parse(\"E\")\n                )\n                .withTypeVariableConstraints(io.crate.metadata.functions.TypeVariableConstraint.typeVariable(\"E\")),\n            (signature, boundSignature) -> new UnnestTableFunctionImplementation(\n                signature,\n                boundSignature,\n                LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings()) ?\n                    new RowType(List.of(boundSignature.returnType())) :\n                    new RowType(List.of(boundSignature.returnType()), List.of(NAME)))\n        );\n        module.register(\n            Signature\n                .table(\n                    NAME,\n                    TypeSignature.parse(\"array(N)\"),\n                    RowType.EMPTY.getTypeSignature()\n                )\n                .withTypeVariableConstraints(typeVariableOfAnyType(\"N\"))\n                .withFeature(Scalar.Feature.NON_NULLABLE)\n                .withVariableArity(),\n            (signature, boundSignature) -> {\n                var argTypes = boundSignature.argTypes();\n                ArrayList<DataType<?>> fieldTypes = new ArrayList<>(argTypes.size());\n                for (int i = 0; i < argTypes.size(); i++) {\n                    DataType<?> dataType = argTypes.get(i);\n                    fieldTypes.add(ArrayType.unnest(dataType));\n                }\n                boolean useLegacyName = LegacySettings.LEGACY_TABLE_FUNCTION_COLUMN_NAMING.get(module.settings());\n                List<String> fieldNames = fieldTypes.size() == 1 && !useLegacyName\n                    ? List.of(NAME)\n                    : List.of();\n                RowType returnType = new RowType(fieldTypes, fieldNames);\n\n                BoundSignature newBoundSignature = new BoundSignature(\n                    boundSignature.argTypes(),\n                    fieldTypes.size() == 1 ? fieldTypes.get(0) : returnType\n                );\n                return new UnnestTableFunctionImplementation(\n                    signature,\n                    newBoundSignature,\n                    returnType\n                );\n            }\n        );\n        );\n    }\n\n    static class UnnestTableFunctionImplementation extends TableFunctionImplementation<List<Object>> {\n\n        private final RowType returnType;\n",
           "confidence": 1.0,
-          "context_lines_included": 0,
+          "context_lines_included": 3,
           "verified": true
         }
       ]
     },
     "agent7_validator": {
-      "elapsed_s": 111.36,
+      "elapsed_s": 0.27,
       "error": null,
       "validation_passed": false,
-      "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper):    rsync     && rm -rf /var/lib/apt/lists/*\n#5 CACHED\n\n#6 [3/5] WORKDIR /repo\n#6 CACHED\n\n#7 [4/5] WORKDIR /repo\n#7 CACHED\n\n#8 [5/5] RUN mkdir -p /root/.m2 /etc/maven /.m2 /usr/share/maven/ref/ &&     echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /usr/share/maven/conf/toolchains.xml &&     cp /usr/share/ma",
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Aux hunk application failed: aux patch apply failed for server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java:32\nerror: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java:32\nerror: server/src/test/java/io/crate/analyze/SelectSta",
       "validation_attempts": 1,
       "retry_files": [],
-      "build_success": false,
-      "build_mode": "crate-helper",
+      "build_success": null,
+      "build_mode": null,
       "test_success": null,
       "test_mode": null,
       "test_state": null,
@@ -105,7 +105,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 235
     },
     "java_production_hunks": 2,
@@ -121,18 +121,18 @@
     "failed_hunks_total": 0,
     "retry_contexts": [
       {
-        "error_type": "api_mismatch",
-        "error_message": "--- Building code for 1e6fb65 ---\nCPU detected: 12\nMaven threads: 12\n--- Changing directory to /home/kaushal/backport-claw/repos/crate ---\nmaven-cache-crate\n--- Building Docker image... ---\n--- Setting cache permissions... ---\n--- Building with Maven... ---\n[INFO] Scanning for projects...\n[INFO] ------------------------------------------------------------------------\n[INFO] Reactor Build Order:\n[INFO] \n[INFO] crate                                                              [pom]\n[INFO] crate-libs-shared                                                  [jar]\n[INFO] crate-libs-dex                                                     [jar]\n[INFO] crate-libs-es-x-content                                            [jar]\n[INFO] crate-libs-cli                                                     [jar]\n[INFO] crate-libs-guice                                                   [jar]\n[INFO] crate-libs-sql-parser                                              [jar]\n[INFO] crate-libs-pgwire                                                  [jar]\n[INFO] crate-server                                                       [jar]\n[INFO] es-analysis-common                                                 [jar]\n[INFO] es-analysis-phonetic                                               [jar]\n[INFO] es-discovery-ec2                                                   [jar]\n[INFO] es-repository-s3                                                   [jar]\n[INFO] es-repository-url                                                  [jar]\n[INFO] es-repository-azure                                                [jar]\n[INFO] dns-discovery                                                      [jar]\n[INFO] crate-copy-s3                                                      [jar]\n[INFO] crate-functions                                                    [jar]\n[INFO] crate-lang-js                                                      [jar]\n[INFO] crate-jmx-monitoring                                               ",
+        "error_type": "context_mismatch",
+        "error_message": "aux patch apply failed for server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: [git-strict] error: patch failed: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java:32\nerror: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: patch does not apply\n[git-tolerant] error: patch failed: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java:32\nerror: server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java: patch does not apply\n[gnu-patch-dry-run] checking file server/src/test/java/io/crate/analyze/SelectStat",
         "attempt_count": 1,
-        "suggested_action": "route_to_namespace_or_structural"
+        "suggested_action": "re-localize"
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 634,
+    "generated_patch_bytes": 15934,
     "target_patch_bytes": 7606,
     "validation_passed": false,
-    "validation_failure_category": "api_mismatch",
-    "build_success": false,
+    "validation_failure_category": "context_mismatch",
+    "build_success": null,
     "test_success": null,
     "test_mode": null,
     "test_transition": {},

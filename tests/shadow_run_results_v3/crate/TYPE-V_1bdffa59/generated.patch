@@ -56,6 +56,55 @@ index 11e05e2d93..2138aa808d 100644
      );
  
      private int batchSize;
+diff --git a/server/src/main/java/io/crate/replication/logical/MetadataTracker.java b/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
+index f39e910cfc..6c6c61721c 100644
+--- a/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
++++ b/server/src/main/java/io/crate/replication/logical/MetadataTracker.java
+@@ -23,6 +23,7 @@ package io.crate.replication.logical;
+ 
+ import static io.crate.replication.logical.LogicalReplicationSettings.NON_REPLICATED_SETTINGS;
+ import static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;
++import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;
+ 
+ import java.io.Closeable;
+ import java.util.ArrayList;
+@@ -402,8 +403,8 @@ public final class MetadataTracker implements Closeable {
+         Set<RelationName> currentlyReplicatedTables = subscription.relations().keySet();
+ 
+         Set<RelationName> existingRelations = publisherStateResponse.concreteIndices().stream()
+-            .filter(index -> metadata.hasIndex(index))
+-            .map(index -> RelationName.fromIndexName(index))
++            .filter(im -> metadata.hasIndex(im.getIndex().getName()))
++            .map(im -> RelationName.fromIndexName(im.getIndex().getName()))
+             .filter(relationName -> currentlyReplicatedTables.contains(relationName) == false)
+             .collect(Collectors.toCollection(() -> new HashSet<>()));
+ 
+@@ -437,13 +438,22 @@ public final class MetadataTracker implements Closeable {
+         var toRestoreIndices = new ArrayList<String>();
+         var toRestoreTemplates = new ArrayList<String>();
+ 
+-        for (var indexName : stateResponse.concreteIndices()) {
++        for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {
++            String indexName = indexMetadata.getIndex().getName();
+             var relationName = RelationName.fromIndexName(indexName);
++            if (subscribedRelations.get(relationName) == null) {
++                relationNamesForStateUpdate.add(relationName);
++            }
++            if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {
++                // If the index is not active, we cannot restore it
++                if (LOGGER.isDebugEnabled()) {
++                    LOGGER.debug("Skipping index {} for subscription {} as it is not active", indexName, subscription);
++                }
++                continue;
++            }
+             if (subscriberState.metadata().hasIndex(indexName) == false) {
+                 toRestoreIndices.add(indexName);
+                 relationNamesForStateUpdate.add(relationName);
+-            } else if (subscribedRelations.get(relationName) == null) {
+-                relationNamesForStateUpdate.add(relationName);
+             }
+         }
+         for (var templateName : stateResponse.concreteTemplates()) {
 diff --git a/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java b/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
 index d9914c03aa..430c2efb80 100644
 --- a/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
@@ -81,7 +130,7 @@ index d9914c03aa..430c2efb80 100644
          }
  
 diff --git a/server/src/main/java/io/crate/replication/logical/metadata/Publication.java b/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
-index 9e87dcd277..2b5fc5bff0 100644
+index 9e87dcd277..1c1ac1f64d 100644
 --- a/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
 +++ b/server/src/main/java/io/crate/replication/logical/metadata/Publication.java
 @@ -115,7 +115,6 @@ public class Publication implements Writeable {
@@ -92,7 +141,27 @@ index 9e87dcd277..2b5fc5bff0 100644
      public Map<RelationName, RelationMetadata> resolveCurrentRelations(ClusterState state,
                                                                         Roles roles,
                                                                         Role publicationOwner,
-@@ -169,14 +168,28 @@ public class Publication implements Writeable {
+@@ -124,18 +123,7 @@ public class Publication implements Writeable {
+         // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned
+         Predicate<String> indexFilter = indexName -> {
+             var indexMetadata = state.metadata().index(indexName);
+-            if (indexMetadata != null) {
+-                boolean softDeletes = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());
+-                if (softDeletes == false) {
+-                    LOGGER.warn(
+-                        "Table '{}' won't be replicated as the required table setting " +
+-                            "'soft_deletes.enabled' is set to: {}",
+-                        RelationName.fromIndexName(indexName),
+-                        softDeletes
+-                    );
+-                    return false;
+-                }
+-                var routingTable = state.routingTable().index(indexName);
++
+                 assert routingTable != null : "routingTable must not be null";
+                 return routingTable.allPrimaryShardsActive();
+ 
+@@ -169,14 +157,28 @@ public class Publication implements Writeable {
          }
  
          return relations.stream()

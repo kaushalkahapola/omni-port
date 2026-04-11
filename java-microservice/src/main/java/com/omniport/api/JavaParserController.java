@@ -39,6 +39,28 @@ public class JavaParserController {
         return getService().findMethodDefinitions(repoPath, sourceFilePath, methodNames);
     }
 
+    /**
+     * Return modifier information for methods in the given file.
+     *
+     * Request body:
+     *   repo_path    — absolute path to the repository root
+     *   file_path    — path to the Java file (relative to repo_path)
+     *   method_names — list of method names to inspect
+     *
+     * Response body:
+     *   status  → "ok" | "error"
+     *   methods → map of methodName → {visibility, modifiers, is_abstract, has_body,
+     *                                    is_class_abstract, declaring_class}
+     */
+    @PostMapping("/method-modifiers")
+    public Map<String, Object> methodModifiers(@RequestBody Map<String, Object> request) {
+        String repoPath = (String) request.get("repo_path");
+        String filePath = (String) request.get("file_path");
+        @SuppressWarnings("unchecked")
+        List<String> methodNames = (List<String>) request.get("method_names");
+        return getService().getMethodModifiers(repoPath, filePath, methodNames);
+    }
+
     @GetMapping("/health")
     public Map<String, String> health() {
         return Map.of("status", "ok", "service", "javaparser");

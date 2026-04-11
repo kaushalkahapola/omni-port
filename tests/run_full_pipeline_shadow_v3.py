@@ -63,7 +63,7 @@ from src.agents.agent3_fastapply import fast_apply_agent
 from src.agents.agent4_namespace import namespace_adapter_agent
 from src.agents.agent5_structural import structural_refactor_agent
 from src.agents.agent6_synthesizer import hunk_synthesizer_agent
-from src.agents.agent7_validator import run_validation, run_phase0_baseline
+from src.agents.agent7_validator import run_validation, run_phase0_baseline, _apply_synthesized_hunks
 from src.tools.notification_service import TelegramNotifier
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -766,10 +766,18 @@ def process_patch(
     results["agents"]["agent6_synthesizer"]["synthesis_status"] = state.get("synthesis_status", "")
     results["agents"]["agent6_synthesizer"]["synthesized_hunks"] = make_serializable(synthesized)
 
-    # ── 6. Capture generated diff (before Agent 7 restores on failure) ──────────
+    # ── 6. Apply synthesized hunks to disk, then capture the diff ────────────────
     # Agent 3's fast-apply hunks are already on disk at this point.
-    # Agent 7 may call restore_repo_state() on build/test failure, wiping the diff.
-    # Capture now so generated.patch always reflects what the agents produced.
+    # Synthesized hunks from agents 4/5/6 live only in state["synthesized_hunks"]; apply
+    # them now so the diff reflects the full output, and mark them pre-applied so
+    # Agent 7 doesn't attempt to re-apply (which would fail with old_string not found).
+    # Agent 7 may call restore_repo_state() on build/test failure, wiping the diff,
+    # so we must capture generated.patch before Agent 7 runs.
+    if synthesized:
+        pre_apply_result = _apply_synthesized_hunks(repo_path, synthesized)
+        state["synthesized_hunks_pre_applied"] = True
+        if not pre_apply_result["success"]:
+            print(f"  [pipeline] WARNING: pre-apply of synthesized hunks had errors: {pre_apply_result['output'][:200]}")
     generated_patch = git_diff(repo_path)
     (out_dir / "generated.patch").write_text(generated_patch, encoding="utf-8")
     print(f"\n  generated.patch written ({len(generated_patch)} bytes)")

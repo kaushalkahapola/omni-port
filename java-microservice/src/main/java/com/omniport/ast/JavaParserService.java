@@ -2,6 +2,7 @@ package com.omniport.ast;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
@@ -243,6 +244,84 @@ public class JavaParserService {
             result.put("message", e.getMessage());
         }
 
+        return result;
+    }
+
+    /**
+     * Return modifier information for each requested method in the given file.
+     *
+     * For each method name in methodNames, returns a map with:
+     *   "visibility"  → "public" | "protected" | "private" | "package-private"
+     *   "modifiers"   → list of modifier keywords (e.g. ["public", "abstract", "synchronized"])
+     *   "is_abstract" → true if the method is declared abstract (no body)
+     *   "has_body"    → true if the method has an implementation block
+     *   "is_class_abstract" → true if the declaring class itself is abstract
+     *
+     * Only inspects the given file — does NOT walk the hierarchy.
+     * If a method name appears multiple times (overloaded), the FIRST occurrence is returned.
+     */
+    public Map<String, Object> getMethodModifiers(String repoPath, String filePath,
+                                                   List<String> methodNames) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            File file = new File(repoPath, filePath);
+            if (!file.exists()) {
+                result.put("status", "error");
+                result.put("message", "File not found: " + file.getAbsolutePath());
+                return result;
+            }
+
+            CompilationUnit cu = StaticJavaParser.parse(file);
+
+            Map<String, Map<String, Object>> methodInfoMap = new HashMap<>();
+            Map<String, Boolean> classAbstractMap = new HashMap<>();
+
+            for (TypeDeclaration<?> type : cu.getTypes()) {
+                boolean classIsAbstract = false;
+                if (type instanceof ClassOrInterfaceDeclaration) {
+                    classIsAbstract = ((ClassOrInterfaceDeclaration) type).isAbstract();
+                }
+                String typeName = type.getNameAsString();
+                classAbstractMap.put(typeName, classIsAbstract);
+
+                for (MethodDeclaration method : type.getMethods()) {
+                    String name = method.getNameAsString();
+                    if (!methodNames.contains(name)) continue;
+                    if (methodInfoMap.containsKey(name)) continue; // first occurrence wins
+
+                    // Collect modifier keywords
+                    List<String> modList = new ArrayList<>();
+                    for (Modifier mod : method.getModifiers()) {
+                        modList.add(mod.getKeyword().asString());
+                    }
+
+                    // Determine visibility
+                    String visibility = "package-private";
+                    if (modList.contains("public"))    visibility = "public";
+                    else if (modList.contains("protected")) visibility = "protected";
+                    else if (modList.contains("private"))   visibility = "private";
+
+                    boolean isAbstract = method.isAbstract();
+                    boolean hasBody    = method.getBody().isPresent();
+
+                    Map<String, Object> info = new HashMap<>();
+                    info.put("visibility",        visibility);
+                    info.put("modifiers",         modList);
+                    info.put("is_abstract",       isAbstract);
+                    info.put("has_body",          hasBody);
+                    info.put("is_class_abstract", classIsAbstract);
+                    info.put("declaring_class",   typeName);
+                    methodInfoMap.put(name, info);
+                }
+            }
+
+            result.put("status", "ok");
+            result.put("methods", methodInfoMap);
+
+        } catch (Exception e) {
+            result.put("status", "error");
+            result.put("message", e.getMessage());
+        }
         return result;
     }
 

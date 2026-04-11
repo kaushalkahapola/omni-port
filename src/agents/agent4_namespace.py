@@ -14,12 +14,113 @@ don't match. So reaching Agent 4 means the content has genuinely drifted.
 """
 
 import re
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 from pathlib import Path
 from difflib import SequenceMatcher
 from pydantic import BaseModel, Field
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
 from src.core.llm_router import get_default_router, LLMTier
+
+
+# ── Abstract-class helpers ────────────────────────────────────────────────────
+
+def _is_abstract_class(file_content: str) -> bool:
+    """Returns True if the target file defines an abstract class."""
+    return bool(re.search(r'\babstract\s+class\b', file_content))
+
+
+def _get_abstract_method_names(file_content: str) -> Set[str]:
+    """Return method names declared abstract in the target file (regex fallback)."""
+    names: Set[str] = set()
+    for m in re.finditer(
+        r'\babstract\b\s+[\w<>\[\]?,\s]+?\s+(\w+)\s*\(',
+        file_content,
+    ):
+        names.add(m.group(1))
+    return names
+
+
+def _extract_method_name_from_old_content(old_content: str) -> Optional[str]:
+    """Extract the primary method name from the hunk's old_content."""
+    m = re.search(
+        r'(?:public|protected|private)\s+(?:(?:synchronized|static|final|abstract)\s+)*'
+        r'[\w<>\[\]?,\s]+?\s+(\w+)\s*\(',
+        old_content,
+    )
+    if m:
+        return m.group(1)
+    return None
+
+
+def _old_content_has_concrete_body(old_content: str) -> bool:
+    """True if old_content contains a concrete method body (opening brace after params).
+
+    A method with a body looks like:  ) { ...  or  ) throws Foo {
+    An abstract declaration looks like: );  — no opening brace follows the signature.
+    """
+    return bool(re.search(r'\)\s*(?:throws\s+[\w\s,]+)?\s*\{', old_content))
+
+
+def _query_method_modifiers_from_service(
+    repo_path: str,
+    file_path: str,
+    method_names: List[str],
+) -> Optional[Dict[str, Any]]:
+    """
+    Ask the Java microservice for precise modifier info on the given methods.
+
+    Returns the 'methods' dict on success, or None if the service is unavailable
+    or the file cannot be parsed.  Callers must handle None gracefully.
+    """
+    try:
+        from src.tools.java_http_client import javaparser_method_modifiers
+        result = javaparser_method_modifiers(repo_path, file_path, method_names)
+        if result.get("status") == "ok":
+            return result.get("methods", {})
+    except Exception:
+        pass
+    return None
+
+
+def _should_skip_abstract_hunk(
+    method_name: str,
+    old_content: str,
+    service_method_info: Optional[Dict[str, Any]],
+    regex_abstract_methods: Set[str],
+) -> bool:
+    """
+    Determine whether a hunk targeting an abstract method should be skipped.
+
+    A hunk must be SKIPPED when:
+      - The method is abstract in the target file AND
+      - old_content has a CONCRETE BODY (i.e. mainline kept it concrete in a more
+        specialised class, but the target moved it to an abstract base — the concrete
+        implementation lives in a subclass, not here).
+
+    A hunk must NOT be skipped when:
+      - The method is abstract in the target BUT old_content is also an abstract
+        declaration (e.g. visibility change: protected abstract → public abstract).
+        That change applies to the abstract declaration itself.
+      - The method is CONCRETE in the target (normal adaptation path).
+
+    Priority: JavaParser service info > regex heuristics.
+    """
+    # --- primary: JavaParser service result ---
+    if service_method_info is not None:
+        info = service_method_info.get(method_name)
+        if info is None:
+            # Method not found in target file at all — don't skip (let LLM handle it).
+            return False
+        method_is_abstract_in_target = info.get("is_abstract", False)
+        if not method_is_abstract_in_target:
+            return False  # concrete in target → normal adaptation
+        # Method is abstract in target. Skip only if old_content has a body.
+        return _old_content_has_concrete_body(old_content)
+
+    # --- fallback: regex heuristics ---
+    if method_name not in regex_abstract_methods:
+        return False  # not abstract in target → normal
+    return _old_content_has_concrete_body(old_content)
 
 
 def _compute_hunk_diff(hunk: Dict[str, Any]) -> Dict[str, Any]:
@@ -132,6 +233,8 @@ def _adapt_with_llm(
     loc_result: LocalizationResult,
     pre_region_context: str = "",
     post_region_context: str = "",
+    same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
+    abstract_methods_in_target: Optional[Set[str]] = None,
 ) -> NamespaceAdaptationOutput:
     """
     Calls the Balanced LLM to rewrite imports and symbol references.
@@ -186,9 +289,49 @@ IMPORTANT — THIS IS A PURE ADDITION:
 - Do NOT remove or omit any existing code; nothing is deleted by this hunk.
 """
 
+    # Build same-file context section to prevent referencing already-deleted symbols.
+    same_file_section = ""
+    if same_file_applied_hunks:
+        parts = []
+        for h in same_file_applied_hunks:
+            diff_h = _compute_hunk_diff(h)
+            removed = "\n".join(f"  - {l}" for l in diff_h["lines_removed"])
+            added = "\n".join(f"  + {l}" for l in diff_h["lines_added"])
+            if removed or added:
+                parts.append(f"Removed lines:\n{removed or '  (none)'}\nAdded lines:\n{added or '  (none)'}")
+        if parts:
+            same_file_section = (
+                "\n⚠️  Other changes ALREADY APPLIED to this same file (Agent 3 fast-apply):\n"
+                "Your adapted_new_content MUST be compatible with these. "
+                "Do NOT call methods, use fields, or reference symbols that appear in 'Removed lines' below — "
+                "they no longer exist in the file.\n\n"
+                + "\n\n".join(parts)
+                + "\n"
+            )
+
+    # Build abstract-class context note.
+    abstract_class_note = ""
+    if abstract_methods_in_target:
+        method_name = _extract_method_name_from_old_content(hunk.get("old_content", ""))
+        abstract_class_note = f"""
+⚠️  TARGET FILE IS AN ABSTRACT CLASS. The following methods are declared abstract there
+(they have NO body; concrete implementations live in subclasses):
+  {', '.join(sorted(abstract_methods_in_target))}
+
+Rules:
+- NEVER produce a concrete body (return statement, method implementation) for any of
+  these abstract methods in adapted_new_content. Abstract declarations must stay abstract.
+- If this hunk's only change is a VISIBILITY modifier (e.g. protected→private) on an
+  abstract method, it CANNOT apply here — abstract methods must remain overridable.
+  In that case output adapted_old_content = adapted_new_content (no change to the line).
+- Modifier changes like adding `synchronized` CAN apply to CONCRETE methods only.
+  Check the target context: if the method has a body `{{ ... }}` it is concrete; if it
+  ends with `;` it is abstract.
+"""
+
     prompt = f"""You are Agent 4 (Namespace Adapter) for OmniPort, a Java patch backporting system.
 A patch hunk must be adapted to a different codebase version where symbol names and imports differ.
-
+{same_file_section}{abstract_class_note}
 Known symbol renames from localization analysis:
 {mappings_text}
 
@@ -325,8 +468,58 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
             except (IOError, UnicodeDecodeError):
                 pass
 
+        # ── Idempotency guard ─────────────────────────────────────────────────
+        # Pure-addition hunks where every substantial added line is already
+        # present verbatim in the target file are no-ops on this branch
+        # (e.g. a constant backported earlier, or a branch where the constant
+        # was never removed). Sending such hunks to the LLM causes it to
+        # hallucinate duplicate declarations. Claim and skip.
+        if file_content:
+            diff_pre = _compute_hunk_diff(hunk)
+            if diff_pre["is_pure_add"]:
+                substantial = [l for l in diff_pre["lines_added"] if len(l.strip()) > 20]
+                if substantial and all(l.strip() in file_content for l in substantial):
+                    processed_indices.append(i)
+                    continue
+
         if not _should_namespace_adapt(hunk, loc_result, file_content):
             continue
+
+        # ── Abstract-class guard ──────────────────────────────────────────────
+        # When the target file is an abstract class, some hunks from the mainline
+        # try to modify methods that are ABSTRACT in the target.  Two sub-cases:
+        #
+        #   SKIP: old_content has a concrete body (the class hierarchy diverged —
+        #         mainline kept it concrete in a specialized class, but in the target
+        #         branch it was pulled up as abstract into the base; the concrete
+        #         impl now lives in a subclass, not here).
+        #
+        #   KEEP: old_content is itself an abstract declaration (e.g. changing
+        #         protected abstract → public abstract).  The change targets the
+        #         declaration itself and is valid in the abstract class.
+        #
+        # We first try the JavaParser microservice for precise modifier info; if it
+        # is unavailable we fall back to regex + body-detection heuristics.
+        abstract_methods_in_target: Set[str] = set()
+        if file_content and _is_abstract_class(file_content) and loc_result.file_path:
+            abstract_methods_in_target = _get_abstract_method_names(file_content)
+            method_name = _extract_method_name_from_old_content(hunk.get("old_content", ""))
+            if method_name:
+                # Query the microservice once per hunk (cheap — single file parse,
+                # cached by Spring on repeated calls to same file).
+                service_info = _query_method_modifiers_from_service(
+                    repo_path, loc_result.file_path, [method_name]
+                )
+                if _should_skip_abstract_hunk(
+                    method_name,
+                    hunk.get("old_content", ""),
+                    service_info,
+                    abstract_methods_in_target,
+                ):
+                    # Silently claim and skip — change does not belong in the
+                    # abstract base class on this branch.
+                    processed_indices.append(i)
+                    continue
 
         # Claim this hunk.
         processed_indices.append(i)
@@ -357,7 +550,20 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
                 pre_end = loc_result.start_line - 1
                 pre_region_context = "".join(lines[pre_start:pre_end])
 
-        output = _adapt_with_llm(hunk, loc_result, pre_region_context, post_region_context)
+        # Collect other hunks on the same file that were already fast-applied by Agent 3,
+        # so the LLM knows which symbols/methods have been removed and can't be referenced.
+        current_file = loc_result.file_path
+        same_file_applied: List[Dict[str, Any]] = [
+            hunks[j]
+            for j in processed_indices
+            if j != i and j < len(hunks) and hunks[j].get("file_path") == current_file
+        ]
+
+        output = _adapt_with_llm(
+            hunk, loc_result, pre_region_context, post_region_context,
+            same_file_applied,
+            abstract_methods_in_target=abstract_methods_in_target or None,
+        )
 
         diff = _compute_hunk_diff(hunk)
 

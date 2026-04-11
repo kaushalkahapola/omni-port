@@ -120,6 +120,7 @@ class StructuralRefactor:
         edits: List[GumTreeEdit],
         api_changes: Optional[Dict[str, str]] = None,
         intended_new_code: Optional[str] = None,
+        same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
     ) -> StructuralAdaptationOutput:
         if not self.llm_client:
             return StructuralAdaptationOutput(
@@ -141,7 +142,28 @@ but may use mainline API names that differ from the target branch):
 
 """
 
+        same_file_section = ""
+        if same_file_applied_hunks:
+            parts = []
+            for h in same_file_applied_hunks:
+                old_lines = [l for l in h.get("old_content", "").splitlines() if l.strip()]
+                new_lines = [l for l in h.get("new_content", "").splitlines() if l.strip()]
+                old_only = set(old_lines) - set(new_lines)
+                if old_only:
+                    removed = "\n".join(f"  - {l}" for l in sorted(old_only))
+                    parts.append(f"Removed:\n{removed}")
+            if parts:
+                same_file_section = (
+                    "\n⚠️  Other changes ALREADY APPLIED to this same file (Agent 3 fast-apply):\n"
+                    "Your refactored_code MUST be compatible. "
+                    "Do NOT call methods, use fields, or reference symbols listed under 'Removed' — "
+                    "they no longer exist in the file.\n\n"
+                    + "\n\n".join(parts)
+                    + "\n"
+                )
+
         prompt = f"""You are Agent 5 (Structural Refactor) for OmniPort, a Java patch backporting system.
+{same_file_section}
 The target-branch code below must be structurally refactored to match the intent of a
 mainline patch.
 
@@ -190,6 +212,7 @@ Return ONLY valid Java code in refactored_code.
         hunk: Dict[str, Any],
         loc_result: LocalizationResult,
         edit_script: Optional[str] = None,
+        same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
     ) -> StructuralAdaptationOutput:
         # original_code is the TARGET's current code (context_snapshot), since Agent 5
         # produces refactored_code that replaces it verbatim in the target file.
@@ -207,6 +230,7 @@ Return ONLY valid Java code in refactored_code.
             edits,
             loc_result.symbol_mappings if loc_result.symbol_mappings else None,
             intended_new_code=intended_new_code,
+            same_file_applied_hunks=same_file_applied_hunks,
         )
 
 
@@ -264,7 +288,16 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
         # Claim this hunk.
         processed_indices.append(i)
 
-        output = refactor.refactor_hunk(hunk, loc_result)
+        # Collect other hunks on the same file already applied by Agent 3,
+        # so the LLM knows which symbols/methods are no longer available.
+        current_file = loc_result.file_path
+        same_file_applied: List[Dict[str, Any]] = [
+            hunks[j]
+            for j in processed_indices
+            if j != i and j < len(hunks) and hunks[j].get("file_path") == current_file
+        ]
+
+        output = refactor.refactor_hunk(hunk, loc_result, same_file_applied_hunks=same_file_applied)
 
         if output.success and output.confidence > 0.5:
             refactored_hunks.append({

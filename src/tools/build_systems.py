@@ -131,13 +131,14 @@ def _run_cmd(
     try:
         result = subprocess.run(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # merge stderr into stdout chronologically
             text=True,
             cwd=cwd,
             env=env,
             timeout=timeout,
         )
-        output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+        output = (result.stdout or "").strip()
         print(f"  [build_systems] Command finished with return code: {result.returncode}")
         return {"success": result.returncode == 0, "returncode": result.returncode, "output": output}
     except subprocess.TimeoutExpired:
@@ -299,7 +300,7 @@ def parse_compile_errors(output: str) -> list[CompilerErrorDetail]:
         r"([^:\s]+\.java):(?:\[(\d+),\d+\][ ]?:?|(\d+):)\s*(.*)"
     )
     for line in (output or "").splitlines():
-        if ": error:" not in line and not line.strip().startswith("error:"):
+        if "error:" not in line.lower():
             continue
         m = pattern.search(line)
         if not m:
