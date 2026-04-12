@@ -183,7 +183,46 @@ Code immediately AFTER the replaced region in the target file (already exists �
                     + "\n"
                 )
 
+        pre_context_section = ""
+        if pre_region_context.strip():
+            pre_context_section = f"""
+Code immediately BEFORE the localized region in the target file (already exists — do NOT remove unless it is part of the block being replaced):
+```java
+{pre_region_context}
+```
+"""
+
+        post_context_section = ""
+        if post_region_context.strip():
+            post_context_section = f"""
+Code immediately AFTER the replaced region in the target file (already exists — do NOT recreate):
+```java
+{post_region_context}
+```
+"""
+
+        same_file_section = ""
+        if same_file_applied_hunks:
+            parts = []
+            for h in same_file_applied_hunks:
+                old_lines = [l for l in h.get("old_content", "").splitlines() if l.strip()]
+                new_lines = [l for l in h.get("new_content", "").splitlines() if l.strip()]
+                old_only = set(old_lines) - set(new_lines)
+                if old_only:
+                    removed = "\n".join(f"  - {l}" for l in sorted(old_only))
+                    parts.append(f"Removed:\n{removed}")
+            if parts:
+                same_file_section = (
+                    "\n⚠️  Other changes ALREADY APPLIED to this same file (Agent 3 fast-apply):\n"
+                    "Your refactored_code MUST be compatible. "
+                    "Do NOT call methods, use fields, or reference symbols listed under 'Removed' — "
+                    "they no longer exist in the file.\n\n"
+                    + "\n\n".join(parts)
+                    + "\n"
+                )
+
         prompt = f"""You are Agent 5 (Structural Refactor) for OmniPort, a Java patch backporting system.
+{same_file_section}
 {same_file_section}
 The target-branch code below must be structurally refactored to match the intent of a
 mainline patch.
@@ -192,6 +231,7 @@ Current code in the TARGET file (this is what refactored_code will REPLACE verba
 ```java
 {original_code}
 ```
+{pre_context_section}{post_context_section}
 {pre_context_section}{post_context_section}
 {intended_section}
 Structural changes detected by GumTree:
@@ -429,12 +469,33 @@ IMPORTANT:
             except (IOError, UnicodeDecodeError):
                 pass
 
+        #
+        # IMPORTANT: context_snapshot was captured at localization time (before Agent 3
+        # applied any fast-apply hunks). If Agent 3 modified the same file, the snapshot
+        # may no longer be verbatim in the file. Re-read the current file to get the
+        # actual current state of the localized region — Agent 6 needs to find original_code
+        # verbatim when it applies the CLAW replacement.
+        original_code = loc_result.context_snapshot  # fallback if file read fails
+        from pathlib import Path
+        target_path = Path(self.repo_path) / loc_result.file_path
+        if target_path.exists() and loc_result.start_line > 0 and loc_result.end_line > 0:
+            try:
+                file_lines = target_path.read_text(encoding="utf-8").splitlines(keepends=True)
+                start = max(0, loc_result.start_line - 1)
+                end = min(len(file_lines), loc_result.end_line)
+                current_region = "".join(file_lines[start:end])
+                if current_region.strip():
+                    original_code = current_region
+            except (IOError, UnicodeDecodeError):
+                pass
+
         intended_new_code = hunk.get("new_content", "") or None
 
         edits = self.parse_gumtree_edits(edit_script) if edit_script else []
 
         return self.refactor_with_llm(
             original_code,
+            original_code,  # target_context == original_code (current file state)
             original_code,  # target_context == original_code (current file state)
             edits,
             loc_result.symbol_mappings if loc_result.symbol_mappings else None,
@@ -490,6 +551,9 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
             break
 
         loc_result = loc_results[i]
+        # Skip hunks where localization found no file at all, or new-file hunks
+        # (handled by Agent 6's new-file path).
+        if loc_result.method_used in ("failed", "new_file") or not loc_result.file_path:
         # Skip hunks where localization found no file at all, or new-file hunks
         # (handled by Agent 6's new-file path).
         if loc_result.method_used in ("failed", "new_file") or not loc_result.file_path:
@@ -550,8 +614,10 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
             refactored_hunks.append({
                 **hunk,
                 # old_content = current file region (post-Agent3 state), so Agent 6
+                # old_content = current file region (post-Agent3 state), so Agent 6
                 # can find it verbatim in the target file for CLAW pair construction.
                 # new_content = Agent 5's refactored replacement.
+                "old_content": current_file_region,
                 "old_content": current_file_region,
                 "new_content": output.refactored_code,
                 "refactored": True,
