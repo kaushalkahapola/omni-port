@@ -1,0 +1,227 @@
+{
+  "run_timestamp": "2026-04-12T04:08:41.746928",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "e7228911f64b3a3a8376e95dc258c845d76cef61",
+  "backport_commit": "af79a03f61f8e5260c58093b213e0a66aac0d2e9",
+  "description": "master \u2192 6.0",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.15,
+      "error": null,
+      "java_hunks": 4,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 23,
+          "end_line": 28,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 287,
+          "end_line": 296,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 305,
+          "end_line": 318,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 325,
+          "end_line": 337,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.89,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies the DelayableWriteChannel.java file by changing the internal structure of how delayed writes are chained and processed. It renames a field from 'parent' to 'previous' and changes the logic in writePendingMessages() to correctly order multiple delayed writes by traversing the chain and emitting messages in the original order. This involves structural changes to the class and its internal data flow, not just simple string replacements or formatting changes. The patch also adds a new test to verify the correct ordering behavior. The localization evidence shows exact matches for the hunks, indicating the patch applies cleanly but involves structural modifications. Therefore, the patch is best classified as TYPE_III (structural changes). The confidence is high due to exact localization and clear structural changes. The token budget estimate is moderate, reflecting the complexity of understanding and applying structural changes in Java code and tests.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "applied_count": 4,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.05,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.protocols.postgres.DelayableWriteChannelTest.xml"
+        ],
+        "target_classes": [
+          "DelayableWriteChannelTest"
+        ],
+        "test_cases": {
+          "io.crate.protocols.postgres.DelayableWriteChannelTest#test_delayed_writes_are_released_on_close": "passed",
+          "io.crate.protocols.postgres.DelayableWriteChannelTest#test_write_pending_writes_in_correct_order": "passed",
+          "io.crate.protocols.postgres.DelayableWriteChannelTest#test_can_add_and_unblock_from_different_threads": "passed"
+        },
+        "classes": {
+          "io.crate.protocols.postgres.DelayableWriteChannelTest": "passed"
+        },
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0,
+          "total": 3
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.protocols.postgres.DelayableWriteChannelTest#test_write_pending_writes_in_correct_order"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 3,
+        "patched_total": 3,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 9,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 3
+    },
+    "java_production_hunks": 4,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 4,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 3367,
+    "target_patch_bytes": 7147,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.protocols.postgres.DelayableWriteChannelTest#test_write_pending_writes_in_correct_order"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 3,
+      "patched_total": 3,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}
