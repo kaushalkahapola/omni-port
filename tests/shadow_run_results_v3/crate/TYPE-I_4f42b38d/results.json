@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T16:08:57.247497",
+  "run_timestamp": "2026-04-12T02:18:02.003671",
   "repo": "crate",
   "patch_type": "TYPE-I",
   "original_commit": "4f42b38d70b18e2b3c1d760e4f406c00b163c465",
@@ -34,12 +34,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 6.14,
+      "elapsed_s": 3.14,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch modifies the JoinGraph.java file by adding a condition to only add edges for equi-join conditions. The localization evidence shows that the relevant hunks were found via 'git_exact' with high confidence, indicating that the patch applies as an exact match string replacement. The changes are straightforward and do not involve structural or API changes, so the complexity is TYPE_I. The patch also includes a test addition and a release note update, but these do not increase the complexity classification. The token budget estimate is moderate due to the need to apply the patch and verify the test addition.",
+        "reasoning": "The patch modifies a single conditional statement in JoinGraph.java by adding an additional check using an existing method isEquiJoin. Both hunks in JoinGraph.java were found via exact matching with high confidence, indicating the patch applies cleanly without structural changes. The test addition and release notes update are straightforward additions and do not affect the classification. Overall, this is a trivial backport involving exact string replacement with minimal complexity, fitting TYPE_I classification.",
         "is_auto_generated": false
       }
     },
@@ -66,7 +66,7 @@
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.06,
       "error": null,
       "refactored_count": 0
     },
@@ -78,94 +78,228 @@
       "synthesis_status": "success",
       "synthesized_hunks": []
     },
-    "agent7_validator": {
-      "elapsed_s": 285.3,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
       "error": null,
-      "validation_passed": true,
-      "validation_failure_category": "",
-      "validation_error_context": "",
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "test_failure",
+      "validation_error_context": "Test regressions (pass\u2192fail): ['io.crate.planner.operators.LogicalPlannerTest#test_select_count_star_is_optimized_if_there_is_a_single_agg_in_select_list']",
       "validation_attempts": 1,
       "retry_files": [],
       "build_success": true,
       "build_mode": "crate-helper",
-      "test_success": true,
+      "test_success": false,
       "test_mode": "crate-helper",
       "test_state": {
         "xml_reports": [
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.planner.operators.LogicalPlannerTest.xml"
         ],
         "target_classes": [
-          "io.crate.planner.operators.LogicalPlannerTest"
+          "LogicalPlannerTest"
         ],
         "test_cases": {
-          "io.crate.planner.operators.LogicalPlannerTest#testInWithSubqueryOrderImplicitlyApplied": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testSelectOnVirtualTableWithOrderBy": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testScoreColumnIsCollectedNotFetched": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testHavingGlobalAggregation": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_can_create_execution_plan_from_correlated_join_with_reordered_hash_join": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testAliasedPrimaryKeyLookupHasGetPlan": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_rename_gets_scalar_outputs_from_collect": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_limit_on_hash_join_is_rewritten_to_query_then_fetch": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_query_uses_fetch_if_there_is_a_nested_loop_join_where_only_one_side_can_utilize_fetch": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testParentQueryIsPushedDownAndMergedIntoSubRelationWhereClause": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_prune_outputs_on_group_hash_aggregate": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testInWithSubqueryOrderImplicitlyAppliedWithExistingOrderBy": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testPlanOfJoinedViewsHasBoundaryWithViewOutputs": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_limit_distinct_limits_outputs_to_the_group_keys_if_source_has_more_outputs": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_group_by_with_alias_and_limit_distinct_rewrite_creates_valid_plan": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_collect_derives_estimated_size_per_row_from_stats_and_types": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testQTFWithoutOrderBy": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_limit_on_join_is_rewritten_to_query_then_fetch": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_query_uses_fetch_if_there_is_a_hash_join_where_only_one_side_can_utilize_fetch": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_column_pruning_is_applied_to_subqueries": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_eval_qtf_doesnt_unwrap_non_fetchable_aliases": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testSelectCountStarIsOptimizedInsideRelations": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testQTFWithOrderByAndAlias": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_optimize_for_in_subquery_only_operates_on_primitive_types": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_unused_table_function_in_subquery_is_not_pruned": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testHavingGlobalAggregationAndRelationAlias": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testSelectCountStarIsOptimizedOnNestedSubqueries": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_scalar_uses_table_function_and_column_not_used_in_select_and_table_function": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testSelectCountStarIsOptimized": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_prune_outputs_on_window_functions": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testIntermediateFetch": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testAggregationOnTableFunction": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_prune_outputs_on_table_functions": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testJoinTwoTables": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testInWithSubqueryOrderImplicitlyAppliedWithExistingOrderByOnDifferentField": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_do_not_apply_eliminate_cross_join_for_non_equi_join": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testQTFWithOrderBy": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_ram_accounting_released_on_multi_phase_execution_failure": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_prune_outputs_on_group_hash_aggregate_with_limit": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testSimpleSelectQAFAndLimit": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_select_count_star_on_aliased_table_is_optimized": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_orderBy_not_optimized_for_array_subquery_expression": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#test_select_count_star_is_optimized_if_there_is_a_single_agg_in_select_list": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_select_count_star_is_optimized_if_there_is_a_single_agg_in_select_list": "failed",
           "io.crate.planner.operators.LogicalPlannerTest#test_select_expression_with_a_non_fetchable_column_and_parameter": "passed",
-          "io.crate.planner.operators.LogicalPlannerTest#testAvgWindowFunction": "passed"
+          "io.crate.planner.operators.LogicalPlannerTest#test_unused_table_function_in_subquery_is_not_pruned": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testIntermediateFetch": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_optimize_for_in_subquery_only_operates_on_primitive_types": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testSelectCountStarIsOptimized": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testInWithSubqueryOrderImplicitlyApplied": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_eval_qtf_doesnt_unwrap_non_fetchable_aliases": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_do_not_apply_eliminate_cross_join_for_non_equi_join": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_limit_on_hash_join_is_rewritten_to_query_then_fetch": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_prune_outputs_on_group_hash_aggregate": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_collect_derives_estimated_size_per_row_from_stats_and_types": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_prune_outputs_on_group_hash_aggregate_with_limit": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_can_create_execution_plan_from_correlated_join_with_reordered_hash_join": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testAvgWindowFunction": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testQTFWithoutOrderBy": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testSimpleSelectQAFAndLimit": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_scalar_uses_table_function_and_column_not_used_in_select_and_table_function": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_ram_accounting_released_on_multi_phase_execution_failure": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_select_count_star_on_aliased_table_is_optimized": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_group_by_with_alias_and_limit_distinct_rewrite_creates_valid_plan": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testSelectCountStarIsOptimizedInsideRelations": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testAggregationOnTableFunction": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_prune_outputs_on_window_functions": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testAliasedPrimaryKeyLookupHasGetPlan": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testQTFWithOrderBy": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_limit_on_join_is_rewritten_to_query_then_fetch": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testParentQueryIsPushedDownAndMergedIntoSubRelationWhereClause": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_orderBy_not_optimized_for_array_subquery_expression": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testSelectCountStarIsOptimizedOnNestedSubqueries": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_prune_outputs_on_table_functions": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testSelectOnVirtualTableWithOrderBy": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testPlanOfJoinedViewsHasBoundaryWithViewOutputs": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testQTFWithOrderByAndAlias": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testHavingGlobalAggregationAndRelationAlias": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testScoreColumnIsCollectedNotFetched": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_query_uses_fetch_if_there_is_a_hash_join_where_only_one_side_can_utilize_fetch": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testJoinTwoTables": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_limit_distinct_limits_outputs_to_the_group_keys_if_source_has_more_outputs": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_column_pruning_is_applied_to_subqueries": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_rename_gets_scalar_outputs_from_collect": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testHavingGlobalAggregation": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testInWithSubqueryOrderImplicitlyAppliedWithExistingOrderByOnDifferentField": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#testInWithSubqueryOrderImplicitlyAppliedWithExistingOrderBy": "passed",
+          "io.crate.planner.operators.LogicalPlannerTest#test_query_uses_fetch_if_there_is_a_nested_loop_join_where_only_one_side_can_utilize_fetch": "passed"
         },
         "classes": {
-          "io.crate.planner.operators.LogicalPlannerTest": "passed"
+          "io.crate.planner.operators.LogicalPlannerTest": "failed"
         },
         "summary": {
-          "passed": 45,
-          "failed": 0,
+          "passed": 44,
+          "failed": 1,
           "skipped": 0,
           "total": 45
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": true,
+        "valid_backport_signal": false,
         "fail_to_pass": [
           "io.crate.planner.operators.LogicalPlannerTest#test_do_not_apply_eliminate_cross_join_for_non_equi_join"
         ],
-        "pass_to_fail": [],
+        "pass_to_fail": [
+          "io.crate.planner.operators.LogicalPlannerTest#test_select_count_star_is_optimized_if_there_is_a_single_agg_in_select_list"
+        ],
         "newly_passing": [],
         "baseline_total": 45,
         "patched_total": 45,
-        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+        "reason": "Invalid: Some tests regressed from pass to fail."
       },
       "compile_errors": []
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "applied",
+      "fallback_attempts": 1,
+      "synthesized_count": 2,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java",
+          "what_changed": "Added a static import for the isEquiJoin method from EquiJoinDetector.",
+          "where_in_code": "package-level imports in JoinGraph.java",
+          "intent": "To enable direct usage of isEquiJoin without qualifying it with its class name, likely for cleaner and more readable code.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "isEquiJoin"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java",
+          "what_changed": "Modified the conditional to additionally check if the filter represents an equi-join before processing it as an edge.",
+          "where_in_code": "JoinGraph class, inside a method processing join filters (exact method name not provided)",
+          "intent": "To ensure that only filters representing equi-joins with exactly two keys are accepted as edges, improving correctness by excluding non-equi-join filters from edge collection.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "isEquiJoin",
+            "entry",
+            "edgeCollector"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java:24: error: cannot find symbol",
+      "validation_attempts": 2,
+      "retry_files": [
+        "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java",
+          "line": 24,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "applied",
+      "fallback_attempts": 2,
+      "synthesized_count": 1,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java",
+          "what_changed": "Added a static import for the isEquiJoin method from EquiJoinDetector.",
+          "where_in_code": "package imports in JoinGraph.java",
+          "intent": "To enable direct usage of the isEquiJoin method without qualifying it with its class name, likely for cleaner and more readable code.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "isEquiJoin"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java",
+          "what_changed": "Modified a conditional to additionally check if the filter represents an equi-join before processing it as an edge; only filters with exactly two keys and that are equi-joins are accepted by the edgeCollector.",
+          "where_in_code": "JoinGraph class, inside a method processing join filters (exact method not specified)",
+          "intent": "To ensure that only equi-join conditions with exactly two keys are treated as edges in the join graph, improving the accuracy of join graph construction by excluding non-equi-join filters.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "isEquiJoin",
+            "entry",
+            "edgeCollector"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry2": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java:192: error: cannot find symbol",
+      "validation_attempts": 3,
+      "retry_files": [
+        "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java",
+          "line": 192,
+          "message": "error: cannot find symbol"
+        }
+      ]
     }
   },
   "summary": {
@@ -174,7 +308,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 45
     },
     "java_production_hunks": 2,
@@ -183,34 +317,46 @@
       0,
       1
     ],
-    "tokens_used": 0,
+    "tokens_used": 7556,
     "synthesis_status": "success",
     "applied_on_disk_ag3": 2,
-    "synthesized_count": 0,
+    "synthesized_count": 1,
     "failed_hunks_total": 0,
-    "retry_contexts": [],
+    "syntax_repair_status": "clean",
+    "fallback_status": "applied",
+    "fallback_attempts": 2,
+    "retry_contexts": [
+      {
+        "error_type": "test_failure",
+        "error_message": "OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended\n[ERROR] Tests run: 45, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 10.20 s <<< FAILURE! -- in io.crate.planner.operators.LogicalPlannerTest\n[ERROR] io.crate.planner.operators.LogicalPlannerTest.test_select_count_star_is_optimized_if_there_is_a_single_agg_in_select_list -- Time elapsed: 5.522 s <<< FAILURE!\n[ERROR] Failures: \n[ERROR]   LogicalPlannerTest.test_select_count_star_is_optimized_if_there_is_a_single_agg_in_select_list:251->plan:91 \n[ERROR] Tests run: 45, Failures: 1, Errors: 0, Skipped: 0\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.4:test (default-test) on project crate-server: There are test failures.\n[ERROR] \n[ERROR] See /repo/server/target/surefire-reports for the individual test results.\n[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 1,
+        "suggested_action": "regenerate_hunk"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java:[24,50] error: cannot find symbol\n  symbol:   class EquiJoinDetector\n[ERROR] /repo/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java:[24] error: static import only from classes and interfaces\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.1:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java:[24,50] error: cannot find symbol\n[ERROR]   symbol:   class EquiJoinDetector\n[ERROR]   location: package io.crate.planner.optimizer.joinorder\n[ERROR] /repo/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java:[24] error: static import only from classes and interfaces\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 2,
+        "suggested_action": "route_to_namespace_or_structural"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   To follow the GraalVM recommendations, please add the following options to your build tool:\n/repo/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java:[192,54] error: cannot find symbol\n  symbol:   method isEquiJoin(Symbol)\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.1:compile (default-compile) on project crate-server: Compilation failure\n[ERROR]   To follow the GraalVM recommendations, please add the following options to your build tool:\n[ERROR]     -Alog4j.graalvm.groupId=<groupId>\n[ERROR]     -Alog4j.graalvm.artifactId=<artifactId>\n[ERROR] Note: GraalVmProcessor: writing GraalVM metadata for 2 Java classes to `META-INF/native-image/log4j-generated/bdf44563/reflect-config.json`.\n[ERROR] Note: PluginProcessor: writing plugin descriptor for 2 Log4j Plugins to `META-INF/org/apache/logging/log4j/core/config/plugins/Log4j2Plugins.dat`.\n[ERROR] /repo/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java:[192,54] error: cannot find symbol\n[ERROR]   symbol:   method isEquiJoin(Symbol)\n[ERROR]   location: class GraphBuilder\n[ERROR] \n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 3,
+        "suggested_action": "route_to_namespace_or_structural"
+      }
+    ],
     "failed_hunks": [],
     "generated_patch_bytes": 1143,
     "target_patch_bytes": 5084,
-    "validation_passed": true,
-    "validation_failure_category": "",
-    "build_success": true,
-    "test_success": true,
-    "test_mode": "crate-helper",
-    "test_transition": {
-      "valid_backport_signal": true,
-      "fail_to_pass": [
-        "io.crate.planner.operators.LogicalPlannerTest#test_do_not_apply_eliminate_cross_join_for_non_equi_join"
-      ],
-      "pass_to_fail": [],
-      "newly_passing": [],
-      "baseline_total": 45,
-      "patched_total": 45,
-      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
-    },
-    "fail_to_pass_count": 1,
+    "validation_passed": false,
+    "validation_failure_category": "api_mismatch",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
+    "fail_to_pass_count": 0,
     "newly_passing_count": 0,
     "pass_to_fail_count": 0,
-    "backport_success": true
+    "backport_success": false
   }
 }

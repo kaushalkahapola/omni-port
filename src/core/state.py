@@ -150,5 +150,6 @@ class BackportState(TypedDict):
 
     # Metrics
     tokens_used: int
+    llm_token_usage: Dict[str, Dict[str, int]]
     wall_clock_time: float
     status: str

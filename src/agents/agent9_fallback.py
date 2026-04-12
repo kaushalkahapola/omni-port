@@ -362,6 +362,7 @@ def _run_phase1(
     loc_results: List[LocalizationResult],
     router,
     tokens_used: int,
+    token_tracker: Optional[Dict[str, int]] = None,
 ) -> Tuple[List[HunkDescription], int]:
     """Run the description-builder LLM call (Fast tier). Returns (descriptions, tokens_used)."""
     prompt = _build_description_prompt(hunks, loc_results)
@@ -369,7 +370,13 @@ def _run_phase1(
         llm = router.get_model(LLMTier.FAST, tokens_used)
         response = llm.invoke(prompt)
         raw = response.content if hasattr(response, "content") else str(response)
-        tokens_used += len(prompt.split()) + len(raw.split())
+        
+        usage = getattr(response, "usage_metadata", None) or {}
+        if token_tracker is not None:
+            token_tracker["input"] += usage.get("input_tokens", 0)
+            token_tracker["output"] += usage.get("output_tokens", 0)
+            
+        tokens_used += usage.get("total_tokens", len(prompt.split()) + len(raw.split()))
 
         # Strip markdown fences.
         clean = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.MULTILINE)
@@ -562,6 +569,7 @@ def _run_phase2(
     router,
     tokens_used: int,
     retry_contexts: Optional[List[Dict[str, Any]]] = None,
+    token_tracker: Optional[Dict[str, int]] = None,
 ) -> Tuple[FallbackOutput, int]:
     """
     Run the ReAct tool-calling loop (Balanced tier).
@@ -613,7 +621,13 @@ def _run_phase2(
             break
 
         raw_content = response.content if hasattr(response, "content") else str(response)
-        tokens_used += len(str(messages).split()) // 4 + len(raw_content.split())
+        
+        usage = getattr(response, "usage_metadata", None) or {}
+        if token_tracker is not None:
+            token_tracker["input"] += usage.get("input_tokens", 0)
+            token_tracker["output"] += usage.get("output_tokens", 0)
+            
+        tokens_used += usage.get("total_tokens", len(str(messages).split()) // 4 + len(raw_content.split()))
 
         # Check for tool calls (LangChain tool_calls attribute).
         tool_calls = getattr(response, "tool_calls", None) or []
@@ -742,6 +756,7 @@ def fallback_agent_node(state: BackportState) -> BackportState:
     """
     fallback_attempts: int = state.get("fallback_attempts", 0)
     tokens_used: int = state.get("tokens_used", 0)
+    usage_dict = state.setdefault("llm_token_usage", {}).setdefault("agent9_fallback", {"input": 0, "output": 0})
 
     logger.info("fallback_agent: starting attempt %d", fallback_attempts + 1)
 
@@ -760,7 +775,7 @@ def fallback_agent_node(state: BackportState) -> BackportState:
         }
 
     # ── Phase 1: Description Builder ─────────────────────────────────────────
-    descriptions, tokens_used = _run_phase1(hunks, loc_results, router, tokens_used)
+    descriptions, tokens_used = _run_phase1(hunks, loc_results, router, tokens_used, token_tracker=usage_dict)
     logger.info("fallback_agent: Phase 1 produced %d description(s)", len(descriptions))
 
     # Fix E: when retry_files is empty (common after build/checkstyle failures
@@ -794,7 +809,7 @@ def fallback_agent_node(state: BackportState) -> BackportState:
     # ── Phase 2: Change Application ──────────────────────────────────────────
     fallback_output, tokens_used = _run_phase2(
         active_descriptions, loc_results, state, router, tokens_used,
-        retry_contexts=all_retry_contexts,
+        retry_contexts=all_retry_contexts, token_tracker=usage_dict
     )
     logger.info(
         "fallback_agent: Phase 2 produced %d hunk(s), %d failed",

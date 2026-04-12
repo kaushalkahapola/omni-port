@@ -1,5 +1,5 @@
 diff --git a/server/src/main/java/io/crate/execution/engine/indexing/BatchIteratorBackpressureExecutor.java b/server/src/main/java/io/crate/execution/engine/indexing/BatchIteratorBackpressureExecutor.java
-index 8870ceab13..d1b6470fdd 100644
+index 8870ceab13..1d9d9e5fc7 100644
 --- a/server/src/main/java/io/crate/execution/engine/indexing/BatchIteratorBackpressureExecutor.java
 +++ b/server/src/main/java/io/crate/execution/engine/indexing/BatchIteratorBackpressureExecutor.java
 @@ -35,10 +35,9 @@ import java.util.function.BinaryOperator;
@@ -22,3 +22,15 @@ index 8870ceab13..d1b6470fdd 100644
      /**
       * @param batchIterator provides the items for {@code execute}
       * @param execute async function which is called for each item from the batchIterator
+@@ -179,7 +177,10 @@ public class BatchIteratorBackpressureExecutor<T, R> {
+                         scheduler.schedule(this::resumeConsumption, delayInMs, TimeUnit.MILLISECONDS);
+                         return;
+                     }
+-                    // fall through to execute
++                    // No delay available, execute and let any response continue (release semaphore)
++                    execute(item);
++                    semaphore.release();
++                    return;
+                 }
+                 execute(item);
+             }

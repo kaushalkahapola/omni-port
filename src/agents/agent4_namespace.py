@@ -282,6 +282,7 @@ def _adapt_with_llm(
     same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
     abstract_methods_in_target: Optional[Set[str]] = None,
     verification_feedback: str = "",
+    token_tracker: Optional[Dict[str, int]] = None,
 ) -> NamespaceAdaptationOutput:
     """
     Calls the Balanced LLM to rewrite imports and symbol references.
@@ -508,6 +509,11 @@ Format your response EXACTLY as follows:
         response = balanced_model.invoke(prompt)
         content = response.content if hasattr(response, "content") else str(response)
         
+        usage = getattr(response, "usage_metadata", None) or {}
+        if token_tracker is not None:
+            token_tracker["input"] += usage.get("input_tokens", 0)
+            token_tracker["output"] += usage.get("output_tokens", 0)
+        
         import re
         
         notes = ""
@@ -708,10 +714,13 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
             if j != i and j < len(hunks) and hunks[j].get("file_path") == current_file
         ]
 
+        usage_dict = state.setdefault("llm_token_usage", {}).setdefault("agent4_namespace", {"input": 0, "output": 0})
+
         output = _adapt_with_llm(
             hunk, loc_result, pre_region_context, post_region_context,
             same_file_applied,
             abstract_methods_in_target=abstract_methods_in_target or None,
+            token_tracker=usage_dict,
         )
 
         diff = _compute_hunk_diff(hunk)
@@ -764,6 +773,7 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
                         same_file_applied,
                         abstract_methods_in_target=abstract_methods_in_target or None,
                         verification_feedback=actual_region,
+                        token_tracker=usage_dict,
                     )
 
         if output.success:

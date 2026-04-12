@@ -819,6 +819,7 @@ def _adapt_new_file_content(
     raw_content: str,
     repo_path: str,
     tokens_used: int,
+    token_tracker: Optional[Dict[str, int]] = None,
 ) -> Tuple[str, int]:
     """
     Attempt to adapt the import section of a new Java file for the target branch.
@@ -852,7 +853,15 @@ def _adapt_new_file_content(
         llm = router.get_model(LLMTier.BALANCED, tokens_used)
         response = llm.invoke(prompt)
         raw_response = response.content if hasattr(response, "content") else str(response)
-        tokens_used += len(prompt.split()) + len(raw_response.split())
+        
+        usage = getattr(response, "usage_metadata", None) or {}
+        if token_tracker is not None:
+            token_tracker["input"] += usage.get("input_tokens", 0)
+            token_tracker["output"] += usage.get("output_tokens", 0)
+            
+        # fallback accumulation just in case
+        tokens_used += usage.get("total_tokens", len(prompt.split()) + len(raw_response.split()))
+        
         # Strip accidental markdown fences.
         adapted = re.sub(r"^```(?:java)?\s*\n?", "", raw_response.strip(), flags=re.MULTILINE)
         adapted = re.sub(r"\n?```\s*$", "", adapted.strip(), flags=re.MULTILINE)
@@ -888,6 +897,7 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     processed_indices = set(state.get("processed_hunk_indices", []))
     retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
     tokens_used: int = state.get("tokens_used", 0)
+    usage_dict = state.setdefault("llm_token_usage", {}).setdefault("agent6_synthesizer", {"input": 0, "output": 0})
 
     # ── Build synthesis batches ───────────────────────────────────────────────
 
@@ -922,7 +932,7 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
                         # Adapt imports/package declaration for the target branch
                         # before writing to disk.  Falls back to raw content on error.
                         adapted_content, tokens_used = _adapt_new_file_content(
-                            file_path, new_content, repo_path, tokens_used
+                            file_path, new_content, repo_path, tokens_used, token_tracker=usage_dict
                         )
                         abs_path.parent.mkdir(parents=True, exist_ok=True)
                         abs_path.write_text(adapted_content, encoding="utf-8")

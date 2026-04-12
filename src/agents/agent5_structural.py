@@ -123,6 +123,7 @@ class StructuralRefactor:
         same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
         pre_region_context: str = "",
         post_region_context: str = "",
+        token_tracker: Optional[Dict[str, int]] = None,
     ) -> StructuralAdaptationOutput:
         if not self.llm_client:
             return StructuralAdaptationOutput(
@@ -233,6 +234,11 @@ Format your response EXACTLY as follows:
             response = self.llm_client.invoke(prompt)
             content = response.content if hasattr(response, "content") else str(response)
             
+            usage = getattr(response, "usage_metadata", None) or {}
+            if token_tracker is not None:
+                token_tracker["input"] += usage.get("input_tokens", 0)
+                token_tracker["output"] += usage.get("output_tokens", 0)
+            
             explanation = ""
             confidence = 0.0
             
@@ -279,6 +285,7 @@ Format your response EXACTLY as follows:
         hunk: Dict[str, Any],
         target_file_content: str,
         file_path: str,
+        token_tracker: Optional[Dict[str, int]] = None,
     ) -> StructuralAdaptationOutput:
         """
         Fix B fallback: called when localization returned confidence=0 (method_used=failed).
@@ -350,6 +357,11 @@ IMPORTANT:
             response = self.llm_client.invoke(prompt)
             content = response.content if hasattr(response, "content") else str(response)
             
+            usage = getattr(response, "usage_metadata", None) or {}
+            if token_tracker is not None:
+                token_tracker["input"] += usage.get("input_tokens", 0)
+                token_tracker["output"] += usage.get("output_tokens", 0)
+            
             import re
             block_match = re.search(r'<<<<\n(.*?)\n====\n(.*?)>>>>', content, re.DOTALL)
             
@@ -391,6 +403,7 @@ IMPORTANT:
         same_file_applied_hunks: Optional[List[Dict[str, Any]]] = None,
         pre_region_context: str = "",
         post_region_context: str = "",
+        token_tracker: Optional[Dict[str, int]] = None,
     ) -> StructuralAdaptationOutput:
         # original_code is the TARGET's current code (context_snapshot), since Agent 5
         # produces refactored_code that replaces it verbatim in the target file.
@@ -429,6 +442,7 @@ IMPORTANT:
             same_file_applied_hunks=same_file_applied_hunks,
             pre_region_context=pre_region_context,
             post_region_context=post_region_context,
+            token_tracker=token_tracker,
         )
 
 
@@ -463,6 +477,7 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
     failed_hunks: List[Dict[str, Any]] = list(state.get("failed_hunks", []))
     retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
     tokens_used: int = state.get("tokens_used", 0)
+    usage_dict = state.setdefault("llm_token_usage", {}).setdefault("agent5_structural", {"input": 0, "output": 0})
     # Hunks that Agent 4 explicitly escalated (e.g. structural refactoring disguised
     # as a namespace change — Agent 4 detected empty adapted_new_content for a
     # non-pure-removal hunk and deferred to Agent 5).
@@ -527,7 +542,8 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
             hunk, loc_result,
             same_file_applied_hunks=same_file_applied,
             pre_region_context=pre_region_context,
-            post_region_context=post_region_context
+            post_region_context=post_region_context,
+            token_tracker=usage_dict
         )
 
         if output.success and output.confidence > 0.5:
