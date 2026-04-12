@@ -554,6 +554,9 @@ def structural_refactor_agent(state: BackportState) -> BackportState:
         # Skip hunks where localization found no file at all, or new-file hunks
         # (handled by Agent 6's new-file path).
         if loc_result.method_used in ("failed", "new_file") or not loc_result.file_path:
+        # Skip hunks where localization found no file at all, or new-file hunks
+        # (handled by Agent 6's new-file path).
+        if loc_result.method_used in ("failed", "new_file") or not loc_result.file_path:
             continue
         # Process if routing criteria met OR if Agent 4 explicitly escalated this hunk.
         if not _should_structural_refactor(loc_result) and i not in escalation_indices:
