@@ -79,6 +79,7 @@ OUTPUT_DIR = Path(__file__).parent / "shadow_run_results_v3"
 REPO_PATH_MAP: dict[str, str] = {
     "elasticsearch": "repos/elasticsearch",
     "crate": "repos/crate",
+    "druid": "repos/druid",
 }
 
 
