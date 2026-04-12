@@ -517,18 +517,21 @@ class HunkSynthesizer:
             if verified and confidence >= 1.0:
                 # Build the expanded new_string: same surrounding context lines
                 # from the file, but with the core replacement swapped in.
-                context_before = self.extract_lines_with_context(
-                    file_content,
-                    loc_result.start_line,
-                    loc_result.start_line - 1,  # yields only the prefix lines
-                    context_lines,
-                )
-                context_after = self.extract_lines_with_context(
-                    file_content,
-                    loc_result.end_line + 1,
-                    loc_result.end_line,  # yields only the suffix lines
-                    context_lines,
-                )
+                # NOTE: extract_lines_with_context cannot be reused here because
+                # passing end_line=start_line-1 still computes
+                # end = (start_line-1) + context_lines which overlaps INTO the
+                # hunk region, causing the class header (or whatever starts the
+                # hunk) to appear twice in expanded_new.  Compute the prefix and
+                # suffix slices directly instead.
+                file_lines_list = file_content.splitlines(keepends=True)
+                # Lines strictly BEFORE the hunk (1-indexed start_line → 0-indexed start_line-1)
+                pre_start = max(0, loc_result.start_line - 1 - context_lines)
+                pre_end = loc_result.start_line - 1  # exclusive: up to but not including the hunk
+                context_before = "".join(file_lines_list[pre_start:pre_end])
+                # Lines strictly AFTER the hunk (0-indexed: end_line = first line past 1-indexed end_line)
+                post_start = loc_result.end_line
+                post_end = min(len(file_lines_list), loc_result.end_line + context_lines)
+                context_after = "".join(file_lines_list[post_start:post_end])
                 expanded_new = context_before + new_string + "\n" + context_after
 
                 if _new_string_introduces_duplicates(file_content, expanded_old, expanded_new):
