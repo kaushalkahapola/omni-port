@@ -1,0 +1,90 @@
+commit 422c9d48ae8aee46e0e7550e26d8d326cfa6468d
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Tue Aug 26 19:30:50 2025 +0300
+
+    Fix partition by cols not in group by
+    
+    The symbols in `partition by` clause of a window function must also
+    appear in the `group by` clause of the query, (matching psql behavior).
+    Previously, this validation was not applied, therefore a confusing
+    message was thrown later on from the planner, e.g.:
+    ```
+    SELECT sum(x) over(partition by x, y)
+    FROM unnest([1], [6]) as t (x, y)
+    GROUP BY x
+    ```
+    thew:
+    ```
+    UnsupportedFeatureException[Can't handle Symbol [SimpleReference: y]]
+    ```
+    
+    Fixes: #18283
+
+diff --git a/docs/appendices/release-notes/5.10.12.rst b/docs/appendices/release-notes/5.10.12.rst
+index c18e6b5051..78d1480a10 100644
+--- a/docs/appendices/release-notes/5.10.12.rst
++++ b/docs/appendices/release-notes/5.10.12.rst
+@@ -68,3 +68,11 @@ Fixes
+ 
+ - Fixed an issue that could lead to an ``OutOfMemoryError`` when running a
+   query with aggregations under memory pressure in a multi-node cluster.
++
++- Improved error message when attempting to use a column in ``PARTITION BY``
++  clause of a :ref:`window function <window-functions>`, which is not also
++  included in the ``GROUP BY``, e.g.::
++
++    SELECT sum(x) OVER(PARTITION BY x, y)
++    FROM unnest([1], [6]) AS t (x, y)
++    GROUP BY x
+diff --git a/docs/appendices/release-notes/6.0.1.rst b/docs/appendices/release-notes/6.0.1.rst
+index aa9c4480c0..1f37ff73ec 100644
+--- a/docs/appendices/release-notes/6.0.1.rst
++++ b/docs/appendices/release-notes/6.0.1.rst
+@@ -71,3 +71,11 @@ Fixes
+ 
+ - Fixed an issue that could lead to an ``OutOfMemoryError`` when running a
+   query with aggregations under memory pressure in a multi-node cluster.
++
++- Improved error message when attempting to use a column in ``PARTITION BY``
++  clause of a :ref:`window function <window-functions>`, which is not also
++  included in the ``GROUP BY``, e.g.::
++
++    SELECT sum(x) OVER(PARTITION BY x, y)
++    FROM unnest([1], [6]) AS t (x, y)
++    GROUP BY x
+diff --git a/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java b/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
+index 5424e6f310..13a0ab2758 100644
+--- a/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
++++ b/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
+@@ -231,6 +231,12 @@ public final class GroupAndAggregateSemantics {
+                     return offender;
+                 }
+             }
++            for (Symbol partition : function.windowDefinition().partitions()) {
++                Symbol offender = partition.accept(this, groupBy);
++                if (offender != null) {
++                    return offender;
++                }
++            }
+             return null;
+         }
+ 
+diff --git a/server/src/test/java/io/crate/analyze/SelectWindowFunctionAnalyzerTest.java b/server/src/test/java/io/crate/analyze/SelectWindowFunctionAnalyzerTest.java
+index ad6a85dda0..9051eab805 100644
+--- a/server/src/test/java/io/crate/analyze/SelectWindowFunctionAnalyzerTest.java
++++ b/server/src/test/java/io/crate/analyze/SelectWindowFunctionAnalyzerTest.java
+@@ -209,4 +209,14 @@ public class SelectWindowFunctionAnalyzerTest extends CrateDummyClusterServiceUn
+             .isExactlyInstanceOf(IllegalArgumentException.class)
+             .hasMessageStartingWith("'x' must appear in the GROUP BY clause or be used in an aggregation function.");
+     }
++
++    @Test
++    public void test_window_function_partition_symbols_not_in_grouping_raises_an_error() {
++        assertThatThrownBy(() -> e.analyze(
++            "select sum(x) over(partition by x, y) " +
++                "FROM unnest([1], [6]) as t (x, y) " +
++                "group by x"))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessageStartingWith("'y' must appear in the GROUP BY clause or be used in an aggregation function.");
++    }
+ }

@@ -1,0 +1,145 @@
+commit 7e4bc7e9a73d300f97e6905fec14412bf3cd15a2
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Wed Aug 6 14:36:42 2025 +0200
+
+    Improve memory accounting in StreamBucket
+    
+    RamAccounting used to rely on size() difference before and after write to compute ram usage of the added Row.
+    
+    BytesStreamOutput has ramBytesUsed() method providing precise memory usage of the underlying ByteArray,
+    so switching to this method to make accounting more precise.
+    
+    size() eventually catches up but there can be windows where it lags behind.
+    For example:
+    out.size(): 21, out.ramBytesUsed: 1080
+    out.size(): 42, out.ramBytesUsed: 1080
+    out.size(): 63, out.ramBytesUsed: 1080
+    out.size(): 84, out.ramBytesUsed: 1080
+    out.size(): 105, out.ramBytesUsed: 1080
+    …
+    out.size(): 987, out.ramBytesUsed: 1080
+    out.size(): 1008, out.ramBytesUsed: 1080
+    out.size(): 1029, out.ramBytesUsed: 1216
+    …
+    out.size(): 16401, out.ramBytesUsed: 32768
+    out.size(): 16422, out.ramBytesUsed: 32768
+    
+    For big buffers this difeference can lead to a series of add(Row row) calls with a notable underaccouting
+    which can lead to OOM-s on nodes under high memory pressure.
+    
+    See https://github.com/crate/support/issues/460#issuecomment-2454521255
+    at java.lang.OutOfMemoryError.<init>()V (OutOfMemoryError.java:48)
+      at org.elasticsearch.common.util.AbstractBigArray.newBytePage(I)[B (AbstractBigArray.java:120)
+      at org.elasticsearch.common.util.BigByteArray.resize(J)V (BigByteArray.java:154)
+      at org.elasticsearch.common.util.BigArrays.resizeInPlace(Lorg/elasticsearch/common/util/AbstractBigArray;J)Lorg/elasticsearch/common/util/AbstractBigArray; (BigArrays.java:300)
+      at org.elasticsearch.common.util.BigArrays.resize(Lorg/elasticsearch/common/util/ByteArray;J)Lorg/elasticsearch/common/util/ByteArray; (BigArrays.java:347)
+      at org.elasticsearch.common.util.BigArrays.grow(Lorg/elasticsearch/common/util/ByteArray;J)Lorg/elasticsearch/common/util/ByteArray; (BigArrays.java:365)
+      at org.elasticsearch.common.io.stream.BytesStreamOutput.ensureCapacity(J)V (BytesStreamOutput.java:191)
+      at org.elasticsearch.common.io.stream.BytesStreamOutput.writeBytes([BII)V (BytesStreamOutput.java:96)
+      at org.elasticsearch.common.io.stream.StreamOutput.writeBytes([BI)V (StreamOutput.java:156)
+      at org.elasticsearch.common.io.stream.StreamOutput.writeString(Ljava/lang/String;)V (StreamOutput.java:386)
+      at org.elasticsearch.common.io.stream.StreamOutput.lambda$static$5(Lorg/elasticsearch/common/io/stream/StreamOutput;Ljava/lang/Object;)V (StreamOutput.java:594)
+      at org.elasticsearch.common.io.stream.StreamOutput$$Lambda+0x000000005ca63fd8.write(Lorg/elasticsearch/common/io/stream/StreamOutput;Ljava/lang/Object;)V (Unknown Source)
+      at org.elasticsearch.common.io.stream.StreamOutput.writeGenericValue(Ljava/lang/Object;)V (StreamOutput.java:771)
+      at io.crate.types.UncheckedObjectType.writeValueTo(Lorg/elasticsearch/common/io/stream/StreamOutput;Ljava/util/Map;)V (UncheckedObjectType.java:112)
+      at io.crate.types.UncheckedObjectType.writeValueTo(Lorg/elasticsearch/common/io/stream/StreamOutput;Ljava/lang/Object;)V (UncheckedObjectType.java:38)
+      at io.crate.execution.engine.distribution.StreamBucket$Builder.add(Lio/crate/data/Row;)V (StreamBucket.java:76)
+      at io.crate.execution.engine.distribution.ModuloBucketBuilder.add(Lio/crate/data/Row;)V (ModuloBucketBuilder.java:55)
+      at io.crate.execution.engine.distribution.DistributingConsumer.consumeIt(Lio/crate/data/BatchIterator;)V (DistributingConsumer.java:120)
+      at io.crate.execution.engine.distribution.DistributingConsumer.lambda$countdownAndMaybeContinue$3(Lio/crate/data/BatchIterator;)V (DistributingConsumer.java:247)
+
+diff --git a/docs/appendices/release-notes/5.10.12.rst b/docs/appendices/release-notes/5.10.12.rst
+index 0a0ec2c14e..c18e6b5051 100644
+--- a/docs/appendices/release-notes/5.10.12.rst
++++ b/docs/appendices/release-notes/5.10.12.rst
+@@ -65,3 +65,6 @@ Fixes
+ 
+ - Fixed an issue that prevented users to change the value of the
+   :ref:`indices.recovery.max_concurrent_file_chunks` setting.
++
++- Fixed an issue that could lead to an ``OutOfMemoryError`` when running a
++  query with aggregations under memory pressure in a multi-node cluster.
+diff --git a/docs/appendices/release-notes/6.0.1.rst b/docs/appendices/release-notes/6.0.1.rst
+index dc1c235473..aa9c4480c0 100644
+--- a/docs/appendices/release-notes/6.0.1.rst
++++ b/docs/appendices/release-notes/6.0.1.rst
+@@ -68,3 +68,6 @@ Fixes
+ 
+ - Fixed an issue that prevented users to change the value of the
+   :ref:`indices.recovery.max_concurrent_file_chunks` setting.
++
++- Fixed an issue that could lead to an ``OutOfMemoryError`` when running a
++  query with aggregations under memory pressure in a multi-node cluster.
+diff --git a/server/src/main/java/io/crate/execution/engine/distribution/StreamBucket.java b/server/src/main/java/io/crate/execution/engine/distribution/StreamBucket.java
+index 70236198c7..b4ab299664 100644
+--- a/server/src/main/java/io/crate/execution/engine/distribution/StreamBucket.java
++++ b/server/src/main/java/io/crate/execution/engine/distribution/StreamBucket.java
+@@ -57,7 +57,7 @@ public class StreamBucket implements Bucket, Writeable {
+ 
+         private int size = 0;
+         private BytesStreamOutput out;
+-        private int prevOutSize = 0;
++        private long prevRamUsed = 0L;
+ 
+         public Builder(Streamer<?>[] streamers, RamAccounting ramAccounting) {
+             this.ramAccounting = requireNonNull(ramAccounting, "RamAccounting must not be null");
+@@ -78,8 +78,8 @@ public class StreamBucket implements Bucket, Writeable {
+                     throw new RuntimeException(e);
+                 }
+             }
+-            ramAccounting.addBytes(out.size() - prevOutSize);
+-            prevOutSize = out.size();
++            ramAccounting.addBytes(out.ramBytesUsed() - prevRamUsed);
++            prevRamUsed = out.ramBytesUsed();
+         }
+ 
+         public StreamBucket build() {
+diff --git a/server/src/test/java/io/crate/execution/engine/distribution/StreamBucketTest.java b/server/src/test/java/io/crate/execution/engine/distribution/StreamBucketTest.java
+new file mode 100644
+index 0000000000..57bf5102c4
+--- /dev/null
++++ b/server/src/test/java/io/crate/execution/engine/distribution/StreamBucketTest.java
+@@ -0,0 +1,43 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.execution.engine.distribution;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import org.junit.Test;
++
++import io.crate.Streamer;
++import io.crate.data.RowN;
++import io.crate.testing.PlainRamAccounting;
++import io.crate.types.DataTypes;
++
++public class StreamBucketTest {
++
++    @Test
++    public void test_accounting() {
++        Streamer<?>[] streamers = new Streamer[]{DataTypes.STRING.streamer()};
++        var ramAccounting = new PlainRamAccounting();
++        StreamBucket.Builder builder = new StreamBucket.Builder(streamers, ramAccounting);
++        builder.add(new RowN("0123456789"));
++        assertThat(builder.ramBytesUsed()).isEqualTo(1080L); //Used to be 12
++    }
++}

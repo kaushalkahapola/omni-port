@@ -1,0 +1,211 @@
+commit 3c5e054f07eb7f1a431a6c29766873a12aee5436
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Tue Jun 24 17:03:45 2025 +0300
+
+    Fix `c.r.allocation.awareness.*` settings to be visible in `sys.cluster`
+    
+    Mark the 2 settings were as exposed, and implement allow the implicit
+    cast of `Settings` (because the `force` one is a group setting), to an
+    Object, so that it can be transparently used in `SysClusterTableInfo`.
+    
+    Fixes: #18047
+
+diff --git a/docs/admin/system-information.rst b/docs/admin/system-information.rst
+index b37bbf7119..9c7d92ab9e 100644
+--- a/docs/admin/system-information.rst
++++ b/docs/admin/system-information.rst
+@@ -132,6 +132,10 @@ information about the currently applied cluster settings.
+     | settings['cluster']['routing']                                                    | object       |
+     | settings['cluster']['routing']['allocation']                                      | object       |
+     | settings['cluster']['routing']['allocation']['allow_rebalance']                   | text         |
++    | settings['cluster']['routing']['allocation']['awareness']                         | object       |
++    | settings['cluster']['routing']['allocation']['awareness']['attributes']           | text_array   |
++    | settings['cluster']['routing']['allocation']['awareness']['force']                | object       |
++    | settings['cluster']['routing']['allocation']['awareness']['force']['']            | object       |
+     | settings['cluster']['routing']['allocation']['balance']                           | object       |
+     | settings['cluster']['routing']['allocation']['balance']['index']                  | real         |
+     | settings['cluster']['routing']['allocation']['balance']['shard']                  | real         |
+diff --git a/docs/appendices/release-notes/5.10.10.rst b/docs/appendices/release-notes/5.10.10.rst
+index 57c63bcf03..2907b43650 100644
+--- a/docs/appendices/release-notes/5.10.10.rst
++++ b/docs/appendices/release-notes/5.10.10.rst
+@@ -40,6 +40,11 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that would prevent the
++  :ref:`cluster.routing.allocation.awareness.attributes` and
++  :ref:`cluster.routing.allocation.awareness.force.\*.values` to be shown under
++  the ``settings`` column of the :ref:`sys-cluster` table.
++
+ - Fixed an issue that would cause error to be thrown when selecting a column
+   of :ref:`type-timestamp-without-tz` or :ref:`type-timestamp-with-tz` for
+   which, the :ref:`ddl-storage-columnstore` is disabled.
+diff --git a/sandbox/crate/config/crate.yml b/sandbox/crate/config/crate.yml
+index 87a6a66f3d..a70f83a6f3 100644
+--- a/sandbox/crate/config/crate.yml
++++ b/sandbox/crate/config/crate.yml
+@@ -24,3 +24,9 @@ auth:
+         method: trust
+       99:
+         method: password
++
++
++node.attr.zone: a
++cluster.routing.allocation.awareness.attributes: zone
++cluster.routing.allocation.awareness.force.zone.values: a,b,c
++cluster.routing.allocation.cluster_concurrent_rebalance: 99
+diff --git a/server/src/main/java/io/crate/metadata/sys/SysClusterTableInfo.java b/server/src/main/java/io/crate/metadata/sys/SysClusterTableInfo.java
+index 5d57134516..8f57069d04 100644
+--- a/server/src/main/java/io/crate/metadata/sys/SysClusterTableInfo.java
++++ b/server/src/main/java/io/crate/metadata/sys/SysClusterTableInfo.java
+@@ -39,6 +39,7 @@ import io.crate.metadata.SystemTable.ObjectBuilder;
+ import io.crate.metadata.settings.CrateSettings;
+ import io.crate.types.DataType;
+ import io.crate.types.DataTypes;
++import io.crate.types.ObjectType;
+ 
+ public class SysClusterTableInfo {
+ 
+@@ -99,7 +100,6 @@ public class SysClusterTableInfo {
+             .build();
+     }
+ 
+-    @SuppressWarnings("unchecked")
+     private static void addSetting(ClusterSettings clusterSettings,
+                                    ObjectBuilder<Void, ? extends Builder<Void>> settingsBuilder,
+                                    Node<Setting<?>> element) {
+@@ -107,11 +107,16 @@ public class SysClusterTableInfo {
+             Leaf<Setting<?>> leaf = (Leaf<Setting<?>>) element;
+             var setting = leaf.value;
+             var valueType = (DataType<Object>) leaf.value.dataType();
+-            settingsBuilder.add(
+-                leaf.name,
+-                valueType,
+-                x -> valueType.implicitCast(clusterSettings.get(setting))
+-            );
++            Object settingValue = clusterSettings.get(setting);
++            if (settingValue instanceof Settings groupSetting &&
++                valueType.id() == ObjectType.ID) {
++                settingsBuilder.addDynamicObject(leaf.name, DataTypes.STRING, _ -> groupSetting.getAsStructuredMap());
++            } else {
++                settingsBuilder.add(
++                    leaf.name,
++                    valueType,
++                    _ -> valueType.implicitCast(clusterSettings.get(setting)));
++            }
+         } else {
+             var objectSetting = settingsBuilder.startObject(element.name);
+             for (var c : element.children) {
+diff --git a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/decider/AwarenessAllocationDecider.java b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/decider/AwarenessAllocationDecider.java
+index 1302d07597..997799e107 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/routing/allocation/decider/AwarenessAllocationDecider.java
++++ b/server/src/main/java/org/elasticsearch/cluster/routing/allocation/decider/AwarenessAllocationDecider.java
+@@ -90,10 +90,15 @@ public class AwarenessAllocationDecider extends AllocationDecider {
+             Function.identity(),
+             DataTypes.STRING_ARRAY,
+             Property.Dynamic,
+-            Property.NodeScope);
++            Property.NodeScope,
++            Property.Exposed);
+ 
+     public static final Setting<Settings> CLUSTER_ROUTING_ALLOCATION_AWARENESS_FORCE_GROUP_SETTING =
+-        Setting.groupSetting("cluster.routing.allocation.awareness.force.", Property.Dynamic, Property.NodeScope);
++        Setting.groupSetting(
++            "cluster.routing.allocation.awareness.force.",
++            Property.Dynamic,
++            Property.NodeScope,
++            Property.Exposed);
+ 
+     private volatile List<String> awarenessAttributes;
+ 
+diff --git a/server/src/test/java/io/crate/integrationtests/InformationSchemaTest.java b/server/src/test/java/io/crate/integrationtests/InformationSchemaTest.java
+index 917b6ed4a4..ac915b14f3 100644
+--- a/server/src/test/java/io/crate/integrationtests/InformationSchemaTest.java
++++ b/server/src/test/java/io/crate/integrationtests/InformationSchemaTest.java
+@@ -571,7 +571,7 @@ public class InformationSchemaTest extends IntegTestCase {
+     @Test
+     public void testDefaultColumns() {
+         execute("select * from information_schema.columns order by table_schema, table_name");
+-        assertThat(response.rowCount()).isEqualTo(1054);
++        assertThat(response.rowCount()).isEqualTo(1058);
+     }
+ 
+     @Test
+@@ -830,7 +830,7 @@ public class InformationSchemaTest extends IntegTestCase {
+         execute("select max(ordinal_position) from information_schema.columns");
+         assertThat(response.rowCount()).isEqualTo(1);
+ 
+-        assertThat(response.rows()[0][0]).isEqualTo(123);
++        assertThat(response.rows()[0][0]).isEqualTo(127);
+ 
+         execute("create table t1 (id integer, col1 string)");
+         execute("select max(ordinal_position) from information_schema.columns where table_schema = ?",
+diff --git a/server/src/test/java/io/crate/metadata/sys/SysClusterTableInfoTest.java b/server/src/test/java/io/crate/metadata/sys/SysClusterTableInfoTest.java
+index 883f1ea213..5cae1828f9 100644
+--- a/server/src/test/java/io/crate/metadata/sys/SysClusterTableInfoTest.java
++++ b/server/src/test/java/io/crate/metadata/sys/SysClusterTableInfoTest.java
+@@ -24,6 +24,12 @@ package io.crate.metadata.sys;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
++import java.util.List;
++
++import org.elasticsearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;
++import org.elasticsearch.cluster.service.ClusterService;
++import org.elasticsearch.common.settings.ClusterSettings;
++import org.elasticsearch.common.settings.Settings;
+ import org.junit.Test;
+ 
+ import io.crate.execution.engine.collect.NestableCollectExpression;
+@@ -33,6 +39,44 @@ import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
+ 
+ public class SysClusterTableInfoTest extends CrateDummyClusterServiceUnitTest {
+ 
++    @Test
++    public void test_routing_allocation_awareness_settings() {
++        var clusterService = new ClusterService(
++            Settings.EMPTY,
++            new ClusterSettings(
++                Settings.builder()
++                    .put(AwarenessAllocationDecider.CLUSTER_ROUTING_ALLOCATION_AWARENESS_ATTRIBUTE_SETTING.getKey(), List.of("zone"))
++                    .put("cluster.routing.allocation.awareness", "force", new String[] {"zone"}, new String[] {"a,b,c"})
++                    .build(),
++                ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
++            THREAD_POOL);
++        var clusterTable = SysClusterTableInfo.of(clusterService);
++
++        StaticTableReferenceResolver<Void> refResolver = new StaticTableReferenceResolver<>(clusterTable.expressions());
++        NestableCollectExpression<Void, ?> awareness = refResolver.getImplementation(clusterTable.getReference(ColumnIdent.of(
++            "settings",
++                List.of("cluster", "routing", "allocation", "awareness"))));
++        awareness.setNextRow(null);
++        assertThat(awareness.value().toString())
++            .satisfiesAnyOf(
++                s -> assertThat(s).isEqualTo("{attributes=[zone], force={={zone=a,b,c}}}"),
++                s -> assertThat(s).isEqualTo("{force={={zone=a,b,c}}, attributes=[zone]}")
++            );
++
++        awareness = refResolver.getImplementation(clusterTable.getReference(ColumnIdent.of(
++            "settings",
++            List.of("cluster", "routing", "allocation", "awareness", "force", ""))));
++        awareness.setNextRow(null);
++        assertThat(awareness.value().toString()).isEqualTo("{zone=a,b,c}");
++
++        awareness = refResolver.getImplementation(clusterTable.getReference(ColumnIdent.of(
++            "settings",
++            List.of("cluster", "routing", "allocation", "awareness", "force", "", "zone"))));
++        awareness.setNextRow(null);
++        assertThat(awareness.value().toString()).isEqualTo("a,b,c");
++
++    }
++
+     @Test
+     public void test_license_data_can_be_selected() {
+         var clusterTable = SysClusterTableInfo.of(clusterService);
+@@ -56,4 +100,5 @@ public class SysClusterTableInfoTest extends CrateDummyClusterServiceUnitTest {
+         maxNodes.setNextRow(null);
+         assertThat(maxNodes.value()).isNull();
+     }
++
+ }

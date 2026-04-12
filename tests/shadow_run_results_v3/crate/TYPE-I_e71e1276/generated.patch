@@ -1,0 +1,38 @@
+diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
+index 2b6a5dfe87..04a9a488bb 100644
+--- a/server/src/main/java/io/crate/session/Session.java
++++ b/server/src/main/java/io/crate/session/Session.java
+@@ -32,6 +32,7 @@ import java.util.Map;
+ import java.util.UUID;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ScheduledExecutorService;
++import java.util.concurrent.ScheduledFuture;
+ import java.util.concurrent.ThreadLocalRandom;
+ import java.util.concurrent.TimeUnit;
+ 
+@@ -654,7 +655,8 @@ public class Session implements AutoCloseable {
+             executor.client().execute(KillJobsNodeAction.INSTANCE, request);
+         };
+         ScheduledExecutorService scheduler = executor.scheduler();
+-        scheduler.schedule(kill, remainingTimeoutMs, TimeUnit.MILLISECONDS);
++        ScheduledFuture<?> schedule = scheduler.schedule(kill, remainingTimeoutMs, TimeUnit.MILLISECONDS);
++        result.whenComplete((_, _) -> schedule.cancel(false));
+     }
+ 
+     private CompletableFuture<?> triggerDeferredExecutions() {
+@@ -717,7 +719,6 @@ public class Session implements AutoCloseable {
+             timeoutToken
+         );
+ 
+-
+         AnalyzedStatement analyzedStatement = firstPreparedStatement.analyzedStatement();
+         lastStmt = firstPreparedStatement.rawStatement();
+ 
+@@ -1009,7 +1010,6 @@ public class Session implements AutoCloseable {
+             this.startNanos = startNanos;
+         }
+ 
+-
+         public static TimeoutToken noopToken() {
+             return new TimeoutToken();
+         }

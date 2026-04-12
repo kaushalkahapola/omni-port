@@ -1,0 +1,119 @@
+commit 9197f064a3f8f9fee762ce48e45c62311dc0d55a
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Fri Apr 4 09:19:36 2025 +0200
+
+    If insert is aborted on primary, skip remaining items on replica
+    
+    Otherwise remaining (unprocessed) items will be sent to replicas
+    with unassinged sequnce number
+    
+    (cherry picked from commit eb25315655e602a61877f00adc097222802f8d02)
+
+diff --git a/docs/appendices/release-notes/5.10.4.rst b/docs/appendices/release-notes/5.10.4.rst
+index 232e3a82e4..74b995e46d 100644
+--- a/docs/appendices/release-notes/5.10.4.rst
++++ b/docs/appendices/release-notes/5.10.4.rst
+@@ -72,3 +72,7 @@ Fixes
+ - Fixed an issue that caused a ``MATCH`` query to silently override the
+   specified analyzer with the analyzer that was used to index the corresponding
+   column. Since this is not allowed, an error is now thrown.
++
++- Fixed an issue that caused a cluster to have underreplicated shards if an
++  ongoing ``INSERT`` or ``UPDATE`` operation was interrupted by ``KILL`` or
++  a node restart.
+diff --git a/docs/appendices/release-notes/5.9.13.rst b/docs/appendices/release-notes/5.9.13.rst
+index ce4a654d05..eb2606d5c7 100644
+--- a/docs/appendices/release-notes/5.9.13.rst
++++ b/docs/appendices/release-notes/5.9.13.rst
+@@ -67,3 +67,7 @@ Fixes
+ - Fixed an issue that caused a ``MATCH`` query to silently override the
+   specified analyzer with the analyzer that was used to index the corresponding
+   column. Since this is not allowed, an error is now thrown.
++
++- Fixed an issue that caused a cluster to have underreplicated shards if an
++  ongoing ``INSERT`` or ``UPDATE`` operation was interrupted by ``KILL`` or
++  a node restart.
+diff --git a/server/src/main/java/io/crate/execution/dml/upsert/TransportShardUpsertAction.java b/server/src/main/java/io/crate/execution/dml/upsert/TransportShardUpsertAction.java
+index f71afc0b07..b95174b3ca 100644
+--- a/server/src/main/java/io/crate/execution/dml/upsert/TransportShardUpsertAction.java
++++ b/server/src/main/java/io/crate/execution/dml/upsert/TransportShardUpsertAction.java
+@@ -204,13 +204,19 @@ public class TransportShardUpsertAction extends TransportShardAction<ShardUpsert
+ 
+         Translog.Location translogLocation = null;
+         for (ShardUpsertRequest.Item item : request.items()) {
++            if (shardResponse.failure() != null) {
++                // Skip all remaining items on replica
++                item.seqNo(SequenceNumbers.SKIP_ON_REPLICA);
++                continue;
++            }
+             int location = item.location();
+             if (killed.get()) {
+-                // set failure on response and skip all next items.
++                // set failure on response and skip all next items (on primary and on replica)
+                 // this way replica operation will be executed, but only items with a valid source (= was processed on primary)
+                 // will be processed on the replica
+                 shardResponse.failure(new InterruptedException());
+-                break;
++                item.seqNo(SequenceNumbers.SKIP_ON_REPLICA);
++                continue;
+             }
+             try {
+                 IndexItemResponse indexItemResponse = indexItem(
+@@ -246,7 +252,8 @@ public class TransportShardUpsertAction extends TransportShardAction<ShardUpsert
+ 
+                 if (!request.continueOnError()) {
+                     shardResponse.failure(e);
+-                    break;
++                    // Continue, mark remaining items to skip on replica.
++                    continue;
+                 }
+                 shardResponse.add(
+                     location,
+diff --git a/server/src/test/java/io/crate/execution/dml/upsert/TransportShardUpsertActionTest.java b/server/src/test/java/io/crate/execution/dml/upsert/TransportShardUpsertActionTest.java
+index d080fa275f..0d9acf2a26 100644
+--- a/server/src/test/java/io/crate/execution/dml/upsert/TransportShardUpsertActionTest.java
++++ b/server/src/test/java/io/crate/execution/dml/upsert/TransportShardUpsertActionTest.java
+@@ -324,4 +324,43 @@ public class TransportShardUpsertActionTest extends CrateDummyClusterServiceUnit
+         // verifies that it does not throw a ClassCastException: class java.lang.Integer cannot be cast to class java.lang.Long
+         transportShardUpsertAction.processRequestItemsOnReplica(indexShard, request);
+     }
++
++    @Test
++    public void test_primary_aborted_remaining_items_must_be_skipped_on_replica() throws IOException {
++        ShardId shardId = new ShardId(TABLE_IDENT.indexNameOrAlias(), charactersIndexUUID, 0);
++        SimpleReference[] missingAssignmentsColumns = new SimpleReference[]{ID_REF};
++        ShardUpsertRequest request = new ShardUpsertRequest.Builder(
++            DUMMY_SESSION_INFO,
++            TimeValue.timeValueSeconds(30),
++            DuplicateKeyAction.UPDATE_OR_FAIL,
++            false,
++            null,
++            missingAssignmentsColumns,
++            null,
++            UUID.randomUUID()
++        ).newRequest(shardId);
++        request.add(1,
++            ShardUpsertRequest.Item.forInsert(
++                "1", List.of(), Translog.UNSET_AUTO_GENERATED_TIMESTAMP,
++                missingAssignmentsColumns,
++                new Object[]{1},
++                null));
++        request.add(1,
++            ShardUpsertRequest.Item.forInsert(
++                "2", List.of(), Translog.UNSET_AUTO_GENERATED_TIMESTAMP,
++                missingAssignmentsColumns,
++                new Object[]{2},
++                null));
++
++
++        // First item is already processed with killed = true, both items must be skipped on replica.
++        TransportReplicationAction.PrimaryResult<ShardUpsertRequest, ShardResponse> result =
++            transportShardUpsertAction.processRequestItems(indexShard, request, new AtomicBoolean(true));
++
++        assertThat(result.finalResponseIfSuccessful.failure()).isExactlyInstanceOf(InterruptedException.class);
++        assertThat(result.replicaRequest().items()).satisfiesExactly(
++            item -> assertThat(item.seqNo()).isEqualTo(SequenceNumbers.SKIP_ON_REPLICA),
++            item -> assertThat(item.seqNo()).isEqualTo(SequenceNumbers.SKIP_ON_REPLICA)
++        );
++    }
+ }

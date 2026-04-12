@@ -202,8 +202,16 @@ def git_checkout(repo_path: str, ref: str) -> None:
 
 
 def git_diff(repo_path: str) -> str:
+    # Stage all changes (including new files created by agent6) so `git diff --cached`
+    # can show them. Without staging, newly created files are invisible to git diff.
+    subprocess.run(
+        ["git", "-C", repo_path, "add", "--", "."],
+        capture_output=True, text=True
+    )
+    # git diff --cached shows the staged changes relative to HEAD.
+    # This includes new files (with "new file mode"), modifications, and deletions.
     result = subprocess.run(
-        ["git", "-C", repo_path, "diff"],
+        ["git", "-C", repo_path, "diff", "--cached"],
         capture_output=True, text=True
     )
     return result.stdout
@@ -796,14 +804,29 @@ def process_patch(
         if affected_files:
             for fp in sorted(affected_files):
                 if fp:
-                    r = subprocess.run(
-                        ["git", "-C", repo_path, "checkout", "HEAD", "--", fp],
+                    abs_fp = Path(repo_path) / fp
+                    # Check if the file exists in HEAD (tracked). If not, it's a newly
+                    # created file — delete it from disk instead of checking it out.
+                    in_head = subprocess.run(
+                        ["git", "-C", repo_path, "cat-file", "-e", f"HEAD:{fp}"],
                         capture_output=True, text=True,
                     )
-                    if r.returncode == 0:
-                        print(f"  [pipeline] Fix E: rolled back partial changes to {fp}")
+                    if in_head.returncode != 0:
+                        # New file not in HEAD — delete it to roll back agent6's creation.
+                        if abs_fp.exists():
+                            abs_fp.unlink()
+                            print(f"  [pipeline] Fix E: deleted new file {fp} (not in HEAD)")
+                        else:
+                            print(f"  [pipeline] Fix E: new file {fp} already absent — skipping")
                     else:
-                        print(f"  [pipeline] Fix E: could not roll back {fp}: {r.stderr[:200]}")
+                        r = subprocess.run(
+                            ["git", "-C", repo_path, "checkout", "HEAD", "--", fp],
+                            capture_output=True, text=True,
+                        )
+                        if r.returncode == 0:
+                            print(f"  [pipeline] Fix E: rolled back partial changes to {fp}")
+                        else:
+                            print(f"  [pipeline] Fix E: could not roll back {fp}: {r.stderr[:200]}")
             # Remove synthesized hunks for affected files from state so agent7 doesn't try to re-apply.
             synthesized = [
                 h for h in synthesized

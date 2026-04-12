@@ -1,0 +1,17 @@
+diff --git a/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java b/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
+index 5424e6f310..13a0ab2758 100644
+--- a/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
++++ b/server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java
+@@ -231,6 +231,12 @@ public final class GroupAndAggregateSemantics {
+                     return offender;
+                 }
+             }
++            for (Symbol partition : function.windowDefinition().partitions()) {
++                Symbol offender = partition.accept(this, groupBy);
++                if (offender != null) {
++                    return offender;
++                }
++            }
+             return null;
+         }
+ 

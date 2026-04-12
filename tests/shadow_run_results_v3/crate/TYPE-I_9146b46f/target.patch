@@ -1,0 +1,122 @@
+commit 94ca527f2b183b32292fca41880e639f48d2160b
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Tue May 13 14:39:31 2025 +0200
+
+    DELETE must be retried on temporal errors and not be retried on non-retryable errors.
+    
+    (cherry picked from commit 9146b46f29f0d1513e6f6ba6cfd7f732a8b1b475)
+
+diff --git a/docs/appendices/release-notes/5.10.7.rst b/docs/appendices/release-notes/5.10.7.rst
+index 55e8b442cc..6e5474b8f4 100644
+--- a/docs/appendices/release-notes/5.10.7.rst
++++ b/docs/appendices/release-notes/5.10.7.rst
+@@ -51,3 +51,7 @@ Fixes
+   :ref:`conf-session-error_on_unknown_object_key` was not persisted into a view,
+   and such not taken into account when executing the view. Previously created
+   views need to be recreated to apply the setting successfully.
++
++- Fixed an issue that caused ``DELETE`` statements to not be retried on
++  temporal errors (for instance, a shard being unavailable) and instead
++  being retried on permanent errors. Now it's an other way around.
+diff --git a/server/src/main/java/io/crate/execution/dml/delete/TransportShardDeleteAction.java b/server/src/main/java/io/crate/execution/dml/delete/TransportShardDeleteAction.java
+index 8eef62557f..1e9b27f41a 100644
+--- a/server/src/main/java/io/crate/execution/dml/delete/TransportShardDeleteAction.java
++++ b/server/src/main/java/io/crate/execution/dml/delete/TransportShardDeleteAction.java
+@@ -24,7 +24,6 @@ package io.crate.execution.dml.delete;
+ import java.io.IOException;
+ import java.util.concurrent.atomic.AtomicBoolean;
+ 
+-import org.elasticsearch.action.support.TransportActions;
+ import org.elasticsearch.cluster.action.shard.ShardStateAction;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.inject.Inject;
+@@ -42,6 +41,7 @@ import org.elasticsearch.threadpool.ThreadPool;
+ import org.elasticsearch.transport.TransportService;
+ 
+ import io.crate.Constants;
++import io.crate.common.exceptions.Exceptions;
+ import io.crate.exceptions.JobKilledException;
+ import io.crate.execution.dml.ShardResponse;
+ import io.crate.execution.dml.TransportShardAction;
+@@ -119,8 +119,8 @@ public class TransportShardDeleteAction extends TransportShardAction<ShardDelete
+                     );
+                 }
+             } catch (Exception e) {
+-                if (!TransportActions.isShardNotAvailableException(e)) {
+-                    throw e;
++                if (retryPrimaryException(e)) {
++                    throw Exceptions.toRuntimeException(e);
+                 } else {
+                     if (debugEnabled) {
+                         logger.debug("shardId={} failed to execute delete for id={}: {}",
+diff --git a/server/src/test/java/io/crate/execution/dml/delete/TransportShardDeleteActionTest.java b/server/src/test/java/io/crate/execution/dml/delete/TransportShardDeleteActionTest.java
+index 401a13f937..6c75d5a945 100644
+--- a/server/src/test/java/io/crate/execution/dml/delete/TransportShardDeleteActionTest.java
++++ b/server/src/test/java/io/crate/execution/dml/delete/TransportShardDeleteActionTest.java
+@@ -22,6 +22,8 @@
+ package io.crate.execution.dml.delete;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import static org.mockito.ArgumentMatchers.any;
+ import static org.mockito.ArgumentMatchers.anyLong;
+ import static org.mockito.ArgumentMatchers.anyString;
+ import static org.mockito.Mockito.mock;
+@@ -29,6 +31,7 @@ import static org.mockito.Mockito.times;
+ import static org.mockito.Mockito.verify;
+ import static org.mockito.Mockito.when;
+ 
++import java.io.IOException;
+ import java.util.UUID;
+ import java.util.concurrent.atomic.AtomicBoolean;
+ 
+@@ -39,8 +42,10 @@ import org.elasticsearch.common.UUIDs;
+ import org.elasticsearch.common.settings.Settings;
+ import org.elasticsearch.index.Index;
+ import org.elasticsearch.index.IndexService;
++import org.elasticsearch.index.VersionType;
+ import org.elasticsearch.index.shard.IndexShard;
+ import org.elasticsearch.index.shard.ShardId;
++import org.elasticsearch.index.shard.ShardNotFoundException;
+ import org.elasticsearch.indices.IndicesService;
+ import org.elasticsearch.test.transport.MockTransportService;
+ import org.elasticsearch.threadpool.ThreadPool;
+@@ -119,4 +124,38 @@ public class TransportShardDeleteActionTest extends CrateDummyClusterServiceUnit
+         verify(indexShard, times(0))
+             .applyDeleteOperationOnReplica(anyLong(), anyLong(), anyLong(), anyString());
+     }
++
++    @Test
++    public void test_deletion_failed_with_non_retryable_error_must_not_throw() throws IOException {
++        ShardId shardId = new ShardId(TABLE_IDENT.indexNameOrAlias(), indexUUID, 0);
++        final ShardDeleteRequest request = new ShardDeleteRequest(shardId, UUID.randomUUID());
++        request.add(1, new ShardDeleteRequest.Item("1"));
++
++        // Mocks are not set. so shardDeleteOperationOnPrimary fails with NPE.
++        // test verifies that exception is not thrown (delete is not retried) on NPE.
++        TransportReplicationAction.PrimaryResult<ShardDeleteRequest, ShardResponse> result
++            = transportShardDeleteAction.processRequestItems(indexShard, request, new AtomicBoolean(false));
++
++        assertThat(result.finalResponseIfSuccessful.failures()).hasSize(1);
++        assertThat(result.finalResponseIfSuccessful.failures().getFirst().error().getMessage()).contains("deleteResult\" is null");
++    }
++
++    @Test
++    public void test_deletion_failed_with_retryable_error_must_throw() throws IOException {
++        ShardId shardId = new ShardId(TABLE_IDENT.indexNameOrAlias(), indexUUID, 0);
++        final ShardDeleteRequest request = new ShardDeleteRequest(shardId, UUID.randomUUID());
++        request.add(1, new ShardDeleteRequest.Item("1"));
++
++        // item throws exception from the isShardNotAvailableException, processRequestItems must throw as well
++        when(indexShard.applyDeleteOperationOnPrimary(
++            anyLong(),
++            anyString(),
++            any(VersionType.class),
++            anyLong(),
++            anyLong()
++        )).thenThrow(new ShardNotFoundException(shardId));
++
++        assertThatThrownBy(() -> transportShardDeleteAction.processRequestItems(indexShard, request, new AtomicBoolean(false)))
++            .isExactlyInstanceOf(ShardNotFoundException.class);
++    }
+ }
