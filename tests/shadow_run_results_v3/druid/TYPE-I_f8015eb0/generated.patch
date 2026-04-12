@@ -1,0 +1,223 @@
+diff --git a/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java b/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java
+index 365a9135e3..c10a740122 100644
+--- a/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java
++++ b/extensions-core/kinesis-indexing-service/src/main/java/org/apache/druid/indexing/kinesis/supervisor/KinesisSupervisor.java
+@@ -181,7 +181,6 @@ public class KinesisSupervisor extends SeekableStreamSupervisor<String, String,
+     return taskList;
+   }
+ 
+-
+   @Override
+   protected RecordSupplier<String, String, ByteEntity> setupRecordSupplier() throws RuntimeException
+   {
+@@ -427,13 +426,6 @@ public class KinesisSupervisor extends SeekableStreamSupervisor<String, String,
+     );
+   }
+ 
+-  @Override
+-  public long computeLagForAutoScaler()
+-  {
+-    LagStats lagStats = computeLagStats();
+-    return lagStats == null ? 0L : lagStats.getMaxLag();
+-  }
+-
+   private SeekableStreamDataSourceMetadata<String, String> createDataSourceMetadataWithClosedOrExpiredPartitions(
+       SeekableStreamDataSourceMetadata<String, String> currentMetadata,
+       Set<String> terminatedPartitionIds,
+diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java b/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java
+index f8618b06f7..ec81c5f9f9 100644
+--- a/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java
++++ b/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScaler.java
+@@ -21,6 +21,8 @@ package org.apache.druid.indexing.seekablestream.supervisor.autoscaler;
+ 
+ import org.apache.commons.collections4.queue.CircularFifoQueue;
+ import org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;
++import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;
++import org.apache.druid.indexing.overlord.supervisor.autoscaler.LagStats;
+ import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;
+ import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;
+ import org.apache.druid.java.util.common.StringUtils;
+@@ -154,8 +156,17 @@ public class LagBasedAutoScaler implements SupervisorTaskAutoScaler
+       LOCK.lock();
+       try {
+         if (!spec.isSuspended()) {
+-          long lag = supervisor.computeLagForAutoScaler();
+-          lagMetricsQueue.offer(lag > 0 ? lag : 0L);
++          LagStats lagStats = supervisor.computeLagStats();
++
++          if (lagStats != null) {
++            AggregateFunction aggregate = lagBasedAutoScalerConfig.getLagAggregate() == null ?
++                                          lagStats.getAggregateForScaling() :
++                                          lagBasedAutoScalerConfig.getLagAggregate();
++            long lag = lagStats.getMetric(aggregate);
++            lagMetricsQueue.offer(lag > 0 ? lag : 0L);
++          } else {
++            lagMetricsQueue.offer(0L);
++          }
+           log.debug("Current lags for dataSource[%s] are [%s].", dataSource, lagMetricsQueue);
+         } else {
+           log.warn("[%s] supervisor is suspended, skipping lag collection", dataSource);
+diff --git a/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java b/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java
+index e03242de27..068e7cc4f8 100644
+--- a/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java
++++ b/indexing-service/src/main/java/org/apache/druid/indexing/seekablestream/supervisor/autoscaler/LagBasedAutoScalerConfig.java
+@@ -23,6 +23,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
+ import com.fasterxml.jackson.annotation.JsonProperty;
+ import org.apache.druid.indexing.overlord.supervisor.Supervisor;
+ import org.apache.druid.indexing.overlord.supervisor.SupervisorSpec;
++import org.apache.druid.indexing.overlord.supervisor.autoscaler.AggregateFunction;
+ import org.apache.druid.indexing.overlord.supervisor.autoscaler.SupervisorTaskAutoScaler;
+ import org.apache.druid.indexing.seekablestream.supervisor.SeekableStreamSupervisor;
+ import org.apache.druid.java.util.emitter.service.ServiceEmitter;
+@@ -45,6 +46,7 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig
+   private final int scaleOutStep;
+   private final boolean enableTaskAutoScaler;
+   private final long minTriggerScaleActionFrequencyMillis;
++  private final AggregateFunction lagAggregate;
+ 
+   @JsonCreator
+   public LagBasedAutoScalerConfig(
+@@ -61,7 +63,8 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig
+           @Nullable @JsonProperty("scaleInStep") Integer scaleInStep,
+           @Nullable @JsonProperty("scaleOutStep") Integer scaleOutStep,
+           @Nullable @JsonProperty("enableTaskAutoScaler") Boolean enableTaskAutoScaler,
+-          @Nullable @JsonProperty("minTriggerScaleActionFrequencyMillis") Long minTriggerScaleActionFrequencyMillis
++          @Nullable @JsonProperty("minTriggerScaleActionFrequencyMillis") Long minTriggerScaleActionFrequencyMillis,
++          @Nullable @JsonProperty("lagAggregate") AggregateFunction lagAggregate
+   )
+   {
+     this.enableTaskAutoScaler = enableTaskAutoScaler != null ? enableTaskAutoScaler : false;
+@@ -73,6 +76,7 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig
+     this.scaleInThreshold = scaleInThreshold != null ? scaleInThreshold : 1000000;
+     this.triggerScaleOutFractionThreshold = triggerScaleOutFractionThreshold != null ? triggerScaleOutFractionThreshold : 0.3;
+     this.triggerScaleInFractionThreshold = triggerScaleInFractionThreshold != null ? triggerScaleInFractionThreshold : 0.9;
++    this.lagAggregate = lagAggregate;
+ 
+     // Only do taskCountMax and taskCountMin check when autoscaler is enabled. So that users left autoConfig empty{} will not throw any exception and autoscaler is disabled.
+     // If autoscaler is disabled, no matter what configs are set, they are not used.
+@@ -186,6 +190,13 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig
+     return minTriggerScaleActionFrequencyMillis;
+   }
+ 
++  @JsonProperty
++  @Nullable
++  public AggregateFunction getLagAggregate()
++  {
++    return lagAggregate;
++  }
++
+   @Override
+   public String toString()
+   {
+@@ -204,6 +215,7 @@ public class LagBasedAutoScalerConfig implements AutoScalerConfig
+             ", scaleActionPeriodMillis=" + scaleActionPeriodMillis +
+             ", scaleInStep=" + scaleInStep +
+             ", scaleOutStep=" + scaleOutStep +
++            ", lagAggregate=" + lagAggregate +
+             '}';
+   }
+ }
+diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java
+index b1fb439184..bcfc5ebe81 100644
+--- a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java
++++ b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/Supervisor.java
+@@ -92,14 +92,5 @@ public interface Supervisor
+    */
+   LagStats computeLagStats();
+ 
+-  /**
+-   * Used by AutoScaler to make scaling decisions.
+-   */
+-  default long computeLagForAutoScaler()
+-  {
+-    LagStats lagStats = computeLagStats();
+-    return lagStats == null ? 0L : lagStats.getTotalLag();
+-  }
+-
+   int getActiveTaskGroupsCount();
+ }
+diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java
+new file mode 100644
+index 0000000000..dcfbfdbd40
+--- /dev/null
++++ b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/AggregateFunction.java
+@@ -0,0 +1,27 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements.  See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership.  The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License.  You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.druid.indexing.overlord.supervisor.autoscaler;
++
++public enum AggregateFunction
++{
++  MAX,
++  SUM,
++  AVERAGE
++}
+\ No newline at end of file
+diff --git a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
+index 7b6e5fd0ba..2240585680 100644
+--- a/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
++++ b/server/src/main/java/org/apache/druid/indexing/overlord/supervisor/autoscaler/LagStats.java
+@@ -24,12 +24,19 @@ public class LagStats
+   private final long maxLag;
+   private final long totalLag;
+   private final long avgLag;
++  private final AggregateFunction aggregateForScaling;
+ 
+   public LagStats(long maxLag, long totalLag, long avgLag)
++  {
++    this(maxLag, totalLag, avgLag, AggregateFunction.SUM);
++  }
++
++  public LagStats(long maxLag, long totalLag, long avgLag, AggregateFunction aggregateForScaling)
+   {
+     this.maxLag = maxLag;
+     this.totalLag = totalLag;
+     this.avgLag = avgLag;
++    this.aggregateForScaling = aggregateForScaling == null ? AggregateFunction.SUM : aggregateForScaling;
+   }
+ 
+   public long getMaxLag()
+@@ -46,4 +53,26 @@ public class LagStats
+   {
+     return avgLag;
+   }
++
++  /**
++   * The preferred scaling metric that supervisor may specify to be used.
++   * This could be overrided by the autscaler.
++   */
++  public AggregateFunction getAggregateForScaling()
++  {
++    return aggregateForScaling;
++  }
++
++  public long getMetric(AggregateFunction metric)
++  {
++    switch (metric) {
++      case MAX:
++        return getMaxLag();
++      case SUM:
++        return getTotalLag();
++      case AVERAGE:
++        return getAvgLag();
++    }
++    throw new IllegalStateException("Unknown scale metric");
++  }
+ }

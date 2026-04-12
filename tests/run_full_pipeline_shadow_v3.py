@@ -209,6 +209,14 @@ def git_diff(repo_path: str) -> str:
         ["git", "-C", repo_path, "add", "--", "."],
         capture_output=True, text=True
     )
+    # Unstage build/test artefacts that Docker wrote into the repo during Phase-0
+    # baseline / validation runs (e.g. build/all-test-results/TEST-*.xml).
+    # These are NOT part of the backport patch and must not appear in generated.patch.
+    for artifact_dir in ("build/", "target/"):
+        subprocess.run(
+            ["git", "-C", repo_path, "reset", "HEAD", "--", artifact_dir],
+            capture_output=True, text=True
+        )
     # git diff --cached shows the staged changes relative to HEAD.
     # This includes new files (with "new file mode"), modifications, and deletions.
     result = subprocess.run(
