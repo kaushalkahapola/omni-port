@@ -362,6 +362,7 @@ def _run_phase1(
     loc_results: List[LocalizationResult],
     router,
     tokens_used: int,
+    token_tracker: Optional[Dict[str, int]] = None,
 ) -> Tuple[List[HunkDescription], int]:
     """Run the description-builder LLM call (Fast tier). Returns (descriptions, tokens_used)."""
     prompt = _build_description_prompt(hunks, loc_results)
@@ -369,7 +370,13 @@ def _run_phase1(
         llm = router.get_model(LLMTier.FAST, tokens_used)
         response = llm.invoke(prompt)
         raw = response.content if hasattr(response, "content") else str(response)
-        tokens_used += len(prompt.split()) + len(raw.split())
+        
+        usage = getattr(response, "usage_metadata", None) or {}
+        if token_tracker is not None:
+            token_tracker["input"] += usage.get("input_tokens", 0)
+            token_tracker["output"] += usage.get("output_tokens", 0)
+            
+        tokens_used += usage.get("total_tokens", len(prompt.split()) + len(raw.split()))
 
         # Strip markdown fences.
         clean = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.MULTILINE)
@@ -438,6 +445,7 @@ def _build_phase2_system_prompt(
     validation_failure_category: str,
     retry_files: List[str],
     retry_contexts: Optional[List[Dict[str, Any]]] = None,
+    uncovered_retry_files: Optional[List[str]] = None,
 ) -> str:
     desc_text = _format_descriptions(descriptions)
     loc_text = _format_localization(loc_results, retry_files)
@@ -460,6 +468,23 @@ def _build_phase2_system_prompt(
         if error_history else ""
     )
 
+    # Section shown only when retry_files contains test/aux files not covered by
+    # any hunk description.  The agent must READ those files to understand what
+    # API they expect before touching production code.
+    uncovered_section = ""
+    if uncovered_retry_files:
+        lines = "\n".join(f"  - {f}" for f in uncovered_retry_files)
+        uncovered_section = f"""
+=== TEST/AUX FILES CAUSING COMPILE ERRORS (no hunk description available) ===
+The following files were applied from the developer's backport patch directly
+(they are test or auxiliary files, not processed by the LLM pipeline).
+They reference APIs in the production code that do not yet match what they
+expect.  You MUST read each of these files first to understand what method
+signatures / constants they call, then generate production-code CLAW pairs
+that satisfy those call sites.  Do NOT modify the test files themselves.
+{lines}
+"""
+
     return f"""You are Agent 9 (Fallback) for OmniPort, a Java patch backporting system.
 
 Previous automated attempts to apply these changes have failed. Your job is to
@@ -475,7 +500,7 @@ copying patch syntax.
 === WHY PREVIOUS ATTEMPT FAILED ===
 Category : {validation_failure_category}
 Details  : {validation_error_context or '(no details)'}
-{error_history_section}
+{error_history_section}{uncovered_section}
 === FILES THAT NEED ATTENTION ===
 {retry_files_text}
 
@@ -562,6 +587,8 @@ def _run_phase2(
     router,
     tokens_used: int,
     retry_contexts: Optional[List[Dict[str, Any]]] = None,
+    token_tracker: Optional[Dict[str, int]] = None,
+    uncovered_retry_files: Optional[List[str]] = None,
 ) -> Tuple[FallbackOutput, int]:
     """
     Run the ReAct tool-calling loop (Balanced tier).
@@ -577,6 +604,7 @@ def _run_phase2(
         descriptions, loc_results,
         validation_error_context, validation_failure_category, retry_files,
         retry_contexts=retry_contexts,
+        uncovered_retry_files=uncovered_retry_files,
     )
 
     # Enumerate which files need work so the user message is concrete.
@@ -613,7 +641,13 @@ def _run_phase2(
             break
 
         raw_content = response.content if hasattr(response, "content") else str(response)
-        tokens_used += len(str(messages).split()) // 4 + len(raw_content.split())
+        
+        usage = getattr(response, "usage_metadata", None) or {}
+        if token_tracker is not None:
+            token_tracker["input"] += usage.get("input_tokens", 0)
+            token_tracker["output"] += usage.get("output_tokens", 0)
+            
+        tokens_used += usage.get("total_tokens", len(str(messages).split()) // 4 + len(raw_content.split()))
 
         # Check for tool calls (LangChain tool_calls attribute).
         tool_calls = getattr(response, "tool_calls", None) or []
@@ -742,6 +776,7 @@ def fallback_agent_node(state: BackportState) -> BackportState:
     """
     fallback_attempts: int = state.get("fallback_attempts", 0)
     tokens_used: int = state.get("tokens_used", 0)
+    usage_dict = state.setdefault("llm_token_usage", {}).setdefault("agent9_fallback", {"input": 0, "output": 0})
 
     logger.info("fallback_agent: starting attempt %d", fallback_attempts + 1)
 
@@ -760,13 +795,29 @@ def fallback_agent_node(state: BackportState) -> BackportState:
         }
 
     # ── Phase 1: Description Builder ─────────────────────────────────────────
-    descriptions, tokens_used = _run_phase1(hunks, loc_results, router, tokens_used)
+    descriptions, tokens_used = _run_phase1(hunks, loc_results, router, tokens_used, token_tracker=usage_dict)
     logger.info("fallback_agent: Phase 1 produced %d description(s)", len(descriptions))
 
     # Fix E: when retry_files is empty (common after build/checkstyle failures
     # where no javac file was isolated), default to every file in synthesized_hunks
     # so agent 9 has a concrete scope to work against.
+    # EXCEPTION: if the failure category is "test_failure" and retry_files is empty,
+    # that means the build succeeded but a pre-existing test regressed — a behavioural
+    # regression.  Modifying production code logic in response to a behavioural
+    # regression almost always makes things worse (e.g. adding imports for classes
+    # that don't exist in the target branch).  Bail out immediately.
     existing_synth: List[Dict[str, Any]] = list(state.get("synthesized_hunks") or [])
+    if not retry_files and state.get("validation_failure_category") == "test_failure":
+        logger.info(
+            "fallback_agent: skipping — empty retry_files on test_failure means "
+            "behavioural regression, not a fixable compile/API issue"
+        )
+        return {
+            **state,
+            "fallback_status": "failed",
+            "fallback_attempts": fallback_attempts + 1,
+            "hunk_descriptions": [],
+        }
     if not retry_files and existing_synth:
         retry_files = sorted(set(
             h.get("file_path", "") for h in existing_synth if h.get("file_path")
@@ -777,13 +828,27 @@ def fallback_agent_node(state: BackportState) -> BackportState:
             )
 
     # Only pass descriptions for retry-files to Phase 2.
+    # If retry_files contains test/aux files not covered by any description
+    # (they were applied as developer_aux_hunks, not processed by agents 1-6),
+    # we still use all descriptions for Phase 2 but explicitly expose the
+    # uncovered retry files so the agent reads them and understands the API
+    # they expect — rather than blindly modifying production code.
     if retry_files:
         active_descriptions = [d for d in descriptions if d.file_path in retry_files]
         if not active_descriptions:
-            # Fallback: use all descriptions (localization might have a different path).
+            # retry_files are test/aux files with no corresponding description.
+            # Use all descriptions so Phase 2 has full context about what the
+            # production code does, but flag the uncovered files explicitly.
             active_descriptions = descriptions
+            uncovered_retry_files = retry_files
+        else:
+            uncovered_retry_files = [
+                f for f in retry_files
+                if not any(d.file_path == f for d in active_descriptions)
+            ]
     else:
         active_descriptions = descriptions
+        uncovered_retry_files = []
 
     # Fix C: pull full retry_contexts history for richer error context in phase 2.
     all_retry_contexts: List[Dict[str, Any]] = [
@@ -794,7 +859,8 @@ def fallback_agent_node(state: BackportState) -> BackportState:
     # ── Phase 2: Change Application ──────────────────────────────────────────
     fallback_output, tokens_used = _run_phase2(
         active_descriptions, loc_results, state, router, tokens_used,
-        retry_contexts=all_retry_contexts,
+        retry_contexts=all_retry_contexts, token_tracker=usage_dict,
+        uncovered_retry_files=uncovered_retry_files,
     )
     logger.info(
         "fallback_agent: Phase 2 produced %d hunk(s), %d failed",

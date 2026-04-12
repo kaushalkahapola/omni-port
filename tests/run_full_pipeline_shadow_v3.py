@@ -951,6 +951,7 @@ def process_patch(
     results["summary"].update({
         "processed_hunk_indices": state.get("processed_hunk_indices", []),
         "tokens_used": state.get("tokens_used", 0),
+        "llm_token_usage": state.get("llm_token_usage", {}),
         "synthesis_status": state.get("synthesis_status", ""),
         "applied_on_disk_ag3": len(state.get("applied_hunks", [])),
         "synthesized_count": len(synthesized),

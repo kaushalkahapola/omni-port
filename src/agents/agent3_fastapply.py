@@ -115,8 +115,10 @@ class FastApplyAgent:
         if not success:
             return {"applied": False, "file_path": file_path, "error": error}
 
-        if file_path.endswith(".java"):
-            modified_content = cleanup_java_imports(modified_content)
+        # NOTE: import cleanup is intentionally deferred to the end of the
+        # fast_apply_agent node (after ALL hunks for the file are applied).
+        # Running it here would prematurely remove imports that a later hunk
+        # still needs to find as its old_string anchor.
 
         write_ok = self.write_target_file(file_path, modified_content)
         if not write_ok:
@@ -191,6 +193,23 @@ def fast_apply_agent(state: BackportState) -> BackportState:
                     suggested_action="relocalize",
                 )
             )
+
+    # ── Deferred import cleanup ───────────────────────────────────────────────
+    # Run cleanup_java_imports ONCE per file AFTER all hunks have been applied,
+    # not inside process_hunk after each individual hunk.
+    #
+    # Why: import-reorganisation patches often split across two hunks — one hunk
+    # adds the import at the new location, a second removes it from the old one.
+    # Running cleanup after hunk-1 removes the old copy prematurely, destroying
+    # the anchor text that hunk-2 needs, causing it to fall through to agent 4/6
+    # and fail synthesis.
+    modified_files = {r["file_path"] for r in applied_hunks if r.get("file_path", "").endswith(".java")}
+    for fp in modified_files:
+        content = agent.read_target_file(fp)
+        if content is not None:
+            cleaned = cleanup_java_imports(content)
+            if cleaned != content:
+                agent.write_target_file(fp, cleaned)
 
     state["applied_hunks"] = applied_hunks
     state["failed_hunks"] = failed_hunks

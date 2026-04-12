@@ -317,6 +317,7 @@ def syntax_repair_agent(state: BackportState) -> BackportState:
 
     router = get_default_router()
     tokens_used: int = state.get("tokens_used", 0)
+    usage_dict = state.setdefault("llm_token_usage", {}).setdefault("agent8_syntax_repair", {"input": 0, "output": 0})
 
     for file_path, indexed_hunks in file_to_hunks.items():
         file_content = _read_file(repo_path, file_path)
@@ -363,8 +364,13 @@ def syntax_repair_agent(state: BackportState) -> BackportState:
                 llm = router.get_model(LLMTier.BALANCED, tokens_used)
                 response = llm.invoke(prompt)
                 raw = response.content if hasattr(response, "content") else str(response)
-                # Rough token tracking.
-                tokens_used += len(prompt.split()) + len(raw.split())
+                
+                usage = getattr(response, "usage_metadata", None) or {}
+                usage_dict["input"] += usage.get("input_tokens", 0)
+                usage_dict["output"] += usage.get("output_tokens", 0)
+                
+                # fallback/cumulative tracking
+                tokens_used += usage.get("total_tokens", len(prompt.split()) + len(raw.split()))
             except Exception as exc:
                 logger.warning("syntax_repair: LLM call failed: %s", exc)
                 break

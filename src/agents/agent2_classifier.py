@@ -66,10 +66,14 @@ Original Patch:
 
     classification_result = structured_llm.invoke(prompt)
 
-    # Track token usage if the model returns usage metadata.
+    # Track exact token usage if the model returns usage metadata.
     usage = getattr(classification_result, "usage_metadata", None) or {}
     tokens_used = state.get("tokens_used", 0) + usage.get("total_tokens", 0)
     state["tokens_used"] = tokens_used
+    
+    usage_dict = state.setdefault("llm_token_usage", {}).setdefault("agent2_classifier", {"input": 0, "output": 0})
+    usage_dict["input"] += usage.get("input_tokens", 0)
+    usage_dict["output"] += usage.get("output_tokens", 0)
 
     state["classification"] = classification_result
     return state
