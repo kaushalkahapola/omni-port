@@ -1,0 +1,171 @@
+commit 638d270e70a9fd26121d0bf3d19dc6b52c63b92a
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Sun Feb 23 00:20:08 2025 +0100
+
+    Add EqualityProxy (eq=true) for a standalone boolean column
+    
+    (cherry picked from commit b233310e3a55faa0f30c4065770e7187a49a10a5)
+
+diff --git a/docs/appendices/release-notes/5.10.2.rst b/docs/appendices/release-notes/5.10.2.rst
+index d9132347b3..330e48a9c1 100644
+--- a/docs/appendices/release-notes/5.10.2.rst
++++ b/docs/appendices/release-notes/5.10.2.rst
+@@ -67,3 +67,10 @@ Fixes
+   had a comparison of a non-boolean column with a boolean literal, e.g.::
+ 
+     SELECT int_col FROM t where int_col = true;
++
++- Fixed an issue that caused a ``SELECT`` query with a ``WHERE`` clause to
++  return incorrect result if a table had a ``PRIMARY KEY`` on a boolean column
++  and the column was referenced as a standalone operand in a logical expression.
++  E.g.::
++
++    SELECT * FROM tbl WHERE boolean_pk_col OR boolean_pk_col = false
+diff --git a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+index 04c9c3ba57..ef2dcdf45c 100644
+--- a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
++++ b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+@@ -394,6 +394,7 @@ public class EqualityExtractor {
+             private boolean isUnderOrOperator = false;
+             private boolean foundNonPKColumnUnderOr = false;
+             private boolean foundPKColumnUnderOr = false;
++            private boolean isUnderLogicalOperator = false;
+ 
+             private Context(Collection<ColumnIdent> references) {
+                 comparisons = LinkedHashMap.newLinkedHashMap(references.size());
+@@ -424,13 +425,27 @@ public class EqualityExtractor {
+ 
+         @Override
+         public Symbol visitReference(Reference ref, Context ctx) {
+-            if (ctx.comparisons.containsKey(ref.column())) {
++            var comparison = ctx.comparisons.get(ref.column());
++            if (comparison != null) {
+                 if (ctx.isUnderOrOperator) {
+                     ctx.foundPKColumnUnderOr = true;
+                 }
+                 if (ctx.isUnderNotPredicate) {
+                     ctx.foundPKColumnUnderNot = true;
+                 }
++
++                // A boolean PK column must be treated as col = true and add another one comparison.
++                // Otherwise, we might not create a DocKey with value TRUE if it's not added in other parts of the expression.
++                // This should be done only for columns under logical operator,
++                // to avoid transforming 'x = literal' to 'EqProxy(x = true) = literal'
++                if (ref.valueType().equals(DataTypes.BOOLEAN) && ctx.isUnderLogicalOperator) {
++                    // Duplicate entries are eliminated in comparison.add() method.
++                    ctx.proxyBelow = true;
++                    return comparison.add(
++                        new Function(EqOperator.SIGNATURE, List.of(ref, Literal.BOOLEAN_TRUE), EqOperator.RETURN_TYPE)
++                    );
++                }
++
+             } else {
+                 if (ctx.isUnderOrOperator) {
+                     ctx.foundNonPKColumnUnderOr = true;
+@@ -446,6 +461,7 @@ public class EqualityExtractor {
+             List<Symbol> arguments = function.arguments();
+             boolean prevIsUnderNotPredicate = ctx.isUnderNotPredicate;
+ 
++            ctx.isUnderLogicalOperator = false;
+             if (functionName.equals(EqOperator.NAME)) {
+                 Symbol firstArg = arguments.get(0).accept(this, ctx);
+                 if (firstArg instanceof Reference ref && arguments.get(1).any(Symbol.IS_COLUMN) == false) {
+@@ -466,6 +482,7 @@ public class EqualityExtractor {
+                     }
+                 }
+             } else if (Operators.LOGICAL_OPERATORS.contains(functionName)) {
++                ctx.isUnderLogicalOperator = true;
+                 switch (functionName) {
+                     case OrOperator.NAME -> ctx.isUnderOrOperator = true;
+                     case NotPredicate.NAME -> ctx.isUnderNotPredicate = true;
+diff --git a/server/src/test/java/io/crate/analyze/where/EqualityExtractorTest.java b/server/src/test/java/io/crate/analyze/where/EqualityExtractorTest.java
+index d43a37e5e5..6d5541a401 100644
+--- a/server/src/test/java/io/crate/analyze/where/EqualityExtractorTest.java
++++ b/server/src/test/java/io/crate/analyze/where/EqualityExtractorTest.java
+@@ -34,6 +34,7 @@ import org.junit.Test;
+ 
+ import io.crate.analyze.relations.AnalyzedRelation;
+ import io.crate.analyze.relations.DocTableRelation;
++import io.crate.analyze.relations.TableRelation;
+ import io.crate.common.unit.TimeValue;
+ import io.crate.exceptions.JobKilledException;
+ import io.crate.expression.eval.EvaluatingNormalizer;
+@@ -41,9 +42,12 @@ import io.crate.expression.symbol.Symbol;
+ import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.CoordinatorTxnCtx;
+ import io.crate.metadata.RelationName;
++import io.crate.metadata.doc.DocSchemaInfo;
++import io.crate.metadata.doc.DocTableInfo;
+ import io.crate.metadata.settings.CoordinatorSessionSettings;
+ import io.crate.session.Session;
+ import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
++import io.crate.testing.SQLExecutor;
+ import io.crate.testing.SqlExpressions;
+ import io.crate.testing.T3;
+ 
+@@ -71,6 +75,10 @@ public class EqualityExtractorTest extends CrateDummyClusterServiceUnitTest {
+         return ee.extractMatches(primaryKeys, query, coordinatorTxnCtx, Session.TimeoutToken.noopToken()).matches();
+     }
+ 
++    private List<List<Symbol>> analyzeExact(EqualityExtractor ee, Symbol query, List<ColumnIdent> primaryKeys) {
++        return ee.extractMatches(primaryKeys, query, coordinatorTxnCtx, Session.TimeoutToken.noopToken()).matches();
++    }
++
+     /**
+      * Convert a query expression as text into a normalized query {@link Symbol}.
+      * @param expression The query expression as text
+@@ -80,6 +88,10 @@ public class EqualityExtractorTest extends CrateDummyClusterServiceUnitTest {
+         return expressions.normalize(expressions.asSymbol(expression));
+     }
+ 
++    private Symbol query(SqlExpressions expressions, String expression) {
++        return expressions.normalize(expressions.asSymbol(expression));
++    }
++
+     private List<List<Symbol>> analyzeParentX(Symbol query) {
+         return ee.extractParentMatches(List.of(x), query, coordinatorTxnCtx, Session.TimeoutToken.noopToken()).matches();
+     }
+@@ -486,6 +498,43 @@ public class EqualityExtractorTest extends CrateDummyClusterServiceUnitTest {
+         assertThat(analyzeExact).isNull();
+     }
+ 
++    @Test
++    public void test_standalone_boolean_column_transformed_to_eq_true_expression() throws Exception {
++        // Not using an existing table definition because adding a boolean column affects other unrelated tests.
++        var relationName = new RelationName(DocSchemaInfo.NAME, "test");
++        DocTableInfo tableInfo = SQLExecutor.tableInfo(
++            relationName,
++            "create table test(b boolean, primary key(b))",
++            clusterService
++        );
++        TableRelation tableRelation = new TableRelation(tableInfo);
++        Map<RelationName, AnalyzedRelation> tableSources = Map.of(tableInfo.ident(), tableRelation);
++        SqlExpressions expressions = new SqlExpressions(tableSources, tableRelation);
++        EvaluatingNormalizer normalizer = EvaluatingNormalizer.functionOnlyNormalizer(expressions.nodeCtx);
++        EqualityExtractor ee = new EqualityExtractor(normalizer);
++
++
++        List<List<Symbol>> matches = analyzeExact(ee, query(expressions, "b or b = false"), List.of(ColumnIdent.of("b")));
++        assertThat(matches).satisfiesExactlyInAnyOrder(
++            s -> assertThat(s).satisfiesExactly(isLiteral(true)),
++            s -> assertThat(s).satisfiesExactly(isLiteral(false))
++        );
++
++        // No duplicate comparisons, true appears only once
++        matches = analyzeExact(ee, query(expressions, "b or b or b = false"), List.of(ColumnIdent.of("b")));
++        assertThat(matches).satisfiesExactlyInAnyOrder(
++            s -> assertThat(s).satisfiesExactly(isLiteral(true)),
++            s -> assertThat(s).satisfiesExactly(isLiteral(false))
++        );
++
++        matches = analyzeExact(ee, query(expressions, "b or (b in (null))"), List.of(ColumnIdent.of("b")));
++        assertThat(matches).satisfiesExactlyInAnyOrder(
++            s -> assertThat(s).satisfiesExactly(isLiteral(true)),
++            s -> assertThat(s).satisfiesExactly(isLiteral(null))
++        );
++    }
++
++
+     public static class TestToken extends Session.TimeoutToken {
+ 
+         private final int maxChecks;

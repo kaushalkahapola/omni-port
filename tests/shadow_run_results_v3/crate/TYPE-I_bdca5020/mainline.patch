@@ -1,0 +1,56 @@
+commit bdca50204c894462732f364d0a180151ece2bc9a
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Sat Mar 8 16:15:37 2025 +0900
+
+    Validate length limits of float vector types when creating tables
+
+diff --git a/docs/appendices/release-notes/5.10.3.rst b/docs/appendices/release-notes/5.10.3.rst
+index 3ef1aa9435..e567ac078b 100644
+--- a/docs/appendices/release-notes/5.10.3.rst
++++ b/docs/appendices/release-notes/5.10.3.rst
+@@ -47,3 +47,6 @@ Fixes
+ - Fixed an issue that would prevent users with ``DDL`` privilege on ``CLUSTER``
+   level, to execute :ref:`DROP ANALYZER<drop-analyzer>`, thus before the fix,
+   only allowing the ``crate`` superuser to execute ``DROP ANALYZER`` statements.
++
++- Fixed an issue that caused a :ref:`float vector <type-float_vector>` column
++  to be created with length exceeding the maximum.
+diff --git a/server/src/main/java/io/crate/types/FloatVectorType.java b/server/src/main/java/io/crate/types/FloatVectorType.java
+index 9d129fb3b8..3f7999b293 100644
+--- a/server/src/main/java/io/crate/types/FloatVectorType.java
++++ b/server/src/main/java/io/crate/types/FloatVectorType.java
+@@ -103,6 +103,9 @@ public class FloatVectorType extends DataType<float[]> implements Streamer<float
+     private final int dimensions;
+ 
+     public FloatVectorType(int dimensions) {
++        if (dimensions > MAX_DIMENSIONS) {
++            throw new IllegalArgumentException("Float vector type's length cannot exceed " + MAX_DIMENSIONS);
++        }
+         this.dimensions = dimensions;
+     }
+ 
+diff --git a/server/src/test/java/io/crate/types/FloatVectorTypeTest.java b/server/src/test/java/io/crate/types/FloatVectorTypeTest.java
+index 237eddf426..7e60441661 100644
+--- a/server/src/test/java/io/crate/types/FloatVectorTypeTest.java
++++ b/server/src/test/java/io/crate/types/FloatVectorTypeTest.java
+@@ -28,7 +28,7 @@ import java.util.ArrayList;
+ import org.junit.Test;
+ 
+ public class FloatVectorTypeTest extends DataTypeTestCase<float[]> {
+-    
++
+     @Override
+     protected DataDef<float[]> getDataDef() {
+         return DataDef.fromType(new FloatVectorType(4));
+@@ -50,4 +50,11 @@ public class FloatVectorTypeTest extends DataTypeTestCase<float[]> {
+             .isExactlyInstanceOf(UnsupportedOperationException.class)
+             .hasMessage("null values are not allowed for float_vector");
+     }
++
++    @Test
++    public void test_cannot_create_float_vector_type_exceeding_max_length() {
++        assertThatThrownBy(() -> new FloatVectorType(2049))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("Float vector type's length cannot exceed 2048");
++    }
+ }

@@ -1,0 +1,59 @@
+diff --git a/server/src/main/java/io/crate/execution/engine/collect/stats/JobsLogs.java b/server/src/main/java/io/crate/execution/engine/collect/stats/JobsLogs.java
+index a38e021742..9657bdba7a 100644
+--- a/server/src/main/java/io/crate/execution/engine/collect/stats/JobsLogs.java
++++ b/server/src/main/java/io/crate/execution/engine/collect/stats/JobsLogs.java
+@@ -32,6 +32,7 @@ import java.util.function.BooleanSupplier;
+ import java.util.function.LongSupplier;
+ 
+ import org.jetbrains.annotations.Nullable;
++import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.common.annotations.ThreadSafe;
+ import io.crate.expression.reference.sys.job.JobContext;
+@@ -43,7 +44,6 @@ import io.crate.metadata.sys.MetricsView;
+ import io.crate.planner.operators.StatementClassifier;
+ import io.crate.role.Role;
+ 
+-
+ /**
+  * JobsLogs is responsible for adding jobs and operations of that node.
+  * It also provides the functionality to expose that data for system tables,
+@@ -227,7 +227,8 @@ public class JobsLogs {
+         }
+     }
+ 
+-    void updateJobsLog(LogSink<JobContextLog> sink) {
++    @VisibleForTesting
++    public void updateJobsLog(LogSink<JobContextLog> sink) {
+         long stamp = jobsLogLock.writeLock();
+         try {
+             sink.addAll(jobsLog);
+diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
+index 74844d5e60..5db43b20b5 100644
+--- a/server/src/main/java/io/crate/session/Session.java
++++ b/server/src/main/java/io/crate/session/Session.java
+@@ -393,7 +393,7 @@ public class Session implements AutoCloseable {
+         try {
+             preparedStmt = getSafeStmt(statementName);
+         } catch (Throwable t) {
+-            jobsLogs.logPreExecutionFailure(UUIDs.dirtyUUID(), statementName, SQLExceptions.messageOf(t), sessionSettings.sessionUser());
++            jobsLogs.logPreExecutionFailure(UUIDs.dirtyUUID(), "", SQLExceptions.messageOf(t), sessionSettings.sessionUser());
+             throw t;
+         }
+ 
+@@ -700,7 +700,6 @@ public class Session implements AutoCloseable {
+             timeoutToken
+         );
+ 
+-
+         AnalyzedStatement analyzedStatement = firstPreparedStatement.analyzedStatement();
+         lastStmt = firstPreparedStatement.rawStatement();
+ 
+@@ -992,7 +991,6 @@ public class Session implements AutoCloseable {
+             this.startNanos = startNanos;
+         }
+ 
+-
+         public static TimeoutToken noopToken() {
+             return new TimeoutToken();
+         }

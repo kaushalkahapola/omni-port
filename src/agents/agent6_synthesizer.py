@@ -690,7 +690,6 @@ class HunkSynthesizer:
         start_line: int,
         end_line: int,
         context_lines: int = 30,
-        context_lines: int = 30,
     ) -> str:
         """
         Extracts [start_line..end_line] (1-indexed) plus context_lines on each side
@@ -811,27 +810,6 @@ class HunkSynthesizer:
                     context_lines_included=0,
                     verified=False,
                 )
-        if verified and confidence >= 1.0:
-            if _new_string_introduces_duplicates(file_content, old_string, new_string):
-                return SynthesizedHunk(
-                    file_path=file_path,
-                    old_string=old_string,
-                    new_string=new_string,
-                    confidence=0.0,
-                    context_lines_included=0,
-                    verified=False,
-                )
-            # Fix C: parsability gate at attempt 0.
-            gate_ok, gate_reason = _validate_new_string(file_content, old_string, new_string, loc_result)
-            if not gate_ok:
-                return SynthesizedHunk(
-                    file_path=file_path,
-                    old_string=old_string,
-                    new_string=new_string,
-                    confidence=0.0,
-                    context_lines_included=0,
-                    verified=False,
-                )
             return SynthesizedHunk(
                 file_path=file_path,
                 old_string=old_string,
@@ -844,7 +822,6 @@ class HunkSynthesizer:
         # Attempts 1-4: expand context from the TARGET FILE around the localized region.
         # new_string does NOT change — CLAW replaces only the old_string portion.
         for context_lines in [3, 10, 20, 30]:
-        for context_lines in [3, 10, 20, 30]:
             expanded_old = self.extract_lines_with_context(
                 file_content,
                 loc_result.start_line,
@@ -852,7 +829,6 @@ class HunkSynthesizer:
                 context_lines,
             )
             verified, confidence = self.verify_old_string_exists(file_content, expanded_old)
-            if verified and confidence >= 1.0:
             if verified and confidence >= 1.0:
                 # Build the expanded new_string: same surrounding context lines
                 # from the file, but with the core replacement swapped in.
@@ -886,19 +862,6 @@ class HunkSynthesizer:
                 gate_ok, gate_reason = _validate_new_string(file_content, expanded_old, expanded_new, loc_result)
                 if not gate_ok:
                     continue  # try next expansion level
-                if _new_string_introduces_duplicates(file_content, expanded_old, expanded_new):
-                    return SynthesizedHunk(
-                        file_path=file_path,
-                        old_string=expanded_old,
-                        new_string=expanded_new,
-                        confidence=0.0,
-                        context_lines_included=context_lines,
-                        verified=False,
-                    )
-                # Fix C: parsability gate at each context expansion.
-                gate_ok, gate_reason = _validate_new_string(file_content, expanded_old, expanded_new, loc_result)
-                if not gate_ok:
-                    continue  # try next expansion level
                 return SynthesizedHunk(
                     file_path=file_path,
                     old_string=expanded_old,
@@ -907,11 +870,6 @@ class HunkSynthesizer:
                     context_lines_included=context_lines,
                     verified=True,
                 )
-
-        # Fix D: try AST-guided sub-hunk splitting for large hunks.
-        split_result = _try_split_hunk(hunk, loc_result, file_content, self)
-        if split_result is not None:
-            return split_result
 
         # Fix D: try AST-guided sub-hunk splitting for large hunks.
         split_result = _try_split_hunk(hunk, loc_result, file_content, self)
@@ -984,56 +942,6 @@ class HunkSynthesizer:
             confidence=0.0, context_lines_included=0, verified=False,
         )
 
-    def synthesize_pure_addition(
-        self,
-        hunk: Dict[str, Any],
-        file_path: str,
-    ) -> SynthesizedHunk:
-        """
-        For hunks with empty old_content (pure insertion of new method/block).
-        Inserts before the final closing brace of the file (end of class body).
-        Only used when localization failed entirely and old_content is empty.
-        Confidence is 0.7 to flag for review — heuristic insertion point.
-        """
-        new_string = hunk.get("new_content", "").rstrip("\n")
-        if not new_string:
-            return SynthesizedHunk(
-                file_path=file_path, old_string="", new_string="",
-                confidence=0.0, context_lines_included=0, verified=False,
-            )
-
-        file_content = self.read_file(file_path)
-        if not file_content:
-            return SynthesizedHunk(
-                file_path=file_path, old_string="", new_string="",
-                confidence=0.0, context_lines_included=0, verified=False,
-            )
-
-        # Find the last line that is exactly `}` — the outermost class closing brace.
-        lines = file_content.splitlines(keepends=True)
-        for i in range(len(lines) - 1, -1, -1):
-            stripped = lines[i].strip()
-            if stripped == "}":
-                # Use the closing brace + a few lines of context as the anchor
-                # to ensure uniqueness (bare `}` may not be unique on its own).
-                context_start = max(0, i - 2)
-                anchor = "".join(lines[context_start : i + 1])
-                if anchor in file_content:
-                    expanded_new = "".join(lines[context_start:i]) + new_string + "\n" + lines[i]
-                    return SynthesizedHunk(
-                        file_path=file_path,
-                        old_string=anchor,
-                        new_string=expanded_new,
-                        confidence=0.7,
-                        context_lines_included=0,
-                        verified=True,
-                    )
-                break
-
-        return SynthesizedHunk(
-            file_path=file_path, old_string="", new_string="",
-            confidence=0.0, context_lines_included=0, verified=False,
-        )
 
     def synthesize_batch(
         self,
@@ -1415,7 +1323,6 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
                 retry_contexts.append(
                     PatchRetryContext(
                         error_type="synthesis_skipped_no_localization",
-                        error_message="Hunk unclaimed; localization failed entirely",
                         error_message="Hunk unclaimed; localization failed entirely",
                         attempt_count=state.get("current_attempt", 1),
                         suggested_action="manual_review",

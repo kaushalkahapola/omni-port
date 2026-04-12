@@ -1,0 +1,23 @@
+diff --git a/server/src/main/java/org/elasticsearch/common/util/BigArrays.java b/server/src/main/java/org/elasticsearch/common/util/BigArrays.java
+index f60e25687d..49fd693859 100644
+--- a/server/src/main/java/org/elasticsearch/common/util/BigArrays.java
++++ b/server/src/main/java/org/elasticsearch/common/util/BigArrays.java
+@@ -52,15 +52,10 @@ public class BigArrays {
+ 
+         long newSize;
+         if (minTargetSize < pageSize) {
+-            newSize = ArrayUtil.oversize((int)minTargetSize, bytesPerElement);
++            newSize = Math.min(ArrayUtil.oversize((int) minTargetSize, bytesPerElement), pageSize);
+         } else {
+-            newSize = minTargetSize + (minTargetSize >>> 3);
+-        }
+-
+-        if (newSize > pageSize) {
+-            // round to a multiple of pageSize
+-            newSize = newSize - (newSize % pageSize) + pageSize;
+-            assert newSize % pageSize == 0;
++            final long pages = (minTargetSize + pageSize - 1) / pageSize; // ceil(minTargetSize/pageSize)
++            newSize = pages * pageSize;
+         }
+ 
+         return newSize;
