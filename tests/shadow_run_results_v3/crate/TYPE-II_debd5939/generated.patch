@@ -1,0 +1,34 @@
+diff --git a/server/src/testFixtures/java/io/crate/testing/SQLTransportExecutor.java b/server/src/testFixtures/java/io/crate/testing/SQLTransportExecutor.java
+index 94eb726624..433e1b30ea 100644
+--- a/server/src/testFixtures/java/io/crate/testing/SQLTransportExecutor.java
++++ b/server/src/testFixtures/java/io/crate/testing/SQLTransportExecutor.java
+@@ -425,6 +425,13 @@ public class SQLTransportExecutor {
+                     Object value;
+                     String typeName = metadata.getColumnTypeName(i + 1);
+                     value = getObject(resultSet, i, typeName);
++                    if (typeName.equals("char") && value != null) {
++                        // ResultSetParser is dedicated to deal with Postgres specific "char" type which can be single ASCII character.
++                        // This code is also used in tests to get results via JDBC which is not necessarily bound to PG logic.
++                        // Hence, cancel PG specific logic here.
++                        assert value instanceof String;
++                        value = Byte.parseByte((String) value);
++                    }
+                     row[i] = value;
+                 }
+                 rows.add(row);
+@@ -513,7 +520,6 @@ public class SQLTransportExecutor {
+         Sessions sqlOperations();
+     }
+ 
+-
+     private static final DataType<?>[] EMPTY_TYPES = new DataType[0];
+     private static final String[] EMPTY_NAMES = new String[0];
+     private static final Object[][] EMPTY_ROWS = new Object[0][];
+@@ -614,7 +620,6 @@ public class SQLTransportExecutor {
+         }
+     }
+ 
+-
+     /**
+      * Wraps results of bulk requests for testing.
+      */

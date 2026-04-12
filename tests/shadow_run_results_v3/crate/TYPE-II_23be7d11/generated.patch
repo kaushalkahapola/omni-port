@@ -1,0 +1,148 @@
+diff --git a/libs/sql-parser/src/main/java/io/crate/sql/ExpressionFormatter.java b/libs/sql-parser/src/main/java/io/crate/sql/ExpressionFormatter.java
+index e732df3b2c..fc7ddda1cd 100644
+--- a/libs/sql-parser/src/main/java/io/crate/sql/ExpressionFormatter.java
++++ b/libs/sql-parser/src/main/java/io/crate/sql/ExpressionFormatter.java
+@@ -163,12 +163,12 @@ public final class ExpressionFormatter {
+ 
+         @Override
+         public String visitArrayComparisonExpression(ArrayComparisonExpression node, @Nullable List<Expression> parameters) {
+-
+             String array = node.getRight().accept(this, parameters);
+             String left = node.getLeft().accept(this, parameters);
+             String type = node.getType().getValue();
++            String quantifier = node.quantifier().name();
+ 
+-            return "(" + left + " " + type + " ANY(" + array + "))";
++            return "(" + left + " " + type + " " + quantifier + "(" + array + "))";
+         }
+ 
+         @Override
+diff --git a/server/src/main/java/io/crate/expression/operator/any/AnyOperator.java b/server/src/main/java/io/crate/expression/operator/any/AnyOperator.java
+index fa7e79c7b9..c67fed2138 100644
+--- a/server/src/main/java/io/crate/expression/operator/any/AnyOperator.java
++++ b/server/src/main/java/io/crate/expression/operator/any/AnyOperator.java
+@@ -23,7 +23,6 @@ package io.crate.expression.operator.any;
+ 
+ import java.util.List;
+ import java.util.Objects;
+-import java.util.Set;
+ import java.util.stream.StreamSupport;
+ 
+ import org.apache.lucene.search.MatchNoDocsQuery;
+@@ -47,11 +46,9 @@ import io.crate.metadata.TransactionContext;
+ import io.crate.metadata.functions.BoundSignature;
+ import io.crate.metadata.functions.Signature;
+ import io.crate.metadata.functions.TypeVariableConstraint;
+-import io.crate.sql.tree.ComparisonExpression;
+ import io.crate.types.DataType;
+ import io.crate.types.TypeSignature;
+ 
+-
+ /**
+  * Abstract base class for implementations of {@code <probe> <op> ANY(<candidates>)}
+  **/
+@@ -72,15 +69,6 @@ public abstract sealed class AnyOperator<T> extends Operator<T>
+         LikeOperators.ANY_NOT_ILIKE
+     );
+ 
+-    public static final Set<String> SUPPORTED_COMPARISONS = Set.of(
+-        ComparisonExpression.Type.EQUAL.getValue(),
+-        ComparisonExpression.Type.NOT_EQUAL.getValue(),
+-        ComparisonExpression.Type.LESS_THAN.getValue(),
+-        ComparisonExpression.Type.LESS_THAN_OR_EQUAL.getValue(),
+-        ComparisonExpression.Type.GREATER_THAN.getValue(),
+-        ComparisonExpression.Type.GREATER_THAN_OR_EQUAL.getValue()
+-    );
+-
+     protected final DataType<T> leftType;
+ 
+     public static void register(Functions.Builder builder) {
+diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/Optimizer.java b/server/src/main/java/io/crate/planner/optimizer/symbol/Optimizer.java
+index 83a047139c..e07afa821f 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/symbol/Optimizer.java
++++ b/server/src/main/java/io/crate/planner/optimizer/symbol/Optimizer.java
+@@ -39,8 +39,8 @@ import io.crate.planner.PlannerContext;
+ import io.crate.planner.optimizer.matcher.Captures;
+ import io.crate.planner.optimizer.matcher.Match;
+ import io.crate.planner.optimizer.symbol.rule.MoveArrayLengthOnReferenceCastToLiteralCastInsideOperators;
+-import io.crate.planner.optimizer.symbol.rule.MoveReferenceCastToLiteralCastOnAnyOperatorsWhenLeftIsReference;
+-import io.crate.planner.optimizer.symbol.rule.MoveReferenceCastToLiteralCastOnAnyOperatorsWhenRightIsReference;
++import io.crate.planner.optimizer.symbol.rule.MoveReferenceCastToLiteralCastOnArrayOperatorsWhenLeftIsReference;
++import io.crate.planner.optimizer.symbol.rule.MoveReferenceCastToLiteralCastOnArrayOperatorsWhenRightIsReference;
+ import io.crate.planner.optimizer.symbol.rule.MoveSubscriptOnReferenceCastToLiteralCastInsideOperators;
+ import io.crate.planner.optimizer.symbol.rule.SimplifyEqualsOperationOnIdenticalReferences;
+ import io.crate.planner.optimizer.symbol.rule.SwapCastsInComparisonOperators;
+@@ -52,8 +52,8 @@ public class Optimizer {
+     private static final List<Rule<?>> RULES = List.of(
+         new SwapCastsInComparisonOperators(),
+         new SwapCastsInLikeOperators(),
+-        new MoveReferenceCastToLiteralCastOnAnyOperatorsWhenRightIsReference(),
+-        new MoveReferenceCastToLiteralCastOnAnyOperatorsWhenLeftIsReference(),
++        new MoveReferenceCastToLiteralCastOnArrayOperatorsWhenRightIsReference(),
++        new MoveReferenceCastToLiteralCastOnArrayOperatorsWhenLeftIsReference(),
+         new MoveSubscriptOnReferenceCastToLiteralCastInsideOperators(),
+         new MoveArrayLengthOnReferenceCastToLiteralCastInsideOperators(),
+         new SimplifyEqualsOperationOnIdenticalReferences()
+diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnAnyOperatorsWhenLeftIsReference.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnAnyOperatorsWhenLeftIsReference.java
+index e93615e812..6b2bc12cd5 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnAnyOperatorsWhenLeftIsReference.java
++++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnAnyOperatorsWhenLeftIsReference.java
+@@ -25,6 +25,7 @@ import static io.crate.planner.optimizer.matcher.Pattern.typeOf;
+ 
+ import java.util.List;
+ 
++import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.any.AnyOperator;
+ import io.crate.expression.scalar.cast.CastMode;
+ import io.crate.expression.symbol.Function;
+@@ -39,16 +40,15 @@ import io.crate.planner.optimizer.symbol.Rule;
+ import io.crate.types.ArrayType;
+ import io.crate.types.DataType;
+ 
+-
+-public class MoveReferenceCastToLiteralCastOnAnyOperatorsWhenLeftIsReference implements Rule<Function> {
++public class MoveReferenceCastToLiteralCastOnArrayOperatorsWhenLeftIsReference implements Rule<Function> {
+ 
+     private final Capture<Function> castCapture;
+     private final Pattern<Function> pattern;
+ 
+-    public MoveReferenceCastToLiteralCastOnAnyOperatorsWhenLeftIsReference() {
++    public MoveReferenceCastToLiteralCastOnArrayOperatorsWhenLeftIsReference() {
+         this.castCapture = new Capture<>();
+         this.pattern = typeOf(Function.class)
+-            .with(f -> AnyOperator.OPERATOR_NAMES.contains(f.name()))
++            .with(f -> AnyOperator.OPERATOR_NAMES.contains(f.name()) || AllOperator.OPERATOR_NAMES.contains(f.name()))
+             .with(f -> f.arguments().get(1).symbolType().isValueOrParameterSymbol())
+             .with(f -> f.arguments().get(0), typeOf(Function.class).capturedAs(castCapture)
+                 .with(f -> f.isCast() && CastMode.IMPLICIT.equals(f.castMode()))
+diff --git a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnAnyOperatorsWhenRightIsReference.java b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnAnyOperatorsWhenRightIsReference.java
+index ec9f533158..9d46779237 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnAnyOperatorsWhenRightIsReference.java
++++ b/server/src/main/java/io/crate/planner/optimizer/symbol/rule/MoveReferenceCastToLiteralCastOnAnyOperatorsWhenRightIsReference.java
+@@ -25,6 +25,7 @@ import static io.crate.planner.optimizer.matcher.Pattern.typeOf;
+ 
+ import java.util.List;
+ 
++import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.any.AnyEqOperator;
+ import io.crate.expression.operator.any.AnyNeqOperator;
+ import io.crate.expression.operator.any.AnyOperator;
+@@ -42,15 +43,15 @@ import io.crate.types.ArrayType;
+ import io.crate.types.DataType;
+ 
+ 
+-public class MoveReferenceCastToLiteralCastOnAnyOperatorsWhenRightIsReference implements Rule<Function> {
++public class MoveReferenceCastToLiteralCastOnArrayOperatorsWhenRightIsReference implements Rule<Function> {
+ 
+     private final Capture<Function> castCapture;
+     private final Pattern<Function> pattern;
+ 
+-    public MoveReferenceCastToLiteralCastOnAnyOperatorsWhenRightIsReference() {
++    public MoveReferenceCastToLiteralCastOnArrayOperatorsWhenRightIsReference() {
+         this.castCapture = new Capture<>();
+         this.pattern = typeOf(Function.class)
+-            .with(f -> AnyOperator.OPERATOR_NAMES.contains(f.name()))
++            .with(f -> AnyOperator.OPERATOR_NAMES.contains(f.name()) || AllOperator.OPERATOR_NAMES.contains(f.name()))
+             .with(f -> f.arguments().get(0).symbolType().isValueOrParameterSymbol())
+             .with(f -> f.arguments().get(1), typeOf(Function.class).capturedAs(castCapture)
+                 .with(f -> f.isCast() && CastMode.IMPLICIT.equals(f.castMode()))

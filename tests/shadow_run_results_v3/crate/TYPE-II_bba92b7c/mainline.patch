@@ -1,0 +1,98 @@
+commit bba92b7cff3535e822fd979d4403c415a12ca9a1
+Author: Sebastian Utz <su@rtme.net>
+Date:   Tue Apr 1 09:45:32 2025 +0200
+
+    Fix ALTER TABLE RESET to reset the setting on all partitions
+    
+    Fixes #17693.
+
+diff --git a/docs/appendices/release-notes/5.10.4.rst b/docs/appendices/release-notes/5.10.4.rst
+index b09f350894..0fa207d3a8 100644
+--- a/docs/appendices/release-notes/5.10.4.rst
++++ b/docs/appendices/release-notes/5.10.4.rst
+@@ -63,3 +63,8 @@ Fixes
+   closed properly, e.g. due to an unclean node shutdown and the node was
+   restarting with still holding a lock on the shard. The existing retry logic
+   to solve this situation was not working in some cases.
++
++- Fixed an issue causing a ``ALTER TABLE <table> RESET <setting>`` statement on
++  a complete partitioned table to not reset the setting on all partitions, but
++  only on the table itself, so the reset value of the setting would only have
++  taken effect for new partitions.
+diff --git a/docs/appendices/release-notes/5.9.13.rst b/docs/appendices/release-notes/5.9.13.rst
+index a359093e33..64242a6246 100644
+--- a/docs/appendices/release-notes/5.9.13.rst
++++ b/docs/appendices/release-notes/5.9.13.rst
+@@ -58,3 +58,8 @@ Fixes
+   closed properly, e.g. due to an unclean node shutdown and the node was
+   restarting with still holding a lock on the shard. The existing retry logic
+   to solve this situation was not working in some cases.
++
++- Fixed an issue causing a ``ALTER TABLE <table> RESET <setting>`` statement on
++  a complete partitioned table to not reset the setting on all partitions, but
++  only on the table itself, so the reset value of the setting would only have
++  taken effect for new partitions.
+diff --git a/server/src/main/java/io/crate/metadata/cluster/AlterTableClusterStateExecutor.java b/server/src/main/java/io/crate/metadata/cluster/AlterTableClusterStateExecutor.java
+index 76542d58da..4564c261cf 100644
+--- a/server/src/main/java/io/crate/metadata/cluster/AlterTableClusterStateExecutor.java
++++ b/server/src/main/java/io/crate/metadata/cluster/AlterTableClusterStateExecutor.java
+@@ -262,18 +262,16 @@ public class AlterTableClusterStateExecutor extends DDLClusterStateTaskExecutor<
+     @VisibleForTesting
+     static Settings filterSettings(Settings settings, List<Setting<?>> settingsFilter) {
+         Settings.Builder settingsBuilder = Settings.builder();
++        Set<String> settingNames = settings.keySet();
+         for (Setting<?> setting : settingsFilter) {
++            String key = setting.getKey();
+             if (setting.isGroupSetting()) {
+-                String prefix = setting.getKey(); // getKey() returns prefix for a group setting
+-                var settingsGroup = settings.getByPrefix(prefix);
++                var settingsGroup = settings.getByPrefix(key);
+                 for (String name : settingsGroup.keySet()) {
+-                    settingsBuilder.put(prefix + name, settingsGroup.get(name)); // No dot added as prefix already has dot at the end.
+-                }
+-            } else {
+-                String value = settings.get(setting.getKey());
+-                if (value != null) {
+-                    settingsBuilder.put(setting.getKey(), value);
++                    settingsBuilder.put(key + name, settingsGroup.get(name)); // No dot added as prefix already has dot at the end.
+                 }
++            } else if (settingNames.contains(key)) {
++                settingsBuilder.put(key, settings.get(key));
+             }
+         }
+         return settingsBuilder.build();
+diff --git a/server/src/test/java/io/crate/integrationtests/AlterTableIntegrationTest.java b/server/src/test/java/io/crate/integrationtests/AlterTableIntegrationTest.java
+index 19b3a1386c..75de766f74 100644
+--- a/server/src/test/java/io/crate/integrationtests/AlterTableIntegrationTest.java
++++ b/server/src/test/java/io/crate/integrationtests/AlterTableIntegrationTest.java
+@@ -443,4 +443,30 @@ public class AlterTableIntegrationTest extends IntegTestCase {
+             .hasMessageContaining("Relation 'q2' unknown");
+ 
+     }
++
++    @Test
++    public void test_reset_setting_on_complete_partitioned_table() {
++        execute("CREATE TABLE t1 (a INTEGER, b INTEGER) PARTITIONED BY (a)");
++        execute("INSERT INTO t1 VALUES (1, 2), (2, 3)");
++        execute("ALTER TABLE t1 SET (\"blocks.write\" = TRUE)");
++        execute("SELECT table_name, settings['blocks']['write'] FROM information_schema.tables WHERE table_name = 't1' ORDER BY 1");
++        assertThat(response).hasRows(
++            "t1| true"
++        );
++        execute("SELECT partition_ident, settings['blocks']['write'] FROM information_schema.table_partitions WHERE table_name = 't1' ORDER BY 1");
++        assertThat(response).hasRows(
++            "04132| true",
++            "04134| true"
++        );
++        execute("ALTER TABLE t1 RESET (\"blocks.write\")");
++        execute("SELECT table_name, settings['blocks']['write'] FROM information_schema.tables WHERE table_name = 't1' ORDER BY 1");
++        assertThat(response).hasRows(
++            "t1| false"
++        );
++        execute("SELECT partition_ident, settings['blocks']['write'] FROM information_schema.table_partitions WHERE table_name = 't1' ORDER BY 1");
++        assertThat(response).hasRows(
++            "04132| false",
++            "04134| false"
++        );
++    }
+ }

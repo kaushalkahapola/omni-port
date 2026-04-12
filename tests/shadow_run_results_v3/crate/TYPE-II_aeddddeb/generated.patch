@@ -1,0 +1,74 @@
+diff --git a/server/src/main/java/io/crate/metadata/Routing.java b/server/src/main/java/io/crate/metadata/Routing.java
+index a2d99e2123..e649ff8ab3 100644
+--- a/server/src/main/java/io/crate/metadata/Routing.java
++++ b/server/src/main/java/io/crate/metadata/Routing.java
+@@ -27,11 +27,13 @@ import java.util.Map;
+ import java.util.Set;
+ import java.util.TreeMap;
+ 
++import org.elasticsearch.cluster.ClusterState;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
+ import org.elasticsearch.cluster.node.DiscoveryNodes;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
+ import org.elasticsearch.common.io.stream.Writeable;
++import org.elasticsearch.discovery.MasterNotDiscoveredException;
+ 
+ import com.carrotsearch.hppc.IntArrayList;
+ import com.carrotsearch.hppc.IntIndexedContainer;
+@@ -207,6 +209,14 @@ public class Routing implements Writeable {
+         return new Routing(indicesByNode);
+     }
+ 
++    public static Routing forMasterNode(RelationName relationName, ClusterState clusterState) {
++        String masterNodeId = clusterState.nodes().getMasterNodeId();
++        if (masterNodeId == null) {
++            throw new MasterNotDiscoveredException();
++        }
++        return forTableOnSingleNode(relationName, masterNodeId);
++    }
++
+     @Override
+     public boolean equals(Object o) {
+         if (this == o) return true;
+diff --git a/server/src/main/java/io/crate/metadata/sys/SysAllocationsTableInfo.java b/server/src/main/java/io/crate/metadata/sys/SysAllocationsTableInfo.java
+index ed78890185..47b47d6cf3 100644
+--- a/server/src/main/java/io/crate/metadata/sys/SysAllocationsTableInfo.java
++++ b/server/src/main/java/io/crate/metadata/sys/SysAllocationsTableInfo.java
+@@ -56,6 +56,6 @@ public class SysAllocationsTableInfo {
+             ColumnIdent.of("partition_ident"),
+             ColumnIdent.of("shard_id")
+         )
+-        .withRouting((state, ignored, ignored2) -> Routing.forTableOnSingleNode(IDENT, state.nodes().getMasterNodeId()))
++        .withRouting((state, ignored, ignored2) -> Routing.forMasterNode(IDENT, state))
+         .build();
+ }
+diff --git a/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java b/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
+index 2d31b5424f..a80a61a722 100644
+--- a/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
++++ b/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
+@@ -32,6 +32,7 @@ import java.util.function.Predicate;
+ import java.util.function.Supplier;
+ import java.util.function.UnaryOperator;
+ 
++import org.elasticsearch.ElasticsearchException;
+ import org.elasticsearch.Version;
+ import org.elasticsearch.cluster.ClusterState;
+ import org.elasticsearch.cluster.metadata.Metadata;
+@@ -335,7 +336,6 @@ public class LogicalPlanner {
+         return planBuilder;
+     }
+ 
+-
+     public LogicalPlan plan(AnalyzedRelation relation,
+                             PlannerContext plannerContext,
+                             SubqueryPlanner subqueryPlanner,
+@@ -632,7 +632,7 @@ public class LogicalPlanner {
+         } catch (ConversionException e) {
+             throw e;
+         } catch (Exception e) {
+-            if (e instanceof CrateException) {
++            if (e instanceof CrateException || e instanceof ElasticsearchException) {
+                 // Don't hide errors like MissingShardOperationsException, UnavailableShardsException
+                 throw e;
+             }

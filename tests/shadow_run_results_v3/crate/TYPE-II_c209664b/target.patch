@@ -1,0 +1,94 @@
+commit ccdafe7d64a1430426112a9bee90672a8f30eb4e
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Tue May 20 13:00:52 2025 +0300
+
+    Fix adding parent & child object sub-cols in one ALTER stmt
+    
+    When adding multiple object sub columns where, one is a parent of
+    another, the child one, would only try to find a parent in the original
+    table schema, without checking if that parent is also defined in another
+    `ADD COLUMNN` clause, thus ending up with the DEFAULT `object(dynamic)`
+    type being set for the parent sub column.
+    
+    Fixes: #17875
+    (cherry picked from commit c209664b06f0668788ad161f895aea23e94bddc1)
+
+diff --git a/docs/appendices/release-notes/5.10.7.rst b/docs/appendices/release-notes/5.10.7.rst
+index d87bdb76f1..abcd4c8781 100644
+--- a/docs/appendices/release-notes/5.10.7.rst
++++ b/docs/appendices/release-notes/5.10.7.rst
+@@ -47,6 +47,14 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that would cause wrong column data type to be used when adding
++  parent and child object sub-columns in one
++  :ref:`ALTER TABLE <alter-table-add-column>` statement, e.g.::
++
++    ALTER TABLE tbl
++      ADD COLUMN obj['arr'] array(object(dynamic)),
++      ADD COLUMN obj['arr']['id'] integer;
++
+ - Fixed an issue that would cause :ref:`window functions <window-functions>` to
+   use inefficient execution plans, resulting in poor performance, when the
+   :ref:`window definition <window-definition>` is using query parameters. e.g::
+diff --git a/server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java b/server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java
+index 78da6f45a3..7e8d339703 100644
+--- a/server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java
+@@ -516,7 +516,13 @@ public class TableElementsAnalyzer implements FieldProvider<Reference> {
+                     parentBuilder.builtReference = parentRef;
+                     columns.put(parent, parentBuilder);
+                 } else {
+-                    columns.put(parent, new RefBuilder(parent, ObjectType.UNTYPED));
++                    /*
++                      Parent can be missing in the table, but present in the same statement, e.g.:
++                      ALTER TABLE tbl
++                        ADD COLUMN obj['arr'] array(object(dynamic)),
++                        ADD COLUMN obj['arr']['id'] integer
++                     */
++                    columns.computeIfAbsent(parent, _ -> new RefBuilder(parent, ObjectType.UNTYPED));
+                 }
+             }
+             Reference reference = table.getReference(columnName);
+diff --git a/server/src/test/java/io/crate/analyze/AlterTableAddColumnAnalyzerTest.java b/server/src/test/java/io/crate/analyze/AlterTableAddColumnAnalyzerTest.java
+index 69e7be7218..0f9d26bf4f 100644
+--- a/server/src/test/java/io/crate/analyze/AlterTableAddColumnAnalyzerTest.java
++++ b/server/src/test/java/io/crate/analyze/AlterTableAddColumnAnalyzerTest.java
+@@ -22,7 +22,6 @@
+ package io.crate.analyze;
+ 
+ import static io.crate.testing.Asserts.assertThat;
+-import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ 
+ import java.io.IOException;
+@@ -43,6 +42,7 @@ import io.crate.planner.operators.SubQueryResults;
+ import io.crate.sql.parser.ParsingException;
+ import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
+ import io.crate.testing.SQLExecutor;
++import io.crate.types.ArrayType;
+ import io.crate.types.DataTypes;
+ 
+ public class AlterTableAddColumnAnalyzerTest extends CrateDummyClusterServiceUnitTest {
+@@ -239,4 +239,20 @@ public class AlterTableAddColumnAnalyzerTest extends CrateDummyClusterServiceUni
+             .hasMessage("CHECK constraint on column `o1['o2']['b']` cannot refer to column `b`. Use full path to " +
+                         "refer to a sub-column or a table check constraint instead");
+     }
++
++    // Tracks a bug: https://github.com/crate/crate/issues/17875
++    @Test
++    public void test_add_parent_and_child_columns_within_one_statement() throws Exception {
++        e = SQLExecutor.of(clusterService)
++            .addTable("create table tbl(obj object(dynamic))");
++
++        var addColumnRequest = analyze("alter table tbl " +
++                                       "add column obj['arr'] array(object(dynamic)), " +
++                                       "add column obj['arr']['id'] integer");
++        assertThat(addColumnRequest.references()).satisfiesExactly(
++            o1 -> assertThat(o1).hasName("obj"),
++            o1 -> assertThat(o1).hasName("obj['arr']").hasType(new ArrayType<>(DataTypes.UNTYPED_OBJECT)),
++            o1 -> assertThat(o1).hasName("obj['arr']['id']").hasType(DataTypes.INTEGER)
++        );
++    }
+ }

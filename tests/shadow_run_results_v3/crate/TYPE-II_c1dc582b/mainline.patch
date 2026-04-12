@@ -1,0 +1,211 @@
+commit c1dc582bfbdd50117e70612c744173e8b4475028
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Wed Jun 12 15:36:06 2024 +0200
+
+    Show view sub-columns in information_schema.columns
+
+diff --git a/docs/appendices/release-notes/5.7.3.rst b/docs/appendices/release-notes/5.7.3.rst
+index 7add06fd16..fcba0f1e33 100644
+--- a/docs/appendices/release-notes/5.7.3.rst
++++ b/docs/appendices/release-notes/5.7.3.rst
+@@ -48,4 +48,9 @@ See the :ref:`version_5.7.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
+-None
++- Fixed an issue that prevented sub-columns of a view to be shown in the
++  ``information_schema.columns`` table if only top-level columns were used in
++  the view's SELECT query. Workaround: explicitly select sub-columns in the
++  view definition, e.g.::
++
++      CREATE VIEW v AS SELECT a, a['b'] FROM t;
+diff --git a/docs/sql/statements/create-view.rst b/docs/sql/statements/create-view.rst
+index 3f2175a35c..c2ad34a199 100644
+--- a/docs/sql/statements/create-view.rst
++++ b/docs/sql/statements/create-view.rst
+@@ -61,6 +61,14 @@ operations.
+   been created, these columns will show up in subsequent queries on the view.
+   It is generally recommended to avoid using ``*`` in view definitions.
+ 
++ .. NOTE::
++
++   If an object column is selected, sub-columns are visible in the
++   ``information_schema.columns`` table. Added sub-columns at the source
++   relation are visible there while dropped columns won't show up there anymore
++   as well. This applies both to views where ``*`` is used to select columns
++   and to views with a static selection of top level columns.
++
+ 
+ Privileges
+ ==========
+diff --git a/server/src/main/java/io/crate/metadata/view/ViewInfo.java b/server/src/main/java/io/crate/metadata/view/ViewInfo.java
+index a8bbd5900d..e85fbff441 100644
+--- a/server/src/main/java/io/crate/metadata/view/ViewInfo.java
++++ b/server/src/main/java/io/crate/metadata/view/ViewInfo.java
+@@ -45,14 +45,21 @@ public class ViewInfo implements RelationInfo {
+     private final RelationName ident;
+     private final String definition;
+     private final List<Reference> columns;
++    private final List<Reference> references;
+     private final String owner;
+     private final SearchPath searchPath;
+ 
+     @VisibleForTesting
+-    public ViewInfo(RelationName ident, String definition, List<Reference> columns, @Nullable String owner, SearchPath searchPath) {
++    public ViewInfo(RelationName ident, String definition, List<Reference> references, @Nullable String owner, SearchPath searchPath) {
+         this.ident = ident;
+         this.definition = definition;
+-        this.columns = columns;
++        this.references = references
++            .stream()
++            .sorted(Reference.CMP_BY_POSITION_THEN_NAME)
++            .toList();
++        this.columns = this.references.stream()
++            .filter(r -> r.column().isRoot())
++            .toList();
+         this.owner = owner;
+         this.searchPath = searchPath;
+     }
+@@ -94,7 +101,7 @@ public class ViewInfo implements RelationInfo {
+ 
+     @Override
+     public Iterator<Reference> iterator() {
+-        return columns.iterator();
++        return references.iterator();
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/io/crate/metadata/view/ViewInfoFactory.java b/server/src/main/java/io/crate/metadata/view/ViewInfoFactory.java
+index 2b8a55e929..59b06473e9 100644
+--- a/server/src/main/java/io/crate/metadata/view/ViewInfoFactory.java
++++ b/server/src/main/java/io/crate/metadata/view/ViewInfoFactory.java
+@@ -33,6 +33,7 @@ import io.crate.analyze.ParamTypeHints;
+ import io.crate.analyze.relations.AnalyzedRelation;
+ import io.crate.analyze.relations.RelationAnalyzer;
+ import io.crate.expression.symbol.Symbols;
++import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.CoordinatorTxnCtx;
+ import io.crate.metadata.Reference;
+ import io.crate.metadata.ReferenceIdent;
+@@ -41,6 +42,8 @@ import io.crate.metadata.RowGranularity;
+ import io.crate.metadata.SimpleReference;
+ import io.crate.sql.parser.SqlParser;
+ import io.crate.sql.tree.Query;
++import io.crate.types.DataType;
++import io.crate.types.ObjectType;
+ 
+ public class ViewInfoFactory {
+ 
+@@ -70,16 +73,29 @@ public class ViewInfoFactory {
+                 ParamTypeHints.EMPTY
+             );
+             final List<Reference> collectedColumns = new ArrayList<>(relation.outputs().size());
++            List<Reference> subColumns = new ArrayList<>();
+             int position = 1;
+             for (var field : relation.outputs()) {
++                ColumnIdent columnIdent = Symbols.pathFromSymbol(field);
+                 collectedColumns.add(
+-                    new SimpleReference(new ReferenceIdent(ident, Symbols.pathFromSymbol(field).sqlFqn()),
+-                                  RowGranularity.DOC,
+-                                  field.valueType(),
+-                                  position++,
+-                                  null));
++                    new SimpleReference(
++                        new ReferenceIdent(ident, columnIdent.sqlFqn()),
++                        RowGranularity.DOC,
++                        field.valueType(),
++                        position++,
++                        null
++                    )
++                );
++
+             }
+             columns = collectedColumns;
++            // Now add all sub-columns.
++            // We do it after handling top level columns to ensure that ordinals in the information_schema.columns are stable
++            // and sub-columns, added or dropped after view definition don't change ordinals of other columns in the view.
++            for (Reference ref: columns) {
++                position = addSubColumns(subColumns, ident, ref.column(), ref.valueType(), position);
++            }
++            columns.addAll(subColumns);
+         } catch (Exception e) {
+             // Statement could not be analyzed, because the referenced table either not found
+             // or has been updated and view definition became incompatible with the new schema (https://github.com/crate/crate/issues/14377).
+@@ -89,4 +105,30 @@ public class ViewInfoFactory {
+         String viewDefinition = analyzeError ? String.format(Locale.ENGLISH, "/* Corrupted view, needs fix */\n%s", view.stmt()) : view.stmt();
+         return new ViewInfo(ident, viewDefinition, columns, view.owner(), view.searchPath());
+     }
++
++    private static int addSubColumns(List<Reference> subColumns,
++                                     RelationName ident,
++                                     ColumnIdent parent,
++                                     DataType<?> parentType,
++                                     int position) {
++        int updatedPosition = position;
++        if (parentType instanceof ObjectType objectType) {
++            for (var entry : objectType.innerTypes().entrySet()) {
++                String childName = entry.getKey();
++                ColumnIdent childColumn = parent.getChild(childName);
++                DataType<?> childType = entry.getValue();
++                subColumns.add(
++                    new SimpleReference(
++                        new ReferenceIdent(ident, childColumn.sqlFqn()),
++                        RowGranularity.DOC,
++                        childType,
++                        position++,
++                        null
++                    )
++                );
++                updatedPosition = addSubColumns(subColumns, ident, childColumn, childType, position);
++            }
++        }
++        return updatedPosition;
++    }
+ }
+diff --git a/server/src/test/java/io/crate/integrationtests/ViewsITest.java b/server/src/test/java/io/crate/integrationtests/ViewsITest.java
+index be878aea47..1d517f290c 100644
+--- a/server/src/test/java/io/crate/integrationtests/ViewsITest.java
++++ b/server/src/test/java/io/crate/integrationtests/ViewsITest.java
+@@ -83,6 +83,42 @@ public class ViewsITest extends IntegTestCase {
+         }
+     }
+ 
++    @Test
++    public void test_view_on_top_level_columns_sub_columns_are_shown_in_information_schema() throws Exception {
++        execute("CREATE TABLE with_object (a OBJECT AS (b INTEGER), x int, y int)");
++        execute("CREATE VIEW view_with_object AS SELECT x, a, y FROM with_object");
++
++        execute("SELECT column_name, data_type, ordinal_position FROM information_schema.columns WHERE table_name = 'with_object'");
++        assertThat(response).hasRows(
++            "a| object| 1",
++            "a['b']| integer| 2",
++            "x| integer| 3",
++            "y| integer| 4"
++        );
++
++        // Note, that ordinal of the column "a" in the view is different from ordinal in the table.
++        // Ordinals in views assigned by select order and not related to original ordinal in table.
++        // This is compatible with PG behavior.
++        execute("SELECT column_name, data_type, ordinal_position FROM information_schema.columns WHERE table_name = 'view_with_object'");
++        assertThat(response).hasRows(
++            "x| integer| 1",
++            "a| object| 2",
++            "y| integer| 3",
++            "a['b']| integer| 4"
++        );
++
++        // View dynamically binds new sub-columns (even if SELECT is static).
++        execute("ALTER TABLE with_object ADD COLUMN a['c'] text");
++        execute("SELECT column_name, data_type, ordinal_position FROM information_schema.columns WHERE table_name = 'view_with_object'");
++        assertThat(response).hasRows(
++            "x| integer| 1",
++            "a| object| 2",
++            "y| integer| 3",
++            "a['b']| integer| 4",
++            "a['c']| text| 5" // New columns have higher ordinals to keep all ordinals stable.
++        );
++    }
++
+     @Test
+     public void testViewCanBeUsedForJoins() {
+         execute("CREATE TABLE t1 (a STRING, x INTEGER)");

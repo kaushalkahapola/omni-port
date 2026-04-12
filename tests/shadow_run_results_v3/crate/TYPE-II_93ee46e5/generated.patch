@@ -1,0 +1,68 @@
+diff --git a/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java b/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
+index eb83ebc781..7ceb285c3f 100644
+--- a/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
++++ b/server/src/main/java/io/crate/planner/operators/LogicalPlanner.java
+@@ -269,7 +269,6 @@ public class LogicalPlanner {
+         return planBuilder;
+     }
+ 
+-
+     public LogicalPlan plan(AnalyzedRelation relation,
+                             PlannerContext plannerContext,
+                             SubqueryPlanner subqueryPlanner,
+@@ -508,7 +507,15 @@ public class LogicalPlanner {
+             MultiPhaseExecutor.execute(logicalPlan.dependencies(), executor, plannerContext, params)
+                 .whenComplete((valueBySubQuery, failure) -> {
+                     if (failure == null) {
+-                        doExecute(logicalPlan, executor, plannerContext, consumer, params, valueBySubQuery, false);
++                        doExecute(
++                            logicalPlan,
++                            executor,
++                            plannerContext,
++                            consumer,
++                            params,
++                            SubQueryResults.merge(subQueryResults, valueBySubQuery),
++                            false
++                        );
+                     } else {
+                         consumer.accept(null, failure);
+                     }
+diff --git a/server/src/main/java/io/crate/planner/operators/SubQueryResults.java b/server/src/main/java/io/crate/planner/operators/SubQueryResults.java
+index 2089d38ef0..19e5e2959b 100644
+--- a/server/src/main/java/io/crate/planner/operators/SubQueryResults.java
++++ b/server/src/main/java/io/crate/planner/operators/SubQueryResults.java
+@@ -40,7 +40,6 @@ public class SubQueryResults {
+     private static final ObjectIntHashMap<OuterColumn> EMPTY_OUTER_COLUMNS = new ObjectIntHashMap<>();
+     public static final SubQueryResults EMPTY = new SubQueryResults(Collections.emptyMap());
+ 
+-
+     private final Map<SelectSymbol, Object> valuesBySubQuery;
+     private final ObjectIntMap<OuterColumn> boundOuterColumns;
+ 
+@@ -96,4 +95,26 @@ public class SubQueryResults {
+     public void bindOuterColumnInputRow(Row inputRow) {
+         this.inputRow = inputRow;
+     }
++
++    public static SubQueryResults merge(SubQueryResults subQueryResults1, SubQueryResults subQueryResults2) {
++        // Correlated subquery related fields.
++        Row mergedRow = subQueryResults1.inputRow;
++        ObjectIntMap<OuterColumn> mergedBoundOuterColumns = subQueryResults1.boundOuterColumns;
++        if (mergedRow.equals(Row.EMPTY)) {
++            mergedRow = subQueryResults2.inputRow;
++        }
++        if (mergedBoundOuterColumns.equals(EMPTY_OUTER_COLUMNS)) {
++            mergedBoundOuterColumns = subQueryResults2.boundOuterColumns;
++        }
++
++        // Regular sub-select field.
++        Map<SelectSymbol, Object> mergedValuesBySubQuery = subQueryResults1.valuesBySubQuery;
++        if (mergedValuesBySubQuery.isEmpty()) {
++            mergedValuesBySubQuery = subQueryResults2.valuesBySubQuery;
++        }
++
++        SubQueryResults combinedSubQueryResults = new SubQueryResults(mergedValuesBySubQuery, mergedBoundOuterColumns);
++        combinedSubQueryResults.bindOuterColumnInputRow(mergedRow);
++        return combinedSubQueryResults;
++    }
+ }

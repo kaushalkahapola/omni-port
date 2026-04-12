@@ -1,0 +1,23 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index a611db6fc9..00d72fbcba 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -675,7 +675,6 @@ public class Indexer {
+         }
+     }
+ 
+-
+     /**
+      * Looks for new columns in the values of the given IndexItem and returns them.
+      */
+@@ -947,6 +946,10 @@ public class Indexer {
+                     assert valueIdx < insertValues.length : "Target columns and values must have the same size";
+                     root = (Map<String, Object>) insertValues[valueIdx];
+                 }
++                // When a null is assigned to a parent object, do not generate nondeterministic children
++                if (root == null) {
++                    continue;
++                }
+                 ColumnIdent child = column.shiftRight();
+                 Object value = synthetic.value();
+                 // We don't override value if it exists.

@@ -1,0 +1,100 @@
+diff --git a/server/src/main/java/io/crate/analyze/CopyAnalyzer.java b/server/src/main/java/io/crate/analyze/CopyAnalyzer.java
+index 44e8093b31..9dcf9e91d7 100644
+--- a/server/src/main/java/io/crate/analyze/CopyAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/CopyAnalyzer.java
+@@ -73,7 +73,8 @@ class CopyAnalyzer {
+             nodeCtx,
+             RowGranularity.CLUSTER,
+             null,
+-            new TableRelation(tableInfo));
++            new TableRelation(tableInfo),
++            f -> f.signature().isDeterministic());
+ 
+         Table<Symbol> table = node.table().map(t -> exprAnalyzerWithFieldsAsString.convert(t, exprCtx));
+         GenericProperties<Symbol> properties = node.properties().map(t -> exprAnalyzerWithoutFields.convert(t,
+@@ -116,7 +117,8 @@ class CopyAnalyzer {
+             nodeCtx,
+             RowGranularity.CLUSTER,
+             null,
+-            tableRelation);
++            tableRelation,
++            f -> f.signature().isDeterministic());
+ 
+         var exprCtx = new ExpressionAnalysisContext(txnCtx.sessionSettings());
+         var expressionAnalyzer = new ExpressionAnalyzer(
+diff --git a/server/src/main/java/io/crate/analyze/DeleteAnalyzer.java b/server/src/main/java/io/crate/analyze/DeleteAnalyzer.java
+index 24dbb8a508..d9a735d4b3 100644
+--- a/server/src/main/java/io/crate/analyze/DeleteAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/DeleteAnalyzer.java
+@@ -60,11 +60,15 @@ final class DeleteAnalyzer {
+         MaybeAliasedStatement maybeAliasedStatement = MaybeAliasedStatement.analyze(relation);
+         relation = maybeAliasedStatement.nonAliasedRelation();
+ 
+-        if (!(relation instanceof DocTableRelation)) {
++        if (!(relation instanceof DocTableRelation table)) {
+             throw new UnsupportedOperationException("Cannot delete from relations other than base tables");
+         }
+-        DocTableRelation table = (DocTableRelation) relation;
+-        EvaluatingNormalizer normalizer = new EvaluatingNormalizer(nodeCtx, RowGranularity.CLUSTER, null, table);
++        EvaluatingNormalizer normalizer = new EvaluatingNormalizer(
++            nodeCtx,
++            RowGranularity.CLUSTER,
++            null,
++            table,
++            f -> f.signature().isDeterministic());
+         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(
+             txnContext,
+             nodeCtx,
+diff --git a/server/src/main/java/io/crate/analyze/InsertAnalyzer.java b/server/src/main/java/io/crate/analyze/InsertAnalyzer.java
+index 652ec1b289..6df8ca414e 100644
+--- a/server/src/main/java/io/crate/analyze/InsertAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/InsertAnalyzer.java
+@@ -313,7 +313,12 @@ class InsertAnalyzer {
+             fieldProvider = new NameFieldProvider(targetTable);
+         }
+         var expressionAnalyzer = new ExpressionAnalyzer(txnCtx, nodeCtx, paramTypeHints, fieldProvider, null);
+-        var normalizer = new EvaluatingNormalizer(nodeCtx, RowGranularity.CLUSTER, null, targetTable);
++        var normalizer = new EvaluatingNormalizer(
++            nodeCtx,
++            RowGranularity.CLUSTER,
++            null,
++            targetTable,
++            f -> f.signature().isDeterministic());
+         Map<Reference, Symbol> updateAssignments = new HashMap<>(duplicateKeyContext.getAssignments().size());
+         for (Assignment<Expression> assignment : duplicateKeyContext.getAssignments()) {
+             Reference targetCol = (Reference) exprAnalyzer.convert(assignment.columnName(), exprCtx);
+diff --git a/server/src/main/java/io/crate/analyze/UpdateAnalyzer.java b/server/src/main/java/io/crate/analyze/UpdateAnalyzer.java
+index 10fb9e2fcf..da708dcfca 100644
+--- a/server/src/main/java/io/crate/analyze/UpdateAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/UpdateAnalyzer.java
+@@ -107,7 +107,12 @@ public final class UpdateAnalyzer {
+             throw new UnsupportedOperationException("UPDATE is only supported on base-tables");
+         }
+         AbstractTableRelation<?> table = (AbstractTableRelation<?>) relation;
+-        EvaluatingNormalizer normalizer = new EvaluatingNormalizer(nodeCtx, RowGranularity.CLUSTER, null, table);
++        EvaluatingNormalizer normalizer = new EvaluatingNormalizer(
++            nodeCtx,
++            RowGranularity.CLUSTER,
++            null,
++            table,
++            f -> f.signature().isDeterministic());
+         SubqueryAnalyzer subqueryAnalyzer =
+             new SubqueryAnalyzer(relationAnalyzer, new StatementAnalysisContext(typeHints, Operation.READ, txnCtx));
+ 
+diff --git a/server/src/main/java/io/crate/analyze/where/WhereClauseAnalyzer.java b/server/src/main/java/io/crate/analyze/where/WhereClauseAnalyzer.java
+index 7b306d76d4..731eb7f9f3 100644
+--- a/server/src/main/java/io/crate/analyze/where/WhereClauseAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/where/WhereClauseAnalyzer.java
+@@ -112,7 +112,11 @@ public class WhereClauseAnalyzer {
+         PartitionReferenceResolver partitionReferenceResolver = preparePartitionResolver(
+             tableInfo.partitionedByColumns());
+         EvaluatingNormalizer normalizer = new EvaluatingNormalizer(
+-            nodeCtx, RowGranularity.PARTITION, partitionReferenceResolver, null);
++            nodeCtx,
++            RowGranularity.PARTITION,
++            partitionReferenceResolver,
++            null,
++            f -> f.signature().isDeterministic());
+ 
+         Symbol normalized;
+         Map<Symbol, List<Literal<?>>> queryPartitionMap = new HashMap<>();

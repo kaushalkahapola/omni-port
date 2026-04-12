@@ -1,0 +1,22 @@
+diff --git a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
+index 24818ec068..7ca0598811 100644
+--- a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
+@@ -1104,7 +1104,6 @@ public class ExpressionAnalyzer {
+             return allocateFunction(AndOperator.NAME, List.of(gteFunc, lteFunc), context);
+         }
+ 
+-
+         @Override
+         public Symbol visitMatchPredicate(MatchPredicate node, ExpressionAnalysisContext context) {
+             Map<Symbol, Symbol> identBoostMap = HashMap.newHashMap(node.idents().size());
+@@ -1264,6 +1263,9 @@ public class ExpressionAnalyzer {
+                             functionName));
+                     }
+                 }
++            } else if (filter != null) {
++                throw new UnsupportedOperationException(
++                    "FILTER is not implemented for non-aggregate window functions (" + functionName + ")");
+             }
+             newFunction = new WindowFunction(
+                 signature,

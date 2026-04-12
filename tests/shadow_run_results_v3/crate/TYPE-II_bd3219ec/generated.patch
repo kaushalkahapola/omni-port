@@ -1,0 +1,24 @@
+diff --git a/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java b/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
+index 7eff95efb5..94d5284b68 100644
+--- a/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
++++ b/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
+@@ -22,6 +22,7 @@
+ package io.crate.rest.action;
+ 
+ import java.io.IOException;
++import java.io.UncheckedIOException;
+ import java.util.List;
+ import java.util.concurrent.CompletableFuture;
+ 
+@@ -67,9 +68,8 @@ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+             builder.addRow(row, outputFields.size());
+             rowCount++;
+             return null;
+-        } catch (Exception e) {
+-            fail(e);
+-            return null;
++        } catch (IOException e) {
++            throw new UncheckedIOException(e);
+         }
+     }
+ 

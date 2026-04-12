@@ -1,0 +1,441 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "4001c922fd8bb0dd54d2ea148333be6ec257ce84",
+  "backport_commit": "1361a701f87d1e17003fa5ba89b128806e2601ae",
+  "description": "master \u2192 5.8",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.18,
+      "error": null,
+      "java_hunks": 14,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyEqOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 29,
+          "end_line": 34,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyEqOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 57,
+          "end_line": 67,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyLikeOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 22,
+          "end_line": 30,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyLikeOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 63,
+          "end_line": 78,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNeqOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 21,
+          "end_line": 31,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNeqOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 54,
+          "end_line": 67,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNotLikeOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 21,
+          "end_line": 26,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 7,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNotLikeOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 28,
+          "end_line": 33,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 8,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNotLikeOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 62,
+          "end_line": 76,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 9,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 22,
+          "end_line": 30,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 10,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 113,
+          "end_line": 119,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 11,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 158,
+          "end_line": 164,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 12,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyRangeOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 22,
+          "end_line": 30,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 13,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyRangeOperator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 101,
+          "end_line": 114,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.33,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch consists of straightforward modifications primarily changing method signatures to accept a List of non-null values instead of a Literal, filtering out nulls and empty lists, and adding a guard clause returning a MatchNoDocsQuery when no non-null candidates exist. The changes are localized to several related files with consistent patterns and no structural or API redesign. The localization evidence shows all hunks were found via 'git_exact' with high confidence, indicating the patch applies cleanly and directly to the target branch. The patch also includes additions of test cases verifying the new behavior. Overall, this is a trivial backport involving exact string replacements and minor logic additions without structural changes, fitting the TYPE_I classification.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "applied_count": 14,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyEqOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyEqOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyLikeOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyLikeOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNeqOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNeqOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNotLikeOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNotLikeOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyNotLikeOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyRangeOperator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/operator/any/AnyRangeOperator.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.lucene.CommonQueryBuilderTest.xml"
+        ],
+        "target_classes": [
+          "CommonQueryBuilderTest"
+        ],
+        "test_cases": {
+          "io.crate.lucene.CommonQueryBuilderTest#testAnyGreaterAndSmaller": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_is_null_without_index_and_docvalues": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testObjectArrayAccessResultsInFunctionQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_ip_eq_uses_point_range_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_eq_on_float_column_uses_float_point_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_null_array_literal": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_eq_on_byte_column": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testWhereRefInSetLiteralIsConvertedToTermsQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_eq_on_alias_inner_func_uses_termquery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_empty_array_literal": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_operands_containing_nulls": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testGtAnyOnNestedArrayIsNotSupported": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_ip_eq_any_uses_point_term_set_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testNoMatchWhereClause": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testWhereRefEqRef": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testNiceErrorIsThrownOnInvalidTopLevelLiteral": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testWhereLiteralEqReference": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_neq_operator_on_nullable_and_not_nullable_args_does_not_filter_nulls_from_non_nullable_arg": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_eq_object_with_undefined_key": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testIsNullOnObjectArray": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testEqAnyOnNestedArray": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testLteQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testGtQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_is_null_on_ignored_results_in_function_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testMatchWithOperator": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_bkd_tree_backed_geo_shape_match_with_default_match_type": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testEqOnObjectDoesBoolTermQueryForContents": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testMatchQueryTermMustBeALiteral": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testArrayAccessResultsInTermAndFunctionQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testMultiMatchWithOperator": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_prefix_tree_backed_geo_shape_match_disjoint": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_is_null_on_analyzed_text_column_uses_norms_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testEqOnTwoArraysBecomesGenericFunctionQueryAllValuesNull": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testAnyEqArrayLiteral": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testRewriteDocReferenceInWhereClause": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testRegexQueryPcre": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testLessThanAnyOnArrayLiteral": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_is_not_null_on_ignored_results_in_function_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testWhereRefEqLiteral": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testWhereStringRefInSetLiteralIsConvertedToTermsQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_array_not_any_with_and_without_docvalues": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testMatchQueryTermMustNotBeNull": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_bkd_tree_backed_geo_shape_match_disjoint": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testGteQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_neq_operator_on_nullable_and_not_nullable_args_filters_nulls": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testEqOnObjectPreFiltersOnKnownObjectLiteralContents": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testLteAnyOnNestedArrayIsNotSupported": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_eq_on_bool_uses_termquery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_prefix_tree_backed_geo_shape_match_with_default_match_type": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testEqOnArrayWithTooManyClauses": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_eq_any_on_float_column_uses_set_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_cannot_use_field_exists_query_on_args_of_coalesce_function": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testAnyEqOnTimestampArrayColumn": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testIpRange": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testNeqAnyOnArrayLiteral": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testIdQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testWhereRefEqNullWithDifferentTypes": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testRangeQueryForId": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testRangeQueryForUid": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_is_null_on_subscript_function": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_arr_eq_empty_array_literal_is_optimized": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testRangeQueryOnDocThrowsException": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testLtAnyOnNestedArrayIsNotSupported": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testGteAnyOnNestedArrayIsNotSupported": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testIsNullOnGeoPoint": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_not_operator_on_query_equivalent_to_null": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testNotEqOnNotNullableColumnQuery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testAnyOnObjectArrayResultsInXY": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testAnyNotEqOnTimestampColumn": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testRegexQueryFast": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_any_neq_operator_maps_column_names_to_oids": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testAnyEqArrayReference": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_nested_not_operators": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testWhereInIsOptimized": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_equality_query_on_double_array_with_index_off_and_no_docvalues_falls_back_to_generic_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_is_not_null_on_not_null_ref": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_eq_on_alias_uses_termquery": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#test_equal_on_varchar_column_uses_term_query": "passed",
+          "io.crate.lucene.CommonQueryBuilderTest#testEqOnTwoArraysBecomesGenericFunctionQuery": "passed"
+        },
+        "classes": {
+          "io.crate.lucene.CommonQueryBuilderTest": "passed"
+        },
+        "summary": {
+          "passed": 79,
+          "failed": 0,
+          "skipped": 0,
+          "total": 79
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_empty_array_literal",
+          "io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_null_array_literal"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 79,
+        "patched_total": 79,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 16,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 79
+    },
+    "java_production_hunks": 14,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 14,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 11242,
+    "target_patch_bytes": 14236,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_empty_array_literal",
+        "io.crate.lucene.CommonQueryBuilderTest#test_any_operators_with_null_array_literal"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 79,
+      "patched_total": 79,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 2,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

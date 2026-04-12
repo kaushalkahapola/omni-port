@@ -1,0 +1,302 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "006187ad50f256dfb4f1018c01fd54bc2456fd66",
+  "backport_commit": "4d0ac298bc694eab4608bf459fff249f82bf1519",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 1.69,
+      "error": null,
+      "java_hunks": 8,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 31,
+          "end_line": 37,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 39,
+          "end_line": 45,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 48,
+          "end_line": 58,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 64,
+          "end_line": 70,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 29,
+          "end_line": 34,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 56,
+          "end_line": 63,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 259,
+          "end_line": 272,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 7,
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 336,
+          "end_line": 339,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.72,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch involves removing and replacing memory accounting logic related to JSON result sets. It replaces a type-dependent memory accounting approach with a stream-based accounting approach that counts bytes written to the output stream. The changes include removing the use of RowAccounting and TypedRowAccounting, introducing a RamAccountingOutputStream wrapper, and updating tests accordingly. The localization evidence shows most hunks are found via 'git_exact' with high confidence, but some are found via 'git_pickaxe' indicating minor code changes rather than exact matches. The patch does not involve structural or API changes but requires adapting to a different accounting mechanism, which is more than trivial string replacement but less than deep structural refactoring. Therefore, TYPE_II classification with high confidence is appropriate. The token budget estimate accounts for the moderate complexity and multiple files involved.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "applied_count": 6,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 11.1,
+      "error": null,
+      "adapted_count": 2
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 2,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "old_string": "                          List<Symbol> outputFields,\n                          long startTimeNs,\n                          RowAccounting<Row> rowAccounting,\n                          boolean includeTypesOnResponse) throws IOException {\n        this.outputFields = outputFields;\n        this.startTimeNs = startTimeNs;\n        this.rowAccounting = rowAccounting;\n        this.builder = ResultToXContentBuilder.builder(builder);\n        this.builder.cols(outputFields);\n        if (includeTypesOnResponse) {\n            this.builder.colTypes(outputFields);",
+          "new_string": "                          \n                          List<Symbol> outputFields,\n                          long startTimeNs,\n                          boolean includeTypesOnResponse) throws IOException {\n        this.outputFields = outputFields;\n        this.startTimeNs = startTimeNs;\n        this.builder = ResultToXContentBuilder.builder(builder);\n        this.builder.cols(outputFields);\n        if (includeTypesOnResponse) {\n            this.builder.colTypes(outputFields);",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "old_string": "                JsonXContent.builder(),\n                resultFields,\n                startTimeInNs,\n                new TypedRowAccounting(\n                    Lists.map(resultFields, Symbol::valueType),\n                    ramAccounting\n                ),\n                includeTypes\n            );",
+          "new_string": "                new XContentBuilder(JsonXContent.JSON_XCONTENT, new RamAccountingOutputStream(ramAccounting)),\n                resultFields,\n                startTimeInNs,\n                includeTypes\n            );",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.29,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/rest/action/SqlHttpHandler.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 2
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.rest.action.RestActionReceiversTest.xml"
+        ],
+        "target_classes": [
+          "RestActionReceiversTest"
+        ],
+        "test_cases": {
+          "io.crate.rest.action.RestActionReceiversTest#test_ram_accounting_of_the_result_set_receiver": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#testRestRowCountReceiver": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#testRestResultSetReceiver": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#test_rest_bulk_row_count_receiver_supports_single_column_row_on_single_bulk_arg": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#testRestBulkRowCountReceiver": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#test_result_receiver_future_is_not_completed_on_cbe": "passed"
+        },
+        "classes": {
+          "io.crate.rest.action.RestActionReceiversTest": "passed"
+        },
+        "summary": {
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0,
+          "total": 6
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.rest.action.RestActionReceiversTest#testRestBulkRowCountReceiver",
+          "io.crate.rest.action.RestActionReceiversTest#testRestResultSetReceiver",
+          "io.crate.rest.action.RestActionReceiversTest#testRestRowCountReceiver",
+          "io.crate.rest.action.RestActionReceiversTest#test_ram_accounting_of_the_result_set_receiver",
+          "io.crate.rest.action.RestActionReceiversTest#test_rest_bulk_row_count_receiver_supports_single_column_row_on_single_bulk_arg",
+          "io.crate.rest.action.RestActionReceiversTest#test_result_receiver_future_is_not_completed_on_cbe"
+        ],
+        "baseline_total": 0,
+        "patched_total": 6,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 14,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 8,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      7,
+      2,
+      6
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 6,
+    "synthesized_count": 2,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 4846,
+    "target_patch_bytes": 11519,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.rest.action.RestActionReceiversTest#testRestBulkRowCountReceiver",
+        "io.crate.rest.action.RestActionReceiversTest#testRestResultSetReceiver",
+        "io.crate.rest.action.RestActionReceiversTest#testRestRowCountReceiver",
+        "io.crate.rest.action.RestActionReceiversTest#test_ram_accounting_of_the_result_set_receiver",
+        "io.crate.rest.action.RestActionReceiversTest#test_rest_bulk_row_count_receiver_supports_single_column_row_on_single_bulk_arg",
+        "io.crate.rest.action.RestActionReceiversTest#test_result_receiver_future_is_not_completed_on_cbe"
+      ],
+      "baseline_total": 0,
+      "patched_total": 6,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 6,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

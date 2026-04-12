@@ -1,0 +1,277 @@
+commit fd30324948b39ec178c6a9a7b15e0ddabd13c893
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Tue Dec 31 09:07:40 2024 +0100
+
+    Upgrade template on new partitions creation
+    
+    After c8edfff,
+    we upgrade templates only on node startup in GatewayMetaState or on logical replication or on a snapshot restore.
+    That is not enough to prevent old templates being applied on new nodes.
+    
+    Say, we are running a rolling upgrade.
+    One node has been upgraded to VERSION.CURRENT and a master node, which is on old version < CURRENT
+    creates partitions/new indices with old metadata/removed settings.
+    All upgraded nodes will get incoming old template via IndicesClusterStateService
+    and keep it forever as they are already accomplished upgrade-on-startup.
+    
+    We upgrade on the fly as a trade-off to the pre-5.6.0 state
+    where we used to upgrade template on each cluster change and submit synchronous  request via PutTemplate API to the master node to apply it.
+    
+    Each new node either never becomes a master and doesn't really need upgrade or eventually upgrades when it becomes a master.
+    
+    (cherry picked from commit 4f7fabaf4a8ada2e0ff65dfe1422a3fc43f0a3f9)
+    
+    # Conflicts:
+    #       server/src/test/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsActionTest.java
+
+diff --git a/docs/appendices/release-notes/5.9.7.rst b/docs/appendices/release-notes/5.9.7.rst
+index 0cea700684..939212fa06 100644
+--- a/docs/appendices/release-notes/5.9.7.rst
++++ b/docs/appendices/release-notes/5.9.7.rst
+@@ -50,3 +50,7 @@ Fixes
+ - Fixed an issue leading to an error when exporting big tables via ``COPY TO``
+   to the :ref:`Azure Blob Storage <sql-copy-to-az>`.
+   This also has a positive effect on performance.
++
++- Fixed an issue that could prevent the creation of new partitions if data was
++  written to a partitioned table during a rolling upgrade and that table had
++  setting ``warmer.enabled`` specified before the upgrade.
+diff --git a/server/src/main/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsAction.java b/server/src/main/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsAction.java
+index 1f0f59614c..fc4c6989e8 100644
+--- a/server/src/main/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsAction.java
++++ b/server/src/main/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsAction.java
+@@ -25,12 +25,14 @@ import static org.elasticsearch.cluster.metadata.IndexMetadata.INDEX_NUMBER_OF_S
+ import static org.elasticsearch.cluster.metadata.IndexMetadata.SETTING_WAIT_FOR_ACTIVE_SHARDS;
+ import static org.elasticsearch.cluster.metadata.MetadataCreateIndexService.setIndexVersionCreatedSetting;
+ import static org.elasticsearch.cluster.metadata.MetadataCreateIndexService.validateSoftDeletesSetting;
++import static org.elasticsearch.gateway.GatewayMetaState.applyPluginUpgraders;
+ 
+ import java.io.IOException;
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.List;
+ import java.util.Locale;
++import java.util.concurrent.atomic.AtomicBoolean;
+ 
+ import org.elasticsearch.ElasticsearchException;
+ import org.elasticsearch.Version;
+@@ -66,6 +68,7 @@ import org.elasticsearch.index.IndexService;
+ import org.elasticsearch.indices.IndicesService;
+ import org.elasticsearch.indices.ShardLimitValidator;
+ import org.elasticsearch.indices.cluster.IndicesClusterStateService;
++import org.elasticsearch.plugins.MetadataUpgrader;
+ import org.elasticsearch.threadpool.ThreadPool;
+ import org.elasticsearch.transport.TransportService;
+ import org.jetbrains.annotations.Nullable;
+@@ -95,6 +98,7 @@ public class TransportCreatePartitionsAction extends TransportMasterNodeAction<C
+     private final AllocationService allocationService;
+     private final ActiveShardsObserver activeShardsObserver;
+     private final ShardLimitValidator shardLimitValidator;
++    private final MetadataUpgrader metadataUpgrader;
+     private final ClusterStateTaskExecutor<CreatePartitionsRequest> executor = (currentState, tasks) -> {
+         ClusterStateTaskExecutor.ClusterTasksResult.Builder<CreatePartitionsRequest> builder = ClusterStateTaskExecutor.ClusterTasksResult.builder();
+         for (CreatePartitionsRequest request : tasks) {
+@@ -108,18 +112,23 @@ public class TransportCreatePartitionsAction extends TransportMasterNodeAction<C
+         return builder.build(currentState);
+     };
+ 
++    private final AtomicBoolean upgraded;
++
+     @Inject
+     public TransportCreatePartitionsAction(TransportService transportService,
+                                            ClusterService clusterService,
+                                            ThreadPool threadPool,
+                                            IndicesService indicesService,
+                                            AllocationService allocationService,
+-                                           ShardLimitValidator shardLimitValidator) {
++                                           ShardLimitValidator shardLimitValidator,
++                                           MetadataUpgrader metadataUpgrader) {
+         super(CreatePartitionsAction.NAME, transportService, clusterService, threadPool, CreatePartitionsRequest::new);
+         this.indicesService = indicesService;
+         this.allocationService = allocationService;
+         this.activeShardsObserver = new ActiveShardsObserver(clusterService);
+         this.shardLimitValidator = shardLimitValidator;
++        this.metadataUpgrader = metadataUpgrader;
++        this.upgraded = new AtomicBoolean(false);
+     }
+ 
+     @Override
+@@ -171,7 +180,7 @@ public class TransportCreatePartitionsAction extends TransportMasterNodeAction<C
+      * This code is more or less the same as the stuff in {@link MetadataCreateIndexService}
+      * but optimized for bulk operation without separate mapping/alias/index settings.
+      */
+-    private ClusterState executeCreateIndices(ClusterState currentState, CreatePartitionsRequest request) throws Exception {
++    public ClusterState executeCreateIndices(ClusterState currentState, CreatePartitionsRequest request) throws Exception {
+         String removalReason = null;
+         Index testIndex = null;
+         try {
+@@ -186,7 +195,30 @@ public class TransportCreatePartitionsAction extends TransportMasterNodeAction<C
+             String firstIndex = indicesToCreate.get(0);
+             String templateName = PartitionName.templateName(firstIndex);
+ 
+-            IndexTemplateMetadata template = currentState.metadata().templates().get(templateName);
++
++            final Metadata metadata = currentState.metadata();
++            Metadata.Builder newMetadataBuilder = Metadata.builder(metadata);
++
++            // After https://github.com/crate/crate/commit/c8edfff8fe7713b071841b9db1aea26e3f500245,
++            // we upgrade templates only on node startup in GatewayMetaState or on logical replication or on a snapshot restore.
++            // That is not enough to prevent old templates being applied on new nodes.
++
++            // Say, we are running a rolling upgrade.
++            // One node has been upgraded to VERSION.CURRENT and a master node, which is on old version < CURRENT
++            // creates partitions/new indices with old metadata/removed settings.
++            // All upgraded nodes will get incoming old template via IndicesClusterStateService
++            // and keep it forever as they already accomplished upgrade-on-startup.
++
++            // We upgrade on the fly as a trade-off to the pre-5.6.0 state
++            // where we used to upgrade template on each cluster change and submit synchronous  request via PutTemplate API to the master node to apply it.
++            // Each new node either never becomes a master and doesn't really need upgrade or eventually upgrades when it becomes a master.
++            // Since upgrade can be expensive for bulk inserts, we do it only once (per active master node).
++            // After re-election, a new master will run it again, but only once.
++            if (upgraded.compareAndSet(false, true)) {
++                upgradeTemplates(metadata, newMetadataBuilder);
++            }
++
++            IndexTemplateMetadata template = newMetadataBuilder.getTemplate(templateName);
+             if (template == null) {
+                 // Normally should be impossible, as it would mean that we are inserting into a partitioned table without template,
+                 // i.e inserting after CREATE TABLE failed
+@@ -237,7 +269,7 @@ public class TransportCreatePartitionsAction extends TransportMasterNodeAction<C
+             testIndex = indexService.index();
+ 
+             // "Probe" creation of the first index passed validation. Now add all indices to the cluster state metadata and update routing.
+-            Metadata.Builder newMetadataBuilder = Metadata.builder(currentState.metadata());
++
+             MappingMetadata mappingMetadata = new MappingMetadata(template.mapping());
+             for (String index : indicesToCreate) {
+                 final IndexMetadata.Builder indexMetadataBuilder = IndexMetadata.builder(index)
+@@ -290,6 +322,15 @@ public class TransportCreatePartitionsAction extends TransportMasterNodeAction<C
+         }
+     }
+ 
++    public void upgradeTemplates(Metadata metadata, Metadata.Builder newMetadataBuilder) {
++        applyPluginUpgraders(
++            metadata.templates(),
++            metadataUpgrader.indexTemplateMetadataUpgraders,
++            newMetadataBuilder::removeTemplate,
++            (_, indexTemplateMetadata) -> newMetadataBuilder.put(indexTemplateMetadata)
++        );
++    }
++
+     @VisibleForTesting
+     void createIndices(final CreatePartitionsRequest request,
+                        final ActionListener<ClusterStateUpdateResponse> listener) {
+diff --git a/server/src/main/java/org/elasticsearch/gateway/GatewayMetaState.java b/server/src/main/java/org/elasticsearch/gateway/GatewayMetaState.java
+index 12067dc1ea..80fb8a188a 100644
+--- a/server/src/main/java/org/elasticsearch/gateway/GatewayMetaState.java
++++ b/server/src/main/java/org/elasticsearch/gateway/GatewayMetaState.java
+@@ -249,7 +249,7 @@ public class GatewayMetaState implements Closeable {
+         return changed ? upgradedMetadata.build() : metadata;
+     }
+ 
+-    private static <Data> boolean applyPluginUpgraders(ImmutableOpenMap<String, Data> existingData,
++    public static <Data> boolean applyPluginUpgraders(ImmutableOpenMap<String, Data> existingData,
+                                                        UnaryOperator<Map<String, Data>> upgrader,
+                                                        Consumer<String> removeData,
+                                                        BiConsumer<String, Data> putData) {
+diff --git a/server/src/test/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsActionTest.java b/server/src/test/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsActionTest.java
+index 4904c849a8..345f791162 100644
+--- a/server/src/test/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsActionTest.java
++++ b/server/src/test/java/org/elasticsearch/action/admin/indices/create/TransportCreatePartitionsActionTest.java
+@@ -23,15 +23,24 @@ package org.elasticsearch.action.admin.indices.create;
+ 
+ import static io.crate.testing.Asserts.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.spy;
++import static org.mockito.Mockito.times;
++import static org.mockito.Mockito.verify;
+ 
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
+ 
++import org.assertj.core.api.Assertions;
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.support.master.AcknowledgedResponse;
+ import org.elasticsearch.cluster.ClusterState;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
++import org.elasticsearch.cluster.metadata.IndexTemplateMetadata;
+ import org.elasticsearch.cluster.metadata.Metadata;
+ import org.elasticsearch.common.Strings;
++import org.elasticsearch.common.settings.Settings;
+ import org.elasticsearch.indices.InvalidIndexNameException;
+ import org.elasticsearch.test.IntegTestCase;
+ import org.junit.Before;
+@@ -40,8 +49,10 @@ import org.junit.Test;
+ import com.carrotsearch.hppc.cursors.ObjectCursor;
+ 
+ import io.crate.exceptions.SQLExceptions;
++import io.crate.metadata.IndexName;
+ import io.crate.metadata.PartitionName;
+ import io.crate.metadata.RelationName;
++import io.crate.testing.UseNewCluster;
+ import io.crate.testing.UseRandomizedSchema;
+ 
+ @UseRandomizedSchema(random = false)
+@@ -162,4 +173,59 @@ public class TransportCreatePartitionsActionTest extends IntegTestCase {
+         // if one name is invalid no index is created
+         assertThat(cluster().clusterService().state().metadata().hasIndex("valid")).isFalse();
+     }
++
++    @Test
++    @UseNewCluster
++    // Upgrade once logic can be affected by other tests as they all share the same action instance,
++    // use new cluster to aovid flakiness
++    public void test_creation_of_a_new_partition_upgrades_template_and_does_it_once() throws Exception {
++        execute("create table tbl (a int) " +
++            "partitioned by (a) " +
++            "clustered into 1 shards " +
++            "with (number_of_replicas=0)");
++
++        ensureYellow();
++
++        ClusterState clusterState = cluster().clusterService().state();
++        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.metadata());
++
++        String tableTemplateName = PartitionName.templateName("doc", "tbl");
++        IndexTemplateMetadata indexTemplateMetadata = clusterState.metadata().templates().get(tableTemplateName);
++        assertThat(indexTemplateMetadata).isNotNull();
++
++
++        // Remove template and re-add with artificially injected setting that was removed in 5.8
++        metadataBuilder.removeTemplate(tableTemplateName);
++        IndexTemplateMetadata.Builder templateBuilder = IndexTemplateMetadata.builder(tableTemplateName)
++            .version(1)
++            .patterns(indexTemplateMetadata.patterns())
++            .putMapping(indexTemplateMetadata.mapping())
++            .settings(Settings.builder()
++                .put(indexTemplateMetadata.settings())
++                .put(IndexMetadata.SETTING_INDEX_VERSION_CREATED.getKey(), Version.V_5_7_5)
++                .put("index.warmer.enabled", "true")
++            );
++        metadataBuilder.put(templateBuilder);
++        ClusterState artificialState = new ClusterState.Builder(clusterState).metadata(metadataBuilder).build();
++
++        // Imitation of "insert into tbl (a) values (1)".
++        RelationName relationName = RelationName.fromIndexName(tableTemplateName);
++        String indexName = IndexName.encode(relationName, PartitionName.encodeIdent(List.of("1")));
++        CreatePartitionsRequest request = new CreatePartitionsRequest(List.of(indexName));
++
++        TransportCreatePartitionsAction actionSpy = spy(action);
++        ClusterState newState = actionSpy.executeCreateIndices(artificialState, request);
++        indexTemplateMetadata = newState.metadata().templates().get(tableTemplateName);
++        // Value of the removed setting used to be "true"
++        Assertions.assertThat(indexTemplateMetadata.settings().get("index.warmer.enabled", null)).isNull();
++        verify(actionSpy, times(1)).upgradeTemplates(any(), any());
++
++        // Each node upgrades templates only once when it's a master and creates partitions for the first time.
++        // We need a new request to avoid "partition already exists" short-cut logic.
++        indexName = IndexName.encode(relationName, PartitionName.encodeIdent(List.of("2")));
++        request = new CreatePartitionsRequest(List.of(indexName));
++        actionSpy.executeCreateIndices(newState, request);
++        // Without do-once logic would have been 2
++        verify(actionSpy, times(1)).upgradeTemplates(any(), any());
++    }
+ }

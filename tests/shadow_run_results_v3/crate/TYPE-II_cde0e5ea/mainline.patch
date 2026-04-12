@@ -1,0 +1,148 @@
+commit cde0e5ea5bd75874bd800b48d105df5e0e61bfbf
+Author: Mathias Fussenegger <f.mathias@zignar.net>
+Date:   Mon Jan 27 15:00:15 2025 +0100
+
+    Allow precision=scale in NumericType; Fix avg aggregation errors
+    
+    During an `avg` operation it can happen that we get a `BigDecimal` value
+    with scale==precision.
+    
+    This caused streaming to fail because it creates a `NumericType` derived
+    from the `BigDecimal` value and `NumericType` so far enforced that
+    `scale > precision`.
+    
+    This relaxes the restriction.
+    Closes https://github.com/crate/crate/issues/17271
+
+diff --git a/docs/appendices/release-notes/5.10.1.rst b/docs/appendices/release-notes/5.10.1.rst
+index 175488487c..37e8ce83d6 100644
+--- a/docs/appendices/release-notes/5.10.1.rst
++++ b/docs/appendices/release-notes/5.10.1.rst
+@@ -44,6 +44,10 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that could lead to a ``Scale of numeric must be less than the
++  precision`` error when using the ``AVG`` aggregation in a way that involved
++  values of type ``NUMERIC``.
++
+ - Fixed an issue that could cause data loss if increasing the number of shards
+   using ``ALTER TABLE ... SET (number_of_shards = ?)`` while having other
+   allocation settings in place that prevent the shard allocation.
+diff --git a/docs/appendices/release-notes/5.9.9.rst b/docs/appendices/release-notes/5.9.9.rst
+index 00ea326bbd..86705667e1 100644
+--- a/docs/appendices/release-notes/5.9.9.rst
++++ b/docs/appendices/release-notes/5.9.9.rst
+@@ -47,6 +47,10 @@ See the :ref:`version_5.9.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that could lead to a ``Scale of numeric must be less than the
++  precision`` error when using the ``AVG`` aggregation in a way that involved
++  values of type ``NUMERIC``.
++
+ - Fixed an issue that could cause data loss if increasing the number of shards
+   using ``ALTER TABLE ... SET (number_of_shards = ?)`` while having other
+   allocation settings in place that prevent the shard allocation.
+diff --git a/docs/general/ddl/data-types.rst b/docs/general/ddl/data-types.rst
+index 9ea5266528..63c4a44e8c 100644
+--- a/docs/general/ddl/data-types.rst
++++ b/docs/general/ddl/data-types.rst
+@@ -1077,7 +1077,7 @@ significant digits in the unscaled numeric value. The ``scale`` value of a
+ numeric is the count of decimal digits in the fractional part, to the right of
+ the decimal point. For example, the number 123.45 has a precision of ``5`` and
+ a scale of ``2``. Integers have a scale of zero.
+-The scale must be smaller than the precision and greater or equal to zero.
++The scale must be less than or equal to the precision and greater or equal to zero.
+ 
+ To declare the ``NUMERIC`` type with the precision and scale, use the syntax::
+ 
+diff --git a/server/src/main/java/io/crate/types/NumericType.java b/server/src/main/java/io/crate/types/NumericType.java
+index a257c2f43f..4744d8a669 100644
+--- a/server/src/main/java/io/crate/types/NumericType.java
++++ b/server/src/main/java/io/crate/types/NumericType.java
+@@ -75,10 +75,10 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
+             if (precision == null) {
+                 throw new IllegalArgumentException("If scale is set for NUMERIC, precision must be set too");
+             }
+-            if (scale >= precision) {
++            if (scale > precision) {
+                 throw new IllegalArgumentException(String.format(
+                     Locale.ENGLISH,
+-                    "Scale of numeric must be less than the precision. NUMERIC(%d, %d) is unsupported.",
++                    "Scale of numeric must be less or equal the precision. NUMERIC(%d, %d) is unsupported.",
+                     precision,
+                     scale
+                 ));
+diff --git a/server/src/test/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageStateTest.java b/server/src/test/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageStateTest.java
+new file mode 100644
+index 0000000000..35aafa083b
+--- /dev/null
++++ b/server/src/test/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageStateTest.java
+@@ -0,0 +1,53 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.execution.engine.aggregation.impl.average.numeric;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import java.math.BigDecimal;
++import java.math.MathContext;
++
++import org.elasticsearch.common.io.stream.BytesStreamOutput;
++import org.elasticsearch.common.io.stream.StreamInput;
++import org.junit.Test;
++
++import io.crate.execution.engine.aggregation.impl.util.BigDecimalValueWrapper;
++
++public class NumericAverageStateTest {
++
++    @Test
++    @SuppressWarnings("unchecked")
++    public void test_can_stream_bigdecimal_with_precision_eq_scale() throws Exception {
++        var type = new NumericAverageStateType();
++        var out = new BytesStreamOutput();
++        var bigDecimal = new BigDecimal("0.25", new MathContext(2));
++        var bigDecimalValueWrapper = new BigDecimalValueWrapper(bigDecimal);
++        var numericAverageState = new NumericAverageState<>(bigDecimalValueWrapper, 1);
++        type.writeValueTo(out, numericAverageState);
++
++        StreamInput in = out.bytes().streamInput();
++        NumericAverageState<BigDecimalValueWrapper> valueFrom = type.readValueFrom(in);
++        assertThat(valueFrom.sum.value()).isEqualTo(bigDecimal);
++
++    }
++}
++
+diff --git a/server/src/test/java/io/crate/types/NumericTypeTest.java b/server/src/test/java/io/crate/types/NumericTypeTest.java
+index 0f7eb91260..f5af82f85d 100644
+--- a/server/src/test/java/io/crate/types/NumericTypeTest.java
++++ b/server/src/test/java/io/crate/types/NumericTypeTest.java
+@@ -47,7 +47,7 @@ public class NumericTypeTest extends DataTypeTestCase<BigDecimal> {
+     public void test_scale_must_be_lt_precision() throws Exception {
+         assertThatThrownBy(() -> new NumericType(2, 4))
+             .isExactlyInstanceOf(IllegalArgumentException.class)
+-            .hasMessage("Scale of numeric must be less than the precision. NUMERIC(2, 4) is unsupported.");
++            .hasMessage("Scale of numeric must be less or equal the precision. NUMERIC(2, 4) is unsupported.");
+     }
+ 
+     @Test

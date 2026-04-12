@@ -1,0 +1,61 @@
+commit 9ed0b68b5eaf0677f1e202957b0ea8035433fc9e
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Mon Jun 9 15:36:23 2025 -0400
+
+    Fix: Apply values validation during INSERT for inner types of objects
+
+diff --git a/docs/appendices/release-notes/5.10.9.rst b/docs/appendices/release-notes/5.10.9.rst
+index 85d075158a..31684871b9 100644
+--- a/docs/appendices/release-notes/5.10.9.rst
++++ b/docs/appendices/release-notes/5.10.9.rst
+@@ -47,4 +47,11 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
+-None
++- Fixed an issue where length limits were not enforced during insertion.
++  e.g.::
++
++    CREATE TABLE t (o OBJECT AS (c CHAR(3)));
++    INSERT INTO t VALUES ({c='abcd'});
++
++  The insert succeeded before, but now it will cause an
++  ``IllegalArgumentException``.
+diff --git a/server/src/main/java/io/crate/types/ObjectType.java b/server/src/main/java/io/crate/types/ObjectType.java
+index b438d869d8..aa85a60e26 100644
+--- a/server/src/main/java/io/crate/types/ObjectType.java
++++ b/server/src/main/java/io/crate/types/ObjectType.java
+@@ -210,6 +210,12 @@ public class ObjectType extends DataType<Map<String, Object>> implements Streame
+         }
+     }
+ 
++    @Override
++    @SuppressWarnings("unchecked")
++    public Map<String, Object> valueForInsert(Map<String, Object> value) {
++        return convert(value, (dataType, v) -> ((DataType<Object>) dataType).valueForInsert(v));
++    }
++
+     @SuppressWarnings("unchecked")
+     private Map<String, Object> convert(Object value,
+                                         BiFunction<DataType<?>, Object, Object> innerType) {
+diff --git a/server/src/test/java/io/crate/types/ObjectTypeTest.java b/server/src/test/java/io/crate/types/ObjectTypeTest.java
+index 3f2e20338d..18d5cc531e 100644
+--- a/server/src/test/java/io/crate/types/ObjectTypeTest.java
++++ b/server/src/test/java/io/crate/types/ObjectTypeTest.java
+@@ -249,4 +249,16 @@ public class ObjectTypeTest extends DataTypeTestCase<Map<String, Object>> {
+         );
+         assertThat(valueBytes).isEqualTo(2504L);
+     }
++
++    @Test
++    public void test_valueForInsert_on_nested_object() {
++        Map<String, Object> map = new HashMap<>();
++        map.put("c", "abcd");
++        var type = ObjectType.of(ColumnPolicy.DYNAMIC)
++            .setInnerType("c", CharacterType.of(3))
++            .build();
++        assertThatThrownBy(() -> type.valueForInsert(map))
++            .isExactlyInstanceOf(ConversionException.class)
++            .hasMessage("Cannot cast object element `c` with value `abcd` to type `text(3)`");
++    }
+ }

@@ -1,0 +1,31 @@
+diff --git a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
+index 3db5401f8d..c77434d0cd 100644
+--- a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
+@@ -848,11 +848,15 @@ public class ExpressionAnalyzer {
+             if (node.getEscape() != null) {
+                 throw new UnsupportedOperationException("ESCAPE is not supported.");
+             }
+-            Symbol arraySymbol = node.getValue().accept(this, context);
+-            Symbol leftSymbol = node.getPattern().accept(this, context);
++            Symbol value = node.getValue().accept(this, context);
++            Symbol pattern = node.getPattern().accept(this, context);
++            int valueDimensions = ArrayType.dimensions(value.valueType());
++            int patternDimensions = ArrayType.dimensions(pattern.valueType());
++            int diff = valueDimensions - patternDimensions;
++            value = ArrayUnnestFunction.unnest(value, diff - 1);
+             return allocateFunction(
+                 LikeOperators.arrayOperatorName(node.quantifier(), node.inverse(), node.ignoreCase()),
+-                List.of(leftSymbol, arraySymbol),
++                List.of(pattern, value),
+                 context);
+         }
+ 
+@@ -1111,7 +1115,6 @@ public class ExpressionAnalyzer {
+             return allocateFunction(AndOperator.NAME, List.of(gteFunc, lteFunc), context);
+         }
+ 
+-
+         @Override
+         public Symbol visitMatchPredicate(MatchPredicate node, ExpressionAnalysisContext context) {
+             Map<Symbol, Symbol> identBoostMap = HashMap.newHashMap(node.idents().size());

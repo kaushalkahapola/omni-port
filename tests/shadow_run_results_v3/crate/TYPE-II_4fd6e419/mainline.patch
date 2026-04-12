@@ -1,0 +1,252 @@
+commit 4fd6e4196b8d56aa0ec97003f3675be3422fb393
+Author: Michael Kleen <mkleen@gmail.com>
+Date:   Thu May 9 12:41:20 2024 +0200
+
+    Add memory accounting for multiphase execution
+    
+    Multi-Phase execution can produce large intermediate results which can
+    cause out-of-memoryi errors. This adds memory accounting to prevent this.
+
+diff --git a/docs/appendices/release-notes/5.7.2.rst b/docs/appendices/release-notes/5.7.2.rst
+index 3b17c16a31..0a51df3d8f 100644
+--- a/docs/appendices/release-notes/5.7.2.rst
++++ b/docs/appendices/release-notes/5.7.2.rst
+@@ -46,4 +46,6 @@ See the :ref:`version_5.7.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
+-None
++- Added memory accounting for multi-phase execution to prevent out-of-memory
++  errors caused by sub-queries such as ''SELECT * FROM t1 WHERE id IN
++  (SELECT id FROM t2)'' or lookup-joins with large intermediate results.
+diff --git a/server/src/main/java/io/crate/execution/MultiPhaseExecutor.java b/server/src/main/java/io/crate/execution/MultiPhaseExecutor.java
+index 6d1aa4ea0d..fbbe01cf73 100644
+--- a/server/src/main/java/io/crate/execution/MultiPhaseExecutor.java
++++ b/server/src/main/java/io/crate/execution/MultiPhaseExecutor.java
+@@ -21,8 +21,13 @@
+ 
+ package io.crate.execution;
+ 
++import static io.crate.data.breaker.BlockBasedRamAccounting.MAX_BLOCK_SIZE_IN_BYTES;
++
++import io.crate.breaker.ConcurrentRamAccounting;
+ import io.crate.data.CollectingRowConsumer;
+ import io.crate.data.Row;
++import io.crate.data.breaker.BlockBasedRamAccounting;
++import io.crate.data.breaker.RamAccounting;
+ import io.crate.execution.engine.FirstColumnConsumers;
+ import io.crate.expression.symbol.SelectSymbol;
+ import io.crate.planner.DependencyCarrier;
+@@ -36,6 +41,8 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.concurrent.CompletableFuture;
+ 
++import org.elasticsearch.indices.breaker.HierarchyCircuitBreakerService;
++
+ public final class MultiPhaseExecutor {
+ 
+     private MultiPhaseExecutor() {
+@@ -45,14 +52,21 @@ public final class MultiPhaseExecutor {
+                                                              DependencyCarrier executor,
+                                                              PlannerContext plannerContext,
+                                                              Row params) {
++        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
++            "multi-phase",
++            executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
++            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
++        );
++
+         List<CompletableFuture<?>> dependencyFutures = new ArrayList<>(dependencies.size());
+         IdentityHashMap<SelectSymbol, Object> valueBySubQuery = new IdentityHashMap<>();
++
+         for (Map.Entry<LogicalPlan, SelectSymbol> entry : dependencies.entrySet()) {
+             LogicalPlan depPlan = entry.getKey();
+             depPlan = plannerContext.optimize().apply(depPlan, plannerContext);
+             SelectSymbol selectSymbol = entry.getValue();
+ 
+-            CollectingRowConsumer<?, ?> rowConsumer = getConsumer(selectSymbol.getResultType());
++            CollectingRowConsumer<?, ?> rowConsumer = getConsumer(selectSymbol, ramAccounting);
+             depPlan.execute(
+                 executor, PlannerContext.forSubPlan(plannerContext), rowConsumer, params, SubQueryResults.EMPTY);
+ 
+@@ -64,10 +78,19 @@ public final class MultiPhaseExecutor {
+         }
+         return CompletableFuture
+             .allOf(dependencyFutures.toArray(new CompletableFuture[0]))
+-            .thenApply(ignored -> new SubQueryResults(valueBySubQuery));
++            .thenApply(ignored -> {
++                ramAccounting.release();
++                return new SubQueryResults(valueBySubQuery);
++            });
+     }
+ 
+-    private static CollectingRowConsumer<?, ?> getConsumer(SelectSymbol.ResultType resultType) {
+-        return new CollectingRowConsumer<>(FirstColumnConsumers.getCollector(resultType));
++    private static CollectingRowConsumer<?, ?> getConsumer(SelectSymbol selectSymbol, RamAccounting ramAccounting) {
++        return new CollectingRowConsumer<>(
++            FirstColumnConsumers.getCollector(
++                selectSymbol.getResultType(),
++                selectSymbol.innerType(),
++                new BlockBasedRamAccounting(ramAccounting::addBytes, MAX_BLOCK_SIZE_IN_BYTES)
++            )
++        );
+     }
+ }
+diff --git a/server/src/main/java/io/crate/execution/engine/CorrelatedJoinProjector.java b/server/src/main/java/io/crate/execution/engine/CorrelatedJoinProjector.java
+index 22382ceea3..20b79c459c 100644
+--- a/server/src/main/java/io/crate/execution/engine/CorrelatedJoinProjector.java
++++ b/server/src/main/java/io/crate/execution/engine/CorrelatedJoinProjector.java
+@@ -33,6 +33,7 @@ import io.crate.data.CloseableIterator;
+ import io.crate.data.CollectingRowConsumer;
+ import io.crate.data.Projector;
+ import io.crate.data.Row;
++import io.crate.data.breaker.RamAccounting;
+ import io.crate.expression.symbol.SelectSymbol;
+ import io.crate.expression.symbol.Symbol;
+ import io.crate.planner.DependencyCarrier;
+@@ -75,7 +76,11 @@ public final class CorrelatedJoinProjector implements Projector {
+         private final Collector<Row, ?, ?> collector;
+ 
+         public BindAndExecuteSubQuery() {
+-            this.collector = FirstColumnConsumers.getCollector(correlatedSubQuery.getResultType());
++            this.collector = FirstColumnConsumers.getCollector(
++                correlatedSubQuery.getResultType(),
++                correlatedSubQuery.innerType(),
++                RamAccounting.NO_ACCOUNTING
++            );
+         }
+ 
+         @Override
+diff --git a/server/src/main/java/io/crate/execution/engine/FirstColumnConsumers.java b/server/src/main/java/io/crate/execution/engine/FirstColumnConsumers.java
+index 1f6dabdc28..fc3e237f85 100644
+--- a/server/src/main/java/io/crate/execution/engine/FirstColumnConsumers.java
++++ b/server/src/main/java/io/crate/execution/engine/FirstColumnConsumers.java
+@@ -33,7 +33,9 @@ import java.util.function.UnaryOperator;
+ import java.util.stream.Collector;
+ 
+ import io.crate.data.Row;
++import io.crate.data.breaker.RamAccounting;
+ import io.crate.expression.symbol.SelectSymbol.ResultType;
++import io.crate.types.DataType;
+ 
+ /**
+  * Collectors to retrieve either {@link AllValues} or a {@link SingleValue} of the first column of each row.
+@@ -42,9 +44,13 @@ public class FirstColumnConsumers {
+ 
+     private static class AllValues implements Collector<Row, List<Object>, List<Object>> {
+ 
+-        public static final AllValues INSTANCE = new AllValues();
++        private final RamAccounting ramAccounting;
++        private final DataType<Object> dataType;
+ 
+-        private AllValues() {
++        @SuppressWarnings("unchecked")
++        private AllValues(RamAccounting ramAccounting, DataType<?> dataType) {
++            this.ramAccounting = ramAccounting;
++            this.dataType = (DataType<Object>) dataType;
+         }
+ 
+         @Override
+@@ -55,7 +61,9 @@ public class FirstColumnConsumers {
+         @Override
+         public BiConsumer<List<Object>, Row> accumulator() {
+             return (agg, row) -> {
+-                agg.add(row.get(0));
++                Object value = row.get(0);
++                ramAccounting.addBytes(dataType.valueBytes(value));
++                agg.add(value);
+             };
+         }
+ 
+@@ -123,11 +131,10 @@ public class FirstColumnConsumers {
+ 
+     }
+ 
+-    public static Collector<Row, ?, ?> getCollector(ResultType resultType) {
+-        return switch (resultType) {
+-            case SINGLE_COLUMN_MULTIPLE_VALUES -> AllValues.INSTANCE;
+-            case SINGLE_COLUMN_SINGLE_VALUE -> SingleValue.INSTANCE;
+-            case SINGLE_COLUMN_EXISTS -> AllValues.INSTANCE;
+-        };
++    public static Collector<Row, ?, ?> getCollector(ResultType resultType, DataType<?> dataType, RamAccounting ramAccounting) {
++        if (resultType == ResultType.SINGLE_COLUMN_SINGLE_VALUE) {
++            return SingleValue.INSTANCE;
++        }
++        return new AllValues(ramAccounting, dataType);
+     }
+ }
+diff --git a/server/src/main/java/io/crate/expression/symbol/SelectSymbol.java b/server/src/main/java/io/crate/expression/symbol/SelectSymbol.java
+index b279c39c64..df3078fe24 100644
+--- a/server/src/main/java/io/crate/expression/symbol/SelectSymbol.java
++++ b/server/src/main/java/io/crate/expression/symbol/SelectSymbol.java
+@@ -102,6 +102,10 @@ public class SelectSymbol implements Symbol {
+         return dataType;
+     }
+ 
++    public DataType<?> innerType() {
++        return dataType.innerType();
++    }
++
+     @Override
+     public String toString() {
+         return "(" + relation + ")";
+diff --git a/server/src/test/java/io/crate/execution/engine/FirstColumnConsumersTest.java b/server/src/test/java/io/crate/execution/engine/FirstColumnConsumersTest.java
+new file mode 100644
+index 0000000000..bc2264648a
+--- /dev/null
++++ b/server/src/test/java/io/crate/execution/engine/FirstColumnConsumersTest.java
+@@ -0,0 +1,54 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.execution.engine;
++
++import static io.crate.testing.Asserts.assertThat;
++
++import java.util.List;
++import java.util.concurrent.atomic.AtomicInteger;
++import java.util.stream.Collector;
++
++import org.junit.Test;
++
++import io.crate.data.Row;
++import io.crate.data.Row1;
++import io.crate.data.breaker.BlockBasedRamAccounting;
++import io.crate.expression.symbol.SelectSymbol;
++import io.crate.types.DataTypes;
++
++
++public class FirstColumnConsumersTest {
++
++
++    @Test
++    @SuppressWarnings("unchecked")
++    public void test_accounting_for_all_consumer() {
++        AtomicInteger calls = new AtomicInteger();
++        var accounting = new BlockBasedRamAccounting(bytes -> calls.incrementAndGet(), 1);
++        Collector<Row, List<Object>, ?> collector = (Collector<Row, List<Object>, ?>) FirstColumnConsumers
++            .getCollector(SelectSymbol.ResultType.SINGLE_COLUMN_MULTIPLE_VALUES, DataTypes.INTEGER, accounting);
++        List<Object> supplier = collector.supplier().get();
++        collector.accumulator().accept(supplier, new Row1(1));
++        assertThat(calls.get()).isEqualTo(1);
++        assertThat(accounting.totalBytes()).isEqualTo(16);
++    }
++}

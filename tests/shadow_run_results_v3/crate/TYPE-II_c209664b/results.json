@@ -1,0 +1,180 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "c209664b06f0668788ad161f895aea23e94bddc1",
+  "backport_commit": "ccdafe7d64a1430426112a9bee90672a8f30eb4e",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 516,
+          "end_line": 522,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.98,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies a specific code section in TableElementsAnalyzer.java to fix a bug related to adding parent and child object sub-columns in one ALTER statement. The change is a small, precise fix that adds a computeIfAbsent call instead of a put call, which is a straightforward string replacement with minor logic adjustment. The test addition and release notes update are also straightforward additions. The localization evidence shows the main code hunk was found via 'git_exact' with high confidence, indicating the patch applies cleanly and directly to the target branch. Therefore, this patch is classified as TYPE_I with high confidence and a moderate token budget estimate to handle the fix and associated test and documentation updates.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.analyze.AlterTableAddColumnAnalyzerTest.xml"
+        ],
+        "target_classes": [
+          "AlterTableAddColumnAnalyzerTest"
+        ],
+        "test_cases": {
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#test_cannot_add_named_primary_key_constraint_to_existing_table": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#add_multiple_columns_adding_same_name_primitive_throws_an_exception": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#testAddColumnWithCheckConstraintFailsBecauseItRefersToAnotherColumn": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#testAddColumnThatExistsAlready": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#test_check_constraint_cannot_be_added_to_nested_object_sub_column_without_full_path": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#testAddPrimaryKeyColumnWithArrayTypeUnsupported": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#test_add_parent_and_child_columns_within_one_statement": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#test_check_constraint_on_nested_object_sub_column_has_correct_type_and_expression": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#test_cannot_alter_table_to_add_a_column_definition_of_type_time": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#add_multiple_columns_pkey_indices_referring_to_correct_ref_indices": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#testAddColumnWithAnalyzerAndNonStringType": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#testAddColumnOnSystemTableIsNotAllowed": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#testAddFulltextIndex": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#testAlterTableAddColumnWithNullConstraint": "passed",
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#testAddColumnOnSinglePartitionNotAllowed": "passed"
+        },
+        "classes": {
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest": "passed"
+        },
+        "summary": {
+          "passed": 15,
+          "failed": 0,
+          "skipped": 0,
+          "total": 15
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.analyze.AlterTableAddColumnAnalyzerTest#test_add_parent_and_child_columns_within_one_statement"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 15,
+        "patched_total": 15,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 15
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1812,
+    "target_patch_bytes": 4873,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.analyze.AlterTableAddColumnAnalyzerTest#test_add_parent_and_child_columns_within_one_statement"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 15,
+      "patched_total": 15,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

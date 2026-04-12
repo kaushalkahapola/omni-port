@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-10T16:08:57.247497",
+  "run_timestamp": "2026-04-11T20:49:12.740210",
   "repo": "crate",
   "patch_type": "TYPE-II",
   "original_commit": "a9199b9f781a9db3a49c1a8341e6837d63ed7980",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.03,
+      "elapsed_s": 0.07,
       "error": null,
       "java_hunks": 3,
       "aux_hunks": 1,
@@ -43,12 +43,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.68,
+      "elapsed_s": 2.68,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch consists of adding a new method 'withOutputs' to the Collect class and refactoring existing code to use this method instead of directly constructing new Collect instances. The changes are localized and involve exact string replacements and additions without structural or API changes. The localization evidence shows all hunks were found via 'git_exact' with high confidence, indicating the patch applies cleanly and trivially to the target branch. The test additions and release notes updates are straightforward and do not affect complexity. Therefore, this patch is classified as TYPE_I with high confidence.",
+        "reasoning": "The patch consists of adding a new method 'withOutputs' to the Collect class and refactoring existing code to use this method instead of creating new Collect instances directly. The changes are localized to a single file and involve straightforward additions and replacements without structural or API changes. The localization evidence shows exact matches with high confidence, indicating the patch applies cleanly. The test additions and release notes updates are also straightforward. Overall, this is a trivial backport with exact string replacements and minor additions, fitting TYPE_I classification.",
         "is_auto_generated": false
       }
     },
@@ -92,9 +92,15 @@
       "synthesis_status": "success",
       "synthesized_hunks": []
     },
-    "agent7_validator": {
-      "elapsed_s": 287.19,
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
       "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
       "validation_passed": true,
       "validation_failure_category": "",
       "validation_error_context": "",
@@ -109,17 +115,17 @@
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.planner.PlannerTest.xml"
         ],
         "target_classes": [
-          "io.crate.planner.PlannerTest"
+          "PlannerTest"
         ],
         "test_cases": {
-          "io.crate.planner.PlannerTest#testExecutionPhaseIdSequence": "passed",
-          "io.crate.planner.PlannerTest#test_table_with_clustered_by_and_partition_filter_routing": "passed",
           "io.crate.planner.PlannerTest#testSetTimeZone": "passed",
-          "io.crate.planner.PlannerTest#test_execution_exception_is_not_wrapped_in_logical_planner": "passed",
           "io.crate.planner.PlannerTest#testSetPlan": "passed",
-          "io.crate.planner.PlannerTest#testDeallocate": "passed",
           "io.crate.planner.PlannerTest#test_invalid_any_param_leads_to_clear_error_message": "passed",
-          "io.crate.planner.PlannerTest#testSetSessionTransactionModeIsNoopPlan": "passed"
+          "io.crate.planner.PlannerTest#test_table_with_clustered_by_and_partition_filter_routing": "passed",
+          "io.crate.planner.PlannerTest#testDeallocate": "passed",
+          "io.crate.planner.PlannerTest#testExecutionPhaseIdSequence": "passed",
+          "io.crate.planner.PlannerTest#testSetSessionTransactionModeIsNoopPlan": "passed",
+          "io.crate.planner.PlannerTest#test_execution_exception_is_not_wrapped_in_logical_planner": "passed"
         },
         "classes": {
           "io.crate.planner.PlannerTest": "passed"
@@ -158,7 +164,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 3,
@@ -173,6 +179,9 @@
     "applied_on_disk_ag3": 3,
     "synthesized_count": 0,
     "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
     "retry_contexts": [],
     "failed_hunks": [],
     "generated_patch_bytes": 1703,

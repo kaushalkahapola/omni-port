@@ -1,0 +1,42 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index 36f7de4234..6937a3d135 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -135,7 +135,6 @@ public class Indexer {
+     /// after dynamic column additions;
+     private List<Reference> indexOrder;
+ 
+-
+     public record IndexColumn<I>(Reference reference, List<? extends I> inputs) {
+     }
+ 
+@@ -188,9 +187,18 @@ public class Indexer {
+             }
+             int pkIndex = table.primaryKey().indexOf(column);
+             if (pkIndex > -1) {
+-                return NestableCollectExpression.forFunction(item ->
+-                    ref.valueType().implicitCast(item.pkValues().get(pkIndex))
+-                );
++                return NestableCollectExpression.forFunction(item -> {
++                    // create table t (a int generated always as c+1, b int, c int primary key);
++                    // insert into t(c) values (0);
++                    // update t set b=-1;
++                    // when replicating the UPDATE query, 'a' needs to resolve 'c' which is PK and is not available in
++                    // item.pkValues(), fall back to search targetColumns.
++                    if (pkIndex < item.pkValues().size()) {
++                        return ref.valueType().implicitCast(item.pkValues().get(pkIndex));
++                    } else {
++                        return item.insertValues()[targetColumns.indexOf(ref)];
++                    }
++                });
+             }
+             int index = targetColumns.indexOf(ref);
+             if (index > -1) {
+@@ -786,7 +794,6 @@ public class Indexer {
+         }
+     }
+ 
+-
+     /**
+      * Looks for new columns in the values of the given IndexItem and returns them.
+      */

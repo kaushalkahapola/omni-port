@@ -1,0 +1,70 @@
+diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+index 98ea4d3793..aa8a068ce4 100644
+--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
++++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+@@ -112,7 +112,6 @@ import io.crate.types.ArrayType;
+ import io.crate.types.DataType;
+ import io.crate.types.ObjectType;
+ 
+-
+ /**
+  * Represents a user table.
+  * <p>
+@@ -422,17 +421,7 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+         if (!isPartitioned) {
+             IndexMetadata index = metadata.index(ident.indexNameOrAlias());
+             if (index == null) {
+-                if (concreteIndices.length > 0) {
+-                    index = metadata.index(concreteIndices[0]);
+-                    LOGGER.info(
+-                        "Found indices={} for relation={} without index template. Orphaned partition?",
+-                        concreteIndices,
+-                        ident
+-                    );
+-                }
+-                if (index == null) {
+-                    throw new RelationUnknown(ident);
+-                }
++                throw new RelationUnknown(ident);
+             }
+             if (concreteIndices.length == 0) {
+                 throw new RelationUnknown(ident);
+@@ -674,7 +663,6 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+         }
+     }
+ 
+-
+     private void validateDropColumns(List<DropColumn> dropColumns) {
+         var leftOverCols = columns().stream().map(Reference::column).collect(Collectors.toSet());
+         for (int i = 0 ; i < dropColumns.size(); i++) {
+diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfoFactory.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfoFactory.java
+index 7b2dbfc503..f99b4405c9 100644
+--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfoFactory.java
++++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfoFactory.java
+@@ -138,17 +138,7 @@ public class DocTableInfoFactory {
+         if (indexTemplateMetadata == null) {
+             IndexMetadata index = metadata.index(relation.indexNameOrAlias());
+             if (index == null) {
+-                if (concreteIndices.length > 0) {
+-                    index = metadata.index(concreteIndices[0]);
+-                    LOGGER.info(
+-                        "Found indices={} for relation={} without index template. Orphaned partition?",
+-                        concreteIndices,
+-                        relation
+-                    );
+-                }
+-                if (index == null) {
+-                    throw new RelationUnknown(relation);
+-                }
++                throw new RelationUnknown(relation);
+             }
+             tableParameters = index.getSettings();
+             versionCreated = IndexMetadata.SETTING_INDEX_VERSION_CREATED.get(tableParameters);
+@@ -466,7 +456,6 @@ public class DocTableInfoFactory {
+         }
+     }
+ 
+-
+     @Nullable
+     private Symbol parseExpression(@Nullable String expression) {
+         if (expression == null) {

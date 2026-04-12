@@ -1,0 +1,82 @@
+diff --git a/server/src/main/java/io/crate/types/DoubleType.java b/server/src/main/java/io/crate/types/DoubleType.java
+index bfcd0d3342..45f7741a64 100644
+--- a/server/src/main/java/io/crate/types/DoubleType.java
++++ b/server/src/main/java/io/crate/types/DoubleType.java
+@@ -23,7 +23,6 @@ package io.crate.types;
+ 
+ import java.io.IOException;
+ import java.math.BigDecimal;
+-import java.math.BigInteger;
+ import java.util.List;
+ import java.util.function.Function;
+ 
+@@ -119,8 +118,8 @@ public class DoubleType extends DataType<Double> implements FixedWidthType, Stre
+         }
+     };
+ 
+-    private static final BigInteger DOUBLE_MAX = BigDecimal.valueOf(Double.MAX_VALUE).toBigInteger();
+-    private static final BigInteger DOUBLE_MIN = BigDecimal.valueOf(-Double.MAX_VALUE).toBigInteger();
++    private static final BigDecimal DOUBLE_MAX = BigDecimal.valueOf(Double.MAX_VALUE);
++    private static final BigDecimal DOUBLE_MIN = BigDecimal.valueOf(-Double.MAX_VALUE);
+ 
+     private DoubleType() {
+     }
+@@ -157,13 +156,13 @@ public class DoubleType extends DataType<Double> implements FixedWidthType, Stre
+         } else if (value instanceof Double d) {
+             return d;
+         } else if (value instanceof String s) {
+-            return Double.valueOf(s);
++            return JavaDoubleParser.parseDouble(s);
+         } else if (value instanceof BigDecimal bigDecimalValue) {
+-            if (DOUBLE_MAX.compareTo(bigDecimalValue.toBigInteger()) <= 0
+-                || DOUBLE_MIN.compareTo(bigDecimalValue.toBigInteger()) >= 0) {
++            double d = bigDecimalValue.doubleValue();
++            if (!Double.isFinite(d)) {
+                 throw new IllegalArgumentException(getName() + " value out of range: " + value);
+             }
+-            return bigDecimalValue.doubleValue();
++            return d;
+         } else if (value instanceof Number n) {
+             return n.doubleValue();
+         } else {
+diff --git a/server/src/main/java/io/crate/types/FloatType.java b/server/src/main/java/io/crate/types/FloatType.java
+index 6274eb8a0b..9d38067ee1 100644
+--- a/server/src/main/java/io/crate/types/FloatType.java
++++ b/server/src/main/java/io/crate/types/FloatType.java
+@@ -23,7 +23,6 @@ package io.crate.types;
+ 
+ import java.io.IOException;
+ import java.math.BigDecimal;
+-import java.math.BigInteger;
+ import java.util.List;
+ import java.util.function.Function;
+ 
+@@ -119,8 +118,8 @@ public class FloatType extends DataType<Float> implements Streamer<Float>, Fixed
+         }
+     };
+ 
+-    private static final BigInteger MAX = BigDecimal.valueOf(Float.MAX_VALUE).toBigInteger();
+-    private static final BigInteger MIN = BigDecimal.valueOf(-Float.MAX_VALUE).toBigInteger();
++    private static final BigDecimal MAX = BigDecimal.valueOf(Float.MAX_VALUE);
++    private static final BigDecimal MIN = BigDecimal.valueOf(-Float.MAX_VALUE);
+ 
+     private FloatType() {
+     }
+@@ -157,10 +156,14 @@ public class FloatType extends DataType<Float> implements Streamer<Float>, Fixed
+         } else if (value instanceof Float f) {
+             return f;
+         } else if (value instanceof String s) {
+-            return Float.parseFloat(s);
++            return JavaFloatParser.parseFloat(s);
+         } else if (value instanceof BigDecimal bigDecimalValue) {
+-            if (MAX.compareTo(bigDecimalValue.toBigInteger()) <= 0
+-                || MIN.compareTo(bigDecimalValue.toBigInteger()) >= 0) {
++            // Preferring compareTo over equals as it gives safer equality check.
++            // From the compareTo docs:
++            // Two BigDecimal objects that are equal in value but have a different scale (like 2.0 and 2.00)
++            // are considered equal by this method.
++            if (MAX.compareTo(bigDecimalValue) <= 0
++                || MIN.compareTo(bigDecimalValue) >= 0) {
+                 throw new IllegalArgumentException("float value out of range: " + value);
+             }
+             return bigDecimalValue.floatValue();

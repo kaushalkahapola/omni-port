@@ -1,0 +1,17 @@
+diff --git a/server/src/main/java/io/crate/types/ObjectType.java b/server/src/main/java/io/crate/types/ObjectType.java
+index 2aa5215b57..7aec5a61c8 100644
+--- a/server/src/main/java/io/crate/types/ObjectType.java
++++ b/server/src/main/java/io/crate/types/ObjectType.java
+@@ -200,6 +200,12 @@ public class ObjectType extends DataType<Map<String, Object>> implements Streame
+         }
+     }
+ 
++    @Override
++    @SuppressWarnings("unchecked")
++    public Map<String, Object> valueForInsert(Map<String, Object> value) {
++        return convert(value, (dataType, v) -> ((DataType<Object>) dataType).valueForInsert(v));
++    }
++
+     @SuppressWarnings("unchecked")
+     private Map<String, Object> convert(Object value,
+                                         BiFunction<DataType<?>, Object, Object> innerType) {

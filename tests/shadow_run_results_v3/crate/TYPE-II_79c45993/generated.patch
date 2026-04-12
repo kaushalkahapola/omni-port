@@ -1,0 +1,76 @@
+diff --git a/server/src/main/java/io/crate/analyze/DropAnalyzerStatementAnalyzer.java b/server/src/main/java/io/crate/analyze/DropAnalyzerStatementAnalyzer.java
+index 5a2ff5fe29..43ad2df24c 100644
+--- a/server/src/main/java/io/crate/analyze/DropAnalyzerStatementAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/DropAnalyzerStatementAnalyzer.java
+@@ -21,7 +21,6 @@
+ 
+ package io.crate.analyze;
+ 
+-import io.crate.exceptions.AnalyzerUnknownException;
+ import io.crate.metadata.FulltextAnalyzerResolver;
+ 
+ public class DropAnalyzerStatementAnalyzer {
+@@ -36,9 +35,6 @@ public class DropAnalyzerStatementAnalyzer {
+         if (ftResolver.hasBuiltInAnalyzer(analyzerName)) {
+             throw new IllegalArgumentException("Cannot drop a built-in analyzer");
+         }
+-        if (ftResolver.hasCustomAnalyzer(analyzerName) == false) {
+-            throw new AnalyzerUnknownException(analyzerName);
+-        }
+         return new AnalyzedDropAnalyzer(analyzerName);
+     }
+ }
+diff --git a/server/src/main/java/io/crate/auth/AccessControlImpl.java b/server/src/main/java/io/crate/auth/AccessControlImpl.java
+index 0e89ec22c8..6754e00d59 100644
+--- a/server/src/main/java/io/crate/auth/AccessControlImpl.java
++++ b/server/src/main/java/io/crate/auth/AccessControlImpl.java
+@@ -55,6 +55,7 @@ import io.crate.analyze.AnalyzedDeallocate;
+ import io.crate.analyze.AnalyzedDeclare;
+ import io.crate.analyze.AnalyzedDeleteStatement;
+ import io.crate.analyze.AnalyzedDiscard;
++import io.crate.analyze.AnalyzedDropAnalyzer;
+ import io.crate.analyze.AnalyzedDropForeignTable;
+ import io.crate.analyze.AnalyzedDropFunction;
+ import io.crate.analyze.AnalyzedDropRepository;
+@@ -511,6 +512,18 @@ public final class AccessControlImpl implements AccessControl {
+             return null;
+         }
+ 
++        @Override
++        protected Void visitDropAnalyzerStatement(AnalyzedDropAnalyzer analysis, Role user) {
++            Privileges.ensureUserHasPrivilege(
++                relationVisitor.roles,
++                user,
++                Permission.DDL,
++                Securable.CLUSTER,
++                null
++            );
++            return null;
++        }
++
+         @Override
+         public Void visitAnalyzedCreateBlobTable(AnalyzedCreateBlobTable analysis, Role user) {
+             Privileges.ensureUserHasPrivilege(
+diff --git a/server/src/main/java/io/crate/planner/node/ddl/DropAnalyzerPlan.java b/server/src/main/java/io/crate/planner/node/ddl/DropAnalyzerPlan.java
+index da712f5975..bdafe11078 100644
+--- a/server/src/main/java/io/crate/planner/node/ddl/DropAnalyzerPlan.java
++++ b/server/src/main/java/io/crate/planner/node/ddl/DropAnalyzerPlan.java
+@@ -35,6 +35,7 @@ import io.crate.analyze.AnalyzedDropAnalyzer;
+ import io.crate.data.Row;
+ import io.crate.data.Row1;
+ import io.crate.data.RowConsumer;
++import io.crate.exceptions.AnalyzerUnknownException;
+ import io.crate.execution.support.OneRowActionListener;
+ import io.crate.metadata.FulltextAnalyzerResolver;
+ import io.crate.planner.DependencyCarrier;
+@@ -72,6 +73,10 @@ public class DropAnalyzerPlan implements Plan {
+     @VisibleForTesting
+     public static ClusterUpdateSettingsRequest createRequest(String analyzerName,
+                                                              FulltextAnalyzerResolver ftResolver) {
++        if (ftResolver.hasCustomAnalyzer(analyzerName) == false) {
++            throw new AnalyzerUnknownException(analyzerName);
++        }
++
+         Settings.Builder builder = Settings.builder();
+         builder.putNull(ANALYZER.buildSettingName(analyzerName));
+ 

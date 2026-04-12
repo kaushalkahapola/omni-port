@@ -1,0 +1,170 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "9b61be3c7aef89289e8575e23dad7ca8e9bdc12e",
+  "backport_commit": "021eb4ea02b4f364ad83b5bf103bb8366655dfa1",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 67,
+          "end_line": 73,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.57,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.9,
+        "reasoning": "The patch modifies exception handling in RestResultSetReceiver.java by changing the caught exception from IOException to Exception, which is a minor but important change. The test addition in RestActionReceiversTest.java adds a new test case to verify behavior on CircuitBreakerException. The release notes update is trivial. The main code change is a small catch clause modification, found exactly in the target branch, indicating a straightforward backport with minor fuzziness due to test additions and exception broadening. Overall, this is a whitespace/formatting and minor logic drift patch requiring fuzzy matching rather than structural or API changes.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.rest.action.RestActionReceiversTest.xml"
+        ],
+        "target_classes": [
+          "RestActionReceiversTest"
+        ],
+        "test_cases": {
+          "io.crate.rest.action.RestActionReceiversTest#testRestBulkRowCountReceiver": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#test_result_reciever_future_completed_on_cbe": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#test_rest_bulk_row_count_receiver_supports_single_column_row_on_single_bulk_arg": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#testRestResultSetReceiver": "passed",
+          "io.crate.rest.action.RestActionReceiversTest#testRestRowCountReceiver": "passed"
+        },
+        "classes": {
+          "io.crate.rest.action.RestActionReceiversTest": "passed"
+        },
+        "summary": {
+          "passed": 5,
+          "failed": 0,
+          "skipped": 0,
+          "total": 5
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.rest.action.RestActionReceiversTest#test_result_reciever_future_completed_on_cbe"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 5,
+        "patched_total": 5,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 6,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 5
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 663,
+    "target_patch_bytes": 4642,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.rest.action.RestActionReceiversTest#test_result_reciever_future_completed_on_cbe"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 5,
+      "patched_total": 5,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

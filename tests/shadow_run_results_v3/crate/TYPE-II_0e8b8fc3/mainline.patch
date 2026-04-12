@@ -1,0 +1,113 @@
+commit 0e8b8fc34bc388e70b9f48e14cd256c54a15d37c
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Tue Nov 12 19:57:44 2024 +0200
+
+    Fix: generated columns not dropped with no error
+    
+    Fix an issue that would cause generated column to not be dropped
+    with ALTER TABLE DROP COLUMN, because `isDropped()` was always returning
+    `false` for `GeneratedReference`. Also adjust the places where
+    DocTableInfo and metadata are built to skip those columns once dropped.
+    
+    Fixes: #16972
+
+diff --git a/docs/appendices/release-notes/5.9.3.rst b/docs/appendices/release-notes/5.9.3.rst
+index 7afad0007b..174cf5f77b 100644
+--- a/docs/appendices/release-notes/5.9.3.rst
++++ b/docs/appendices/release-notes/5.9.3.rst
+@@ -47,6 +47,11 @@ See the :ref:`version_5.9.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that would prevent
++  :ref:`dropping <sql-alter-table-drop-column>` a
++  :ref:`generated column <ddl-generated-columns>` from a table, even though no
++  error was returned.
++
+ - Fixed an issue that would cause an error to be thrown when attempting to
+   ``ORDER BY`` on top of a complex query (e.g. a ``JOIN``), using an expression
+   which contains a query parameter, e.g.::
+diff --git a/server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java b/server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java
+index 8f1b7c46cd..19c47db8f2 100644
+--- a/server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java
++++ b/server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java
+@@ -287,7 +287,7 @@ public final class MappingUtil {
+ 
+         // Generated expressions
+         List<GeneratedReference> newGenExpressions = references.stream()
+-            .filter(ref -> ref instanceof GeneratedReference)
++            .filter(ref -> ref instanceof GeneratedReference && !ref.isDropped())
+             .map(ref -> (GeneratedReference) ref)
+             .toList();
+         if (newGenExpressions.isEmpty() == false) {
+diff --git a/server/src/main/java/io/crate/metadata/GeneratedReference.java b/server/src/main/java/io/crate/metadata/GeneratedReference.java
+index 8c51481a18..7a55d1a8f7 100644
+--- a/server/src/main/java/io/crate/metadata/GeneratedReference.java
++++ b/server/src/main/java/io/crate/metadata/GeneratedReference.java
+@@ -232,7 +232,7 @@ public final class GeneratedReference implements Reference {
+ 
+     @Override
+     public boolean isDropped() {
+-        return false;
++        return ref.isDropped();
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+index f823fc2cbd..4ba47c328b 100644
+--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
++++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+@@ -244,7 +244,7 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+             return ref;
+         });
+         this.generatedColumns = this.references.values().stream()
+-            .filter(r -> r instanceof GeneratedReference)
++            .filter(r -> r instanceof GeneratedReference && !r.isDropped())
+             .map(r -> (GeneratedReference) r)
+             .toList();
+         this.indexColumns = indexColumns;
+diff --git a/server/src/test/java/io/crate/execution/ddl/tables/DropColumnTaskTest.java b/server/src/test/java/io/crate/execution/ddl/tables/DropColumnTaskTest.java
+index 7c4e9474d8..f1fb85d482 100644
+--- a/server/src/test/java/io/crate/execution/ddl/tables/DropColumnTaskTest.java
++++ b/server/src/test/java/io/crate/execution/ddl/tables/DropColumnTaskTest.java
+@@ -82,6 +82,40 @@ public class DropColumnTaskTest extends CrateDummyClusterServiceUnitTest {
+         );
+     }
+ 
++    @Test
++    public void test_can_drop_generated_column() throws Exception {
++        var e = SQLExecutor.of(clusterService)
++            .addTable("create table tbl (x int, y int GENERATED ALWAYS AS (x+1), z int)");
++        DocTableInfo tbl = e.resolveTableInfo("tbl");
++        ClusterState initialState = clusterService.state();
++        var dropColumnTask = new AlterTableTask<>(
++            e.nodeCtx, tbl.ident(), TransportDropColumnAction.DROP_COLUMN_OPERATOR);
++        Reference colToDrop = tbl.getReference(ColumnIdent.of("y"));
++        var request = new DropColumnRequest(tbl.ident(), List.of(new DropColumn(colToDrop, false)));
++        ClusterState newState = dropColumnTask.execute(initialState, request);
++
++        assertThat(newState.version())
++            .as("Version is not increased. The MasterService does when the state is applied")
++            .isEqualTo(initialState.version());
++        assertThat(newState.metadata().version())
++            .as("Version is not increased. The MasterService does when the state is applied")
++            .isEqualTo(initialState.metadata().version());
++
++        String indexName = tbl.ident().indexNameOrAlias();
++        assertThat(newState.metadata().index(indexName).getVersion())
++            .isGreaterThan(initialState.metadata().index(indexName).getVersion());
++
++        DocTableInfo newTable = new DocTableInfoFactory(e.nodeCtx).create(tbl.ident(), newState.metadata());
++
++        assertThat(newTable.getReference(colToDrop.column())).isNull();
++        assertThat(newTable.columns()).hasSize(2);
++        assertThat(newTable.droppedColumns()).satisfiesExactly(
++            x -> assertThat(x)
++                .hasName("_dropped_2")
++                .hasPosition(2)
++        );
++    }
++
+     @Test
+     public void test_can_drop_subcolumn() throws Exception {
+         var e = SQLExecutor.of(clusterService)

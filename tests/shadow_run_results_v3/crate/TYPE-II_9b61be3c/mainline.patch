@@ -1,0 +1,103 @@
+commit 9b61be3c7aef89289e8575e23dad7ca8e9bdc12e
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Wed Jun 4 15:19:11 2025 +0200
+
+    Fail RestResultSetReceiver on circuit breaker exceptions
+    
+    Non-bulk execution depends on receiver's future being completed to complete request processing.
+    If we don't fail on CBE, 'SqlHttpHandler.handleSQLRequest.whenComplete' is never done.
+
+diff --git a/docs/appendices/release-notes/5.10.8.rst b/docs/appendices/release-notes/5.10.8.rst
+index 384e8bb325..f9e41484a8 100644
+--- a/docs/appendices/release-notes/5.10.8.rst
++++ b/docs/appendices/release-notes/5.10.8.rst
+@@ -60,3 +60,6 @@ Fixes
+ - Fixed an issue where ``sas_token`` and ``key`` settings for
+   :ref:`azure repositories <sql-create-repo-azure>` were exposed as unmasked
+   settings in :ref:`sys.repositories <sys-repositories>` table.
++
++- Fixed an issue that caused queries to not complete and return if a 
++  ``CircuitBreakerException`` was thrown while constructing the result set.
+diff --git a/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java b/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
+index 01535d2f83..0ab51943d1 100644
+--- a/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
++++ b/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
+@@ -68,7 +68,7 @@ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+             builder.addRow(row, outputFields.size());
+             rowCount++;
+             return null;
+-        } catch (IOException e) {
++        } catch (Exception e) {
+             fail(e);
+             return null;
+         }
+diff --git a/server/src/test/java/io/crate/rest/action/RestActionReceiversTest.java b/server/src/test/java/io/crate/rest/action/RestActionReceiversTest.java
+index 9f61b3d983..b1d6cadb9b 100644
+--- a/server/src/test/java/io/crate/rest/action/RestActionReceiversTest.java
++++ b/server/src/test/java/io/crate/rest/action/RestActionReceiversTest.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.rest.action;
+ 
++import static io.crate.data.breaker.BlockBasedRamAccounting.MAX_BLOCK_SIZE_IN_BYTES;
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
+ import java.io.IOException;
+@@ -28,6 +29,7 @@ import java.util.Collections;
+ import java.util.List;
+ 
+ import org.elasticsearch.common.Strings;
++import org.elasticsearch.common.breaker.TestCircuitBreaker;
+ import org.elasticsearch.common.xcontent.XContentBuilder;
+ import org.elasticsearch.common.xcontent.json.JsonXContent;
+ import org.elasticsearch.index.engine.VersionConflictEngineException;
+@@ -37,15 +39,18 @@ import org.junit.Test;
+ 
+ import io.crate.auth.AccessControl;
+ import io.crate.breaker.TypedRowAccounting;
++import io.crate.common.collections.Lists;
+ import io.crate.data.Row;
+ import io.crate.data.Row1;
+ import io.crate.data.RowN;
++import io.crate.data.breaker.BlockBasedRamAccounting;
+ import io.crate.data.breaker.RamAccounting;
+ import io.crate.expression.symbol.ScopedSymbol;
+ import io.crate.expression.symbol.Symbol;
+ import io.crate.expression.symbol.Symbols;
+ import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.RelationName;
++import io.crate.session.ResultReceiver;
+ import io.crate.types.DataTypes;
+ 
+ public class RestActionReceiversTest extends ESTestCase {
+@@ -145,4 +150,30 @@ public class RestActionReceiversTest extends ESTestCase {
+         assertThat(results[0].rowCount()).isEqualTo(1L);
+         assertThat(results[0].error()).isNull();
+     }
++
++    @Test
++    public void test_result_reciever_future_completed_on_cbe() throws Exception {
++        TestCircuitBreaker breaker = new TestCircuitBreaker();
++        breaker.startBreaking();
++        RamAccounting ramAccounting = new BlockBasedRamAccounting(
++            b -> breaker.addEstimateBytesAndMaybeBreak(b, "http-result"),
++            MAX_BLOCK_SIZE_IN_BYTES);
++
++        ResultReceiver<XContentBuilder> resultReceiver = new RestResultSetReceiver(
++            JsonXContent.builder(),
++            fields,
++            fieldNames,
++            System.currentTimeMillis(),
++            new TypedRowAccounting(
++                Lists.map(fields, Symbol::valueType),
++                ramAccounting
++            ),
++            false
++        );
++
++        // Fails with CBE, resultReceiver's future must be completed, so that sys.jobs entry is cleared.
++        resultReceiver.setNextRow(rows.get(0));
++        assertThat(resultReceiver.completionFuture().isDone()).isTrue();
++        assertThat(resultReceiver.completionFuture().isCompletedExceptionally()).isTrue();
++    }
+ }

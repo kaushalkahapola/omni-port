@@ -1,0 +1,248 @@
+commit 006187ad50f256dfb4f1018c01fd54bc2456fd66
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Sat Jun 14 10:25:42 2025 -0400
+
+    Fix OOM caused by under-accounted memory usage in JSON result sets
+    
+    The result set for HTTP requests is returned in JSON format, but
+    the memory accounting logic was type dependant. For example, a
+    double was counted as 8 bytes, even though in JSON it's actually
+    a string like "0.123456789" which should be counted as 11 bytes(
+    sizeof utf-8 * length). This led to under-accounting and
+    potential OOM.
+
+diff --git a/docs/appendices/release-notes/5.10.10.rst b/docs/appendices/release-notes/5.10.10.rst
+index ee8d53cc7b..3a22092dda 100644
+--- a/docs/appendices/release-notes/5.10.10.rst
++++ b/docs/appendices/release-notes/5.10.10.rst
+@@ -53,3 +53,7 @@ Fixes
+ 
+ - Fixed an issue that caused queries with aggregations to get stuck under
+   memory pressure.
++
++- Fixed an issue that caused RAM under-accounting, potentially leading to an
++  ``OutOfMemoryError`` when result sets contained numeric values with large
++  digit counts. The issue affected ``HTTP`` requests only.
+diff --git a/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java b/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
+index 11b3ef72c5..89361c91fe 100644
+--- a/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
++++ b/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
+@@ -31,7 +31,6 @@ import org.jetbrains.annotations.Nullable;
+ 
+ import io.crate.session.ResultReceiver;
+ import io.crate.data.Row;
+-import io.crate.data.breaker.RowAccounting;
+ import io.crate.expression.symbol.Symbol;
+ 
+ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+@@ -39,7 +38,6 @@ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+     private final List<Symbol> outputFields;
+     private final ResultToXContentBuilder builder;
+     private final long startTimeNs;
+-    private final RowAccounting<Row> rowAccounting;
+     private final CompletableFuture<XContentBuilder> result = new CompletableFuture<>();
+ 
+     private long rowCount;
+@@ -48,11 +46,9 @@ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+                           List<Symbol> outputFields,
+                           List<String> outputFieldNames,
+                           long startTimeNs,
+-                          RowAccounting<Row> rowAccounting,
+                           boolean includeTypesOnResponse) throws IOException {
+         this.outputFields = outputFields;
+         this.startTimeNs = startTimeNs;
+-        this.rowAccounting = rowAccounting;
+         this.builder = ResultToXContentBuilder.builder(builder);
+         this.builder.cols(outputFieldNames);
+         if (includeTypesOnResponse) {
+@@ -65,7 +61,6 @@ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+     @Nullable
+     public CompletableFuture<Void> setNextRow(Row row) {
+         try {
+-            rowAccounting.accountForAndMaybeBreak(row);
+             builder.addRow(row, outputFields.size());
+             rowCount++;
+             return null;
+diff --git a/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java b/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
+index ddc725ef60..801ab798ff 100644
+--- a/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
++++ b/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
+@@ -29,6 +29,7 @@ import static io.crate.session.Session.UNNAMED;
+ import static java.util.Collections.emptyList;
+ import static java.util.Collections.singletonList;
+ 
++import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.util.List;
+ import java.util.Map;
+@@ -56,8 +57,6 @@ import io.crate.auth.AuthSettings;
+ import io.crate.auth.Credentials;
+ import io.crate.auth.HttpAuthUpstreamHandler;
+ import io.crate.auth.Protocol;
+-import io.crate.breaker.TypedRowAccounting;
+-import io.crate.common.collections.Lists;
+ import io.crate.data.breaker.BlockBasedRamAccounting;
+ import io.crate.data.breaker.RamAccounting;
+ import io.crate.exceptions.SQLExceptions;
+@@ -259,14 +258,10 @@ public class SqlHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest>
+                 b -> breaker.addEstimateBytesAndMaybeBreak(b, "http-result"),
+                 MAX_BLOCK_SIZE_IN_BYTES);
+             resultReceiver = new RestResultSetReceiver(
+-                JsonXContent.builder(),
++                new XContentBuilder(JsonXContent.JSON_XCONTENT, new RamAccountingOutputStream(ramAccounting)),
+                 resultFields,
+                 description.getFieldNames(),
+                 startTimeInNs,
+-                new TypedRowAccounting(
+-                    Lists.map(resultFields, Symbol::valueType),
+-                    ramAccounting
+-                ),
+                 includeTypes
+             );
+             resultReceiver.completionFuture().whenComplete((result, error) -> ramAccounting.close());
+@@ -337,4 +332,32 @@ public class SqlHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest>
+     private static boolean bothProvided(@Nullable List<Object> args, @Nullable List<List<Object>> bulkArgs) {
+         return args != null && !args.isEmpty() && bulkArgs != null && !bulkArgs.isEmpty();
+     }
++
++    static final class RamAccountingOutputStream extends ByteArrayOutputStream {
++
++        private final RamAccounting ramAccounting;
++
++        public RamAccountingOutputStream(RamAccounting ramAccounting) {
++            super();
++            this.ramAccounting = ramAccounting;
++        }
++
++        @Override
++        public void write(byte[] b, int off, int len) {
++            ramAccounting.addBytes(len);
++            super.write(b, off, len);
++        }
++
++        @Override
++        public void write(int b) {
++            ramAccounting.addBytes(1);
++            super.write(b);
++        }
++
++        @Override
++        public void close() throws IOException {
++            ramAccounting.release();
++            super.close();
++        }
++    }
+ }
+diff --git a/server/src/test/java/io/crate/rest/action/RestActionReceiversTest.java b/server/src/test/java/io/crate/rest/action/RestActionReceiversTest.java
+index a7f04645dd..01811a3062 100644
+--- a/server/src/test/java/io/crate/rest/action/RestActionReceiversTest.java
++++ b/server/src/test/java/io/crate/rest/action/RestActionReceiversTest.java
+@@ -40,8 +40,6 @@ import org.elasticsearch.test.ESTestCase;
+ import org.junit.Test;
+ 
+ import io.crate.auth.AccessControl;
+-import io.crate.breaker.TypedRowAccounting;
+-import io.crate.common.collections.Lists;
+ import io.crate.data.Row;
+ import io.crate.data.Row1;
+ import io.crate.data.RowN;
+@@ -49,7 +47,6 @@ import io.crate.data.breaker.BlockBasedRamAccounting;
+ import io.crate.data.breaker.RamAccounting;
+ import io.crate.expression.symbol.ScopedSymbol;
+ import io.crate.expression.symbol.Symbol;
+-import io.crate.expression.symbol.Symbols;
+ import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.RelationName;
+ import io.crate.session.ResultReceiver;
+@@ -60,11 +57,11 @@ public class RestActionReceiversTest extends ESTestCase {
+     private final List<RowN> rows = List.of(
+         new RowN("foo", 1, true),
+         new RowN("bar", 2, false),
+-        new RowN("foobar", 3, null)
++        new RowN("abc", Long.MAX_VALUE, false)
+     );
+     private final List<Symbol> fields = List.of(
+         new ScopedSymbol(new RelationName("doc", "dummy"), ColumnIdent.fromPath("doc.col_a"), DataTypes.STRING),
+-        new ScopedSymbol(new RelationName("doc", "dummy"), ColumnIdent.fromPath("doc.col_b"), DataTypes.INTEGER),
++        new ScopedSymbol(new RelationName("doc", "dummy"), ColumnIdent.fromPath("doc.col_b"), DataTypes.LONG),
+         new ScopedSymbol(new RelationName("doc", "dummy"), ColumnIdent.fromPath("doc.col_c"), DataTypes.BOOLEAN)
+     );
+     private final List<String> fieldNames = List.of("col_a", "col_b", "col_c");
+@@ -104,7 +101,6 @@ public class RestActionReceiversTest extends ESTestCase {
+             fields,
+             fieldNames,
+             0L,
+-            new TypedRowAccounting(Symbols.typeView(fields), RamAccounting.NO_ACCOUNTING),
+             true
+         );
+         for (Row row : rows) {
+@@ -154,29 +150,61 @@ public class RestActionReceiversTest extends ESTestCase {
+     }
+ 
+     @Test
+-    public void test_result_reciever_future_is_not_completed_on_cbe() throws Exception {
++    public void test_result_receiver_future_is_not_completed_on_cbe() throws Exception {
+         TestCircuitBreaker breaker = new TestCircuitBreaker();
+         breaker.startBreaking();
+         RamAccounting ramAccounting = new BlockBasedRamAccounting(
+             b -> breaker.addEstimateBytesAndMaybeBreak(b, "http-result"),
+             MAX_BLOCK_SIZE_IN_BYTES);
+-
++        XContentBuilder jsonXContentBuilder = new XContentBuilder(
++            JsonXContent.JSON_XCONTENT, new SqlHttpHandler.RamAccountingOutputStream(ramAccounting));
+         ResultReceiver<XContentBuilder> resultReceiver = new RestResultSetReceiver(
+-            JsonXContent.builder(),
++            jsonXContentBuilder,
+             fields,
+             fieldNames,
+             System.currentTimeMillis(),
+-            new TypedRowAccounting(
+-                Lists.map(fields, Symbol::valueType),
+-                ramAccounting
+-            ),
+             false
+         );
+ 
+         // Fails with CBE, resultReceiver's future must not be completed,
+         // it's handled by the consumer/response emitter which also closes iterator/clears sys.jobs entry
+-        assertThatThrownBy(() -> resultReceiver.setNextRow(rows.get(0)))
++        assertThatThrownBy(() -> {
++            resultReceiver.setNextRow(rows.get(0));
++            jsonXContentBuilder.flush(); // flush the internal buffer to OutputStream to trigger ram-accounting
++        })
+             .isExactlyInstanceOf(CircuitBreakingException.class);
+         assertThat(resultReceiver.completionFuture().isDone()).isFalse();
+     }
++
++    @Test
++    public void test_ram_accounting_of_the_result_set_receiver() throws Exception {
++        RamAccounting ramAccounting = new BlockBasedRamAccounting(
++            b -> new TestCircuitBreaker().addEstimateBytesAndMaybeBreak(b, "http-result"),
++            MAX_BLOCK_SIZE_IN_BYTES);
++        SqlHttpHandler.RamAccountingOutputStream ramAccountingOutputStream = new SqlHttpHandler.RamAccountingOutputStream(ramAccounting);
++        XContentBuilder jsonXContentBuilder = new XContentBuilder(JsonXContent.JSON_XCONTENT, ramAccountingOutputStream);
++        ResultReceiver<XContentBuilder> resultReceiver = new RestResultSetReceiver(
++            jsonXContentBuilder,
++            fields,
++            fieldNames,
++            System.currentTimeMillis(),
++            false
++        );
++
++        resultReceiver.setNextRow(rows.get(0));
++        jsonXContentBuilder.flush(); // flush the internal buffer to OutputStream to trigger ram-accounting
++        long bytesFirstRow = ramAccounting.totalBytes();
++
++        resultReceiver.setNextRow(rows.get(1));
++        jsonXContentBuilder.flush();
++        long bytesSecondRow = ramAccounting.totalBytes() - bytesFirstRow;
++
++        resultReceiver.setNextRow(rows.get(2));
++        jsonXContentBuilder.flush();
++        long bytesThirdRow = ramAccounting.totalBytes() - bytesSecondRow - bytesFirstRow;
++
++        assertThat(bytesThirdRow - bytesSecondRow).isEqualTo(
++            String.valueOf(Long.MAX_VALUE).length() - String.valueOf(2L).length()
++        );
++    }
+ }
