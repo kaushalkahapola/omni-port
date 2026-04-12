@@ -1,0 +1,1053 @@
+commit 2414401337b6b12b3392502285257bd1913c27b9
+Author: Sebastian Utz <su@rtme.net>
+Date:   Thu Oct 30 16:21:32 2025 +0100
+
+    Fix logical replication with clusters running versions < 6.1.0
+    
+    The retention lease id used the string representation of the
+    shardId, which contains the `indexUUID` since v6.1.
+    This will break ongoing logical replication, thus reverting
+    back to the old string representation format for the lease id.
+    Additionally, shard requests from/to older nodes were resolving
+    their index/shardrouting by index name instead of uuid, this
+    adds BWC logic to fallback to resolve by-name.
+    
+    Follow up of #18063.
+
+diff --git a/docs/appendices/release-notes/6.1.1.rst b/docs/appendices/release-notes/6.1.1.rst
+index 5cb51a52e3..5aed624930 100644
+--- a/docs/appendices/release-notes/6.1.1.rst
++++ b/docs/appendices/release-notes/6.1.1.rst
+@@ -73,3 +73,6 @@ Fixes
+ - Fixed an issue causing ``SELECT *`` or ``ANALYZE`` statements to fail with an
+   error ``unexpected docvalues type... Re-index with correct docvalues type.``
+   if a column was added into restored table.
++
++- Fixed an issue resulting in broken :ref:`administration-logical-replication`
++  when subscribing to clusters running versions < :ref:`version_6.1.0`.
+diff --git a/server/src/main/java/io/crate/replication/logical/ShardReplicationChangesTracker.java b/server/src/main/java/io/crate/replication/logical/ShardReplicationChangesTracker.java
+index 9b700bcd1d..b7570fdb26 100644
+--- a/server/src/main/java/io/crate/replication/logical/ShardReplicationChangesTracker.java
++++ b/server/src/main/java/io/crate/replication/logical/ShardReplicationChangesTracker.java
+@@ -372,9 +372,9 @@ public class ShardReplicationChangesTracker implements Closeable {
+                                     () -> renewLeasesThenReschedule(toSeqNoReceived)
+                                 );
+                             } else if (isClosed) {
+-                                LOGGER.debug("Exception renewing retention lease. Stopping tracking (closed=true)");
++                                LOGGER.debug("Exception renewing retention lease. Stopping tracking (closed=true)", e);
+                             } else {
+-                                LOGGER.warn("Exception renewing retention lease. Stopping tracking (closed=false)");
++                                LOGGER.warn("Exception renewing retention lease. Stopping tracking (closed=false)", e);
+                             }
+                         }
+                     )
+diff --git a/server/src/main/java/io/crate/replication/logical/action/GetFileChunkAction.java b/server/src/main/java/io/crate/replication/logical/action/GetFileChunkAction.java
+index 9e450ebec1..b6654dd174 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/GetFileChunkAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/GetFileChunkAction.java
+@@ -122,7 +122,7 @@ public class GetFileChunkAction extends ActionType<GetFileChunkAction.Response>
+         @Nullable
+         @Override
+         protected ShardsIterator shards(ClusterState state, Request request) {
+-            return state.routingTable().shardRoutingTable(request.shardId()).primaryShardIt();
++            return shardRoutingTable(state, request.shardId(), request.senderVersion()).primaryShardIt();
+         }
+     }
+ 
+diff --git a/server/src/main/java/io/crate/replication/logical/action/GetStoreMetadataAction.java b/server/src/main/java/io/crate/replication/logical/action/GetStoreMetadataAction.java
+index 8bf0c94909..518cd52aaf 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/GetStoreMetadataAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/GetStoreMetadataAction.java
+@@ -113,7 +113,7 @@ public class GetStoreMetadataAction extends ActionType<GetStoreMetadataAction.Re
+         @Nullable
+         @Override
+         protected ShardsIterator shards(ClusterState state, Request request) {
+-            return state.routingTable().shardRoutingTable(request.shardId()).primaryShardIt();
++            return shardRoutingTable(state, request.shardId(), request.senderVersion()).primaryShardIt();
+         }
+     }
+ 
+diff --git a/server/src/main/java/io/crate/replication/logical/action/ReleasePublisherResourcesAction.java b/server/src/main/java/io/crate/replication/logical/action/ReleasePublisherResourcesAction.java
+index 9da70a38de..c8090462e6 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/ReleasePublisherResourcesAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/ReleasePublisherResourcesAction.java
+@@ -104,7 +104,7 @@ public class ReleasePublisherResourcesAction extends ActionType<AcknowledgedResp
+         @Nullable
+         @Override
+         protected ShardsIterator shards(ClusterState state, Request request) {
+-            return state.routingTable().shardRoutingTable(request.shardId()).primaryShardIt();
++            return shardRoutingTable(state, request.shardId(), request.senderVersion()).primaryShardIt();
+         }
+     }
+ 
+diff --git a/server/src/main/java/io/crate/replication/logical/action/RestoreShardRequest.java b/server/src/main/java/io/crate/replication/logical/action/RestoreShardRequest.java
+index dedccf4dc4..a261492696 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/RestoreShardRequest.java
++++ b/server/src/main/java/io/crate/replication/logical/action/RestoreShardRequest.java
+@@ -21,6 +21,9 @@
+ 
+ package io.crate.replication.logical.action;
+ 
++import java.io.IOException;
++
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.support.single.shard.SingleShardRequest;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
+ import org.elasticsearch.common.io.stream.StreamInput;
+@@ -28,8 +31,6 @@ import org.elasticsearch.common.io.stream.StreamOutput;
+ import org.elasticsearch.index.shard.ShardId;
+ import org.elasticsearch.transport.RemoteClusterAwareRequest;
+ 
+-import java.io.IOException;
+-
+ public class RestoreShardRequest extends SingleShardRequest
+     implements RemoteClusterAwareRequest {
+ 
+@@ -37,16 +38,18 @@ public class RestoreShardRequest extends SingleShardRequest
+     private final DiscoveryNode node;
+     private final ShardId shardId;
+     private final String subscriberClusterName;
++    private final Version senderVersion;
+ 
+     public RestoreShardRequest(String restoreUUID,
+                                DiscoveryNode node,
+                                ShardId shardId,
+                                String subscriberClusterName) {
+-        super(shardId.getIndexName());
++        super(shardId.getIndex());
+         this.restoreUUID = restoreUUID;
+         this.node = node;
+         this.shardId = shardId;
+         this.subscriberClusterName = subscriberClusterName;
++        this.senderVersion = Version.CURRENT;
+     }
+ 
+     public RestoreShardRequest(StreamInput in) throws IOException {
+@@ -55,6 +58,7 @@ public class RestoreShardRequest extends SingleShardRequest
+         this.node = new DiscoveryNode(in);
+         this.shardId = new ShardId(in);
+         this.subscriberClusterName = in.readString();
++        this.senderVersion = in.getVersion();
+     }
+ 
+     @Override
+@@ -83,6 +87,10 @@ public class RestoreShardRequest extends SingleShardRequest
+         return restoreUUID;
+     }
+ 
++    public Version senderVersion() {
++        return senderVersion;
++    }
++
+     @Override
+     public String toString() {
+         return "RestoreShardRequest{" +
+diff --git a/server/src/main/java/io/crate/replication/logical/action/ShardChangesAction.java b/server/src/main/java/io/crate/replication/logical/action/ShardChangesAction.java
+index 58c2a51115..5fb9b33a66 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/ShardChangesAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/ShardChangesAction.java
+@@ -33,6 +33,7 @@ import java.util.concurrent.TimeoutException;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.elasticsearch.ElasticsearchTimeoutException;
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionType;
+ import org.elasticsearch.action.support.single.shard.SingleShardRequest;
+@@ -226,10 +227,8 @@ public class ShardChangesAction extends ActionType<ShardChangesAction.Response>
+         @Nullable
+         @Override
+         protected ShardsIterator shards(ClusterState state, Request request) {
+-            return state.routingTable().shardRoutingTable(
+-                request.shardId().getIndexUUID(),
+-                request.shardId().id()
+-            ).activeInitializingShardsRandomIt();
++            return shardRoutingTable(state, request.shardId, request.senderVersion)
++                .activeInitializingShardsRandomIt();
+         }
+     }
+ 
+@@ -238,12 +237,14 @@ public class ShardChangesAction extends ActionType<ShardChangesAction.Response>
+         private final ShardId shardId;
+         private final long fromSeqNo;
+         private final long toSeqNo;
++        private final Version senderVersion;
+ 
+         public Request(ShardId shardId, long fromSeqNo, long toSeqNo) {
+-            super(shardId.getIndexName());
++            super(shardId.getIndex());
+             this.shardId = shardId;
+             this.fromSeqNo = fromSeqNo;
+             this.toSeqNo = toSeqNo;
++            senderVersion = Version.CURRENT;
+         }
+ 
+         public Request(StreamInput in) throws IOException {
+@@ -251,6 +252,7 @@ public class ShardChangesAction extends ActionType<ShardChangesAction.Response>
+             this.shardId = new ShardId(in);
+             this.fromSeqNo = in.readLong();
+             this.toSeqNo = in.readVLong();
++            this.senderVersion = in.getVersion();
+         }
+ 
+         @Override
+diff --git a/server/src/main/java/io/crate/replication/logical/seqno/RetentionLeaseHelper.java b/server/src/main/java/io/crate/replication/logical/seqno/RetentionLeaseHelper.java
+index 27883fe2bd..3085bb19b3 100644
+--- a/server/src/main/java/io/crate/replication/logical/seqno/RetentionLeaseHelper.java
++++ b/server/src/main/java/io/crate/replication/logical/seqno/RetentionLeaseHelper.java
+@@ -28,6 +28,7 @@ import org.elasticsearch.client.Client;
+ import org.elasticsearch.index.seqno.RetentionLeaseActions;
+ import org.elasticsearch.index.seqno.RetentionLeaseAlreadyExistsException;
+ import org.elasticsearch.index.shard.ShardId;
++import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.common.exceptions.Exceptions;
+ import io.crate.exceptions.SQLExceptions;
+@@ -43,9 +44,10 @@ public class RetentionLeaseHelper {
+         return "logical_replication:" + subscriberClusterName;
+     }
+ 
+-    private static String retentionLeaseIdForShard(String subscriberClusterName, ShardId shardId) {
++    @VisibleForTesting
++    static String retentionLeaseIdForShard(String subscriberClusterName, ShardId shardId) {
+         var retentionLeaseSource = retentionLeaseSource(subscriberClusterName);
+-        return retentionLeaseSource + ":" + shardId;
++        return retentionLeaseSource + ":" + "[" + shardId.getIndex().getName() + "][" + shardId.id() + "]";
+     }
+ 
+ 
+diff --git a/server/src/main/java/org/elasticsearch/action/support/single/shard/SingleShardRequest.java b/server/src/main/java/org/elasticsearch/action/support/single/shard/SingleShardRequest.java
+index 88273ee63f..ba30a52edc 100644
+--- a/server/src/main/java/org/elasticsearch/action/support/single/shard/SingleShardRequest.java
++++ b/server/src/main/java/org/elasticsearch/action/support/single/shard/SingleShardRequest.java
+@@ -21,17 +21,17 @@ package org.elasticsearch.action.support.single.shard;
+ 
+ import java.io.IOException;
+ 
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.StreamOutput;
++import org.elasticsearch.index.Index;
+ import org.elasticsearch.index.shard.ShardId;
+ import org.elasticsearch.transport.TransportRequest;
+ 
+ public abstract class SingleShardRequest extends TransportRequest {
+ 
+-    /**
+-     * The concrete index name
+-     */
+-    protected final String index;
++    protected final Index index;
+ 
+     ShardId internalShardId;
+ 
+@@ -40,15 +40,21 @@ public abstract class SingleShardRequest extends TransportRequest {
+         if (in.readBoolean()) {
+             internalShardId = new ShardId(in);
+         }
+-        index = in.readOptionalString();
+-        // no need to pass threading over the network, they are always false when coming throw a thread pool
++        String indexName = IndexMetadata.INDEX_NAME_NA_VALUE;
++        String indexUUID = IndexMetadata.INDEX_UUID_NA_VALUE;
++        if (in.getVersion().before(Version.V_6_1_0)) {
++            indexName = in.readOptionalString();
++        } else {
++            indexUUID = in.readString();
++        }
++        index = new Index(indexName, indexUUID);
+     }
+ 
+-    protected SingleShardRequest(String index) {
++    protected SingleShardRequest(Index index) {
+         this.index = index;
+     }
+ 
+-    public String index() {
++    public Index index() {
+         return index;
+     }
+ 
+@@ -56,6 +62,10 @@ public abstract class SingleShardRequest extends TransportRequest {
+     public void writeTo(StreamOutput out) throws IOException {
+         super.writeTo(out);
+         out.writeOptionalWriteable(internalShardId);
+-        out.writeOptionalString(index);
++        if (out.getVersion().before(Version.V_6_1_0)) {
++            out.writeOptionalString(index.getName());
++        } else {
++            out.writeString(index.getUUID());
++        }
+     }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/action/support/single/shard/TransportSingleShardAction.java b/server/src/main/java/org/elasticsearch/action/support/single/shard/TransportSingleShardAction.java
+index 7458868aa2..ed1bedcb49 100644
+--- a/server/src/main/java/org/elasticsearch/action/support/single/shard/TransportSingleShardAction.java
++++ b/server/src/main/java/org/elasticsearch/action/support/single/shard/TransportSingleShardAction.java
+@@ -24,6 +24,7 @@ import java.io.IOException;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.apache.logging.log4j.message.ParameterizedMessage;
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionListenerResponseHandler;
+ import org.elasticsearch.action.ActionRunnable;
+@@ -34,14 +35,18 @@ import org.elasticsearch.cluster.ClusterState;
+ import org.elasticsearch.cluster.block.ClusterBlockException;
+ import org.elasticsearch.cluster.block.ClusterBlockLevel;
+ import org.elasticsearch.cluster.block.ClusterBlocks;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
+ import org.elasticsearch.cluster.node.DiscoveryNode;
+ import org.elasticsearch.cluster.node.DiscoveryNodes;
++import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
+ import org.elasticsearch.cluster.routing.ShardRouting;
+ import org.elasticsearch.cluster.routing.ShardsIterator;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.elasticsearch.common.io.stream.Writeable;
+ import org.elasticsearch.common.logging.LoggerMessageFormat;
++import org.elasticsearch.index.Index;
++import org.elasticsearch.index.IndexNotFoundException;
+ import org.elasticsearch.index.shard.ShardId;
+ import org.elasticsearch.threadpool.ThreadPool;
+ import org.elasticsearch.transport.TransportChannel;
+@@ -125,6 +130,23 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
+     @Nullable
+     protected abstract ShardsIterator shards(ClusterState state, Request request);
+ 
++    public static IndexShardRoutingTable shardRoutingTable(ClusterState state, ShardId shardId, Version senderVersion) {
++        String indexUUID = shardId.getIndexUUID();
++
++        // Older version uses their shardId containing their local indexUUID
++        // In these cases, the local indexUUID must be resolved using the provided indexName
++        if (senderVersion.onOrBefore(Version.V_6_1_0)) {
++            String indexName = shardId.getIndexName();
++            IndexMetadata indexMetadata = state.metadata().getIndexByName(indexName);
++            if (indexMetadata == null) {
++                throw new IndexNotFoundException(shardId.getIndex());
++            }
++            indexUUID = indexMetadata.getIndex().getUUID();
++        }
++
++        return state.routingTable().shardRoutingTable(indexUUID, shardId.id());
++    }
++
+     class AsyncSingleAction {
+ 
+         private final ActionListener<Response> listener;
+@@ -149,7 +171,19 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
+ 
+ 
+             ClusterBlocks blocks = clusterState.blocks();
+-            blockException = blocks.indexBlockedException(ClusterBlockLevel.READ, request.index());
++            Index index = request.index();
++
++            // Nodes <= 6.1.0 are sending the index name instead of the UUID while everything is based on UUID's
++            // nowadays. This we try to resolve the actually UUID by the given name.
++            if (index.getUUID().equals(IndexMetadata.INDEX_UUID_NA_VALUE)) {
++                IndexMetadata indexMetadata = clusterState.metadata().getIndexByName(index.getName());
++                if (indexMetadata == null) {
++                    throw new IndexNotFoundException(index);
++                }
++                index = indexMetadata.getIndex();
++            }
++
++            blockException = blocks.indexBlockedException(ClusterBlockLevel.READ, index.getUUID());
+             if (blockException != null) {
+                 throw blockException;
+             }
+diff --git a/server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java b/server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java
+index 7d70e2ae28..b00fc73b97 100644
+--- a/server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java
++++ b/server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java
+@@ -19,11 +19,12 @@
+ 
+ package org.elasticsearch.index;
+ 
++import java.io.IOException;
++import java.util.Locale;
++
+ import org.elasticsearch.ResourceNotFoundException;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ 
+-import java.io.IOException;
+-
+ public final class IndexNotFoundException extends ResourceNotFoundException {
+     /**
+      * Construct with a custom message.
+@@ -38,7 +39,7 @@ public final class IndexNotFoundException extends ResourceNotFoundException {
+     }
+ 
+     public IndexNotFoundException(String index, Throwable cause) {
+-        super("no such index", cause);
++        super(String.format(Locale.ENGLISH, "no such index %s", index), cause);
+         setIndex(index);
+     }
+ 
+@@ -47,7 +48,7 @@ public final class IndexNotFoundException extends ResourceNotFoundException {
+     }
+ 
+     public IndexNotFoundException(Index index, Throwable cause) {
+-        super("no such index", cause);
++        super(String.format(Locale.ENGLISH, "no such index %s", index), cause);
+         setIndex(index);
+     }
+ 
+diff --git a/server/src/main/java/org/elasticsearch/index/seqno/RetentionLeaseActions.java b/server/src/main/java/org/elasticsearch/index/seqno/RetentionLeaseActions.java
+index d6b96b6d49..2ec302f9d1 100644
+--- a/server/src/main/java/org/elasticsearch/index/seqno/RetentionLeaseActions.java
++++ b/server/src/main/java/org/elasticsearch/index/seqno/RetentionLeaseActions.java
+@@ -22,6 +22,7 @@ package org.elasticsearch.index.seqno;
+ import java.io.IOException;
+ import java.util.Objects;
+ 
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.ActionListener;
+ import org.elasticsearch.action.ActionType;
+ import org.elasticsearch.action.support.single.shard.SingleShardRequest;
+@@ -77,9 +78,7 @@ public class RetentionLeaseActions {
+ 
+         @Override
+         protected ShardsIterator shards(final ClusterState state, final T request) {
+-            return state
+-                .routingTable()
+-                .shardRoutingTable(request.getShardId().getIndexUUID(), request.getShardId().id())
++            return shardRoutingTable(state, request.getShardId(), request.senderVersion())
+                 .primaryShardIt();
+         }
+ 
+@@ -241,6 +240,7 @@ public class RetentionLeaseActions {
+     private abstract static class Request extends SingleShardRequest {
+ 
+         private final ShardId shardId;
++        private final Version senderVersion;
+ 
+         public ShardId getShardId() {
+             return shardId;
+@@ -256,12 +256,14 @@ public class RetentionLeaseActions {
+             super(in);
+             shardId = new ShardId(in);
+             id = in.readString();
++            senderVersion = in.getVersion();
+         }
+ 
+         Request(final ShardId shardId, final String id) {
+-            super(Objects.requireNonNull(shardId).getIndexUUID());
++            super(Objects.requireNonNull(shardId).getIndex());
+             this.shardId = shardId;
+             this.id = Objects.requireNonNull(id);
++            this.senderVersion = Version.CURRENT;
+         }
+ 
+         @Override
+@@ -271,6 +273,9 @@ public class RetentionLeaseActions {
+             out.writeString(id);
+         }
+ 
++        public Version senderVersion() {
++            return senderVersion;
++        }
+     }
+ 
+     public static class AddOrRenewRequest extends Request {
+diff --git a/server/src/test/java/io/crate/replication/logical/action/GetFileChunkActionTest.java b/server/src/test/java/io/crate/replication/logical/action/GetFileChunkActionTest.java
+new file mode 100644
+index 0000000000..e8527d5a2e
+--- /dev/null
++++ b/server/src/test/java/io/crate/replication/logical/action/GetFileChunkActionTest.java
+@@ -0,0 +1,90 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.replication.logical.action;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.Mockito.mock;
++
++import java.net.InetAddress;
++
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.node.DiscoveryNode;
++import org.elasticsearch.cluster.routing.ShardRouting;
++import org.elasticsearch.cluster.routing.ShardsIterator;
++import org.elasticsearch.common.UUIDs;
++import org.elasticsearch.common.io.stream.BytesStreamOutput;
++import org.elasticsearch.common.transport.TransportAddress;
++import org.elasticsearch.index.Index;
++import org.elasticsearch.index.shard.ShardId;
++import org.elasticsearch.index.store.StoreFileMetadata;
++import org.elasticsearch.indices.IndicesService;
++import org.elasticsearch.transport.TransportService;
++import org.junit.Test;
++
++import io.crate.replication.logical.repository.PublisherRestoreService;
++import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
++import io.crate.testing.SQLExecutor;
++
++public class GetFileChunkActionTest extends CrateDummyClusterServiceUnitTest {
++
++    @Test
++    public void test_bwc_can_resolve_shards_using_index_names_before_6_1() throws Exception {
++        SQLExecutor.builder(clusterService)
++            .build()
++            .addTable("CREATE TABLE doc.t1 (id INT) CLUSTERED INTO 1 SHARDS")
++            .startShards("doc.t1");
++
++        ShardId shardId = new ShardId(new Index("t1", "unknown-uuid"), 0);
++
++        GetFileChunkAction.TransportAction transportAction = new GetFileChunkAction.TransportAction(
++                THREAD_POOL,
++                clusterService,
++                mock(TransportService.class),
++                mock(IndicesService.class),
++                mock(PublisherRestoreService.class)
++            );
++        GetFileChunkAction.Request request = new GetFileChunkAction.Request(
++            UUIDs.randomBase64UUID(),
++            new DiscoveryNode("node1", new TransportAddress(InetAddress.ofLiteral("127.0.0.1"), 1234), Version.V_6_0_0),
++            shardId,
++            "subscriber name",
++            new StoreFileMetadata("dummy", 0, "dummy", Version.V_6_0_0.luceneVersion),
++            0,
++            0
++        );
++
++        try (var out = new BytesStreamOutput()) {
++            out.setVersion(Version.V_6_0_0);
++            request.writeTo(out);
++            try (var in = out.bytes().streamInput()) {
++                in.setVersion(Version.V_6_0_0);
++                GetFileChunkAction.Request request1 = new GetFileChunkAction.Request(in);
++
++                ShardsIterator shardsIt = transportAction.shards(clusterService.state(), request1);
++                assertThat(shardsIt).isNotNull();
++                ShardRouting shardRouting = shardsIt.nextOrNull();
++                assertThat(shardRouting).isNotNull();
++                assertThat(shardRouting.id()).isEqualTo(0);
++            }
++        }
++    }
++}
+diff --git a/server/src/test/java/io/crate/replication/logical/action/GetStoreMetadataActionTest.java b/server/src/test/java/io/crate/replication/logical/action/GetStoreMetadataActionTest.java
+new file mode 100644
+index 0000000000..af32848720
+--- /dev/null
++++ b/server/src/test/java/io/crate/replication/logical/action/GetStoreMetadataActionTest.java
+@@ -0,0 +1,84 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.replication.logical.action;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.Mockito.mock;
++
++import java.net.InetAddress;
++
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.node.DiscoveryNode;
++import org.elasticsearch.cluster.routing.ShardRouting;
++import org.elasticsearch.cluster.routing.ShardsIterator;
++import org.elasticsearch.common.UUIDs;
++import org.elasticsearch.common.io.stream.BytesStreamOutput;
++import org.elasticsearch.common.transport.TransportAddress;
++import org.elasticsearch.index.Index;
++import org.elasticsearch.index.shard.ShardId;
++import org.elasticsearch.transport.TransportService;
++import org.junit.Test;
++
++import io.crate.replication.logical.repository.PublisherRestoreService;
++import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
++import io.crate.testing.SQLExecutor;
++
++public class GetStoreMetadataActionTest extends CrateDummyClusterServiceUnitTest {
++
++    @Test
++    public void test_bwc_can_resolve_shards_using_index_names_before_6_1() throws Exception {
++        SQLExecutor.builder(clusterService)
++            .build()
++            .addTable("CREATE TABLE doc.t1 (id INT) CLUSTERED INTO 1 SHARDS")
++            .startShards("doc.t1");
++
++        ShardId shardId = new ShardId(new Index("t1", "unknown-uuid"), 0);
++
++        GetStoreMetadataAction.TransportAction transportAction = new GetStoreMetadataAction.TransportAction(
++                THREAD_POOL,
++                clusterService,
++                mock(TransportService.class),
++                mock(PublisherRestoreService.class)
++            );
++        GetStoreMetadataAction.Request request = new GetStoreMetadataAction.Request(
++            UUIDs.randomBase64UUID(),
++            new DiscoveryNode("node1", new TransportAddress(InetAddress.ofLiteral("127.0.0.1"), 1234), Version.V_6_0_0),
++            shardId,
++            "subscriber name"
++        );
++
++        try (var out = new BytesStreamOutput()) {
++            out.setVersion(Version.V_6_0_0);
++            request.writeTo(out);
++            try (var in = out.bytes().streamInput()) {
++                in.setVersion(Version.V_6_0_0);
++                GetStoreMetadataAction.Request request1 = new GetStoreMetadataAction.Request(in);
++
++                ShardsIterator shardsIt = transportAction.shards(clusterService.state(), request1);
++                assertThat(shardsIt).isNotNull();
++                ShardRouting shardRouting = shardsIt.nextOrNull();
++                assertThat(shardRouting).isNotNull();
++                assertThat(shardRouting.id()).isEqualTo(0);
++            }
++        }
++    }
++}
+diff --git a/server/src/test/java/io/crate/replication/logical/action/ReleasePublisherResourcesActionTest.java b/server/src/test/java/io/crate/replication/logical/action/ReleasePublisherResourcesActionTest.java
+new file mode 100644
+index 0000000000..947e532288
+--- /dev/null
++++ b/server/src/test/java/io/crate/replication/logical/action/ReleasePublisherResourcesActionTest.java
+@@ -0,0 +1,84 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.replication.logical.action;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.Mockito.mock;
++
++import java.net.InetAddress;
++
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.node.DiscoveryNode;
++import org.elasticsearch.cluster.routing.ShardRouting;
++import org.elasticsearch.cluster.routing.ShardsIterator;
++import org.elasticsearch.common.UUIDs;
++import org.elasticsearch.common.io.stream.BytesStreamOutput;
++import org.elasticsearch.common.transport.TransportAddress;
++import org.elasticsearch.index.Index;
++import org.elasticsearch.index.shard.ShardId;
++import org.elasticsearch.transport.TransportService;
++import org.junit.Test;
++
++import io.crate.replication.logical.repository.PublisherRestoreService;
++import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
++import io.crate.testing.SQLExecutor;
++
++public class ReleasePublisherResourcesActionTest extends CrateDummyClusterServiceUnitTest {
++
++    @Test
++    public void test_bwc_can_resolve_shards_using_index_names_before_6_1() throws Exception {
++        SQLExecutor.builder(clusterService)
++            .build()
++            .addTable("CREATE TABLE doc.t1 (id INT) CLUSTERED INTO 1 SHARDS")
++            .startShards("doc.t1");
++
++        ShardId shardId = new ShardId(new Index("t1", "unknown-uuid"), 0);
++
++        GetStoreMetadataAction.TransportAction transportAction = new GetStoreMetadataAction.TransportAction(
++                THREAD_POOL,
++                clusterService,
++                mock(TransportService.class),
++                mock(PublisherRestoreService.class)
++            );
++        GetStoreMetadataAction.Request request = new GetStoreMetadataAction.Request(
++            UUIDs.randomBase64UUID(),
++            new DiscoveryNode("node1", new TransportAddress(InetAddress.ofLiteral("127.0.0.1"), 1234), Version.V_6_0_0),
++            shardId,
++            "subscriber name"
++        );
++
++        try (var out = new BytesStreamOutput()) {
++            out.setVersion(Version.V_6_0_0);
++            request.writeTo(out);
++            try (var in = out.bytes().streamInput()) {
++                in.setVersion(Version.V_6_0_0);
++                GetStoreMetadataAction.Request request1 = new GetStoreMetadataAction.Request(in);
++
++                ShardsIterator shardsIt = transportAction.shards(clusterService.state(), request1);
++                assertThat(shardsIt).isNotNull();
++                ShardRouting shardRouting = shardsIt.nextOrNull();
++                assertThat(shardRouting).isNotNull();
++                assertThat(shardRouting.id()).isEqualTo(0);
++            }
++        }
++    }
++}
+diff --git a/server/src/test/java/io/crate/replication/logical/action/ShardChangesActionTest.java b/server/src/test/java/io/crate/replication/logical/action/ShardChangesActionTest.java
+new file mode 100644
+index 0000000000..3c3f8d4738
+--- /dev/null
++++ b/server/src/test/java/io/crate/replication/logical/action/ShardChangesActionTest.java
+@@ -0,0 +1,78 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.replication.logical.action;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.Mockito.mock;
++
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.routing.ShardRouting;
++import org.elasticsearch.cluster.routing.ShardsIterator;
++import org.elasticsearch.common.io.stream.BytesStreamOutput;
++import org.elasticsearch.index.Index;
++import org.elasticsearch.index.shard.ShardId;
++import org.elasticsearch.indices.IndicesService;
++import org.elasticsearch.transport.TransportService;
++import org.junit.Test;
++
++import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
++import io.crate.testing.SQLExecutor;
++
++public class ShardChangesActionTest extends CrateDummyClusterServiceUnitTest {
++
++    @Test
++    public void test_bwc_can_resolve_shards_using_index_names_before_6_1() throws Exception {
++        SQLExecutor.builder(clusterService)
++            .build()
++            .addTable("CREATE TABLE doc.t1 (id INT) CLUSTERED INTO 1 SHARDS")
++            .startShards("doc.t1");
++
++        ShardId shardId = new ShardId(new Index("t1", "unknown-uuid"), 0);
++
++        ShardChangesAction.TransportAction transportAction = new ShardChangesAction.TransportAction(
++                THREAD_POOL,
++                clusterService,
++                mock(TransportService.class),
++                mock(IndicesService.class)
++            );
++        ShardChangesAction.Request request = new ShardChangesAction.Request(
++            shardId,
++            0,
++            0
++        );
++
++        try (var out = new BytesStreamOutput()) {
++            out.setVersion(Version.V_6_0_0);
++            request.writeTo(out);
++            try (var in = out.bytes().streamInput()) {
++                in.setVersion(Version.V_6_0_0);
++                ShardChangesAction.Request request1 = new ShardChangesAction.Request(in);
++
++                ShardsIterator shardsIt = transportAction.shards(clusterService.state(), request1);
++                assertThat(shardsIt).isNotNull();
++                ShardRouting shardRouting = shardsIt.nextOrNull();
++                assertThat(shardRouting).isNotNull();
++                assertThat(shardRouting.id()).isEqualTo(0);
++            }
++        }
++    }
++}
+diff --git a/server/src/test/java/io/crate/replication/logical/seqno/RetentionLeaseHelperTest.java b/server/src/test/java/io/crate/replication/logical/seqno/RetentionLeaseHelperTest.java
+new file mode 100644
+index 0000000000..d09d9e860c
+--- /dev/null
++++ b/server/src/test/java/io/crate/replication/logical/seqno/RetentionLeaseHelperTest.java
+@@ -0,0 +1,49 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.replication.logical.seqno;
++
++import static io.crate.testing.Asserts.assertThat;
++
++import org.elasticsearch.common.UUIDs;
++import org.elasticsearch.index.shard.ShardId;
++import org.junit.Test;
++
++public class RetentionLeaseHelperTest {
++
++    /**
++     * Ensures the retention lease id format. This is important for logical-replication to survive upgrades/running
++     * between mixed version clusters.
++     * If it changes, existing logical replications between mixed versions won't work anymore as the id will not match
++     * the id used on the cluster with a different version.
++     */
++    @Test
++    public void test_retention_lease_id_for_shard() {
++        ShardId shardId = new ShardId(
++            "dummy",
++            UUIDs.randomBase64UUID(),
++            0
++        );
++
++        String leaseId = RetentionLeaseHelper.retentionLeaseIdForShard("cluster1", shardId);
++        assertThat(leaseId).isEqualTo("logical_replication:cluster1:[dummy][0]");
++    }
++}
+diff --git a/server/src/test/java/org/elasticsearch/action/support/single/shard/SingleShardRequestTest.java b/server/src/test/java/org/elasticsearch/action/support/single/shard/SingleShardRequestTest.java
+new file mode 100644
+index 0000000000..d8a7e0b802
+--- /dev/null
++++ b/server/src/test/java/org/elasticsearch/action/support/single/shard/SingleShardRequestTest.java
+@@ -0,0 +1,94 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package org.elasticsearch.action.support.single.shard;
++
++import static io.crate.testing.Asserts.assertThat;
++
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
++import org.elasticsearch.common.io.stream.BytesStreamOutput;
++import org.elasticsearch.index.Index;
++import org.elasticsearch.index.shard.ShardId;
++import org.elasticsearch.tasks.TaskId;
++import org.elasticsearch.test.ESTestCase;
++import org.junit.Test;
++
++public class SingleShardRequestTest extends ESTestCase {
++
++    @Test
++    public void test_streaming() throws Exception {
++        Index index = new Index("index-name", "index-uuid");
++        ShardId shardId = new ShardId(index, 0);
++
++        SingleShardRequest shardRequest = new SingleShardRequest(index) {};
++        shardRequest.internalShardId = shardId;
++
++        try (var out = new BytesStreamOutput()) {
++            shardRequest.writeTo(out);
++            try (var in = out.bytes().streamInput()) {
++                SingleShardRequest shardRequest1 = new SingleShardRequest(in) {};
++                Index index1 = shardRequest1.index();
++                assertThat(index1.getName().equals(IndexMetadata.INDEX_NAME_NA_VALUE));
++                assertThat(index1.getUUID().equals(index.getUUID()));
++                assertThat(shardRequest1.internalShardId).isEqualTo(shardId);
++            }
++        }
++    }
++
++    @Test
++    public void test_streaming_bwc_before_6_1() throws Exception {
++        Index index = new Index("index-name", "index-uuid");
++        ShardId shardId = new ShardId(index, 0);
++
++        try (var out = new BytesStreamOutput()) {
++            TaskId.EMPTY_TASK_ID.writeTo(out);
++            out.writeBoolean(true);
++            shardId.writeTo(out);
++            out.writeOptionalString(index.getName());
++
++            try (var in = out.bytes().streamInput()) {
++                in.setVersion(Version.V_6_0_0);
++                SingleShardRequest shardRequest1 = new SingleShardRequest(in) {};
++                Index index1 = shardRequest1.index();
++                assertThat(index1.getName().equals(index.getName()));
++                assertThat(index1.getUUID().equals(IndexMetadata.INDEX_UUID_NA_VALUE));
++            }
++        }
++
++        SingleShardRequest shardRequest = new SingleShardRequest(index) {};
++        shardRequest.internalShardId = shardId;
++        try (var out = new BytesStreamOutput()) {
++            out.setVersion(Version.V_6_0_0);
++            shardRequest.writeTo(out);
++            try (var in = out.bytes().streamInput()) {
++                in.setVersion(Version.V_6_0_0);
++                TaskId.readFromStream(in);
++                in.readBoolean();
++                ShardId shardId1 = new ShardId(in);
++                String indexName = in.readOptionalString();
++
++                assertThat(shardId1).isEqualTo(shardId);
++                assertThat(indexName).isEqualTo(index.getName());
++            }
++        }
++    }
++}
+diff --git a/server/src/test/java/org/elasticsearch/index/seqno/RetentionLeaseActionsTest.java b/server/src/test/java/org/elasticsearch/index/seqno/RetentionLeaseActionsTest.java
+new file mode 100644
+index 0000000000..fb2c2b4663
+--- /dev/null
++++ b/server/src/test/java/org/elasticsearch/index/seqno/RetentionLeaseActionsTest.java
+@@ -0,0 +1,80 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package org.elasticsearch.index.seqno;
++
++import static io.crate.testing.Asserts.assertThat;
++import static org.mockito.Mockito.mock;
++
++import org.elasticsearch.Version;
++import org.elasticsearch.cluster.routing.ShardRouting;
++import org.elasticsearch.cluster.routing.ShardsIterator;
++import org.elasticsearch.common.io.stream.BytesStreamOutput;
++import org.elasticsearch.index.Index;
++import org.elasticsearch.index.shard.ShardId;
++import org.elasticsearch.indices.IndicesService;
++import org.elasticsearch.transport.TransportService;
++import org.junit.Test;
++
++import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
++import io.crate.testing.SQLExecutor;
++
++public class RetentionLeaseActionsTest extends CrateDummyClusterServiceUnitTest {
++
++    @Test
++    public void test_bwc_can_resolve_shards_using_index_names_before_6_1() throws Exception {
++        SQLExecutor.builder(clusterService)
++            .build()
++            .addTable("CREATE TABLE doc.t1 (id INT) CLUSTERED INTO 1 SHARDS")
++            .startShards("doc.t1");
++
++        ShardId shardId = new ShardId(new Index("t1", "unknown-uuid"), 0);
++
++        RetentionLeaseActions.Add.TransportAction retentionLeaseActionAdd =
++            new RetentionLeaseActions.Add.TransportAction(
++                THREAD_POOL,
++                clusterService,
++                mock(TransportService.class),
++                mock(IndicesService.class)
++            );
++        RetentionLeaseActions.AddOrRenewRequest request = new RetentionLeaseActions.AddOrRenewRequest(
++            shardId,
++            "lease-id",
++            1,
++            "lease source"
++        );
++
++        try (var out = new BytesStreamOutput()) {
++            out.setVersion(Version.V_6_0_0);
++            request.writeTo(out);
++            try (var in = out.bytes().streamInput()) {
++                in.setVersion(Version.V_6_0_0);
++                RetentionLeaseActions.AddOrRenewRequest request1 = new RetentionLeaseActions.AddOrRenewRequest(in);
++
++                ShardsIterator shardsIt = retentionLeaseActionAdd.shards(clusterService.state(), request1);
++                assertThat(shardsIt).isNotNull();
++                ShardRouting shardRouting = shardsIt.nextOrNull();
++                assertThat(shardRouting).isNotNull();
++                assertThat(shardRouting.id()).isEqualTo(0);
++            }
++        }
++    }
++}

@@ -1,0 +1,862 @@
+commit 6c4fd5e558079c125e6719e40633ba64e1fda2bf
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Sun Sep 8 14:03:22 2024 -0400
+
+    Add support for AllLike and AllNotLike operators
+    
+    (cherry picked from commit 2d1d5792c54e7422dbb64fac5894ebcdcd1c92a0)
+
+diff --git a/docs/appendices/release-notes/5.8.3.rst b/docs/appendices/release-notes/5.8.3.rst
+index 3b86e933a8..734c291638 100644
+--- a/docs/appendices/release-notes/5.8.3.rst
++++ b/docs/appendices/release-notes/5.8.3.rst
+@@ -81,3 +81,6 @@ Fixes
+ - Fixed an issue that caused failure of ``ALTER ROLE`` statements updating or
+   resetting password of a user with specified :ref:`JWT <create-user-jwt>`
+   properties.
++
++- Fixed an issue that caused filtering by ``LIKE ALL`` on arrays to behave like
++  ``LIKE ANY``.
+diff --git a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
+index 83615af1f4..d8710927c6 100644
+--- a/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java
+@@ -60,6 +60,7 @@ import io.crate.exceptions.ColumnUnknownException;
+ import io.crate.exceptions.ConversionException;
+ import io.crate.execution.engine.aggregation.impl.CollectSetAggregation;
+ import io.crate.expression.eval.EvaluatingNormalizer;
++import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.AndOperator;
+ import io.crate.expression.operator.EqOperator;
+ import io.crate.expression.operator.ExistsOperator;
+@@ -68,7 +69,6 @@ import io.crate.expression.operator.Operator;
+ import io.crate.expression.operator.OrOperator;
+ import io.crate.expression.operator.RegexpMatchCaseInsensitiveOperator;
+ import io.crate.expression.operator.RegexpMatchOperator;
+-import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.any.AnyOperator;
+ import io.crate.expression.predicate.NotPredicate;
+ import io.crate.expression.scalar.ArraySliceFunction;
+@@ -841,7 +841,7 @@ public class ExpressionAnalyzer {
+             Symbol arraySymbol = node.getValue().accept(this, context);
+             Symbol leftSymbol = node.getPattern().accept(this, context);
+             return allocateFunction(
+-                LikeOperators.arrayOperatorName(node.inverse(), node.ignoreCase()),
++                LikeOperators.arrayOperatorName(node.quantifier(), node.inverse(), node.ignoreCase()),
+                 List.of(leftSymbol, arraySymbol),
+                 context);
+         }
+diff --git a/server/src/main/java/io/crate/expression/operator/LikeOperators.java b/server/src/main/java/io/crate/expression/operator/LikeOperators.java
+index b73a865da7..094ca642d9 100644
+--- a/server/src/main/java/io/crate/expression/operator/LikeOperators.java
++++ b/server/src/main/java/io/crate/expression/operator/LikeOperators.java
+@@ -29,6 +29,9 @@ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.WildcardQuery;
+ import org.jetbrains.annotations.Nullable;
+ 
++import io.crate.expression.operator.all.AllLikeOperator;
++import io.crate.expression.operator.all.AllNotLikeOperator;
++import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.any.AnyLikeOperator;
+ import io.crate.expression.operator.any.AnyNotLikeOperator;
+ import io.crate.expression.operator.any.AnyOperator;
+@@ -36,6 +39,7 @@ import io.crate.lucene.match.CrateRegexQuery;
+ import io.crate.metadata.Functions;
+ import io.crate.metadata.Scalar;
+ import io.crate.metadata.functions.Signature;
++import io.crate.sql.tree.ArrayComparison;
+ import io.crate.types.DataTypes;
+ 
+ public class LikeOperators {
+@@ -47,6 +51,11 @@ public class LikeOperators {
+     public static final String ANY_NOT_LIKE = AnyOperator.OPERATOR_PREFIX + "not_like";
+     public static final String ANY_NOT_ILIKE = AnyOperator.OPERATOR_PREFIX + "not_ilike";
+ 
++    public static final String ALL_LIKE = AllOperator.OPERATOR_PREFIX + "like";
++    public static final String ALL_ILIKE = AllOperator.OPERATOR_PREFIX + "ilike";
++    public static final String ALL_NOT_LIKE = AllOperator.OPERATOR_PREFIX + "not_like";
++    public static final String ALL_NOT_ILIKE = AllOperator.OPERATOR_PREFIX + "not_ilike";
++
+     public static final Character DEFAULT_ESCAPE = '\\';
+     /**
+      *  To avoid creating a String out of {@link #DEFAULT_ESCAPE} every time
+@@ -58,12 +67,24 @@ public class LikeOperators {
+         return ignoreCase ? OP_ILIKE : OP_LIKE;
+     }
+ 
+-    public static String arrayOperatorName(boolean negate, boolean ignoreCase) {
++    public static String arrayOperatorName(ArrayComparison.Quantifier q, boolean negate, boolean ignoreCase) {
+         String name;
+-        if (negate) {
+-            name = ignoreCase ? ANY_NOT_ILIKE : ANY_NOT_LIKE;
+-        } else {
+-            name = ignoreCase ? ANY_ILIKE : ANY_LIKE;
++        switch (q) {
++            case ANY -> {
++                if (negate) {
++                    name = ignoreCase ? ANY_NOT_ILIKE : ANY_NOT_LIKE;
++                } else {
++                    name = ignoreCase ? ANY_ILIKE : ANY_LIKE;
++                }
++            }
++            case ALL -> {
++                if (negate) {
++                    name = ignoreCase ? ALL_NOT_ILIKE : ALL_NOT_LIKE;
++                } else {
++                    name = ignoreCase ? ALL_ILIKE : ALL_LIKE;
++                }
++            }
++            default -> throw new IllegalStateException("An invalid array operator: " + q);
+         }
+         return name;
+     }
+@@ -217,6 +238,66 @@ public class LikeOperators {
+                     CaseSensitivity.INSENSITIVE
+                 )
+         );
++        builder.add(
++            Signature.scalar(
++                    ALL_LIKE,
++                    DataTypes.STRING.getTypeSignature(),
++                    DataTypes.STRING_ARRAY.getTypeSignature(),
++                    Operator.RETURN_TYPE.getTypeSignature()
++                ).withFeature(Scalar.Feature.DETERMINISTIC)
++                .withFeature(Scalar.Feature.NULLABLE),
++            (signature, boundSignature) ->
++                new AllLikeOperator(
++                    signature,
++                    boundSignature,
++                    CaseSensitivity.SENSITIVE
++                )
++        );
++        builder.add(
++            Signature.scalar(
++                    ALL_NOT_LIKE,
++                    DataTypes.STRING.getTypeSignature(),
++                    DataTypes.STRING_ARRAY.getTypeSignature(),
++                    Operator.RETURN_TYPE.getTypeSignature()
++                ).withFeature(Scalar.Feature.DETERMINISTIC)
++                .withFeature(Scalar.Feature.NULLABLE),
++            (signature, boundSignature) ->
++                new AllNotLikeOperator(
++                    signature,
++                    boundSignature,
++                    CaseSensitivity.SENSITIVE
++                )
++        );
++        builder.add(
++            Signature.scalar(
++                    ALL_ILIKE,
++                    DataTypes.STRING.getTypeSignature(),
++                    DataTypes.STRING_ARRAY.getTypeSignature(),
++                    Operator.RETURN_TYPE.getTypeSignature()
++                ).withFeature(Scalar.Feature.DETERMINISTIC)
++                .withFeature(Scalar.Feature.NULLABLE),
++            (signature, boundSignature) ->
++                new AllLikeOperator(
++                    signature,
++                    boundSignature,
++                    CaseSensitivity.INSENSITIVE
++                )
++        );
++        builder.add(
++            Signature.scalar(
++                    ALL_NOT_ILIKE,
++                    DataTypes.STRING.getTypeSignature(),
++                    DataTypes.STRING_ARRAY.getTypeSignature(),
++                    Operator.RETURN_TYPE.getTypeSignature()
++                ).withFeature(Scalar.Feature.DETERMINISTIC)
++                .withFeature(Scalar.Feature.NULLABLE),
++            (signature, boundSignature) ->
++                new AllNotLikeOperator(
++                    signature,
++                    boundSignature,
++                    CaseSensitivity.INSENSITIVE
++                )
++        );
+     }
+ 
+     static final Pattern makePattern(String pattern, CaseSensitivity caseSensitivity, Character escape) {
+diff --git a/server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java b/server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java
+new file mode 100644
+index 0000000000..f9cd9bdcca
+--- /dev/null
++++ b/server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java
+@@ -0,0 +1,75 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.expression.operator.all;
++
++import org.apache.lucene.search.Query;
++
++import io.crate.expression.operator.LikeOperators;
++import io.crate.expression.symbol.Function;
++import io.crate.expression.symbol.Literal;
++import io.crate.lucene.LuceneQueryBuilder;
++import io.crate.metadata.Reference;
++import io.crate.metadata.functions.BoundSignature;
++import io.crate.metadata.functions.Signature;
++import io.crate.types.ArrayType;
++import io.crate.types.DataType;
++import io.crate.types.ObjectType;
++
++public final class AllLikeOperator extends AllOperator<String> {
++
++    private final LikeOperators.CaseSensitivity caseSensitivity;
++
++    public AllLikeOperator(Signature signature,
++                           BoundSignature boundSignature,
++                           LikeOperators.CaseSensitivity caseSensitivity) {
++        super(signature, boundSignature);
++        this.caseSensitivity = caseSensitivity;
++        DataType<?> innerType = ((ArrayType<?>) boundSignature.argTypes().get(1)).innerType();
++        if (innerType.id() == ObjectType.ID) {
++            throw new IllegalArgumentException("ALL on object arrays is not supported");
++        }
++    }
++
++    @Override
++    boolean matches(String probe, String candidate) {
++        // Accept both sides of arguments to be patterns
++        return LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) ||
++            LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);
++    }
++
++    @Override
++    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, LuceneQueryBuilder.Context context) {
++        return null;
++    }
++
++    @Override
++    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, LuceneQueryBuilder.Context context) {
++        return null;
++    }
++
++    @Override
++    protected void validateRightArg(String arg) {
++        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {
++            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);
++        }
++    }
++}
+diff --git a/server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java b/server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java
+new file mode 100644
+index 0000000000..38ca217fa5
+--- /dev/null
++++ b/server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java
+@@ -0,0 +1,74 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.expression.operator.all;
++
++import org.apache.lucene.search.Query;
++
++import io.crate.expression.operator.LikeOperators;
++import io.crate.expression.operator.LikeOperators.CaseSensitivity;
++import io.crate.expression.symbol.Function;
++import io.crate.expression.symbol.Literal;
++import io.crate.lucene.LuceneQueryBuilder.Context;
++import io.crate.metadata.Reference;
++import io.crate.metadata.functions.BoundSignature;
++import io.crate.metadata.functions.Signature;
++
++public final class AllNotLikeOperator extends AllOperator<String> {
++
++    private final CaseSensitivity caseSensitivity;
++
++    public AllNotLikeOperator(Signature signature,
++                              BoundSignature boundSignature,
++                              CaseSensitivity caseSensitivity) {
++        super(signature, boundSignature);
++        this.caseSensitivity = caseSensitivity;
++    }
++
++    @SuppressWarnings("unused")
++    private static String negateWildcard(String wildCard) {
++        return "~(" + wildCard + ')';
++    }
++
++    @Override
++    boolean matches(String probe, String candidate) {
++        // Accept both sides of arguments to be patterns
++        return !LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) &&
++            !LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);
++    }
++
++    @Override
++    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, Context context) {
++        return null;
++    }
++
++    @Override
++    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, Context context) {
++        return null;
++    }
++
++    @Override
++    protected void validateRightArg(String arg) {
++        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {
++            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);
++        }
++    }
++}
+diff --git a/server/src/main/java/io/crate/expression/operator/all/AllOperator.java b/server/src/main/java/io/crate/expression/operator/all/AllOperator.java
+index 562ca19d4b..6fc68b2830 100644
+--- a/server/src/main/java/io/crate/expression/operator/all/AllOperator.java
++++ b/server/src/main/java/io/crate/expression/operator/all/AllOperator.java
+@@ -27,6 +27,7 @@ import java.util.List;
+ import org.apache.lucene.search.Query;
+ 
+ import io.crate.data.Input;
++import io.crate.expression.operator.LikeOperators;
+ import io.crate.expression.operator.Operator;
+ import io.crate.expression.scalar.ArrayUnnestFunction;
+ import io.crate.expression.symbol.Function;
+@@ -44,7 +45,7 @@ import io.crate.metadata.functions.TypeVariableConstraint;
+ import io.crate.types.DataType;
+ import io.crate.types.TypeSignature;
+ 
+-public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOperator, AllNeqOperator, AllRangeOperator {
++public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOperator, AllLikeOperator, AllNeqOperator, AllNotLikeOperator, AllRangeOperator {
+ 
+     public static final String OPERATOR_PREFIX = "_all_";
+     public static final List<String> OPERATOR_NAMES = List.of(
+@@ -53,7 +54,11 @@ public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOpe
+         AllRangeOperator.Comparison.GT.opName(),
+         AllRangeOperator.Comparison.GTE.opName(),
+         AllRangeOperator.Comparison.LT.opName(),
+-        AllRangeOperator.Comparison.LTE.opName()
++        AllRangeOperator.Comparison.LTE.opName(),
++        LikeOperators.ALL_LIKE,
++        LikeOperators.ALL_ILIKE,
++        LikeOperators.ALL_NOT_LIKE,
++        LikeOperators.ALL_NOT_ILIKE
+     );
+ 
+     protected final DataType<Object> leftType;
+@@ -114,11 +119,11 @@ public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOpe
+             if (rightValue == null) {
+                 anyNulls = true;
+                 matches++;
+-                continue;
+-            }
+-            validateRightArg(rightValue);
+-            if (matches(leftValue, rightValue)) {
+-                matches++;
++            } else {
++                validateRightArg(rightValue);
++                if (matches(leftValue, rightValue)) {
++                    matches++;
++                }
+             }
+         }
+         if (matches == rightValues.size()) {
+@@ -128,17 +133,16 @@ public abstract sealed class AllOperator<T> extends Operator<T> permits AllEqOpe
+         }
+     }
+ 
+-    @SuppressWarnings("unchecked")
+     @Override
+     public Query toQuery(Function function, LuceneQueryBuilder.Context context) {
+         List<Symbol> args = function.arguments();
+         Symbol probe = args.get(0);
+         Symbol candidates = args.get(1);
+         while (candidates instanceof Function fn && fn.signature().equals(ArrayUnnestFunction.SIGNATURE)) {
+-            candidates = fn.arguments().get(0);
++            candidates = fn.arguments().getFirst();
+         }
+         if (probe instanceof Literal<?> literal && candidates instanceof Reference ref) {
+-            return literalMatchesAllArrayRef(function, (Literal<T>) literal, ref, context);
++            return literalMatchesAllArrayRef(function, literal, ref, context);
+         } else if (probe instanceof Reference ref && candidates instanceof Literal<?> literal) {
+             return refMatchesAllArrayLiteral(function, ref, literal, context);
+         } else {
+diff --git a/server/src/main/java/io/crate/expression/symbol/Function.java b/server/src/main/java/io/crate/expression/symbol/Function.java
+index 575bf55445..6d011ec802 100644
+--- a/server/src/main/java/io/crate/expression/symbol/Function.java
++++ b/server/src/main/java/io/crate/expression/symbol/Function.java
+@@ -39,6 +39,7 @@ import io.crate.exceptions.ConversionException;
+ import io.crate.execution.engine.aggregation.impl.CountAggregation;
+ import io.crate.expression.operator.ExistsOperator;
+ import io.crate.expression.operator.Operator;
++import io.crate.expression.operator.all.AllOperator;
+ import io.crate.expression.operator.any.AnyOperator;
+ import io.crate.expression.predicate.IsNullPredicate;
+ import io.crate.expression.predicate.MatchPredicate;
+@@ -378,6 +379,8 @@ public class Function implements Symbol, Cloneable {
+             default:
+                 if (AnyOperator.OPERATOR_NAMES.contains(name)) {
+                     printAnyOperator(builder, style);
++                } else if (AllOperator.OPERATOR_NAMES.contains(name)) {
++                    printAllOperator(builder, style);
+                 } else if (isCast()) {
+                     printCastFunction(builder, style);
+                 } else if (name.startsWith(Operator.PREFIX)) {
+@@ -412,7 +415,7 @@ public class Function implements Symbol, Cloneable {
+         String name = signature.getName().name();
+         assert name.startsWith(AnyOperator.OPERATOR_PREFIX) : "function for printAnyOperator must start with any prefix";
+         assert arguments.size() == 2 : "function's number of arguments must be 2";
+-        String operatorName = name.substring(4).replace('_', ' ').toUpperCase(Locale.ENGLISH);
++        String operatorName = name.substring(AnyOperator.OPERATOR_PREFIX.length()).replace('_', ' ').toUpperCase(Locale.ENGLISH);
+         builder
+             .append("(") // wrap operator in parens to ensure precedence
+             .append(arguments.get(0).toString(style))
+@@ -424,6 +427,22 @@ public class Function implements Symbol, Cloneable {
+             .append("))");
+     }
+ 
++    private void printAllOperator(StringBuilder builder, Style style) {
++        String name = signature.getName().name();
++        assert name.startsWith(AllOperator.OPERATOR_PREFIX) : "function for printAllOperator must start with all prefix";
++        assert arguments.size() == 2 : "function's number of arguments must be 2";
++        String operatorName = name.substring(AllOperator.OPERATOR_PREFIX.length()).replace('_', ' ').toUpperCase(Locale.ENGLISH);
++        builder
++            .append("(") // wrap operator in parens to ensure precedence
++            .append(arguments.get(0).toString(style))
++            .append(" ")
++            .append(operatorName)
++            .append(" ")
++            .append("ALL(")
++            .append(arguments.get(1).toString(style))
++            .append("))");
++    }
++
+     private void printCastFunction(StringBuilder builder, Style style) {
+         var name = signature.getName().name();
+         assert arguments.size() == 2 : "Expecting 2 arguments for function " + name;
+diff --git a/server/src/test/java/io/crate/analyze/expressions/ExpressionAnalyzerTest.java b/server/src/test/java/io/crate/analyze/expressions/ExpressionAnalyzerTest.java
+index d815200500..2a68165ceb 100644
+--- a/server/src/test/java/io/crate/analyze/expressions/ExpressionAnalyzerTest.java
++++ b/server/src/test/java/io/crate/analyze/expressions/ExpressionAnalyzerTest.java
+@@ -505,4 +505,19 @@ public class ExpressionAnalyzerTest extends CrateDummyClusterServiceUnitTest {
+             )
+         );
+     }
++
++    @Test
++    public void test_analyze_all_like_operator_variants() {
++        Symbol symbol = executor.asSymbol("t1.a like all(['a', 'b', 'c'])");
++        assertThat(symbol).isSQL("(doc.t1.a LIKE ALL(['a', 'b', 'c']))");
++
++        symbol = executor.asSymbol("t1.a ilike all(['a', 'b', 'c'])");
++        assertThat(symbol).isSQL("(doc.t1.a ILIKE ALL(['a', 'b', 'c']))");
++
++        symbol = executor.asSymbol("t1.a not like all(['a', 'b', 'c'])");
++        assertThat(symbol).isSQL("(doc.t1.a NOT LIKE ALL(['a', 'b', 'c']))");
++
++        symbol = executor.asSymbol("t1.a not ilike all(['a', 'b', 'c'])");
++        assertThat(symbol).isSQL("(doc.t1.a NOT ILIKE ALL(['a', 'b', 'c']))");
++    }
+ }
+diff --git a/server/src/test/java/io/crate/expression/operator/all/AllLikeOperatorTest.java b/server/src/test/java/io/crate/expression/operator/all/AllLikeOperatorTest.java
+new file mode 100644
+index 0000000000..5003884502
+--- /dev/null
++++ b/server/src/test/java/io/crate/expression/operator/all/AllLikeOperatorTest.java
+@@ -0,0 +1,160 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ALL KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.expression.operator.all;
++
++import static io.crate.testing.Asserts.isLiteral;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++
++import org.junit.Test;
++
++import io.crate.expression.scalar.ScalarTestCase;
++
++public class AllLikeOperatorTest extends ScalarTestCase {
++
++    @Test
++    public void testNormalizeSimpleSymbolEqual() {
++        assertNormalize("'foo' like all (['foo'])", isLiteral(true));
++        assertNormalize("'notFoo' like all (['foo', 'notFoo'])", isLiteral(false));
++        assertNormalize("'foo' ilike all (['fOo', 'FOO'])", isLiteral(true));
++    }
++
++    @Test
++    public void testNormalizeSymbolLikeZeroOrMore() {
++        // Following tests: wildcard: '%' ... zero or more characters (0...N)
++        assertNormalize("'%bar' like all (['foobar', 'bar'])", isLiteral(true));
++        assertNormalize("'%bar' like all (['bar'])", isLiteral(true));
++        assertNormalize("'%bar' like all (['ar', 'car'])", isLiteral(false));
++        assertNormalize("'foo%' like all (['foobar', 'foobar'])", isLiteral(true));
++        assertNormalize("'foo%' like all (['foo', 'fooo'])", isLiteral(true));
++        assertNormalize("'foo%' like all (['fo', 'kuh'])", isLiteral(false));
++        assertNormalize("'%oob%' like all (['foobar'])", isLiteral(true));
++        assertNormalize("'%bar' ilike all (['FOObAr'])", isLiteral(true));
++        assertNormalize("'foo%' ilike all (['fO', 'kuh'])", isLiteral(false));
++        assertNormalize("'%oob%' ilike all (['bOOb'])", isLiteral(true));
++    }
++
++    @Test
++    public void testNormalizeSymbolLikeExactlyOne() {
++        // Following tests: wildcard: '_' ... all single character (exactly one)
++        assertNormalize("'_ar' like all (['bar'])", isLiteral(true));
++        assertNormalize("'_bar' like all (['bar'])", isLiteral(false));
++        assertNormalize("'fo_' like all (['foo', 'for'])", isLiteral(true));
++        assertNormalize("'foo_' like all (['foo'])", isLiteral(false));
++        assertNormalize("'_o_' like all (['foo'])", isLiteral(true));
++        assertNormalize("'_foobar_' like all (['foobar'])", isLiteral(false));
++        assertNormalize("'_ar' ilike all (['bAR'])", isLiteral(true));
++        assertNormalize("'_o_' ilike all (['fOo'])", isLiteral(true));
++        assertNormalize("'fOO_' ilike all (['foo'])", isLiteral(false));
++    }
++
++    // Following tests: mixed wildcards:
++
++    @Test
++    public void testNormalizeSymbolLikeMixed() {
++        assertNormalize("'%o_ar' like all (['foobar', 'obar'])", isLiteral(true));
++        assertNormalize("'%a_' like all (['foobar'])", isLiteral(true));
++        assertNormalize("'%o_a%' like all (['foobar'])", isLiteral(true));
++        assertNormalize("'%i%m%' like all (['Lorem ipsum dolor...'])", isLiteral(true));
++        assertNormalize("'%%%sum%%' like all (['Lorem ipsum dolor...'])", isLiteral(true));
++        assertNormalize("'%i%m' like all (['Lorem ipsum dolor...'])", isLiteral(false));
++        assertNormalize("'%o_a%' ilike all (['fOObar'])", isLiteral(true));
++        assertNormalize("'%%%sum%%' ilike all (['Lorem IpSuM dolor...'])", isLiteral(true));
++    }
++
++    @Test
++    public void testEvaluateStraight() throws Exception {
++        assertEvaluate("'foo' like all (['foo', 'foo', 'foo'])", true);
++        assertEvaluate("'foo' like all (['foo'])", true);
++        assertEvaluate("'foo' like all ([])", true);
++        assertEvaluate("'foo' like all (['foo', 'koo', 'doo'])", false);
++    }
++
++    @Test
++    public void testEvaluateLikeMixed() {
++        assertEvaluate("'%o_ar' like all (['foobar', 'obar'])", true);
++        assertEvaluate("'%a_' like all (['foobar'])", true);
++        assertEvaluate("'%o_a%' like all (['foobar'])", true);
++        assertEvaluate("'%i%m%' like all (['Lorem ipsum dolor...'])", true);
++        assertEvaluate("'%%%sum%%' like all (['Lorem ipsum dolor...'])", true);
++        assertEvaluate("'%i%m' like all (['Lorem ipsum dolor...'])", false);
++        assertEvaluate("'%o_a%' ilike all (['fOObar'])", true);
++        assertEvaluate("'%%%sum%%' ilike all (['Lorem IpSuM dolor...'])", true);
++    }
++
++    @Test
++    public void testEvaluateNull() throws Exception {
++        assertEvaluateNull("null like all([null])");
++        assertEvaluateNull("'foo'like all([null])");
++        assertEvaluateNull("null like all(['bar'])");
++    }
++
++    @Test
++    public void testNormalizeSymbolNull() throws Exception {
++        assertNormalize("null like all([null])", isLiteral(null));
++        assertNormalize("'foo'like all([null])", isLiteral(null));
++        assertNormalize("null like all(['bar'])", isLiteral(null));
++
++        assertNormalize("null ilike all([null])", isLiteral(null));
++        assertNormalize("'foo'ilike all([null])", isLiteral(null));
++        assertNormalize("null ilike all(['bar'])", isLiteral(null));
++    }
++
++    @Test
++    public void testNegateLike() throws Exception {
++        assertEvaluate("not 'A' like all (['A'])", false);
++        assertEvaluate("not 'A' ilike all (['a'])", false);
++    }
++
++    @Test
++    public void test_patterns_on_right_arg() {
++        assertNormalize("'foobar' like all (['%bar'])", isLiteral(true));
++        assertNormalize("'bar' like all (['_ar'])", isLiteral(true));
++        assertNormalize("'foobar' like all (['%o_a%'])", isLiteral(true));
++        assertNormalize("'fOobAR' ilike all (['%BaR'])", isLiteral(true));
++        assertNormalize("'BaR' ilike all (['_ar'])", isLiteral(true));
++        assertNormalize("'foobar' ilike all (['%O_a%'])", isLiteral(true));
++    }
++
++    @Test
++    public void test_non_string_values() {
++        assertNormalize("1 like all ([1, null, 1])", isLiteral(null));
++        assertNormalize("1 not like all ([1])", isLiteral(false));
++        assertNormalize("1 ilike all ([1, 1])", isLiteral(true));
++        assertNormalize("1 not ilike all ([1])", isLiteral(false));
++    }
++
++    @Test
++    public void test_wildcard_escaped_in_c_style_string() {
++        assertEvaluate("'TextToMatch' LIKE ALL ([E'Te\\%tch'])", true);
++        assertEvaluate("'TextToMatch' ILIKE ALL ([E'te\\%tch'])", true);
++    }
++
++    @Test
++    public void test_all_like_ilike_with_trailing_escape_character() {
++        assertThatThrownBy(() -> assertEvaluate("'TextToMatch' LIKE ALL (['a', 'b', 'ab\\'])", false))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("pattern 'ab\\' must not end with escape character '\\'");
++        assertThatThrownBy(() -> assertEvaluate("'TextToMatch' ILIKE ALL (['a', 'b', 'ab\\'])", false))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("pattern 'ab\\' must not end with escape character '\\'");
++    }
++}
+diff --git a/server/src/test/java/io/crate/expression/operator/all/AllNotLikeOperatorTest.java b/server/src/test/java/io/crate/expression/operator/all/AllNotLikeOperatorTest.java
+new file mode 100644
+index 0000000000..8b1ec00039
+--- /dev/null
++++ b/server/src/test/java/io/crate/expression/operator/all/AllNotLikeOperatorTest.java
+@@ -0,0 +1,160 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ALL KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.expression.operator.all;
++
++import static io.crate.testing.Asserts.isLiteral;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++
++import org.junit.Test;
++
++import io.crate.expression.scalar.ScalarTestCase;
++
++public class AllNotLikeOperatorTest extends ScalarTestCase {
++
++    @Test
++    public void testNormalizeSimpleSymbolEqual() {
++        assertNormalize("'foo' not like all (['foo'])", isLiteral(false));
++        assertNormalize("'notFoo' not like all (['foo'])", isLiteral(true));
++
++        assertNormalize("'foo' not ilike all (['FoO'])", isLiteral(false));
++        assertNormalize("'notFoo' not ilike all (['notFOO'])", isLiteral(false));
++    }
++
++    @Test
++    public void testNormalizeSymbolLikeZeroOrMore() {
++        // Following tests: wildcard: '%' ... zero or more characters (0...N)
++        assertNormalize("'%bar' not like all (['foobar', 'bar'])", isLiteral(false));
++        assertNormalize("'%bar' not like all (['bar'])", isLiteral(false));
++        assertNormalize("'%bar' not like all (['ar', 'car'])", isLiteral(true));
++        assertNormalize("'foo%' not like all (['foobar', 'kuhbar'])", isLiteral(false));
++        assertNormalize("'foo%' not like all (['foo', 'kuh'])", isLiteral(false));
++        assertNormalize("'foo%' not like all (['fo', 'kuh'])", isLiteral(true));
++        assertNormalize("'%oob%' not like all (['foobar'])", isLiteral(false));
++
++        assertNormalize("'foo%' not ilike all (['FOO', 'foo'])", isLiteral(false));
++        assertNormalize("'foo%' not ilike all (['fo', 'kuh'])", isLiteral(true));
++        assertNormalize("'%oob%' not ilike all (['FOOBAR'])", isLiteral(false));
++    }
++
++    @Test
++    public void testNormalizeSymbolLikeExactlyOne() {
++        // Following tests: wildcard: '_' ... all single character (exactly one)
++        assertNormalize("'_ar' not like all (['bar'])", isLiteral(false));
++        assertNormalize("'_bar' not like all (['bar'])", isLiteral(true));
++        assertNormalize("'fo_' not like all (['foo', 'for'])", isLiteral(false));
++        assertNormalize("'foo_' not like all (['foo', 'foo'])", isLiteral(true));
++        assertNormalize("'_o_' not like all (['foo'])", isLiteral(false));
++        assertNormalize("'_foobar_' not like all (['foobar'])", isLiteral(true));
++
++        assertNormalize("'foo_' not ilike all (['FOO'])", isLiteral(true));
++        assertNormalize("'_o_' not ilike all (['fOo'])", isLiteral(false));
++        assertNormalize("'_foobar_' not ilike all (['foObar'])", isLiteral(true));
++    }
++
++    // Following tests: mixed wildcards:
++
++    @Test
++    public void testNormalizeSymbolLikeMixed() {
++        assertNormalize("'%o_ar' not like all (['oar', 'aoar'])", isLiteral(true));
++        assertNormalize("'%a_' not like all (['foobar'])", isLiteral(false));
++        assertNormalize("'%o_a%' not like all (['foobar'])", isLiteral(false));
++        assertNormalize("'%i%m%' not like all (['Lorem ipsum dolor...'])", isLiteral(false));
++        assertNormalize("'%%%sum%%' not like all (['Lorem ipsum dolor...'])", isLiteral(false));
++        assertNormalize("'%i%m' not like all (['Lorem ipsum dolor...'])", isLiteral(true));
++
++        assertNormalize("'%i%m%' not ilike all (['LOREM IPSUM DOLOR...'])", isLiteral(false));
++        assertNormalize("'%%%sum%%' not ilike all (['LOREM IPSUM DOLOR...'])", isLiteral(false));
++        assertNormalize("'%i%m' not ilike all (['LOREM IPSUM DOLOR...'])", isLiteral(true));
++    }
++
++    @Test
++    public void testEvaluateStraight() throws Exception {
++        assertEvaluate("'foo' not like all (['joo', 'koo', 'doo'])", true);
++        assertEvaluate("'foo' not like all (['foo'])", false);
++        assertEvaluate("'foo' not like all ([])", true);
++        assertEvaluate("'foo' not like all (['koo', 'doo'])", true);
++
++        assertEvaluate("'foo' not ilike all ([])", true);
++        assertEvaluate("'foo' not ilike all (['Koo', 'doO'])", true);
++    }
++
++
++    @Test
++    public void testEvaluateLikeMixed() {
++        assertEvaluate("'%o_ar' not like all (['foobar', 'foobaz'])", false);
++        assertEvaluate("'%a_' not like all (['foobar'])", false);
++        assertEvaluate("'%o_a%' not like all (['foobar'])", false);
++        assertEvaluate("'%i%m%' not like all (['Lorem ipsum dolor..'])", false);
++        assertEvaluate("'%%%sum%%' not like all (['Lorem ipsum dolor...'])", false);
++        assertEvaluate("'%i%m' not like all (['Lorem ipsum dolor...'])", true);
++        assertEvaluate("'%%%sum%%' not ilike all (['Lorem IPSUM dolor...'])", false);
++
++    }
++
++    @Test
++    public void testEvaluateNull() throws Exception {
++        assertEvaluateNull("null not like all ([null])");
++        assertEvaluateNull("'foo' not like all ([null])");
++        assertEvaluateNull("null not like all (['bar'])");
++        assertEvaluateNull("null not ilike all (['bar'])");
++    }
++
++    @Test
++    public void testNormalizeSymbolNull() throws Exception {
++        assertNormalize("null not like all ([null])", isLiteral(null));
++        assertNormalize("'foo' not like all ([null])", isLiteral(null));
++        assertNormalize("null not like all (['bar'])", isLiteral(null));
++        assertNormalize("null not ilike all (['bar'])", isLiteral(null));
++    }
++
++    @Test
++    public void testNegateNotLike() throws Exception {
++        assertEvaluate("not 'A' not like all (['A', 'B'])", true);
++        assertEvaluate("not 'A' not ilike all (['a', 'A'])", true);
++    }
++
++    @Test
++    public void test_patterns_on_right_arg() {
++        assertNormalize("'foobar' not like all (['%barr'])", isLiteral(true));
++        assertNormalize("'bar' not like all (['_ar'])", isLiteral(false));
++        assertNormalize("'foobar' not like all (['%o_a%'])", isLiteral(false));
++        assertNormalize("'fOobAR' not ilike all (['%BaR'])", isLiteral(false));
++        assertNormalize("'BaR' not ilike all (['z_ar'])", isLiteral(true));
++        assertNormalize("'foobar' not ilike all (['%O_a%'])", isLiteral(false));
++    }
++
++    @Test
++    public void test_wildcard_escaped_in_c_style_string() {
++        assertEvaluate("'TextToMatch' NOT LIKE ALL ([E'Te\\%tch'])", false);
++        assertEvaluate("'TextToMatch' NOT ILIKE ALL ([E'te\\%tch'])", false);
++    }
++
++    @Test
++    public void test_all_not_like_ilike_with_trailing_escape_character() {
++        assertThatThrownBy(() -> assertEvaluate("'TextToMatch' NOT LIKE ALL (['TextToMatch', 'ab\\'])", false))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("pattern 'ab\\' must not end with escape character '\\'");
++        assertThatThrownBy(() -> assertEvaluate("'TextToMatch' NOT ILIKE ALL (['texttomatch', 'ab\\'])", false))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("pattern 'ab\\' must not end with escape character '\\'");
++    }
++}
+diff --git a/server/src/test/java/io/crate/expression/operator/any/AnyLikeOperatorTest.java b/server/src/test/java/io/crate/expression/operator/any/AnyLikeOperatorTest.java
+index 6794c83bc2..3d0c30990e 100644
+--- a/server/src/test/java/io/crate/expression/operator/any/AnyLikeOperatorTest.java
++++ b/server/src/test/java/io/crate/expression/operator/any/AnyLikeOperatorTest.java
+@@ -31,7 +31,7 @@ import io.crate.expression.scalar.ScalarTestCase;
+ public class AnyLikeOperatorTest extends ScalarTestCase {
+ 
+     @Test
+-    public void testNormalizeSingleSymbolEqual() {
++    public void testNormalizeSimpleSymbolEqual() {
+         assertNormalize("'foo' like any (['foo'])", isLiteral(true));
+         assertNormalize("'notFoo' like any (['foo'])", isLiteral(false));
+         assertNormalize("'foo' ilike any (['fOo', 'FOO'])", isLiteral(true));
+diff --git a/server/src/test/java/io/crate/expression/operator/any/AnyNotLikeOperatorTest.java b/server/src/test/java/io/crate/expression/operator/any/AnyNotLikeOperatorTest.java
+index 8e8e480bc9..b676a5cba8 100644
+--- a/server/src/test/java/io/crate/expression/operator/any/AnyNotLikeOperatorTest.java
++++ b/server/src/test/java/io/crate/expression/operator/any/AnyNotLikeOperatorTest.java
+@@ -31,7 +31,7 @@ import io.crate.expression.scalar.ScalarTestCase;
+ public class AnyNotLikeOperatorTest extends ScalarTestCase {
+ 
+     @Test
+-    public void testNormalizeSingleSymbolEqual() {
++    public void testNormalizeSimpleSymbolEqual() {
+         assertNormalize("'foo' not like any (['foo'])", isLiteral(false));
+         assertNormalize("'notFoo' not like any (['foo'])", isLiteral(true));
+ 
+diff --git a/server/src/test/java/io/crate/expression/symbol/format/SymbolPrinterTest.java b/server/src/test/java/io/crate/expression/symbol/format/SymbolPrinterTest.java
+index 9fbfac6a06..07964025e4 100644
+--- a/server/src/test/java/io/crate/expression/symbol/format/SymbolPrinterTest.java
++++ b/server/src/test/java/io/crate/expression/symbol/format/SymbolPrinterTest.java
+@@ -419,4 +419,11 @@ public class SymbolPrinterTest extends CrateDummyClusterServiceUnitTest {
+         assertThat(symbol).isFunction("subscript");
+         assertPrint(symbol, "\"OBJ\"[1]['intarray']");
+     }
++
++    @Test
++    public void test_all_operator() {
++        assertPrintingRoundTrip("foo = ALL (['a', 'b', 'c'])", "(doc.formatter.foo = ALL(['a', 'b', 'c']))");
++        assertPrintingRoundTrip("foo NOT LIKE ALL (['a', 'b', 'c'])", "(doc.formatter.foo NOT LIKE ALL(['a', 'b', 'c']))");
++        assertPrintingRoundTrip("foo ILIKE ALL (['a', 'b', 'c'])", "(doc.formatter.foo ILIKE ALL(['a', 'b', 'c']))");
++    }
+ }

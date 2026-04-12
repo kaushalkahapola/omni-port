@@ -1,6 +1,7 @@
+import glob
 import os
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from collections import Counter
 from src.core.state import BackportState, LocalizationResult
 from src.localization.stage0_hierarchy import run_hierarchy_file_redirect
@@ -216,6 +217,96 @@ def localizer_pipeline(repo_path: str, file_path: str, hunk: Dict[str, Any]) -> 
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# File-operation helpers (DELETED / RENAMED production Java files)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _resolve_file_in_target(repo_path: str, mainline_path: str) -> Optional[str]:
+    """
+    Try to find the file that corresponds to *mainline_path* in the target branch.
+
+    Strategy:
+      1. Exact path match — the same relative path exists in target.
+      2. Class-name grep — search the repo's src/main/java tree for a file whose
+         name matches the basename of *mainline_path*.
+
+    Returns the repo-relative path if found, else None.
+    """
+    exact = os.path.join(repo_path, mainline_path)
+    if os.path.isfile(exact):
+        return mainline_path
+
+    basename = os.path.basename(mainline_path)
+    if not basename.endswith(".java"):
+        return None
+
+    # Search for a file with the same basename under the repo's Java source tree.
+    pattern = os.path.join(repo_path, "**", basename)
+    matches = glob.glob(pattern, recursive=True)
+    if len(matches) == 1:
+        rel = os.path.relpath(matches[0], repo_path)
+        return rel.replace("\\", "/")
+    if len(matches) > 1:
+        # Prefer the match whose directory path most closely resembles the mainline path.
+        mainline_parts = mainline_path.replace("\\", "/").split("/")
+        best = min(
+            matches,
+            key=lambda m: _path_distance(m.replace("\\", "/"), mainline_parts),
+        )
+        return os.path.relpath(best, repo_path).replace("\\", "/")
+    return None
+
+
+def _path_distance(candidate: str, mainline_parts: List[str]) -> int:
+    """Count the number of path components that differ between candidate and mainline."""
+    cand_parts = candidate.split("/")
+    # Compare from the right (most specific → least specific).
+    mismatches = 0
+    for cp, mp in zip(reversed(cand_parts), reversed(mainline_parts)):
+        if cp != mp:
+            mismatches += 1
+    return mismatches
+
+
+def _compute_rename_target_path(
+    repo_path: str,
+    old_mainline_path: str,
+    new_mainline_path: str,
+    target_old_path: str,
+) -> str:
+    """
+    Compute the desired destination path for a rename in the target branch.
+
+    The mainline rename moves old_mainline_path → new_mainline_path.
+    In target, the source is at target_old_path (which may differ from
+    old_mainline_path when the package structure diverged).
+
+    If the filename changed (e.g. Foo.java → Bar.java), apply the same filename
+    change to target_old_path.  Otherwise keep the directory structure of
+    target_old_path and only update the filename component.
+
+    Returns a repo-relative path for the renamed file in target.
+    """
+    old_basename = os.path.basename(old_mainline_path)
+    new_basename = os.path.basename(new_mainline_path)
+
+    target_dir = os.path.dirname(target_old_path)
+
+    if old_basename == new_basename:
+        # Pure directory move — apply the same relative directory shift.
+        old_dir = os.path.dirname(old_mainline_path).replace("\\", "/")
+        new_dir = os.path.dirname(new_mainline_path).replace("\\", "/")
+        tgt_dir = target_dir.replace("\\", "/")
+        if tgt_dir.endswith(old_dir):
+            new_tgt_dir = tgt_dir[: len(tgt_dir) - len(old_dir)] + new_dir
+            return (new_tgt_dir.rstrip("/") + "/" + new_basename).lstrip("/")
+        # Can't map directory — keep target old dir, use new basename.
+        return (tgt_dir.rstrip("/") + "/" + new_basename).lstrip("/")
+    else:
+        # Filename changed — same dir in target, new filename.
+        return (target_dir.rstrip("/") + "/" + new_basename).lstrip("/")
+
+
 def _apply_inter_hunk_consistency(
     repo_path: str,
     hunks: List[Dict[str, Any]],
@@ -241,11 +332,11 @@ def _apply_inter_hunk_consistency(
         if len(indices) < 2:
             continue  # need at least 2 hunks to have a majority
 
-        # Count target files among successful (non-failed) results.
+        # Count target files among successful (non-failed, non-new_file) results.
         target_counts: Counter = Counter()
         for i in indices:
             r = results[i]
-            if r.method_used != "failed" and r.file_path:
+            if r.method_used not in ("failed", "new_file") and r.file_path:
                 target_counts[r.file_path] += 1
 
         if not target_counts:
@@ -295,6 +386,11 @@ def localize_hunks(state: BackportState) -> BackportState:
       developer's real backport, not from the mainline patch.
 
     Step 1: Execute the 5-stage hybrid localization per-hunk, per-file.
+      Special cases handled before the 5-stage pipeline:
+        - is_new_file  → method_used="new_file" (file creation handled by Agent 6)
+        - is_del_file  → method_used="deleted_file" (deletion queued in file_operations)
+        - is_rename    → method_used="renamed_file" or localize via old path;
+                         rename queued in file_operations
 
     Step 2: Apply an inter-hunk consistency check to correct outlier file
     assignments when multiple hunks from the same source file disagree.
@@ -308,9 +404,110 @@ def localize_hunks(state: BackportState) -> BackportState:
     state["hunks"] = java_code_hunks
     # developer_aux_hunks pre-populated by caller; do NOT overwrite
 
+    # Carry forward any file_operations already in state (e.g. from a retry run).
+    file_operations: List[Dict[str, Any]] = list(state.get("file_operations") or [])
+
     results: List[LocalizationResult] = []
     for hunk in java_code_hunks:
         file_path = hunk.get("file_path", "")
+
+        # ── New-file hunks (--- /dev/null) ────────────────────────────────────
+        # Skip the 5-stage pipeline entirely; Agent 6 creates the file.
+        if hunk.get("is_new_file"):
+            results.append(LocalizationResult(
+                method_used="new_file",
+                confidence=1.0,
+                context_snapshot="",
+                file_path=file_path or "",
+                start_line=0,
+                end_line=0,
+            ))
+            continue
+
+        # ── Deleted-file hunks (+++ /dev/null) ────────────────────────────────
+        # Find the file in the target branch; queue a DELETED operation.
+        if hunk.get("is_del_file"):
+            target_path = _resolve_file_in_target(repo_path, file_path) if file_path else None
+            if target_path:
+                # Avoid duplicate entries for the same file (multiple hunks from one file).
+                already_queued = any(
+                    op["operation"] == "DELETED" and op["file_path"] == target_path
+                    for op in file_operations
+                )
+                if not already_queued:
+                    file_operations.append({
+                        "operation": "DELETED",
+                        "file_path": target_path,
+                    })
+            results.append(LocalizationResult(
+                method_used="deleted_file",
+                confidence=1.0 if target_path else 0.0,
+                context_snapshot="",
+                file_path=target_path or file_path or "",
+                start_line=0,
+                end_line=0,
+            ))
+            continue
+
+        # ── Renamed-file hunks (rename from / rename to) ─────────────────────
+        # Find the old file in target; queue a RENAMED operation.
+        # Content changes (if any) are localized against the old path.
+        if hunk.get("is_rename"):
+            old_mainline_path = hunk.get("old_file_path") or ""
+            new_mainline_path = file_path or ""
+
+            # Find the source file in target (may be at same or different path).
+            target_old_path = (
+                _resolve_file_in_target(repo_path, old_mainline_path)
+                if old_mainline_path else None
+            )
+
+            if target_old_path:
+                # Compute where the renamed file should land in target.
+                target_new_path = _compute_rename_target_path(
+                    repo_path, old_mainline_path, new_mainline_path, target_old_path
+                )
+                # Queue the rename; avoid duplicates.
+                already_queued = any(
+                    op["operation"] == "RENAMED" and op.get("old_file_path") == target_old_path
+                    for op in file_operations
+                )
+                if not already_queued:
+                    file_operations.append({
+                        "operation": "RENAMED",
+                        "file_path": new_mainline_path,
+                        "old_file_path": target_old_path,
+                        "target_new_path": target_new_path,
+                    })
+
+                # If there are content changes, localize them against the old path in target.
+                if hunk.get("old_content", "").strip():
+                    loc_result = localizer_pipeline(repo_path, target_old_path, hunk)
+                    results.append(loc_result)
+                else:
+                    # Pure rename (no content changes) — nothing to synthesize.
+                    results.append(LocalizationResult(
+                        method_used="renamed_file",
+                        confidence=1.0,
+                        context_snapshot="",
+                        file_path=target_old_path,
+                        start_line=0,
+                        end_line=0,
+                    ))
+            else:
+                # Cannot find the source file — treat as new-file addition so Agent 6
+                # creates it (content from new_content in the hunk).
+                results.append(LocalizationResult(
+                    method_used="new_file",
+                    confidence=0.5,
+                    context_snapshot="",
+                    file_path=new_mainline_path,
+                    start_line=0,
+                    end_line=0,
+                ))
+            continue
+
+        # ── Normal production Java hunk (MODIFIED) ────────────────────────────
         if file_path:
             loc_result = localizer_pipeline(repo_path, file_path, hunk)
             results.append(loc_result)
@@ -327,4 +524,5 @@ def localize_hunks(state: BackportState) -> BackportState:
     results = _apply_inter_hunk_consistency(repo_path, java_code_hunks, results)
 
     state["localization_results"] = results
+    state["file_operations"] = file_operations
     return state

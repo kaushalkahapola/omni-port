@@ -1,0 +1,685 @@
+{
+  "run_timestamp": "2026-04-11T16:04:33.302350",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "1c52ae11779a1eec20070ad25df8c89056cdb41d",
+  "backport_commit": "c4984a5ccac6a5b8aee988210326a59a55aab776",
+  "description": "master \u2192 5.5",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 3.33,
+      "error": null,
+      "java_hunks": 7,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.866,
+          "start_line": 116,
+          "end_line": 122,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 292,
+          "end_line": 298,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 368,
+          "end_line": 374,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 49,
+          "end_line": 54,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 166,
+          "end_line": 176,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 186,
+          "end_line": 192,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 203,
+          "end_line": 209,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.74,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch involves modifying code to normalize and optimize casts before extracting primary key matches in query planning. The changes include adding calls to an optimizer method and adjusting how queries are normalized and processed. The localization evidence shows most hunks were found via 'git_pickaxe' with high confidence, indicating some code drift and minor structural adjustments rather than exact matches. The patch does not introduce deep structural refactoring or redesign but requires understanding of expression normalization and query planning internals, making it more complex than a trivial string replacement but not a major refactor. Hence, it is classified as TYPE_II (whitespace/formatting drift and minor code adjustments requiring fuzzy matching). The token budget estimate reflects moderate complexity to backport and test the changes properly.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 21.68,
+      "error": null,
+      "adapted_count": 4
+    },
+    "agent5_structural": {
+      "elapsed_s": 39.23,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 4,
+      "failed_count": 1,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "old_string": "        var context = new ProxyInjectingVisitor.Context(columns);\n        Symbol proxiedTree = symbol.accept(ProxyInjectingVisitor.INSTANCE, context);",
+          "new_string": "        var context = new ProxyInjectingVisitor.Context(columns);\n        // Normalize the query so that any casts on literals are evaluated\n        var normalizedQuery = normalizer.normalize(symbol, transactionContext);\n        Symbol proxiedTree = normalizedQuery.accept(ProxyInjectingVisitor.INSTANCE, context);",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "old_string": "        @Override\n        public void writeTo(StreamOutput out) throws IOException {\n            throw new UnsupportedOperationException(\"writeTo not supported for \" +\n                                                    EqProxy.class.getSimpleName());\n        }",
+          "new_string": "        @Override\n        public void writeTo(StreamOutput out) throws IOException {\n            throw new UnsupportedOperationException(\"writeTo not supported for \" +\n                EqProxy.class.getSimpleName());\n        }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "old_string": "\n        static class Context {\n\n            private LinkedHashMap<ColumnIdent, Comparison> comparisons;\n            private boolean proxyBelow;\n            private final Set<Symbol> unknowns = new HashSet<>();",
+          "new_string": "        static class Context {\n\n            private final LinkedHashMap<ColumnIdent, Comparison> comparisons;\n            private boolean proxyBelow;\n            private final Set<Symbol> unknowns = new HashSet<>();",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "old_string": "        if (pkMatches.matches() == null && shouldUseDocKeys) {\n            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), query, txnCtx);\n        }",
+          "new_string": "        if (pkMatches.matches() == null && shouldUseDocKeys) {\n            pkMatches = eqExtractor.extractMatches(List.of(DocSysColumns.ID), optimizedCastsQuery, txnCtx);\n        }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.03,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 3
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/analyze/where/EqualityExtractor.java:370: 'CLASS_DEF' should be separated from previous line. [EmptyLineSeparator]",
+      "validation_attempts": 1,
+      "retry_files": [
+        "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "line": 370,
+          "message": "'CLASS_DEF' should be separated from previous line. [EmptyLineSeparator]"
+        }
+      ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "failed",
+      "fallback_attempts": 1,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "what_changed": "Introduced normalization of the query before applying the ProxyInjectingVisitor, replacing direct acceptance of the original query.",
+          "where_in_code": "EqualityExtractor.extractMatches method (or equivalent method processing the query with ProxyInjectingVisitor)",
+          "intent": "To ensure that any casts on literals within the query are evaluated and normalized before further processing, improving accuracy of equality extraction.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "normalizer",
+            "ProxyInjectingVisitor",
+            "query",
+            "normalizedQuery"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "what_changed": "Adjusted formatting of the exception message string in the writeTo method of EqProxy class without changing logic.",
+          "where_in_code": "EqProxy.writeTo(StreamOutput)",
+          "intent": "Code style/formatting improvement for better readability without altering behavior.",
+          "change_type": "other",
+          "key_symbols": [
+            "EqProxy",
+            "writeTo"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/analyze/where/EqualityExtractor.java",
+          "what_changed": "Made the 'comparisons' field in the Context class final.",
+          "where_in_code": "EqualityExtractor.Context class",
+          "intent": "To enforce immutability of the comparisons map reference within the Context, improving code safety and clarity.",
+          "change_type": "add_field",
+          "key_symbols": [
+            "Context",
+            "comparisons"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "what_changed": "Added an import statement for the Optimizer class.",
+          "where_in_code": "Top-level imports in WhereClauseOptimizer.java",
+          "intent": "To enable usage of the Optimizer class for query optimization within this file.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Optimizer"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "what_changed": "Inserted a step to optimize casts in the query before extracting primary key and clusteredBy matches, replacing direct extraction from the original query.",
+          "where_in_code": "WhereClauseOptimizer.optimizeWhereClause (or equivalent method using EqualityExtractor)",
+          "intent": "To move casts from columns to literals by optimizing the query first, enabling more accurate extraction of primary key matches and document keys.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "Optimizer.optimizeCasts",
+            "EqualityExtractor.extractMatches",
+            "pkMatches",
+            "clusteredByMatches"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "what_changed": "Changed the source query to optimizedCastsQuery when extracting matches for DocSysColumns.ID if primary key matches are missing.",
+          "where_in_code": "WhereClauseOptimizer.optimizeWhereClause (or equivalent method)",
+          "intent": "To ensure that cast optimizations are applied consistently when extracting document key matches, improving match accuracy.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "pkMatches",
+            "DocSysColumns.ID",
+            "optimizedCastsQuery"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+          "what_changed": "Switched to using optimizedCastsQuery instead of the original query when extracting partition matches if the table is partitioned.",
+          "where_in_code": "WhereClauseOptimizer.optimizeWhereClause (or equivalent method)",
+          "intent": "To apply cast optimizations before partition match extraction, ensuring consistency and correctness in partition pruning logic.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "partitionMatches",
+            "optimizedCastsQuery",
+            "eqExtractor.extractMatches"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 2,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": false,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.planner.SelectPlannerTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.planner.WhereClauseOptimizerTest.xml"
+        ],
+        "target_classes": [
+          "SelectPlannerTest",
+          "WhereClauseOptimizerTest"
+        ],
+        "test_cases": {
+          "io.crate.planner.SelectPlannerTest#test_select_from_table_function_with_filter_on_not_selected_column": "passed",
+          "io.crate.planner.SelectPlannerTest#testSelectPartitionedTableOrderByPartitionedColumnInFunction": "passed",
+          "io.crate.planner.SelectPlannerTest#test_filter_on_aliased_object_col_in_view_is_pushed_down_to_collect": "passed",
+          "io.crate.planner.SelectPlannerTest#testWherePKAndMatchDoesNotResultInESGet": "passed",
+          "io.crate.planner.SelectPlannerTest#testQAFPagingIsEnabledOnHighOffset": "passed",
+          "io.crate.planner.SelectPlannerTest#testAggregationCanBeUsedAsArgumentToTableFunction": "passed",
+          "io.crate.planner.SelectPlannerTest#test_group_by_on_subscript_on_obj_output_of_sub_relation": "passed",
+          "io.crate.planner.SelectPlannerTest#test_select_where_seq_and_primary_term_missing_id": "passed",
+          "io.crate.planner.SelectPlannerTest#test_distinct_with_limit_is_optimized_to_limitandoffset_distinct": "passed",
+          "io.crate.planner.SelectPlannerTest#testOrderByOnTableFunctionMustOrderAfterProjectSet": "passed",
+          "io.crate.planner.SelectPlannerTest#testMultiGetPlan": "passed",
+          "io.crate.planner.SelectPlannerTest#test_order_by_on_aggregation_with_alias_in_select_list": "passed",
+          "io.crate.planner.SelectPlannerTest#testSelectAnalyzedReferenceInFunctionAggregation": "passed",
+          "io.crate.planner.SelectPlannerTest#testTablePartitionsAreNarrowedToMatchWhereClauseOfParentQuery": "passed",
+          "io.crate.planner.SelectPlannerTest#testQAFPagingIsEnabledOnHighLimit": "passed",
+          "io.crate.planner.SelectPlannerTest#test_match_used_on_table_with_alias_is_resolved_to_a_function": "passed",
+          "io.crate.planner.SelectPlannerTest#test_non_euqi_join_with_scalar_using_parameter_placeholders": "passed",
+          "io.crate.planner.SelectPlannerTest#testReferenceToNestedAggregatedField": "passed",
+          "io.crate.planner.SelectPlannerTest#test_equi_join_with_scalar_using_parameter_placeholders": "passed",
+          "io.crate.planner.SelectPlannerTest#test_filter_on_object_col_is_pushed_down_to_collect_with_view": "passed",
+          "io.crate.planner.SelectPlannerTest#test3TableJoinWithNoMatch": "passed",
+          "io.crate.planner.SelectPlannerTest#testGlobalCountPlan": "passed",
+          "io.crate.planner.SelectPlannerTest#test_columns_used_in_hash_join_condition_are_not_duplicated_in_outputs": "passed",
+          "io.crate.planner.SelectPlannerTest#testShardQueueSizeCalculation": "passed",
+          "io.crate.planner.SelectPlannerTest#test_distinct_with_limit_and_offset_keeps_offset": "passed",
+          "io.crate.planner.SelectPlannerTest#test_non_recursive_nested_with": "passed",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregateOn2TableJoinWithNoMatch": "passed",
+          "io.crate.planner.SelectPlannerTest#test_filter_by_internal_id_result_in_get_plan": "failed",
+          "io.crate.planner.SelectPlannerTest#testQueryRequiresScalar": "passed",
+          "io.crate.planner.SelectPlannerTest#test_select_where_id_and_seq_missing_primary_term": "passed",
+          "io.crate.planner.SelectPlannerTest#testWindowFunctionsWithPartitionByAreExecutedDistributed": "passed",
+          "io.crate.planner.SelectPlannerTest#testGetPlan": "passed",
+          "io.crate.planner.SelectPlannerTest#testCountOnPartitionedTable": "passed",
+          "io.crate.planner.SelectPlannerTest#test_queries_in_count_operator_are_optimized": "passed",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregateOn3TableJoinWithNoMatch": "passed",
+          "io.crate.planner.SelectPlannerTest#testQTFPagingIsEnabledOnHighLimit": "passed",
+          "io.crate.planner.SelectPlannerTest#testGetPlanPartitioned": "passed",
+          "io.crate.planner.SelectPlannerTest#testGetPlanStringLiteral": "passed",
+          "io.crate.planner.SelectPlannerTest#test_filter_and_eval_on_get_operator_use_shard_projections": "passed",
+          "io.crate.planner.SelectPlannerTest#test_collect_phase_narrows_shard_selection_based_on_clustered_by_columns": "passed",
+          "io.crate.planner.SelectPlannerTest#testScalarCanBeUsedAroundTableGeneratingFunctionInSelectList": "passed",
+          "io.crate.planner.SelectPlannerTest#test_order_by_on_subscript_on_obj_output_of_sub_relation": "passed",
+          "io.crate.planner.SelectPlannerTest#testHasNoResultFromHaving": "passed",
+          "io.crate.planner.SelectPlannerTest#test2TableJoinWithNoMatch": "passed",
+          "io.crate.planner.SelectPlannerTest#testFilterOnPKSubsetResultsInPKLookupPlanIfTheOtherPKPartIsGenerated": "passed",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregationPlan": "passed",
+          "io.crate.planner.SelectPlannerTest#testGetWithVersion": "passed",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregateWithWhereOnPartitionColumn": "passed",
+          "io.crate.planner.SelectPlannerTest#testShardSelect": "passed",
+          "io.crate.planner.SelectPlannerTest#testAggregationOnTopOfTableFunctionIsNotPossibleWithoutSeparateSubQuery": "passed",
+          "io.crate.planner.SelectPlannerTest#testUnnestInSelectListResultsInPlanWithProjectSetOperator": "passed",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlan": "passed",
+          "io.crate.planner.SelectPlannerTest#testSelectFromUnnestResultsInTableFunctionPlan": "passed",
+          "io.crate.planner.SelectPlannerTest#testOuterJoinToInnerJoinRewrite": "passed",
+          "io.crate.planner.SelectPlannerTest#testSeqNoAndPrimaryTermFilteringRequirePrimaryKey": "passed",
+          "io.crate.planner.SelectPlannerTest#test_table_function_without_from_can_bind_parameters": "passed",
+          "io.crate.planner.SelectPlannerTest#test_join_with_no_match_where_clause_pushes_down_no_match": "passed",
+          "io.crate.planner.SelectPlannerTest#testHandlerSideRouting": "passed",
+          "io.crate.planner.SelectPlannerTest#testSortOnUnknownColumn": "passed",
+          "io.crate.planner.SelectPlannerTest#test_columns_used_in_nl_join_condition_are_not_duplicated_in_outputs": "passed",
+          "io.crate.planner.SelectPlannerTest#testAggregationOnGeneratedColumns": "passed",
+          "io.crate.planner.SelectPlannerTest#testLimitThatIsBiggerThanPageSizeCausesQTFPUshPlan": "passed",
+          "io.crate.planner.SelectPlannerTest#testInnerJoinResultsInHashJoinIfHashJoinIsEnabled": "passed",
+          "io.crate.planner.SelectPlannerTest#test_group_by_without_aggregates_and_with_limit_is_optimized_to_limitandoffset_distinct": "passed",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanHighLimit": "passed",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregationOn3TableJoinWithImplicitJoinConditions": "passed",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanNoFetch": "passed",
+          "io.crate.planner.SelectPlannerTest#test_non_recursive_with_is_rewritten_to_nested_subselects": "passed",
+          "io.crate.planner.SelectPlannerTest#test_group_by_on_pk_lookup_uses_shard_projections": "passed",
+          "io.crate.planner.SelectPlannerTest#testShardSelectWithOrderBy": "passed",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanFunction": "passed",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanPartitioned": "passed",
+          "io.crate.planner.SelectPlannerTest#test_window_function_with_function_used_in_order_by_injects_eval_below_window_agg_ordering": "passed",
+          "io.crate.planner.SelectPlannerTest#test_filter_on_aliased_subselect_output": "passed",
+          "io.crate.planner.SelectPlannerTest#testCountDistinctPlan": "passed",
+          "io.crate.planner.SelectPlannerTest#test3TableJoinQuerySplitting": "passed",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregationHaving": "passed",
+          "io.crate.planner.SelectPlannerTest#test_collect_execution_plan_is_narrowed_to_matching_generated_partition_columns": "passed",
+          "io.crate.planner.SelectPlannerTest#testTableFunctionIsExecutedAfterAggregation": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#test_filter_on_pk_with_implicit_cast": "failed",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysIn": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#test_expands_filter_on_date_bin_generated_column": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysSimpleEqOr": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysSimpleEq": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOn_IdDoesNotProduceDocKeysIfTableHasOnlyAClusteredByDefinition": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnPartitionColumnAndPrimaryKeyResultsInDocKeys": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOn_IdOnPartitionedTableDoesNotResultInDocKeys": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnPKAndVersionResultsInDocKeys": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#test_filter_on_pk_combined_with_AND_results_in_dockeys": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#test_filter_on_id_with_implicit_cast": "failed",
+          "io.crate.planner.WhereClauseOptimizerTest#testClusteredByValueContainsComma": "passed",
+          "io.crate.planner.WhereClauseOptimizerTest#testEmptyClusteredByValue": "passed"
+        },
+        "classes": {
+          "io.crate.planner.SelectPlannerTest": "failed",
+          "io.crate.planner.WhereClauseOptimizerTest": "failed"
+        },
+        "summary": {
+          "passed": 89,
+          "failed": 3,
+          "skipped": 0,
+          "total": 92
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.planner.SelectPlannerTest#test2TableJoinWithNoMatch",
+          "io.crate.planner.SelectPlannerTest#test3TableJoinQuerySplitting",
+          "io.crate.planner.SelectPlannerTest#test3TableJoinWithNoMatch",
+          "io.crate.planner.SelectPlannerTest#testAggregationCanBeUsedAsArgumentToTableFunction",
+          "io.crate.planner.SelectPlannerTest#testAggregationOnGeneratedColumns",
+          "io.crate.planner.SelectPlannerTest#testAggregationOnTopOfTableFunctionIsNotPossibleWithoutSeparateSubQuery",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlan",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanFunction",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanHighLimit",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanNoFetch",
+          "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanPartitioned",
+          "io.crate.planner.SelectPlannerTest#testCountDistinctPlan",
+          "io.crate.planner.SelectPlannerTest#testCountOnPartitionedTable",
+          "io.crate.planner.SelectPlannerTest#testFilterOnPKSubsetResultsInPKLookupPlanIfTheOtherPKPartIsGenerated",
+          "io.crate.planner.SelectPlannerTest#testGetPlan",
+          "io.crate.planner.SelectPlannerTest#testGetPlanPartitioned",
+          "io.crate.planner.SelectPlannerTest#testGetPlanStringLiteral",
+          "io.crate.planner.SelectPlannerTest#testGetWithVersion",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregateOn2TableJoinWithNoMatch",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregateOn3TableJoinWithNoMatch",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregateWithWhereOnPartitionColumn",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregationHaving",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregationOn3TableJoinWithImplicitJoinConditions",
+          "io.crate.planner.SelectPlannerTest#testGlobalAggregationPlan",
+          "io.crate.planner.SelectPlannerTest#testGlobalCountPlan",
+          "io.crate.planner.SelectPlannerTest#testHandlerSideRouting",
+          "io.crate.planner.SelectPlannerTest#testHasNoResultFromHaving",
+          "io.crate.planner.SelectPlannerTest#testInnerJoinResultsInHashJoinIfHashJoinIsEnabled",
+          "io.crate.planner.SelectPlannerTest#testLimitThatIsBiggerThanPageSizeCausesQTFPUshPlan",
+          "io.crate.planner.SelectPlannerTest#testMultiGetPlan",
+          "io.crate.planner.SelectPlannerTest#testOrderByOnTableFunctionMustOrderAfterProjectSet",
+          "io.crate.planner.SelectPlannerTest#testOuterJoinToInnerJoinRewrite",
+          "io.crate.planner.SelectPlannerTest#testQAFPagingIsEnabledOnHighLimit",
+          "io.crate.planner.SelectPlannerTest#testQAFPagingIsEnabledOnHighOffset",
+          "io.crate.planner.SelectPlannerTest#testQTFPagingIsEnabledOnHighLimit",
+          "io.crate.planner.SelectPlannerTest#testQueryRequiresScalar",
+          "io.crate.planner.SelectPlannerTest#testReferenceToNestedAggregatedField",
+          "io.crate.planner.SelectPlannerTest#testScalarCanBeUsedAroundTableGeneratingFunctionInSelectList",
+          "io.crate.planner.SelectPlannerTest#testSelectAnalyzedReferenceInFunctionAggregation",
+          "io.crate.planner.SelectPlannerTest#testSelectFromUnnestResultsInTableFunctionPlan",
+          "io.crate.planner.SelectPlannerTest#testSelectPartitionedTableOrderByPartitionedColumnInFunction",
+          "io.crate.planner.SelectPlannerTest#testSeqNoAndPrimaryTermFilteringRequirePrimaryKey",
+          "io.crate.planner.SelectPlannerTest#testShardQueueSizeCalculation",
+          "io.crate.planner.SelectPlannerTest#testShardSelect",
+          "io.crate.planner.SelectPlannerTest#testShardSelectWithOrderBy",
+          "io.crate.planner.SelectPlannerTest#testSortOnUnknownColumn",
+          "io.crate.planner.SelectPlannerTest#testTableFunctionIsExecutedAfterAggregation",
+          "io.crate.planner.SelectPlannerTest#testTablePartitionsAreNarrowedToMatchWhereClauseOfParentQuery",
+          "io.crate.planner.SelectPlannerTest#testUnnestInSelectListResultsInPlanWithProjectSetOperator",
+          "io.crate.planner.SelectPlannerTest#testWherePKAndMatchDoesNotResultInESGet",
+          "io.crate.planner.SelectPlannerTest#testWindowFunctionsWithPartitionByAreExecutedDistributed",
+          "io.crate.planner.SelectPlannerTest#test_collect_execution_plan_is_narrowed_to_matching_generated_partition_columns",
+          "io.crate.planner.SelectPlannerTest#test_collect_phase_narrows_shard_selection_based_on_clustered_by_columns",
+          "io.crate.planner.SelectPlannerTest#test_columns_used_in_hash_join_condition_are_not_duplicated_in_outputs",
+          "io.crate.planner.SelectPlannerTest#test_columns_used_in_nl_join_condition_are_not_duplicated_in_outputs",
+          "io.crate.planner.SelectPlannerTest#test_distinct_with_limit_and_offset_keeps_offset",
+          "io.crate.planner.SelectPlannerTest#test_distinct_with_limit_is_optimized_to_limitandoffset_distinct",
+          "io.crate.planner.SelectPlannerTest#test_equi_join_with_scalar_using_parameter_placeholders",
+          "io.crate.planner.SelectPlannerTest#test_filter_and_eval_on_get_operator_use_shard_projections",
+          "io.crate.planner.SelectPlannerTest#test_filter_on_aliased_object_col_in_view_is_pushed_down_to_collect",
+          "io.crate.planner.SelectPlannerTest#test_filter_on_aliased_subselect_output",
+          "io.crate.planner.SelectPlannerTest#test_filter_on_object_col_is_pushed_down_to_collect_with_view",
+          "io.crate.planner.SelectPlannerTest#test_group_by_on_pk_lookup_uses_shard_projections",
+          "io.crate.planner.SelectPlannerTest#test_group_by_on_subscript_on_obj_output_of_sub_relation",
+          "io.crate.planner.SelectPlannerTest#test_group_by_without_aggregates_and_with_limit_is_optimized_to_limitandoffset_distinct",
+          "io.crate.planner.SelectPlannerTest#test_join_with_no_match_where_clause_pushes_down_no_match",
+          "io.crate.planner.SelectPlannerTest#test_match_used_on_table_with_alias_is_resolved_to_a_function",
+          "io.crate.planner.SelectPlannerTest#test_non_euqi_join_with_scalar_using_parameter_placeholders",
+          "io.crate.planner.SelectPlannerTest#test_non_recursive_nested_with",
+          "io.crate.planner.SelectPlannerTest#test_non_recursive_with_is_rewritten_to_nested_subselects",
+          "io.crate.planner.SelectPlannerTest#test_order_by_on_aggregation_with_alias_in_select_list",
+          "io.crate.planner.SelectPlannerTest#test_order_by_on_subscript_on_obj_output_of_sub_relation",
+          "io.crate.planner.SelectPlannerTest#test_queries_in_count_operator_are_optimized",
+          "io.crate.planner.SelectPlannerTest#test_select_from_table_function_with_filter_on_not_selected_column",
+          "io.crate.planner.SelectPlannerTest#test_select_where_id_and_seq_missing_primary_term",
+          "io.crate.planner.SelectPlannerTest#test_select_where_seq_and_primary_term_missing_id",
+          "io.crate.planner.SelectPlannerTest#test_table_function_without_from_can_bind_parameters",
+          "io.crate.planner.SelectPlannerTest#test_window_function_with_function_used_in_order_by_injects_eval_below_window_agg_ordering",
+          "io.crate.planner.WhereClauseOptimizerTest#testClusteredByValueContainsComma",
+          "io.crate.planner.WhereClauseOptimizerTest#testEmptyClusteredByValue",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysIn",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysSimpleEq",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysSimpleEqOr",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnPKAndVersionResultsInDocKeys",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOnPartitionColumnAndPrimaryKeyResultsInDocKeys",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOn_IdDoesNotProduceDocKeysIfTableHasOnlyAClusteredByDefinition",
+          "io.crate.planner.WhereClauseOptimizerTest#testFilterOn_IdOnPartitionedTableDoesNotResultInDocKeys",
+          "io.crate.planner.WhereClauseOptimizerTest#test_expands_filter_on_date_bin_generated_column",
+          "io.crate.planner.WhereClauseOptimizerTest#test_filter_on_pk_combined_with_AND_results_in_dockeys"
+        ],
+        "baseline_total": 0,
+        "patched_total": 92,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 14,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 92
+    },
+    "java_production_hunks": 7,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      3,
+      6,
+      0,
+      1,
+      2,
+      5,
+      4
+    ],
+    "tokens_used": 8677,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 1,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 1,
+    "retry_contexts": [
+      {
+        "error_type": "structural_refactor_failed",
+        "error_message": "Failed to parse Aider SEARCH/REPLACE block `<<<< ==== >>>>`",
+        "attempt_count": 3,
+        "suggested_action": "manual_review"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "[ERROR] /repo/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java:370:9: 'CLASS_DEF' should be separated from previous line. [EmptyLineSeparator]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.3.0:check (validate) on project crate-server: Failed during checkstyle execution: There is 1 error reported by Checkstyle 9.3 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/io/crate/planner/WhereClauseOptimizer.java",
+        "old_content": "\n        EqualityExtractor eqExtractor = new EqualityExtractor(normalizer);\n\n        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, query, txnCtx);\n        Set<Symbol> clusteredBy = Collections.emptySet();\n        if (table.clusteredBy() != null) {\n            EqualityExtractor.EqMatches clusteredByMatches = eqExtractor.extractParentMatches(\n                Collections.singletonList(table.clusteredBy()), query, txnCtx);\n            List<List<Symbol>> clusteredBySymbols = clusteredByMatches.matches();\n            if (clusteredBySymbols != null) {\n                clusteredBy = HashSet.newHashSet(clusteredBySymbols.size());\n",
+        "new_content": "\n        EqualityExtractor eqExtractor = new EqualityExtractor(normalizer);\n\n        // ExpressionAnalyzer will \"blindly\" add cast to the column, to match the datatype of the literal.\n        // To be able to properly extract pkMatches (and therefore dockeys), so that the cast is moved to the literal,\n        // we need to optimize the casts, before the extraction of pkMatches (and the dockeys after that)\n        var optimizedCastsQuery = Optimizer.optimizeCasts(query, txnCtx, nodeCtx);\n        EqMatches pkMatches = eqExtractor.extractMatches(pkCols, optimizedCastsQuery, txnCtx);\n        Set<Symbol> clusteredBy = Collections.emptySet();\n        if (table.clusteredBy() != null) {\n            EqualityExtractor.EqMatches clusteredByMatches = eqExtractor.extractParentMatches(\n                Collections.singletonList(table.clusteredBy()), optimizedCastsQuery, txnCtx);\n            List<List<Symbol>> clusteredBySymbols = clusteredByMatches.matches();\n            if (clusteredBySymbols != null) {\n                clusteredBy = HashSet.newHashSet(clusteredBySymbols.size());\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "file_operation": "MODIFIED",
+        "error": "Failed to parse Aider SEARCH/REPLACE block `<<<< ==== >>>>`"
+      }
+    ],
+    "generated_patch_bytes": 1884,
+    "target_patch_bytes": 16997,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.planner.SelectPlannerTest#test2TableJoinWithNoMatch",
+        "io.crate.planner.SelectPlannerTest#test3TableJoinQuerySplitting",
+        "io.crate.planner.SelectPlannerTest#test3TableJoinWithNoMatch",
+        "io.crate.planner.SelectPlannerTest#testAggregationCanBeUsedAsArgumentToTableFunction",
+        "io.crate.planner.SelectPlannerTest#testAggregationOnGeneratedColumns",
+        "io.crate.planner.SelectPlannerTest#testAggregationOnTopOfTableFunctionIsNotPossibleWithoutSeparateSubQuery",
+        "io.crate.planner.SelectPlannerTest#testCollectAndMergePlan",
+        "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanFunction",
+        "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanHighLimit",
+        "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanNoFetch",
+        "io.crate.planner.SelectPlannerTest#testCollectAndMergePlanPartitioned",
+        "io.crate.planner.SelectPlannerTest#testCountDistinctPlan",
+        "io.crate.planner.SelectPlannerTest#testCountOnPartitionedTable",
+        "io.crate.planner.SelectPlannerTest#testFilterOnPKSubsetResultsInPKLookupPlanIfTheOtherPKPartIsGenerated",
+        "io.crate.planner.SelectPlannerTest#testGetPlan",
+        "io.crate.planner.SelectPlannerTest#testGetPlanPartitioned",
+        "io.crate.planner.SelectPlannerTest#testGetPlanStringLiteral",
+        "io.crate.planner.SelectPlannerTest#testGetWithVersion",
+        "io.crate.planner.SelectPlannerTest#testGlobalAggregateOn2TableJoinWithNoMatch",
+        "io.crate.planner.SelectPlannerTest#testGlobalAggregateOn3TableJoinWithNoMatch",
+        "io.crate.planner.SelectPlannerTest#testGlobalAggregateWithWhereOnPartitionColumn",
+        "io.crate.planner.SelectPlannerTest#testGlobalAggregationHaving",
+        "io.crate.planner.SelectPlannerTest#testGlobalAggregationOn3TableJoinWithImplicitJoinConditions",
+        "io.crate.planner.SelectPlannerTest#testGlobalAggregationPlan",
+        "io.crate.planner.SelectPlannerTest#testGlobalCountPlan",
+        "io.crate.planner.SelectPlannerTest#testHandlerSideRouting",
+        "io.crate.planner.SelectPlannerTest#testHasNoResultFromHaving",
+        "io.crate.planner.SelectPlannerTest#testInnerJoinResultsInHashJoinIfHashJoinIsEnabled",
+        "io.crate.planner.SelectPlannerTest#testLimitThatIsBiggerThanPageSizeCausesQTFPUshPlan",
+        "io.crate.planner.SelectPlannerTest#testMultiGetPlan",
+        "io.crate.planner.SelectPlannerTest#testOrderByOnTableFunctionMustOrderAfterProjectSet",
+        "io.crate.planner.SelectPlannerTest#testOuterJoinToInnerJoinRewrite",
+        "io.crate.planner.SelectPlannerTest#testQAFPagingIsEnabledOnHighLimit",
+        "io.crate.planner.SelectPlannerTest#testQAFPagingIsEnabledOnHighOffset",
+        "io.crate.planner.SelectPlannerTest#testQTFPagingIsEnabledOnHighLimit",
+        "io.crate.planner.SelectPlannerTest#testQueryRequiresScalar",
+        "io.crate.planner.SelectPlannerTest#testReferenceToNestedAggregatedField",
+        "io.crate.planner.SelectPlannerTest#testScalarCanBeUsedAroundTableGeneratingFunctionInSelectList",
+        "io.crate.planner.SelectPlannerTest#testSelectAnalyzedReferenceInFunctionAggregation",
+        "io.crate.planner.SelectPlannerTest#testSelectFromUnnestResultsInTableFunctionPlan",
+        "io.crate.planner.SelectPlannerTest#testSelectPartitionedTableOrderByPartitionedColumnInFunction",
+        "io.crate.planner.SelectPlannerTest#testSeqNoAndPrimaryTermFilteringRequirePrimaryKey",
+        "io.crate.planner.SelectPlannerTest#testShardQueueSizeCalculation",
+        "io.crate.planner.SelectPlannerTest#testShardSelect",
+        "io.crate.planner.SelectPlannerTest#testShardSelectWithOrderBy",
+        "io.crate.planner.SelectPlannerTest#testSortOnUnknownColumn",
+        "io.crate.planner.SelectPlannerTest#testTableFunctionIsExecutedAfterAggregation",
+        "io.crate.planner.SelectPlannerTest#testTablePartitionsAreNarrowedToMatchWhereClauseOfParentQuery",
+        "io.crate.planner.SelectPlannerTest#testUnnestInSelectListResultsInPlanWithProjectSetOperator",
+        "io.crate.planner.SelectPlannerTest#testWherePKAndMatchDoesNotResultInESGet",
+        "io.crate.planner.SelectPlannerTest#testWindowFunctionsWithPartitionByAreExecutedDistributed",
+        "io.crate.planner.SelectPlannerTest#test_collect_execution_plan_is_narrowed_to_matching_generated_partition_columns",
+        "io.crate.planner.SelectPlannerTest#test_collect_phase_narrows_shard_selection_based_on_clustered_by_columns",
+        "io.crate.planner.SelectPlannerTest#test_columns_used_in_hash_join_condition_are_not_duplicated_in_outputs",
+        "io.crate.planner.SelectPlannerTest#test_columns_used_in_nl_join_condition_are_not_duplicated_in_outputs",
+        "io.crate.planner.SelectPlannerTest#test_distinct_with_limit_and_offset_keeps_offset",
+        "io.crate.planner.SelectPlannerTest#test_distinct_with_limit_is_optimized_to_limitandoffset_distinct",
+        "io.crate.planner.SelectPlannerTest#test_equi_join_with_scalar_using_parameter_placeholders",
+        "io.crate.planner.SelectPlannerTest#test_filter_and_eval_on_get_operator_use_shard_projections",
+        "io.crate.planner.SelectPlannerTest#test_filter_on_aliased_object_col_in_view_is_pushed_down_to_collect",
+        "io.crate.planner.SelectPlannerTest#test_filter_on_aliased_subselect_output",
+        "io.crate.planner.SelectPlannerTest#test_filter_on_object_col_is_pushed_down_to_collect_with_view",
+        "io.crate.planner.SelectPlannerTest#test_group_by_on_pk_lookup_uses_shard_projections",
+        "io.crate.planner.SelectPlannerTest#test_group_by_on_subscript_on_obj_output_of_sub_relation",
+        "io.crate.planner.SelectPlannerTest#test_group_by_without_aggregates_and_with_limit_is_optimized_to_limitandoffset_distinct",
+        "io.crate.planner.SelectPlannerTest#test_join_with_no_match_where_clause_pushes_down_no_match",
+        "io.crate.planner.SelectPlannerTest#test_match_used_on_table_with_alias_is_resolved_to_a_function",
+        "io.crate.planner.SelectPlannerTest#test_non_euqi_join_with_scalar_using_parameter_placeholders",
+        "io.crate.planner.SelectPlannerTest#test_non_recursive_nested_with",
+        "io.crate.planner.SelectPlannerTest#test_non_recursive_with_is_rewritten_to_nested_subselects",
+        "io.crate.planner.SelectPlannerTest#test_order_by_on_aggregation_with_alias_in_select_list",
+        "io.crate.planner.SelectPlannerTest#test_order_by_on_subscript_on_obj_output_of_sub_relation",
+        "io.crate.planner.SelectPlannerTest#test_queries_in_count_operator_are_optimized",
+        "io.crate.planner.SelectPlannerTest#test_select_from_table_function_with_filter_on_not_selected_column",
+        "io.crate.planner.SelectPlannerTest#test_select_where_id_and_seq_missing_primary_term",
+        "io.crate.planner.SelectPlannerTest#test_select_where_seq_and_primary_term_missing_id",
+        "io.crate.planner.SelectPlannerTest#test_table_function_without_from_can_bind_parameters",
+        "io.crate.planner.SelectPlannerTest#test_window_function_with_function_used_in_order_by_injects_eval_below_window_agg_ordering",
+        "io.crate.planner.WhereClauseOptimizerTest#testClusteredByValueContainsComma",
+        "io.crate.planner.WhereClauseOptimizerTest#testEmptyClusteredByValue",
+        "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysIn",
+        "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysSimpleEq",
+        "io.crate.planner.WhereClauseOptimizerTest#testFilterOnClusteredByColumnDoesNotResultInDocKeysSimpleEqOr",
+        "io.crate.planner.WhereClauseOptimizerTest#testFilterOnPKAndVersionResultsInDocKeys",
+        "io.crate.planner.WhereClauseOptimizerTest#testFilterOnPartitionColumnAndPrimaryKeyResultsInDocKeys",
+        "io.crate.planner.WhereClauseOptimizerTest#testFilterOn_IdDoesNotProduceDocKeysIfTableHasOnlyAClusteredByDefinition",
+        "io.crate.planner.WhereClauseOptimizerTest#testFilterOn_IdOnPartitionedTableDoesNotResultInDocKeys",
+        "io.crate.planner.WhereClauseOptimizerTest#test_expands_filter_on_date_bin_generated_column",
+        "io.crate.planner.WhereClauseOptimizerTest#test_filter_on_pk_combined_with_AND_results_in_dockeys"
+      ],
+      "baseline_total": 0,
+      "patched_total": 92,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 89,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

@@ -1,0 +1,171 @@
+commit 9418466aa40f3d12d37af40fe1b33ef6213a4d8c
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Fri Sep 19 16:12:47 2025 -0400
+
+    Fix false omission of NULL-assigned sub-columns during replica recovery
+    
+    Ensure null-assigned sub-columns are included in translog entries used
+    for replica recovery
+    
+    (cherry picked from commit 0e0dd739ac60fb9db95be668067d2630a72db71c)
+    
+    # Conflicts:
+    #       server/src/test/java/io/crate/execution/dml/IndexerTest.java
+
+diff --git a/docs/appendices/release-notes/5.10.13.rst b/docs/appendices/release-notes/5.10.13.rst
+index 7591737db3..708c12c935 100644
+--- a/docs/appendices/release-notes/5.10.13.rst
++++ b/docs/appendices/release-notes/5.10.13.rst
+@@ -59,3 +59,6 @@ Fixes
+ - Fixed an issue that caused ``ArrayIndexOutOfBoundsExeption`` when executing
+   ``COPY FROM`` on a table containing non-deterministic generated or default
+   columns.
++
++- Fixed an issue where null-valued sub-columns of objects were omitted when
++  queried.
+diff --git a/docs/appendices/release-notes/6.0.3.rst b/docs/appendices/release-notes/6.0.3.rst
+index 8147e26322..130483310b 100644
+--- a/docs/appendices/release-notes/6.0.3.rst
++++ b/docs/appendices/release-notes/6.0.3.rst
+@@ -58,3 +58,6 @@ Fixes
+ - Fixed an issue that caused ``ArrayIndexOutOfBoundsExeption`` when executing
+   ``COPY FROM`` on a table containing non-deterministic generated or default
+   columns.
++
++- Fixed an issue where null-valued sub-columns of objects were omitted when
++  queried.
+diff --git a/server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java b/server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java
+index 57ce287151..de9ab7f16c 100644
+--- a/server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java
++++ b/server/src/main/java/io/crate/execution/dml/IndexDocumentBuilder.java
+@@ -106,12 +106,8 @@ public class IndexDocumentBuilder {
+         return translogWriter;
+     }
+ 
+-    /**
+-     * @return a generated value for the given column if one exists, otherwise null
+-     */
+-    public Object getSyntheticValue(ColumnIdent columnIdent) {
+-        Input<Object> input = synthetics.get(columnIdent);
+-        return input == null ? null : input.value();
++    public Input<Object> getSynthetic(ColumnIdent columnIdent) {
++        return synthetics.get(columnIdent);
+     }
+ 
+     /**
+diff --git a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+index c328890ca0..7c9b89ab18 100644
+--- a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+@@ -102,11 +102,11 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+             String innerName = entry.getKey();
+             Child child = entry.getValue();
+             if (value.containsKey(innerName) == false) {
+-                var synth = docBuilder.getSyntheticValue(child.ident());
++                var synth = docBuilder.getSynthetic(child.ident());
+                 if (synth != null) {
+                     // directly modify the map so that containing types will see the value
+                     // if they need to write stored fields
+-                    value.put(innerName, synth);
++                    value.put(innerName, synth.value());
+                 }
+             }
+             var innerValue = value.get(innerName);
+@@ -131,6 +131,8 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+                 columnsToStore.put(k, v);
+             }
+             if (v == null) {
++                translogWriter.writeFieldName(k);
++                translogWriter.writeValue(null);
+                 columnsToStore.put(k, null);
+             }
+         });
+@@ -155,7 +157,7 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+         translogWriter.endObject();
+     }
+ 
+-    private BytesReference toBytes(Map<String, Object> v, Version version) {
++    public static BytesReference toBytes(Map<String, Object> v, Version version) {
+         try (BytesStreamOutput out = new BytesStreamOutput()) {
+             out.setVersion(version);
+             out.writeMap(v, StreamOutput::writeString, StreamOutput::writeGenericValue);
+diff --git a/server/src/test/java/io/crate/execution/dml/IndexerTest.java b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+index b5f2206a8f..170f0c4d70 100644
+--- a/server/src/test/java/io/crate/execution/dml/IndexerTest.java
++++ b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+@@ -648,33 +648,6 @@ public class IndexerTest extends CrateDummyClusterServiceUnitTest {
+         assertThat(returnValues).containsExactly("dummy-id-1", 10, 20);
+     }
+ 
+-    @Test
+-    public void test_fields_are_omitted_in_source_for_null_values() throws Exception {
+-        SQLExecutor e = SQLExecutor.of(clusterService)
+-            .addTable("create table tbl (x int, o object as (y int))");
+-
+-        DocTableInfo table = e.resolveTableInfo("tbl");
+-        Indexer indexer = new Indexer(
+-            table.ident().indexNameOrAlias(),
+-            table,
+-            Version.CURRENT,
+-            new CoordinatorTxnCtx(e.getSessionSettings()),
+-            e.nodeCtx,
+-            List.of(
+-                table.getReference(ColumnIdent.of("x")),
+-                table.getReference(ColumnIdent.of("o"))
+-            ),
+-            null, null
+-        );
+-
+-        HashMap<String, Object> o = new HashMap<>();
+-        o.put("y", null);
+-        ParsedDocument doc = indexer.index(item(null, o));
+-        assertThat(source(doc, table)).isEqualTo(
+-            "{\"o\":{}}"
+-        );
+-    }
+-
+     @Test
+     public void test_indexing_float_results_in_float_field() throws Exception {
+         SQLExecutor e = SQLExecutor.of(clusterService)
+@@ -1582,6 +1555,41 @@ public class IndexerTest extends CrateDummyClusterServiceUnitTest {
+         indexer.collectSchemaUpdates(item); // checks that it does not throw any IndexOutOfBoundsExceptions
+     }
+ 
++    @Test
++    public void test_null_valued_sub_columns_are_stored() throws Exception {
++        SQLExecutor executor = SQLExecutor.of(clusterService)
++            .addTable("""
++                create table t (
++                    o object as (a int, b int as o['a']+1, c int)
++                )
++                """
++            );
++        DocTableInfo table = executor.resolveTableInfo("t");
++
++        Indexer indexer = new Indexer(
++            table.ident().indexNameOrAlias(),
++            table,
++            Version.CURRENT,
++            new CoordinatorTxnCtx(executor.getSessionSettings()),
++            executor.nodeCtx,
++            new ArrayList<>(List.of(table.getReference(ColumnIdent.of("o")))),
++            null, null
++        );
++        // update t set o['a']=null, o['c']=1
++        ParsedDocument parsedDocument = indexer.index(item(MapBuilder.newMapBuilder().put("a", null).put("c", 1).map()));
++        assertThat(source(parsedDocument, table)).isEqualTo("{\"o\":{\"a\":null,\"b\":null,\"c\":1}}");
++
++        // notice null valued sub-columns and non-null sub-columns are persisted differently
++        Map<String, Object> storedValue = new HashMap<>();
++        storedValue.put("a", null);
++        storedValue.put("b", null);
++        assertThat(parsedDocument.doc().getField("1").binaryValue()) // "1" is the oid for 'o'
++            .isEqualTo(ObjectIndexer.toBytes(storedValue, Version.CURRENT).toBytesRef());
++        assertThat(parsedDocument.doc().getField("4").numericValue()).isEqualTo(1); // "4" is the oid for 'c'
++
++        assertTranslogParses(parsedDocument, table);
++    }
++
+     public static void assertTranslogParses(ParsedDocument doc, DocTableInfo info) {
+         assertTranslogParses(doc, info, Version.CURRENT);
+     }

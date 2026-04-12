@@ -1,0 +1,71 @@
+diff --git a/server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java b/server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java
+index 892dad5233..fb782e5fd1 100644
+--- a/server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java
++++ b/server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java
+@@ -144,7 +144,6 @@ public final class MappingUtil {
+         return mapping;
+     }
+ 
+-
+     /**
+      * Creates the "properties" part of a mapping.
+      * Includes all nested sub-columns.
+@@ -275,7 +274,7 @@ public final class MappingUtil {
+ 
+         // Generated expressions
+         List<GeneratedReference> newGenExpressions = references.stream()
+-            .filter(ref -> ref instanceof GeneratedReference)
++            .filter(ref -> ref instanceof GeneratedReference && !ref.isDropped())
+             .map(ref -> (GeneratedReference) ref)
+             .toList();
+         if (newGenExpressions.isEmpty() == false) {
+diff --git a/server/src/main/java/io/crate/metadata/GeneratedReference.java b/server/src/main/java/io/crate/metadata/GeneratedReference.java
+index 8c51481a18..7a55d1a8f7 100644
+--- a/server/src/main/java/io/crate/metadata/GeneratedReference.java
++++ b/server/src/main/java/io/crate/metadata/GeneratedReference.java
+@@ -232,7 +232,7 @@ public final class GeneratedReference implements Reference {
+ 
+     @Override
+     public boolean isDropped() {
+-        return false;
++        return ref.isDropped();
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+index 2aa293ddf3..2ac5ff2b3d 100644
+--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
++++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+@@ -114,7 +114,6 @@ import io.crate.types.DataType;
+ import io.crate.types.DataTypes;
+ import io.crate.types.ObjectType;
+ 
+-
+ /**
+  * Represents a user table.
+  * <p>
+@@ -247,7 +246,7 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+             return ref;
+         });
+         this.generatedColumns = this.references.values().stream()
+-            .filter(r -> r instanceof GeneratedReference)
++            .filter(r -> r instanceof GeneratedReference && !r.isDropped())
+             .map(r -> (GeneratedReference) r)
+             .toList();
+         this.indexColumns = indexColumns;
+@@ -574,7 +573,6 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+         return result;
+     }
+ 
+-
+     /**
+      * returns <code>true</code> if this table is a partitioned table,
+      * <code>false</code> otherwise
+@@ -749,7 +747,6 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+         }
+     }
+ 
+-
+     private void validateDropColumns(List<DropColumn> dropColumns) {
+         var leftOverCols = columns().stream().map(Reference::column).collect(Collectors.toSet());
+         for (int i = 0 ; i < dropColumns.size(); i++) {

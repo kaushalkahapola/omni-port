@@ -1,0 +1,176 @@
+{
+  "run_timestamp": "2026-04-10T16:08:57.247497",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "a2f572fc480380b3c2d17fd3b5e436e759723c19",
+  "backport_commit": "c0d5e58eb817a0ed54aab1d9e52c68ae4ac7f73e",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.89,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/execution/engine/indexing/BatchIteratorBackpressureExecutor.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 35,
+          "end_line": 44,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/execution/engine/indexing/BatchIteratorBackpressureExecutor.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 179,
+          "end_line": 186,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.65,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies the BatchIteratorBackpressureExecutor.java file with a small code change involving a control flow adjustment and semaphore release. The first hunk is an exact match with high confidence, while the second hunk was found via pickaxe with slightly lower confidence, indicating minor drift or formatting differences. Additionally, a new test file is added, which does not affect the classification of the patch complexity but adds to the token budget. Overall, the patch involves minor code changes and additions without structural or API changes, fitting the TYPE_II classification (whitespace/formatting drift, requires fuzzy matching). The target file is not auto-generated.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/execution/engine/indexing/BatchIteratorBackpressureExecutor.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 3.52,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 17.77,
+      "error": null,
+      "refactored_count": 1
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/execution/engine/indexing/BatchIteratorBackpressureExecutor.java",
+          "old_string": "                        scheduler.schedule(this::resumeConsumption, delayInMs, TimeUnit.MILLISECONDS);\n                        return;\n                    }\n                    // fall through to execute\n                }\n                execute(item);\n            }",
+          "new_string": "                        scheduler.schedule(this::resumeConsumption, delayInMs, TimeUnit.MILLISECONDS);\n                        return;\n                    }\n                    // No delay available, execute and let any response continue (release semaphore)\n                    execute(item);\n                    semaphore.release();\n                    return;\n                }\n                execute(item);\n            }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent7_validator": {
+      "elapsed_s": 291.65,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.execution.engine.indexing.ShardUpsertExecutorTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.execution.engine.indexing.ShardUpsertExecutorTest"
+        ],
+        "test_cases": {
+          "io.crate.execution.engine.indexing.ShardUpsertExecutorTest#test_will_pause_on_memory_threshold_with_unknown_target_rtt": "passed"
+        },
+        "classes": {
+          "io.crate.execution.engine.indexing.ShardUpsertExecutorTest": "passed"
+        },
+        "summary": {
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0,
+          "total": 1
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.execution.engine.indexing.ShardUpsertExecutorTest#test_will_pause_on_memory_threshold_with_unknown_target_rtt"
+        ],
+        "baseline_total": 0,
+        "patched_total": 1,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 6,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1236,
+    "target_patch_bytes": 10202,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.execution.engine.indexing.ShardUpsertExecutorTest#test_will_pause_on_memory_threshold_with_unknown_target_rtt"
+      ],
+      "baseline_total": 0,
+      "patched_total": 1,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 1,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

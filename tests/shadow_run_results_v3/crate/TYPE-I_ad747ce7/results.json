@@ -1,0 +1,161 @@
+{
+  "run_timestamp": "2026-04-10T16:08:57.247497",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "ad747ce7703ff4a4d3522fd9d79f5c7f265147b5",
+  "backport_commit": "abd54b04256f814a3f5df17fb21d2e9826db79eb",
+  "description": "master \u2192 6.1",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 4,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 89,
+          "end_line": 99,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 5.7,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch modifies asynchronous handling logic in the RowConsumerToResultReceiver.java file by changing a thenRun callback to a whenComplete callback that handles both success and failure cases. This is a behavioral fix addressing a stuck query issue when a PostgreSQL client disconnects after write buffers are full. The change is localized and does not involve structural or API changes, but it requires understanding of asynchronous futures and error handling, which is more complex than a simple string replacement. The patch also adds a new test case to verify the failure scenario. The localization evidence shows the main hunk was found via exact match, indicating the patch applies cleanly. Overall, this is a whitespace/formatting and minor logic adjustment requiring fuzzy matching and understanding of asynchronous control flow, fitting TYPE_II complexity.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/session/RowConsumerToResultReceiver.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent7_validator": {
+      "elapsed_s": 269.14,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.session.RowConsumerToResultReceiverTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.session.RowConsumerToResultReceiverTest"
+        ],
+        "test_cases": {
+          "io.crate.session.RowConsumerToResultReceiverTest#test_does_not_suspend_consumer_on_last_row": "passed",
+          "io.crate.session.RowConsumerToResultReceiverTest#testBatchedIteratorConsumption": "passed",
+          "io.crate.session.RowConsumerToResultReceiverTest#testExceptionOnAllLoadedCallIsForwardedToResultReceiver": "passed",
+          "io.crate.session.RowConsumerToResultReceiverTest#test_consumer_aborts_if_write_future_fails": "passed",
+          "io.crate.session.RowConsumerToResultReceiverTest#test_consumer_pauses_and_resume_based_on_receivers_writablility": "passed"
+        },
+        "classes": {
+          "io.crate.session.RowConsumerToResultReceiverTest": "passed"
+        },
+        "summary": {
+          "passed": 5,
+          "failed": 0,
+          "skipped": 0,
+          "total": 5
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.session.RowConsumerToResultReceiverTest#test_consumer_aborts_if_write_future_fails"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 5,
+        "patched_total": 5,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "developer_aux_hunks_from_target": 4,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 5
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 4,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1639,
+    "target_patch_bytes": 5756,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.session.RowConsumerToResultReceiverTest#test_consumer_aborts_if_write_future_fails"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 5,
+      "patched_total": 5,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

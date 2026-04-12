@@ -4,6 +4,10 @@
 
 **Model:** Recommended Haiku 4.5 for fast iteration on classifier/router logic, Sonnet 4.6 for agents requiring domain reasoning.
 
+1. ALWAYS Query the knowledge graph first before doing any work.
+2. Only read raw files when necessary to look the code.
+3. use graphify-out/graph.json.
+
 ---
 
 ## Project Overview
@@ -313,3 +317,11 @@ ruff check src/ tests/
 
 **Model selected:** Haiku 4.5 (default for this conversation; switch to Sonnet for reasoning-heavy work)
 
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current

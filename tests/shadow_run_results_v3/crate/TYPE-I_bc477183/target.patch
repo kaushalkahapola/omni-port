@@ -1,0 +1,145 @@
+commit 2dc7eb4aaab286327d3e0069a1a446b17c9be026
+Author: Mathias Fussenegger <f.mathias@zignar.net>
+Date:   Mon Nov 17 14:27:33 2025 +0100
+
+    Fix array value validation on writes
+    
+    `valueForInsert` wasn't implemented in `ArrayType`. Because of that some
+    of the validation logic like that of a `VARCHAR(1)` wasn't executed.
+    
+    Closes https://github.com/crate/crate/issues/18697
+    
+    (cherry picked from commit bc477183cadc3343e449651fcfeae86dd6c6fbc6)
+
+diff --git a/docs/appendices/release-notes/5.10.15.rst b/docs/appendices/release-notes/5.10.15.rst
+index ba594c733f..ba282bca9a 100644
+--- a/docs/appendices/release-notes/5.10.15.rst
++++ b/docs/appendices/release-notes/5.10.15.rst
+@@ -47,6 +47,10 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue that allowed inserting values into ``ARRAY`` columns that
++  violated the array's inner type constraints. For example it was possible to
++  insert ``['aa']`` into a column of type ``ARRAY(VARCHAR(1))``.
++
+ - Fixed an issue that could lead to incorrect results for window functions when
+   the window function used a ``PARTITION BY`` clause on an object subscript
+   coming from a view or CTE and if running in a cluster with more than one node.
+diff --git a/docs/appendices/release-notes/6.0.4.rst b/docs/appendices/release-notes/6.0.4.rst
+index 75ac888268..7170ea62ff 100644
+--- a/docs/appendices/release-notes/6.0.4.rst
++++ b/docs/appendices/release-notes/6.0.4.rst
+@@ -46,6 +46,10 @@ series.
+ Fixes
+ =====
+ 
++- Fixed an issue that allowed inserting values into ``ARRAY`` columns that
++  violated the array's inner type constraints. For example it was possible to
++  insert ``['aa']`` into a column of type ``ARRAY(VARCHAR(1))``.
++
+ - Fixed an issue that could lead to incorrect results for window functions when
+   the window function used a ``PARTITION BY`` clause on an object subscript
+   coming from a view or CTE and if running in a cluster with more than one node.
+diff --git a/docs/appendices/release-notes/6.1.1.rst b/docs/appendices/release-notes/6.1.1.rst
+index fe36cd9cb8..2366802ced 100644
+--- a/docs/appendices/release-notes/6.1.1.rst
++++ b/docs/appendices/release-notes/6.1.1.rst
+@@ -46,6 +46,10 @@ series.
+ Fixes
+ =====
+ 
++- Fixed an issue that allowed inserting values into ``ARRAY`` columns that
++  violated the array's inner type constraints. For example it was possible to
++  insert ``['aa']`` into a column of type ``ARRAY(VARCHAR(1))``.
++
+ - Fixed an issue that could lead to incorrect results for window functions when
+   the window function used a ``PARTITION BY`` clause on an object subscript
+   coming from a view or CTE and if running in a cluster with more than one node.
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index 24f46065a9..efa77ff1ea 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -859,7 +859,7 @@ public class Indexer {
+         Object[] values = item.insertValues();
+         for (int i = 0; i < values.length; i++) {
+             Reference reference = columns.get(i);
+-            Object value = valueForInsert(reference.valueType(), values[i]);
++            Object value = values[i];
+             // No granularity check since PARTITIONED BY columns cannot be added dynamically.
+             if (value == null) {
+                 continue;
+diff --git a/server/src/main/java/io/crate/types/ArrayType.java b/server/src/main/java/io/crate/types/ArrayType.java
+index e045a2785f..633e6211fa 100644
+--- a/server/src/main/java/io/crate/types/ArrayType.java
++++ b/server/src/main/java/io/crate/types/ArrayType.java
+@@ -244,16 +244,12 @@ public class ArrayType<T> extends DataType<List<T>> {
+         return convert(value, innerType, innerType::sanitizeValue, CoordinatorTxnCtx.systemTransactionContext().sessionSettings());
+     }
+ 
+-    public static List<String> fromAnyArray(Object[] values) throws IllegalArgumentException {
+-        if (values == null) {
++    @Override
++    public List<T> valueForInsert(List<T> value) {
++        if (value == null) {
+             return null;
+-        } else {
+-            ArrayList<String> array = new ArrayList<>(values.length);
+-            for (var value : values) {
+-                array.add(anyValueToString(value));
+-            }
+-            return array;
+         }
++        return Lists.map(value, innerType::valueForInsert);
+     }
+ 
+     public static List<String> fromAnyArray(List<?> values) throws IllegalArgumentException {
+@@ -275,13 +271,11 @@ public class ArrayType<T> extends DataType<List<T>> {
+         }
+         try {
+             if (value instanceof Map) {
+-                //noinspection unchecked
+-                return
+-                    Strings.toString(
++                return Strings.toString(
+                         JsonXContent.builder().map((Map<String, ?>) value));
+-            } else if (value instanceof Collection) {
++            } else if (value instanceof Collection<?> collection) {
+                 var array = JsonXContent.builder().startArray();
+-                for (var element : (Collection<?>) value) {
++                for (var element : collection) {
+                     array.value(element);
+                 }
+                 array.endArray();
+diff --git a/server/src/test/java/io/crate/execution/dml/IndexerTest.java b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+index b1a4abec52..988a88184c 100644
+--- a/server/src/test/java/io/crate/execution/dml/IndexerTest.java
++++ b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+@@ -1721,6 +1721,27 @@ public class IndexerTest extends CrateDummyClusterServiceUnitTest {
+         assertThat(returning[0]).isEqualTo(MapBuilder.newMapBuilder().put("a", null).put("b", null).put("c", null).map());
+     }
+ 
++    @Test
++    public void test_array_type_uses_value_for_insert_from_inner_type() throws Exception {
++        SQLExecutor executor = SQLExecutor.of(clusterService)
++            .addTable("create table t (x array(varchar(1)))");
++        DocTableInfo table = executor.resolveTableInfo("t");
++        Indexer indexer = new Indexer(
++            List.of(),
++            table,
++            Version.CURRENT,
++            new CoordinatorTxnCtx(executor.getSessionSettings()),
++            executor.nodeCtx,
++            new ArrayList<>(List.of(table.getReference(ColumnIdent.of("x")))),
++            null,
++            null
++        );
++
++        assertThatThrownBy(() -> indexer.index(item(List.of("aa", "bb"))))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("'aa' is too long for the text type of length: 1");
++    }
++
+     public static void assertTranslogParses(ParsedDocument doc, DocTableInfo info) {
+         assertTranslogParses(doc, info, Version.CURRENT);
+     }

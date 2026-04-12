@@ -1,0 +1,59 @@
+diff --git a/server/src/main/java/io/crate/analyze/relations/RelationAnalyzer.java b/server/src/main/java/io/crate/analyze/relations/RelationAnalyzer.java
+index cef5a3ee9e..2a459f8ef6 100644
+--- a/server/src/main/java/io/crate/analyze/relations/RelationAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/relations/RelationAnalyzer.java
+@@ -313,9 +313,11 @@ public class RelationAnalyzer extends DefaultTraversalVisitor<AnalyzedRelation,
+ 
+         for (var joinColumn : joinUsing.getColumns()) {
+ 
++            boolean joinColumnExistsInLeft = false;
+             for (var leftOutput : leftOutputs) {
+                 var columnIdent = Symbols.pathFromSymbol(leftOutput);
+                 if (columnIdent.name().equals(joinColumn)) {
++                    joinColumnExistsInLeft = true;
+                     if (lhsOutputs.put(joinColumn, leftOutput) != null) {
+                         throw new IllegalArgumentException(String.format(Locale.ENGLISH,
+                                                                          "common column name %s appears more than once in left table", joinColumn));
+@@ -323,14 +325,16 @@ public class RelationAnalyzer extends DefaultTraversalVisitor<AnalyzedRelation,
+                 }
+             }
+ 
+-            if (lhsOutputs.isEmpty()) {
++            if (!joinColumnExistsInLeft) {
+                 throw new IllegalArgumentException(String.format(Locale.ENGLISH,
+                                                                  "column %s specified in USING clause does not exist in left table", joinColumn));
+             }
+ 
++            boolean joinColumnExistsInRight = false;
+             for (Symbol rightOutput : rightOutputs) {
+                 var columnIdent = Symbols.pathFromSymbol(rightOutput);
+                 if (columnIdent.name().equals(joinColumn)) {
++                    joinColumnExistsInRight = true;
+                     if (rhsOutputs.put(joinColumn, rightOutput) != null) {
+                         throw new IllegalArgumentException(String.format(Locale.ENGLISH,
+                                                                          "common column name %s appears more than once in right table", joinColumn));
+@@ -346,7 +350,7 @@ public class RelationAnalyzer extends DefaultTraversalVisitor<AnalyzedRelation,
+                 }
+             }
+ 
+-            if (rhsOutputs.isEmpty()) {
++            if (!joinColumnExistsInRight) {
+                 throw new IllegalArgumentException(String.format(Locale.ENGLISH,
+                                                                  "column %s specified in USING clause does not exist in right table", joinColumn));
+             }
+@@ -579,7 +583,6 @@ public class RelationAnalyzer extends DefaultTraversalVisitor<AnalyzedRelation,
+         return null;
+     }
+ 
+-
+     /**
+      * Resolve expression by also taking ordinal reference into account (eg. for `GROUP BY` clauses).
+      * In case we cannot resolve the expression because an alias is used, will try to resolve the alias.
+@@ -644,7 +647,6 @@ public class RelationAnalyzer extends DefaultTraversalVisitor<AnalyzedRelation,
+         }
+     }
+ 
+-
+     @Override
+     protected AnalyzedRelation visitAliasedRelation(AliasedRelation node, StatementAnalysisContext context) {
+         context.startRelation(true);

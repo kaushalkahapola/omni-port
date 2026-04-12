@@ -1,0 +1,38 @@
+diff --git a/server/src/main/java/io/crate/metadata/cluster/AlterTableClusterStateExecutor.java b/server/src/main/java/io/crate/metadata/cluster/AlterTableClusterStateExecutor.java
+index b9583b183a..e78e1bf8b4 100644
+--- a/server/src/main/java/io/crate/metadata/cluster/AlterTableClusterStateExecutor.java
++++ b/server/src/main/java/io/crate/metadata/cluster/AlterTableClusterStateExecutor.java
+@@ -163,8 +163,6 @@ public class AlterTableClusterStateExecutor extends DDLClusterStateTaskExecutor<
+         return ClusterState.builder(currentState).metadata(metadataBuilder).build();
+     }
+ 
+-
+-
+     /**
+      * The logic is taken over from {@link MetadataUpdateSettingsService#updateSettings(UpdateSettingsRequest, ActionListener)}
+      */
+@@ -253,18 +251,16 @@ public class AlterTableClusterStateExecutor extends DDLClusterStateTaskExecutor<
+     @VisibleForTesting
+     static Settings filterSettings(Settings settings, List<Setting<?>> settingsFilter) {
+         Settings.Builder settingsBuilder = Settings.builder();
++        Set<String> settingNames = settings.keySet();
+         for (Setting<?> setting : settingsFilter) {
++            String key = setting.getKey();
+             if (setting.isGroupSetting()) {
+-                String prefix = setting.getKey(); // getKey() returns prefix for a group setting
+-                var settingsGroup = settings.getByPrefix(prefix);
++                var settingsGroup = settings.getByPrefix(key);
+                 for (String name : settingsGroup.keySet()) {
+-                    settingsBuilder.put(prefix + name, settingsGroup.get(name)); // No dot added as prefix already has dot at the end.
+-                }
+-            } else {
+-                String value = settings.get(setting.getKey());
+-                if (value != null) {
+-                    settingsBuilder.put(setting.getKey(), value);
++                    settingsBuilder.put(key + name, settingsGroup.get(name)); // No dot added as prefix already has dot at the end.
+                 }
++            } else if (settingNames.contains(key)) {
++                settingsBuilder.put(key, settings.get(key));
+             }
+         }
+         return settingsBuilder.build();

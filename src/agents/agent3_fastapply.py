@@ -156,8 +156,8 @@ def fast_apply_agent(state: BackportState) -> BackportState:
 
         loc_result = loc_results[i]
 
-        # Skip hunks with no file location at all.
-        if not loc_result.file_path or loc_result.method_used == "failed":
+        # Skip hunks with no file location at all, or new-file hunks (handled by Agent 6).
+        if not loc_result.file_path or loc_result.method_used in ("failed", "new_file"):
             continue
 
         old_string, new_string = agent.build_claw_strings(hunk, loc_result)

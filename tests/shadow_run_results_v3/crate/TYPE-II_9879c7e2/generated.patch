@@ -1,0 +1,60 @@
+diff --git a/server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java b/server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java
+index dc46e47046..a3181a7047 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java
++++ b/server/src/main/java/org/elasticsearch/cluster/metadata/Metadata.java
+@@ -109,7 +109,6 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata> {
+         SNAPSHOT
+     }
+ 
+-
+     /**
+      * Indicates that this custom metadata will be returned as part of an API call and will be persisted between
+      * node restarts, but will not be a part of a snapshot global state
+@@ -454,6 +453,11 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata> {
+         return Builder.fromXContent(parser, false);
+     }
+ 
++    private static boolean hasGlobalColumnOID(Version version) {
++        return version.onOrAfter(Version.V_5_5_0) &&
++            (version.onOrBefore(Version.V_6_0_3) || version.equals(Version.V_6_1_0));
++    }
++
+     private static class MetadataDiff implements Diff<Metadata> {
+ 
+         private final long version;
+@@ -494,7 +498,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata> {
+             clusterUUID = in.readString();
+             clusterUUIDCommitted = in.readBoolean();
+             version = in.readLong();
+-            if (in.getVersion().onOrAfter(Version.V_5_5_0) && in.getVersion().onOrBefore(Version.V_6_0_3)) {
++            if (hasGlobalColumnOID(in.getVersion())) {
+                 columnOID = in.readLong();
+             } else {
+                 columnOID = COLUMN_OID_UNASSIGNED;
+@@ -521,7 +525,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata> {
+             out.writeString(clusterUUID);
+             out.writeBoolean(clusterUUIDCommitted);
+             out.writeLong(version);
+-            if (out.getVersion().onOrAfter(Version.V_5_5_0) && out.getVersion().onOrBefore(Version.V_6_0_3)) {
++            if (hasGlobalColumnOID(out.getVersion())) {
+                 out.writeLong(columnOID);
+             }
+             coordinationMetadata.writeTo(out);
+@@ -556,7 +560,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata> {
+     public static Metadata readFrom(StreamInput in) throws IOException {
+         Builder builder = new Builder();
+         builder.version = in.readLong();
+-        if (in.getVersion().onOrAfter(Version.V_5_5_0) && in.getVersion().onOrBefore(Version.V_6_0_3)) {
++        if (hasGlobalColumnOID(in.getVersion())) {
+             builder.columnOID(in.readLong());
+         }
+         builder.clusterUUID = in.readString();
+@@ -597,7 +601,7 @@ public class Metadata implements Iterable<IndexMetadata>, Diffable<Metadata> {
+     @Override
+     public void writeTo(StreamOutput out) throws IOException {
+         out.writeLong(version);
+-        if (out.getVersion().onOrAfter(Version.V_5_5_0) && out.getVersion().onOrBefore(Version.V_6_0_3)) {
++        if (hasGlobalColumnOID(out.getVersion())) {
+             out.writeLong(columnOID);
+         }
+         out.writeString(clusterUUID);

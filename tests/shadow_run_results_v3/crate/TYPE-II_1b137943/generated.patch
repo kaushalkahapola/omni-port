@@ -1,0 +1,200 @@
+diff --git a/server/src/main/java/io/crate/analyze/AlterTableDropColumnAnalyzer.java b/server/src/main/java/io/crate/analyze/AlterTableDropColumnAnalyzer.java
+index 3027ca0ad4..8b476c340e 100644
+--- a/server/src/main/java/io/crate/analyze/AlterTableDropColumnAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/AlterTableDropColumnAnalyzer.java
+@@ -26,8 +26,6 @@ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Set;
+ 
+-import org.elasticsearch.Version;
+-
+ import io.crate.analyze.expressions.ExpressionAnalysisContext;
+ import io.crate.analyze.expressions.ExpressionAnalyzer;
+ import io.crate.analyze.relations.DocTableRelation;
+@@ -95,10 +93,9 @@ public class AlterTableDropColumnAnalyzer {
+         return new AnalyzedAlterTableDropColumn(tableInfo, dropColumns);
+     }
+ 
+-
+     /** Validate restrictions based on properties that cannot change */
+     private static void validateStatic(DocTableInfo tableInfo, List<DropColumn> dropColumns) {
+-        if (tableInfo.versionCreated().before(Version.V_5_5_0)) {
++        if (tableInfo.versionCreated().before(DocTableInfo.COLUMN_OID_VERSION)) {
+             throw new UnsupportedOperationException(
+                 "Dropping columns of a table created before version 5.5 is not supported"
+             );
+diff --git a/server/src/main/java/io/crate/analyze/AlterTableRenameColumnAnalyzer.java b/server/src/main/java/io/crate/analyze/AlterTableRenameColumnAnalyzer.java
+index 2a4ced0562..5ee67fb206 100644
+--- a/server/src/main/java/io/crate/analyze/AlterTableRenameColumnAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/AlterTableRenameColumnAnalyzer.java
+@@ -25,7 +25,6 @@ import java.util.List;
+ import java.util.Locale;
+ import java.util.Objects;
+ 
+-import org.elasticsearch.Version;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ 
+@@ -70,9 +69,9 @@ public class AlterTableRenameColumnAnalyzer {
+             sessionSettings.sessionUser(),
+             sessionSettings.searchPath()
+         );
+-        if (tableInfo.versionCreated().before(Version.V_5_5_0)) {
++        if (tableInfo.versionCreated().before(DocTableInfo.COLUMN_OID_VERSION)) {
+             throw new UnsupportedOperationException(
+-                "Renaming columns of a table created before version 5.5 is not supported"
++                "Renaming columns of a table created before version " + DocTableInfo.COLUMN_OID_VERSION + " is not supported"
+             );
+         }
+         var expressionAnalyzer = new ExpressionAnalyzer(
+diff --git a/server/src/main/java/io/crate/execution/ddl/tables/TransportAddColumnAction.java b/server/src/main/java/io/crate/execution/ddl/tables/TransportAddColumnAction.java
+index e91249f921..404fc5c195 100644
+--- a/server/src/main/java/io/crate/execution/ddl/tables/TransportAddColumnAction.java
++++ b/server/src/main/java/io/crate/execution/ddl/tables/TransportAddColumnAction.java
+@@ -21,7 +21,6 @@
+ 
+ package io.crate.execution.ddl.tables;
+ 
+-import org.elasticsearch.Version;
+ import org.elasticsearch.action.support.master.AcknowledgedResponse;
+ import org.elasticsearch.cluster.ClusterState;
+ import org.elasticsearch.cluster.ClusterStateTaskExecutor;
+@@ -37,6 +36,7 @@ import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import io.crate.execution.ddl.AbstractDDLTransportAction;
+ import io.crate.metadata.NodeContext;
++import io.crate.metadata.doc.DocTableInfo;
+ 
+ @Singleton
+ public class TransportAddColumnAction extends AbstractDDLTransportAction<AddColumnRequest, AcknowledgedResponse> {
+@@ -45,7 +45,7 @@ public class TransportAddColumnAction extends AbstractDDLTransportAction<AddColu
+     public static final AlterTableTask.AlterTableOperator<AddColumnRequest> ADD_COLUMN_OPERATOR =
+         (req, doctableInfo, metadataBuilder, nodeCtx) -> doctableInfo.addColumns(
+             nodeCtx,
+-            doctableInfo.versionCreated().onOrAfter(Version.V_5_5_0) ?
++            doctableInfo.versionCreated().onOrAfter(DocTableInfo.COLUMN_OID_VERSION) ?
+                 metadataBuilder.columnOidSupplier() :
+                 () -> Metadata.COLUMN_OID_UNASSIGNED,
+             req.references(),
+@@ -75,7 +75,6 @@ public class TransportAddColumnAction extends AbstractDDLTransportAction<AddColu
+         return new AlterTableTask<>(nodeContext, request.relationName(), ADD_COLUMN_OPERATOR);
+     }
+ 
+-
+     @Override
+     public ClusterBlockException checkBlock(AddColumnRequest request, ClusterState state) {
+         return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index ff9394c0db..8e97945cb1 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -397,7 +397,7 @@ public class Indexer {
+                    Symbol[] returnValues) {
+         this.columns = targetColumns;
+         this.synthetics = new HashMap<>();
+-        this.writeOids = table.versionCreated().onOrAfter(Version.V_5_5_0);
++        this.writeOids = table.versionCreated().onOrAfter(DocTableInfo.COLUMN_OID_VERSION);
+         this.getRef = table::getReference;
+         PartitionName partitionName = table.isPartitioned()
+             ? PartitionName.fromIndexOrTemplate(indexName)
+@@ -665,7 +665,6 @@ public class Indexer {
+         }
+     }
+ 
+-
+     /**
+      * Looks for new columns in the values of the given IndexItem and returns them.
+      */
+diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+index 70f49f9aa4..f4cfd49950 100644
+--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
++++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java
+@@ -114,7 +114,6 @@ import io.crate.types.DataType;
+ import io.crate.types.DataTypes;
+ import io.crate.types.ObjectType;
+ 
+-
+ /**
+  * Represents a user table.
+  * <p>
+@@ -169,6 +168,11 @@ import io.crate.types.ObjectType;
+  */
+ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+ 
++    /**
++     * Tables created on or after this version use oids in the mapping
++     **/
++    public static final Version COLUMN_OID_VERSION = Version.V_5_5_0;
++
+     public static final Setting<Long> TOTAL_COLUMNS_LIMIT =
+         Setting.longSetting("index.mapping.total_fields.limit", 1000L, 0, Property.Dynamic, Property.IndexScope);
+     public static final Setting<Long> DEPTH_LIMIT_SETTING =
+@@ -574,7 +578,6 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+         return result;
+     }
+ 
+-
+     /**
+      * returns <code>true</code> if this table is a partitioned table,
+      * <code>false</code> otherwise
+@@ -749,7 +752,6 @@ public class DocTableInfo implements TableInfo, ShardedTable, StoredTable {
+         }
+     }
+ 
+-
+     private void validateDropColumns(List<DropColumn> dropColumns) {
+         var leftOverCols = columns().stream().map(Reference::column).collect(Collectors.toSet());
+         for (int i = 0 ; i < dropColumns.size(); i++) {
+diff --git a/server/src/main/java/io/crate/metadata/doc/DocTableInfoFactory.java b/server/src/main/java/io/crate/metadata/doc/DocTableInfoFactory.java
+index dee0919e39..cf5ec7bea0 100644
+--- a/server/src/main/java/io/crate/metadata/doc/DocTableInfoFactory.java
++++ b/server/src/main/java/io/crate/metadata/doc/DocTableInfoFactory.java
+@@ -21,6 +21,8 @@
+ 
+ package io.crate.metadata.doc;
+ 
++import static org.elasticsearch.cluster.metadata.Metadata.COLUMN_OID_UNASSIGNED;
++
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Comparator;
+@@ -245,6 +247,15 @@ public class DocTableInfoFactory {
+             mappingSource = Maps.getOrDefault(mappingSource, "default", mappingSource);
+             tableParameters = indexTemplateMetadata.settings();
+             versionCreated = tableParameters.getAsVersion(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT);
++            // Versions up to 5.9.7 had a bug where ALTER TABLE on a partitioned table could change the `versionCreated` property on the template.
++            // See https://github.com/crate/crate/pull/17178
++            // To mitigate the impact, this looks through partitions and takes their lowest version:
++            for (String indexName : concreteIndices) {
++                IndexMetadata indexMetadata = metadata.index(indexName);
++                if (indexMetadata != null) {
++                    versionCreated = Version.min(versionCreated, indexMetadata.getCreationVersion());
++                }
++            }
+             versionUpgraded = null;
+             boolean isClosed = Maps.getOrDefault(
+                 Maps.getOrDefault(mappingSource, "_meta", Map.of()), "closed", false);
+@@ -308,6 +319,15 @@ public class DocTableInfoFactory {
+         );
+         PublicationsMetadata publicationsMetadata = metadata.custom(PublicationsMetadata.TYPE);
+         ColumnIdent clusteredBy = getClusteredBy(primaryKeys, Maps.get(metaMap, "routing"));
++        if (indexTemplateMetadata != null && versionCreated.onOrAfter(DocTableInfo.COLUMN_OID_VERSION)) {
++            // Due to https://github.com/crate/crate/pull/17178 the created version in the template
++            // can be wrong; inferring the correct version from partitions can also fail if old partitions
++            // are deleted.
++            // This is another safety mechanism. If a column doesn't have OIDs the table must be from < 5.5.0
++            if (references.values().stream().anyMatch(ref -> ref.oid() == COLUMN_OID_UNASSIGNED)) {
++                versionCreated = Version.V_5_4_0;
++            }
++        }
+         return new DocTableInfo(
+             relation,
+             references,
+@@ -557,7 +577,6 @@ public class DocTableInfoFactory {
+         }
+     }
+ 
+-
+     /**
+      * Get the IndexType from columnProperties.
+      * <br />

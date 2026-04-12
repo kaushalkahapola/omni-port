@@ -1,0 +1,60 @@
+diff --git a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+index fe20bbb9bb..f063f990c6 100644
+--- a/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
++++ b/server/src/main/java/io/crate/planner/node/management/ExplainPlan.java
+@@ -138,6 +138,12 @@ public class ExplainPlan implements Plan {
+                               RowConsumer consumer,
+                               Row params,
+                               SubQueryResults subQueryResults) {
++        var ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
++            "multi-phase",
++            dependencies.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
++            plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
++        );
++        consumer.completionFuture().whenComplete((_, _) -> ramAccounting.close());
+         if (context != null) {
+             assert subPlan instanceof LogicalPlan : "subPlan must be a LogicalPlan";
+             LogicalPlan plan = (LogicalPlan) subPlan;
+@@ -150,7 +156,7 @@ public class ExplainPlan implements Plan {
+                 subQueryResults,
+                 new IdentityHashMap<>(),
+                 new ArrayList<>(plan.dependencies().size()),
+-                null,
++                ramAccounting,
+                 null
+             );
+         } else {
+@@ -236,24 +242,9 @@ public class ExplainPlan implements Plan {
+                                              SubQueryResults subQueryResults,
+                                              Map<SelectSymbol, Object> valuesBySubQuery,
+                                              List<Map<String, Object>> explainResults,
+-                                             @Nullable RamAccounting ramAccounting,
++                                             RamAccounting ramAccounting,
+                                              @Nullable SelectSymbol selectSymbol) {
+         boolean isTopLevel = selectSymbol == null;
+-
+-        assert ramAccounting != null || isTopLevel : "ramAccounting must NOT be null for subPlans";
+-
+-        if (ramAccounting == null) {
+-            ramAccounting = ConcurrentRamAccounting.forCircuitBreaker(
+-                "multi-phase",
+-                executor.circuitBreaker(HierarchyCircuitBreakerService.QUERY),
+-                plannerContext.transactionContext().sessionSettings().memoryLimitInBytes()
+-            );
+-        }
+-
+-        if (isTopLevel == false) {
+-            plannerContext = PlannerContext.forSubPlan(plannerContext);
+-        }
+-
+         IdentityHashMap<SelectSymbol, Object> subPlanValueBySubQuery = new IdentityHashMap<>();
+         ArrayList<Map<String, Object>> subPlansExplainResults = new ArrayList<>(plan.dependencies().size());
+         List<CompletableFuture<?>> subPlansFutures = new ArrayList<>(plan.dependencies().size());
+@@ -363,7 +354,6 @@ public class ExplainPlan implements Plan {
+             });
+     }
+ 
+-
+     @VisibleForTesting
+     public static String printLogicalPlan(LogicalPlan logicalPlan, PlannerContext plannerContext, boolean showCosts) {
+         final PrintContext printContext = createPrintContext(plannerContext.planStats(), showCosts);

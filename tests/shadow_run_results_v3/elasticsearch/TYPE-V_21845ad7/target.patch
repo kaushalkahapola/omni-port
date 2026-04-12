@@ -1,0 +1,137 @@
+commit 56e19e28bd098337f57e5b49f45ae14137fd3e72
+Author: Nik Everett <nik9000@gmail.com>
+Date:   Thu May 1 17:28:14 2025 -0400
+
+    ESQL: Improve error message for ( and [ (#124177) (#127620)
+    
+    Due to recent grammar changes made ( token to no longer be reported by
+    its text rather by his internal token name. Due to the use of pushMode,
+    the symbol is not treated as a literal rather as a symbol.
+    To address this, the parser listener looks at the error message and
+    changes the message before returning it to the user.
+    
+    Fix #124145
+    Relates #123085 #121948
+
+diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlParser.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlParser.java
+index 367d5d3fb83..53a421e0307 100644
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlParser.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/EsqlParser.java
+@@ -14,6 +14,7 @@ import org.antlr.v4.runtime.RecognitionException;
+ import org.antlr.v4.runtime.Recognizer;
+ import org.antlr.v4.runtime.Token;
+ import org.antlr.v4.runtime.TokenSource;
++import org.antlr.v4.runtime.VocabularyImpl;
+ import org.antlr.v4.runtime.atn.PredictionMode;
+ import org.elasticsearch.logging.LogManager;
+ import org.elasticsearch.logging.Logger;
+@@ -24,6 +25,7 @@ import org.elasticsearch.xpack.esql.telemetry.PlanTelemetry;
+ 
+ import java.util.BitSet;
+ import java.util.EmptyStackException;
++import java.util.Map;
+ import java.util.function.BiFunction;
+ import java.util.function.Function;
+ import java.util.regex.Matcher;
+@@ -46,6 +48,45 @@ public class EsqlParser {
+      */
+     public static final int MAX_LENGTH = 1_000_000;
+ 
++    private static void replaceSymbolWithLiteral(Map<String, String> symbolReplacements, String[] literalNames, String[] symbolicNames) {
++        for (int i = 0, replacements = symbolReplacements.size(); i < symbolicNames.length && replacements > 0; i++) {
++            String symName = symbolicNames[i];
++            if (symName != null) {
++                String replacement = symbolReplacements.get(symName);
++                if (replacement != null && literalNames[i] == null) {
++                    // literals are single quoted
++                    literalNames[i] = "'" + replacement + "'";
++                    replacements--;
++                }
++            }
++        }
++    }
++
++    /**
++     * Add the literal name to a number of tokens that due to ANTLR internals/ATN
++     * have their symbolic name returns instead during error reporting.
++     * When reporting token errors, ANTLR uses the Vocabulary class to get the displayName
++     * (if set), otherwise falls back to the literal one and eventually uses the symbol name.
++     * Since the Vocabulary is static and not pluggable, this code modifies the underlying
++     * arrays by setting the literal string manually based on the token index.
++     * This is needed since some symbols, especially around setting up the mode, end up losing
++     * their literal representation.
++     * NB: this code is highly dependent on the ANTLR internals and thus will likely break
++     * during upgrades.
++     * NB: Can't use this for replacing DEV_ since the Vocabular is static while DEV_ replacement occurs per runtime configuration
++     */
++    static {
++        Map<String, String> symbolReplacements = Map.of("LP", "(", "OPENING_BRACKET", "[");
++
++        // the vocabularies have the same content however are different instances
++        // for extra reliability, perform the replacement for each map
++        VocabularyImpl parserVocab = (VocabularyImpl) EsqlBaseParser.VOCABULARY;
++        replaceSymbolWithLiteral(symbolReplacements, parserVocab.getLiteralNames(), parserVocab.getSymbolicNames());
++
++        VocabularyImpl lexerVocab = (VocabularyImpl) EsqlBaseLexer.VOCABULARY;
++        replaceSymbolWithLiteral(symbolReplacements, lexerVocab.getLiteralNames(), lexerVocab.getSymbolicNames());
++    }
++
+     private EsqlConfig config = new EsqlConfig();
+ 
+     public EsqlConfig config() {
+diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java
+index 44068518774..f105363f278 100644
+--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java
++++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java
+@@ -793,11 +793,8 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         expectError("FROM \"foo\"bar\"", ": token recognition error at: '\"'");
+         expectError("FROM \"foo\"\"bar\"", ": extraneous input '\"bar\"' expecting <EOF>");
+ 
+-        expectError("FROM \"\"\"foo\"\"\"bar\"\"\"", ": mismatched input 'bar' expecting {<EOF>, '|', ',', OPENING_BRACKET, 'metadata'}");
+-        expectError(
+-            "FROM \"\"\"foo\"\"\"\"\"\"bar\"\"\"",
+-            ": mismatched input '\"bar\"' expecting {<EOF>, '|', ',', OPENING_BRACKET, 'metadata'}"
+-        );
++        expectError("FROM \"\"\"foo\"\"\"bar\"\"\"", ": mismatched input 'bar' expecting {<EOF>, '|', ',', '[', 'metadata'}");
++        expectError("FROM \"\"\"foo\"\"\"\"\"\"bar\"\"\"", ": mismatched input '\"bar\"' expecting {<EOF>, '|', ',', '[', 'metadata'}");
+     }
+ 
+     public void testInvalidQuotingAsMetricsIndexPattern() {
+@@ -1087,7 +1084,7 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         expectError("show info metadata _index", "line 1:11: token recognition error at: 'm'");
+         expectError(
+             "explain [from foo] metadata _index",
+-            "line 1:20: mismatched input 'metadata' expecting {'|', ',', OPENING_BRACKET, ']', 'metadata'}"
++            "line 1:20: mismatched input 'metadata' expecting {'|', ',', '[', ']', 'metadata'}"
+         );
+     }
+ 
+@@ -3044,7 +3041,7 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         String map = "{\"option1\":\"string\", \"option2\":1}";
+ 
+         Map<String, String> commands = Map.ofEntries(
+-            Map.entry("from {}", "line 1:7: mismatched input '\"option1\"' expecting {<EOF>, '|', ',', OPENING_BRACKET, 'metadata'}"),
++            Map.entry("from {}", "line 1:7: mismatched input '\"option1\"' expecting {<EOF>, '|', ',', '[', 'metadata'}"),
+             Map.entry("row x = {}", "line 1:9: extraneous input '{' expecting {QUOTED_STRING, INTEGER_LITERAL"),
+             Map.entry("eval x = {}", "line 1:22: extraneous input '{' expecting {QUOTED_STRING, INTEGER_LITERAL"),
+             Map.entry("where x > {}", "line 1:23: no viable alternative at input 'x > {'"),
+@@ -3951,4 +3948,19 @@ public class StatementParserTests extends AbstractStatementParserTests {
+             expectError(q, "Invalid query");
+         }
+     }
++
++    // [ and ( are used to trigger a double mode causing their symbol name (instead of text) to be used in error reporting
++    // this test checks that their are properly replaced in the error message
++    public void testPreserveParanthesis() {
++        // test for (
++        expectError("row a = 1 not in", "line 1:17: mismatched input '<EOF>' expecting '('");
++        expectError("row a = 1 | where a not in", "line 1:27: mismatched input '<EOF>' expecting '('");
++        expectError("row a = 1 | where a not in (1", "line 1:30: mismatched input '<EOF>' expecting {',', ')'}");
++        expectError("row a = 1 | where a not in [1", "line 1:28: missing '(' at '['");
++        expectError("row a = 1 | where a not in 123", "line 1:28: missing '(' at '123'");
++        // test for [
++        expectError("explain", "line 1:8: mismatched input '<EOF>' expecting '['");
++        expectError("explain ]", "line 1:9: token recognition error at: ']'");
++        expectError("explain [row x = 1", "line 1:19: missing ']' at '<EOF>'");
++    }
+ }

@@ -1,0 +1,129 @@
+diff --git a/plugins/es-repository-azure/src/main/java/org/elasticsearch/repositories/azure/AzureRepository.java b/plugins/es-repository-azure/src/main/java/org/elasticsearch/repositories/azure/AzureRepository.java
+index bf476bcdbc..fb03db97a4 100644
+--- a/plugins/es-repository-azure/src/main/java/org/elasticsearch/repositories/azure/AzureRepository.java
++++ b/plugins/es-repository-azure/src/main/java/org/elasticsearch/repositories/azure/AzureRepository.java
+@@ -23,6 +23,7 @@ import static org.elasticsearch.repositories.azure.AzureStorageService.MAX_CHUNK
+ import static org.elasticsearch.repositories.azure.AzureStorageService.MIN_CHUNK_SIZE;
+ 
+ import java.net.Proxy;
++import java.net.URI;
+ import java.util.List;
+ import java.util.Locale;
+ import java.util.function.Function;
+@@ -30,6 +31,7 @@ import java.util.function.Function;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.apache.logging.log4j.message.ParameterizedMessage;
++import org.elasticsearch.ElasticsearchParseException;
+ import org.elasticsearch.cluster.metadata.RepositoryMetadata;
+ import org.elasticsearch.cluster.service.ClusterService;
+ import org.elasticsearch.common.Strings;
+@@ -111,10 +113,16 @@ public class AzureRepository extends BlobStoreRepository {
+             Setting.Property.NodeScope);
+ 
+         static final Setting<String> ENDPOINT_SETTING =
+-            Setting.simpleString("endpoint", Property.NodeScope);
++            Setting.simpleString(
++                "endpoint",
++                val -> validateEndpoint(val, "endpoint"),
++                Property.NodeScope);
+ 
+         static final Setting<String> SECONDARY_ENDPOINT_SETTING =
+-            Setting.simpleString("secondary_endpoint", Property.NodeScope);
++            Setting.simpleString(
++                "secondary_endpoint",
++                val -> validateEndpoint(val, "secondary_endpoint"),
++                Property.NodeScope);
+ 
+         /**
+          * Azure endpoint suffix. Default to core.windows.net (CloudStorageAccount.DEFAULT_DNS).
+@@ -146,6 +154,24 @@ public class AzureRepository extends BlobStoreRepository {
+          */
+         static final Setting<Integer> PROXY_PORT_SETTING =
+             Setting.intSetting("proxy_port", 0, 0, 65535, Setting.Property.NodeScope);
++
++        /**
++         * Verify that the endpoint is a valid URI with a nonnull scheme and host.
++         * Otherwise, the Azure SDK will throw an NPE exception if host is null.
++         */
++        private static void validateEndpoint(String endpoint, String settingName) {
++            if (Strings.isNullOrEmpty(endpoint)) {
++                return;
++            }
++            try {
++                var uri = new URI(endpoint);
++                if (uri.getScheme() == null || uri.getHost() == null) {
++                    throw new ElasticsearchParseException("Invalid " + settingName + " URI: " + endpoint);
++                }
++            } catch (Exception e) {
++                throw new ElasticsearchParseException("Invalid " + settingName + " URI: " + endpoint, e);
++            }
++        }
+     }
+ 
+     public static List<Setting<?>> optionalSettings() {
+diff --git a/plugins/es-repository-azure/src/main/java/org/elasticsearch/repositories/azure/AzureStorageSettings.java b/plugins/es-repository-azure/src/main/java/org/elasticsearch/repositories/azure/AzureStorageSettings.java
+index eabb6da6bd..433d2c46c9 100644
+--- a/plugins/es-repository-azure/src/main/java/org/elasticsearch/repositories/azure/AzureStorageSettings.java
++++ b/plugins/es-repository-azure/src/main/java/org/elasticsearch/repositories/azure/AzureStorageSettings.java
+@@ -29,11 +29,11 @@ import org.elasticsearch.common.settings.SecureString;
+ import org.elasticsearch.common.settings.Setting;
+ import org.elasticsearch.common.settings.Settings;
+ import org.elasticsearch.common.settings.SettingsException;
++import org.jetbrains.annotations.Nullable;
++import org.jetbrains.annotations.VisibleForTesting;
+ 
+ import com.microsoft.azure.storage.LocationMode;
+ 
+-import org.jetbrains.annotations.Nullable;
+-import org.jetbrains.annotations.VisibleForTesting;
+ import io.crate.common.unit.TimeValue;
+ 
+ public final class AzureStorageSettings {
+diff --git a/server/src/main/java/org/elasticsearch/repositories/blobstore/BlobStoreRepository.java b/server/src/main/java/org/elasticsearch/repositories/blobstore/BlobStoreRepository.java
+index 6a71666f37..5355a05c06 100644
+--- a/server/src/main/java/org/elasticsearch/repositories/blobstore/BlobStoreRepository.java
++++ b/server/src/main/java/org/elasticsearch/repositories/blobstore/BlobStoreRepository.java
+@@ -143,7 +143,6 @@ import io.crate.common.unit.TimeValue;
+ import io.crate.exceptions.InvalidArgumentException;
+ import io.crate.server.xcontent.LoggingDeprecationHandler;
+ 
+-
+ /**
+  * BlobStore - based implementation of Snapshot Repository
+  * <p>
+@@ -659,7 +658,6 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
+             l -> cleanupStaleBlobs(deletedSnapshots, foundIndices, rootBlobs, updatedRepoData, l.map(ignored -> null))));
+     }
+ 
+-
+     private void asyncCleanupUnlinkedShardLevelBlobs(RepositoryData oldRepositoryData,
+                                                      Collection<SnapshotId> snapshotIds,
+                                                      Collection<ShardSnapshotMetaDeleteResult> deleteResults,
+@@ -1074,7 +1072,6 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
+         }
+     }
+ 
+-
+     @Override
+     public CompletableFuture<Collection<IndexMetadata>> getSnapshotIndexMetadata(RepositoryData repositoryData, SnapshotId snapshotId, Collection<IndexId> indexIds) {
+         try {
+@@ -1089,8 +1086,6 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
+         }
+     }
+ 
+-
+-
+     private void deleteFromContainer(BlobContainer container, List<String> blobs) throws IOException {
+         LOGGER.trace(() -> new ParameterizedMessage("[{}] Deleting {} from [{}]", metadata.name(), blobs, container.path()));
+         container.deleteBlobsIgnoringIfNotExists(blobs);
+@@ -1164,7 +1159,8 @@ public abstract class BlobStoreRepository extends AbstractLifecycleComponent imp
+                     metadata.name(),
+                     errorInfo.getClass().getSimpleName(),
+                     errorInfo.getMessage()
+-                )
++                ),
++                errorInfo
+             );
+         }
+     }

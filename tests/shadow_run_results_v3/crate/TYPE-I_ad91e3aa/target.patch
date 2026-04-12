@@ -1,0 +1,141 @@
+commit ed7e7467f9c9883784e7d44558cb95ea69eea74c
+Author: Sebastian Utz <su@rtme.net>
+Date:   Wed Oct 15 14:10:07 2025 +0200
+
+    Increase the FORCE_MERGE default pool size to 1/8 of the cores
+    
+    Until now, the FORCE_MERGE pool has a default value of 1, forcing
+    sequential iteration over the shards. On larger machines with a lot
+    of cores it's acceptible to allow the FORCE_MERGE to use multiple
+    threads to parallelize the operations.
+    
+    Using a maximum default value of 1/8 of the available cores should
+    work fine on most installations.
+    
+    Relates to #18341, which fixed the parallelism support in general.
+    Relates to #18517, as due to the parallelism, the shard increase
+    operation will speed up (as it uses the force_merge internally).
+    
+    (cherry picked from commit ad91e3aaffbfd5bff986593c3c57c89f0b52425a)
+
+diff --git a/docs/appendices/release-notes/6.1.0.rst b/docs/appendices/release-notes/6.1.0.rst
+index c09b088a23..e1c59004d8 100644
+--- a/docs/appendices/release-notes/6.1.0.rst
++++ b/docs/appendices/release-notes/6.1.0.rst
+@@ -57,6 +57,10 @@ Breaking Changes
+   the relative paths are resolved, thus conforming to the behavior already
+   described in the :ref:`documentation <conf-node-settings_paths>`.
+ 
++- Increased the ``FORCE_MERGE`` default thread pool size from ``1`` to ``1/8``
++  of the available processors, improving the performance of the :ref:`optimize`
++  operation on machines with more than ``15`` cores.
++
+ Deprecations
+ ============
+ 
+diff --git a/server/src/main/java/org/elasticsearch/threadpool/ThreadPool.java b/server/src/main/java/org/elasticsearch/threadpool/ThreadPool.java
+index 77edd21b5a..ab4a87422c 100644
+--- a/server/src/main/java/org/elasticsearch/threadpool/ThreadPool.java
++++ b/server/src/main/java/org/elasticsearch/threadpool/ThreadPool.java
+@@ -145,7 +145,7 @@ public class ThreadPool implements Scheduler {
+             new ScalingExecutorBuilder(Names.WARMER, 1, halfProcMaxAt5, TimeValue.timeValueMinutes(5)),
+             new ScalingExecutorBuilder(Names.SNAPSHOT, 1, halfProcMaxAt5, TimeValue.timeValueMinutes(5)),
+             new ScalingExecutorBuilder(Names.FETCH_SHARD_STARTED, 1, 2 * availableProcessors, TimeValue.timeValueMinutes(5)),
+-            new FixedExecutorBuilder(settings, Names.FORCE_MERGE, 1, -1),
++            new FixedExecutorBuilder(settings, Names.FORCE_MERGE, oneEightOfProcessors(availableProcessors), -1),
+             new ScalingExecutorBuilder(Names.FETCH_SHARD_STORE, 1, 2 * availableProcessors, TimeValue.timeValueMinutes(5)),
+             new FixedExecutorBuilder(settings, Names.LOGICAL_REPLICATION, searchThreadPoolSize(availableProcessors), 100)
+         );
+@@ -229,6 +229,15 @@ public class ThreadPool implements Scheduler {
+         return new ThreadPoolStats.Stats(name, -1, -1, -1, -1, -1, -1);
+     }
+ 
++    @Nullable
++    public ThreadPool.Info info(String name) {
++        ExecutorHolder holder = executors.get(name);
++        if (holder == null) {
++            return null;
++        }
++        return holder.info();
++    }
++
+     /**
+      * Get the generic {@link ExecutorService}. This executor service
+      * {@link Executor#execute(Runnable)} method will run the {@link Runnable} it is given in the
+@@ -373,6 +382,10 @@ public class ThreadPool implements Scheduler {
+         return boundedBy((numberOfProcessors + 1) / 2, 1, 10);
+     }
+ 
++    static int oneEightOfProcessors(int numberOfProcessors) {
++        return boundedBy(numberOfProcessors / 8, 1, Integer.MAX_VALUE);
++    }
++
+     public static int searchThreadPoolSize(int availableProcessors) {
+         return ((availableProcessors * 3) / 2) + 1;
+     }
+diff --git a/server/src/test/java/org/elasticsearch/threadpool/ThreadPoolTest.java b/server/src/test/java/org/elasticsearch/threadpool/ThreadPoolTest.java
+new file mode 100644
+index 0000000000..764f1f98de
+--- /dev/null
++++ b/server/src/test/java/org/elasticsearch/threadpool/ThreadPoolTest.java
+@@ -0,0 +1,60 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package org.elasticsearch.threadpool;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import org.elasticsearch.common.settings.Settings;
++import org.elasticsearch.common.util.concurrent.EsExecutors;
++import org.elasticsearch.test.ESTestCase;
++import org.junit.Test;
++
++public class ThreadPoolTest extends ESTestCase {
++
++    @Test
++    public void test_one_eight_of_processors() {
++        assertThat(ThreadPool.oneEightOfProcessors(1)).isEqualTo(1);
++        assertThat(ThreadPool.oneEightOfProcessors(3)).isEqualTo(1);
++        assertThat(ThreadPool.oneEightOfProcessors(8)).isEqualTo(1);
++        assertThat(ThreadPool.oneEightOfProcessors(16)).isEqualTo(2);
++    }
++
++
++    @Test
++    public void test_force_merge_pool_size() {
++        final int processors = randomIntBetween(1, EsExecutors.numberOfProcessors(Settings.EMPTY));
++        final ThreadPool threadPool = new TestThreadPool(
++            "test",
++            Settings.builder().put(EsExecutors.PROCESSORS_SETTING.getKey(), processors).build()
++        );
++        try {
++            final int expectedSize = Math.max(1, processors / 8);
++            ThreadPool.Info info = threadPool.info(ThreadPool.Names.FORCE_MERGE);
++            assertThat(info).isNotNull();
++            assertThat(info.min()).isEqualTo(expectedSize);
++            assertThat(info.max()).isEqualTo(expectedSize);
++        } finally {
++            terminate(threadPool);
++        }
++
++    }
++}

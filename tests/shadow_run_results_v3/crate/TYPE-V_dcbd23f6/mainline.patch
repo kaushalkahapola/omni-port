@@ -1,0 +1,205 @@
+commit dcbd23f6208c99f85aa82d287d75a8eb5955000f
+Author: Mathias Fussenegger <f.mathias@zignar.net>
+Date:   Wed Sep 4 15:43:40 2024 +0200
+
+    Fix race allowing to insert conflicting value/types into object(dynamic) columns
+    
+    Closes https://github.com/crate/crate/issues/16562
+    
+    The `ObjectIndexer` changed itself immediately when detecting new
+    columns. This was a problem if concurrently another shard created the
+    same column with a different type:
+    
+        shard 1: Detects obj['x'] as long, modifies itself
+        shard 2: Detects obj['x'] as double, modifies itself
+        shard 1: add column request a)
+        shard 2: add column request b)
+        add column request a) succeeds. cluster state updated to obj['x'] = long
+        shard 1: receives success, continues
+        shard 2: receives add column failure, skips 1 item due to the failure but continues with remaining items
+        shard 2: remaining items are inserted as obj['x'] = double
+    
+    To fix this, this changed the `ObjectIndexer` to not immediately update
+    its children on `collectSchemaUpdates`, but on `updateTargets`, which is
+    only called after a add-column request succeeded
+
+diff --git a/docs/appendices/release-notes/5.8.3.rst b/docs/appendices/release-notes/5.8.3.rst
+index 7750b210d4..2abaa4e114 100644
+--- a/docs/appendices/release-notes/5.8.3.rst
++++ b/docs/appendices/release-notes/5.8.3.rst
+@@ -47,6 +47,10 @@ See the :ref:`version_5.8.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed a race condition that could allow ``INSERT INTO`` statements to write
++  values with conflicting types into a table within an ``OBJECT (DYNAMIC)``
++  column if the insert needed to create a new sub-column dynamically.
++
+ - Fixed an issue that caused ``WHERE`` clause to filter out all rows when the
+   clause contained a :ref:`LIKE or ILIKE<sql_dql_like>` operator on a column
+   declared with :ref:`INDEX OFF<sql_ddl_index_off>` and the pattern was an empty
+diff --git a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+index 8abde8dc4a..aba67a21b2 100644
+--- a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+@@ -159,15 +159,33 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+ 
+     @Override
+     public void updateTargets(Function<ColumnIdent, Reference> getRef) {
++        ColumnIdent objectColumn = ref.column();
++        Reference updatedSelf = getRef.apply(objectColumn);
++        ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());
+         for (var entry : children.entrySet()) {
+-            var newChildRef = getRef.apply(entry.getValue().ident());
+-            if (Objects.equals(entry.getValue().reference, newChildRef) == false) {
+-                // noinspection unchecked
++            Child child = entry.getValue();
++            var newChildRef = getRef.apply(child.ident());
++            if (Objects.equals(child.reference, newChildRef) == false) {
++                @SuppressWarnings("unchecked")
+                 ValueIndexer<Object> indexer = newChildRef.granularity() == RowGranularity.PARTITION
+-                    ? null : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(newChildRef.ident().tableIdent(), newChildRef, getRef);
++                    ? null
++                    : (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(table, newChildRef, getRef);
++
+                 children.put(entry.getKey(), new Child(newChildRef, indexer));
+             }
+-            entry.getValue().indexer.updateTargets(getRef);
++            child.indexer.updateTargets(getRef);
++        }
++        for (String innerColumn : objectType.innerTypes().keySet()) {
++            if (!children.containsKey(innerColumn)) {
++                Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));
++                @SuppressWarnings("unchecked")
++                ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(
++                    table,
++                    childRef,
++                    getRef
++                );
++                children.put(innerColumn, new Child(childRef, childIndexer));
++            }
+         }
+     }
+ 
+@@ -234,7 +252,6 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+                 newColumn,
+                 getRef
+             );
+-            children.put(innerName, new Child(newColumn, valueIndexer));
+             valueIndexer.collectSchemaUpdates(
+                 innerValue,
+                 onDynamicColumn,
+diff --git a/server/src/test/java/io/crate/execution/dml/IndexerTest.java b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+index 2da65f5237..1ee52c18fd 100644
+--- a/server/src/test/java/io/crate/execution/dml/IndexerTest.java
++++ b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+@@ -28,6 +28,7 @@ import static io.crate.types.GeoShapeType.Names.TREE_BKD;
+ import static io.crate.types.GeoShapeType.Names.TREE_GEOHASH;
+ import static io.crate.types.GeoShapeType.Names.TREE_LEGACY_QUADTREE;
+ import static io.crate.types.GeoShapeType.Names.TREE_QUADTREE;
++import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ import static org.elasticsearch.cluster.metadata.Metadata.COLUMN_OID_UNASSIGNED;
+ 
+@@ -69,6 +70,7 @@ import io.crate.expression.symbol.DynamicReference;
+ import io.crate.expression.symbol.Symbol;
+ import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.CoordinatorTxnCtx;
++import io.crate.metadata.NodeContext;
+ import io.crate.metadata.PartitionName;
+ import io.crate.metadata.Reference;
+ import io.crate.metadata.ReferenceIdent;
+@@ -1352,6 +1354,51 @@ public class IndexerTest extends CrateDummyClusterServiceUnitTest {
+         assertTranslogParses(doc, table);
+     }
+ 
++    @Test
++    public void test_handles_type_conflicts_in_dynamic_nested_objects() throws Exception {
++        var sqlExecutor = SQLExecutor.of(clusterService)
++            .addTable("create table tbl (o object(dynamic))");
++        DocTableInfo table = sqlExecutor.resolveTableInfo("tbl");
++        Indexer indexer = getIndexer(sqlExecutor, "tbl", "o");
++
++        Map<String, List<Map<String, Integer>>> value1 = Map.of("name", List.of(Map.of("a", 1)));
++        Map<String, Map<String, Integer>> value2 = Map.of("name", Map.of("a", 1));
++
++        List<Reference> newColumns = indexer.collectSchemaUpdates(item(value1));
++
++        assertThat(newColumns).satisfiesExactly(
++            x -> assertThat(x).hasName("o['name']"),
++            x -> assertThat(x).hasName("o['name']['a']")
++        );
++
++
++        newColumns = indexer.collectSchemaUpdates(item(value2));
++        assertThat(newColumns).as("collectSchemaUpdates must not apply the updates immediately").satisfiesExactly(
++            x -> assertThat(x).hasName("o['name']"),
++            x -> assertThat(x).hasName("o['name']['a']")
++        );
++
++        NodeContext nodeCtx = sqlExecutor.nodeCtx;
++        RelationName tableName = table.ident();
++        var addColumnTask = new AlterTableTask<>(
++            nodeCtx, tableName, TransportAddColumnAction.ADD_COLUMN_OPERATOR);
++        var request = new AddColumnRequest(
++            tableName,
++            newColumns,
++            Map.of(),
++            new IntArrayList()
++        );
++        ClusterState newState = addColumnTask.execute(clusterService.state(), request);
++        DocTableInfo newTable = new DocTableInfoFactory(nodeCtx).create(tableName, newState.metadata());
++
++        indexer.updateTargets(newTable::getReference);
++        newColumns = indexer.collectSchemaUpdates(item(value2));
++        assertThat(newColumns).isEmpty();
++
++        assertThatThrownBy(() -> indexer.index(item(value1)))
++            .isExactlyInstanceOf(ClassCastException.class);
++    }
++
+     public static void assertTranslogParses(ParsedDocument doc, DocTableInfo info) throws Exception {
+         TranslogIndexer ti = new TranslogIndexer(info);
+         ParsedDocument d = ti.index(doc.id(), doc.source());
+diff --git a/server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java b/server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java
+index 98124e524e..585bb9c52c 100644
+--- a/server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java
++++ b/server/src/test/java/io/crate/integrationtests/DynamicMappingUpdateITest.java
+@@ -32,6 +32,7 @@ import java.nio.file.Files;
+ import java.nio.file.Paths;
+ import java.util.List;
+ import java.util.UUID;
++import java.util.stream.Stream;
+ import java.util.stream.StreamSupport;
+ 
+ import org.elasticsearch.test.IntegTestCase;
+@@ -437,4 +438,29 @@ public class DynamicMappingUpdateITest extends IntegTestCase {
+             () -> execute("insert into t (n) values ([[1, 2], [3, 4]])")
+         ).hasMessageContaining("Dynamic nested arrays are not supported");
+     }
++
++    @Test
++    public void test_conflicting_object_updates_do_not_allow_inserting_incompatible_values() throws Exception {
++        execute("""
++            CREATE TABLE exp1 (id TEXT PRIMARY KEY, doc OBJECT(dynamic))
++            """);
++        execute(
++            """
++            INSERT INTO exp1 (id, doc)
++            VALUES
++                ('4', {"name" = [{ "a" = 1 }]}),
++                ('1', {"name" = { "a" = 1 }}),
++                ('2', {"name" = { "a" = 2 }}),
++                ('3', {"name" = { "a" = null }})
++            ;
++              """
++        );
++        execute("REFRESH TABLE exp1");
++        execute("SELECT id FROM exp1 order by id");
++        List<Integer> ids = Stream.of(response.rows()).map(row -> Integer.parseInt(row[0].toString())).toList();
++        assertThat(ids).satisfiesAnyOf(
++            xs -> assertThat(xs).isEqualTo(List.of(1, 2, 3)),
++            xs -> assertThat(xs).isEqualTo(List.of(4))
++        );
++    }
+ }

@@ -1,0 +1,47 @@
+diff --git a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+index 9aafe63987..52082e0e75 100644
+--- a/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java
+@@ -179,6 +179,9 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+ 
+     @Override
+     public void updateTargets(Function<ColumnIdent, Reference> getRef) {
++        ColumnIdent objectColumn = ref.column();
++        Reference updatedSelf = getRef.apply(objectColumn);
++        ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());
+         for (Map.Entry<String, Reference> entry : childColumns.entrySet()) {
+             var innerName = entry.getKey();
+             var oldChildRef = entry.getValue();
+@@ -188,9 +191,9 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+                 if (newChildRef.granularity() != RowGranularity.PARTITION) {
+                     //noinspection unchecked
+                     ValueIndexer<Object> newIndexer = (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(
+-                            newChildRef.ident().tableIdent(),
+-                            newChildRef,
+-                            getRef
++                        table,
++                        newChildRef,
++                        getRef
+                     );
+                     innerIndexers.put(innerName, newIndexer);
+                 }
+@@ -199,6 +202,19 @@ public class ObjectIndexer implements ValueIndexer<Map<String, Object>> {
+         for (var indexer : innerIndexers.values()) {
+             indexer.updateTargets(getRef);
+         }
++        for (String innerColumn : objectType.innerTypes().keySet()) {
++            if (!childColumns.containsKey(innerColumn)) {
++                Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));
++                //noinspection unchecked
++                ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(
++                    table,
++                    childRef,
++                    getRef
++                );
++                childColumns.put(innerColumn, childRef);
++                innerIndexers.put(innerColumn, childIndexer);
++            }
++        }
+     }
+ 
+     @SuppressWarnings("unchecked")

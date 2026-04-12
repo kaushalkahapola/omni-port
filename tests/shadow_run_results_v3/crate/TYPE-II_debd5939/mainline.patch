@@ -1,0 +1,109 @@
+commit debd59396b0678fdcdbfecc3a63166a049f22863
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Fri Jul 5 17:53:21 2024 +0500
+
+    Fix parsing of char columns in foreign tables result set
+    
+    Fixes regression introduced in https://github.com/crate/crate/commit/70ddc1f6eab604ab4220b15c81dfd19a33c621dc
+
+diff --git a/docs/appendices/release-notes/5.7.3.rst b/docs/appendices/release-notes/5.7.3.rst
+index 49516a661a..5e0bc3c03c 100644
+--- a/docs/appendices/release-notes/5.7.3.rst
++++ b/docs/appendices/release-notes/5.7.3.rst
+@@ -94,4 +94,7 @@ Fixes
+ 
+       SELECT * from t1 JOIN t2 ON (t1.a >= 1) = ((t1.a = t1.a) AND (t2.b <= t2.b))
+ 
++- Fixed a regression introduced in 5.7.2 that caused ``SQLParseException`` when
++  selecting columns of type ``char`` from a foreign table.
++
+ 
+diff --git a/server/src/main/java/io/crate/types/ResultSetParser.java b/server/src/main/java/io/crate/types/ResultSetParser.java
+index 42b4d3027c..063256bb54 100644
+--- a/server/src/main/java/io/crate/types/ResultSetParser.java
++++ b/server/src/main/java/io/crate/types/ResultSetParser.java
+@@ -80,11 +80,14 @@ public class ResultSetParser {
+                 return PgOidVectorType.listFromOidVectorString(textval);
+             }
+             case "char":
+-                String strValue = resultSet.getString(columnIndex);
+-                if (strValue == null) {
++                // It's NOT char(1) which is actually "character".
++                // It's char with OID 18, ie single byte "char" which can store single ASCII character.
++                // See also https://www.postgresql.org/docs/15/datatype-character.html#DATATYPE-CHARACTER-SPECIAL-TABLE
++                String str = resultSet.getString(columnIndex);
++                if (str == null) {
+                     return null;
+                 }
+-                return Byte.valueOf(strValue);
++                return str;
+             case "byte":
+                 value = resultSet.getByte(columnIndex);
+                 break;
+diff --git a/server/src/test/java/io/crate/types/ResultSetParserTest.java b/server/src/test/java/io/crate/types/ResultSetParserTest.java
+new file mode 100644
+index 0000000000..7f603888d8
+--- /dev/null
++++ b/server/src/test/java/io/crate/types/ResultSetParserTest.java
+@@ -0,0 +1,43 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.types;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.ArgumentMatchers.anyInt;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++import java.sql.ResultSet;
++
++import org.junit.Test;
++
++public class ResultSetParserTest {
++
++    @Test
++    public void test_can_query_char_column_via_jdbc_from_foreign_table() throws Exception {
++        // Concrete example would be `select prokind from remote_pg_proc`
++        ResultSet resultSet = mock(ResultSet.class);
++        when(resultSet.getString(anyInt())).thenReturn("f");
++        assertThat(ResultSetParser.getObject(resultSet, 1, "char")).isEqualTo("f");
++    }
++
++}
+diff --git a/server/src/testFixtures/java/io/crate/testing/SQLTransportExecutor.java b/server/src/testFixtures/java/io/crate/testing/SQLTransportExecutor.java
+index 9b9cdb6bc4..c4e9506f29 100644
+--- a/server/src/testFixtures/java/io/crate/testing/SQLTransportExecutor.java
++++ b/server/src/testFixtures/java/io/crate/testing/SQLTransportExecutor.java
+@@ -430,6 +430,13 @@ public class SQLTransportExecutor {
+                     Object value;
+                     String typeName = metadata.getColumnTypeName(i + 1);
+                     value = getObject(resultSet, i, typeName);
++                    if (typeName.equals("char") && value != null) {
++                        // ResultSetParser is dedicated to deal with Postgres specific "char" type which can be single ASCII character.
++                        // This code is also used in tests to get results via JDBC which is not necessarily bound to PG logic.
++                        // Hence, cancel PG specific logic here.
++                        assert value instanceof String;
++                        value = Byte.parseByte((String) value);
++                    }
+                     row[i] = value;
+                 }
+                 rows.add(row);

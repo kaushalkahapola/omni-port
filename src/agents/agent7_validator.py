@@ -30,6 +30,7 @@ from typing import Any
 
 from src.backport_claw.apply_hunk import CLAWHunkApplier
 from src.core.state import BackportState, PatchRetryContext
+from src.agents.agent1_localizer import _is_test_file
 from src.tools.build_systems import (
     BuildResult,
     TestResult,
@@ -109,6 +110,230 @@ def _build_patch_header(
     return "\n".join(header_lines) + "\n" + body
 
 
+# ── Fix H: error-tail capture ─────────────────────────────────────────────────
+
+_ERROR_KEYWORDS = ("error:", "error[", "ERROR", "FAILED", "Exception", "BUILD FAILURE",
+                   "cannot find symbol", "symbol:", "incompatible types", "warning:")
+
+def _extract_error_tail(log: str, max_chars: int = 3000) -> str:
+    """
+    Return the most useful portion of a build log for diagnostics.
+    Prefers lines containing error/failure keywords from the TAIL of the log,
+    so that Docker preamble (which appears at the top) is skipped.
+    Falls back to the last max_chars characters when no keyword lines found.
+    """
+    lines = log.splitlines()
+    # Collect lines with error-relevant keywords
+    error_lines = [l for l in lines if any(kw in l for kw in _ERROR_KEYWORDS)]
+    if error_lines:
+        tail = "\n".join(error_lines[-120:])  # at most 120 error lines
+        return tail[-max_chars:]
+    # No keyword lines — just return the tail
+    return log[-max_chars:] if len(log) > max_chars else log
+
+
+# ── Unused-import stripper ────────────────────────────────────────────────────
+
+_JAVA_IMPORT_RE = re.compile(
+    r"^import\s+(?:static\s+)?([\w.]+);\s*$"
+)
+
+def _strip_unused_java_imports(repo_path: str, file_paths: list[str]) -> dict[str, int]:
+    """
+    For each .java file in file_paths, remove any import whose simple class name
+    (the last token after the last '.') does not appear anywhere in the file body
+    (lines after the import block).
+
+    Returns a dict mapping file_path → number of imports removed.
+
+    This is a deterministic pre-build fix for checkstyle UnusedImports failures
+    that arise when an import is added to the wrong file by the localizer.
+    """
+    removed: dict[str, int] = {}
+
+    for rel_path in file_paths:
+        if not rel_path.endswith(".java"):
+            continue
+        abs_path = os.path.join(repo_path, rel_path)
+        if not os.path.isfile(abs_path):
+            continue
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+                lines = fh.readlines()
+        except Exception:
+            continue
+
+        # Separate the import block from the rest.
+        import_indices: list[int] = []
+        body_lines: list[str] = []
+        in_imports = False
+        package_done = False
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("package "):
+                package_done = True
+                body_lines.append(line)
+                continue
+            if package_done and _JAVA_IMPORT_RE.match(stripped):
+                in_imports = True
+                import_indices.append(i)
+                continue
+            if in_imports and not stripped:
+                # blank line inside the import block — keep tracking
+                import_indices.append(i)
+                continue
+            # Once we hit a non-import, non-blank line after imports, stop
+            if in_imports and stripped:
+                in_imports = False
+            body_lines.append(line)
+
+        if not import_indices:
+            continue
+
+        # Build a set of all tokens that appear in the body.
+        body_text = "".join(body_lines)
+
+        new_lines = list(lines)
+        count = 0
+        seen_fqns: dict[str, int] = {}  # fqn → first-seen index (for duplicate detection)
+        for idx in import_indices:
+            line = lines[idx]
+            m = _JAVA_IMPORT_RE.match(line.strip())
+            if not m:
+                continue  # blank line — keep as-is
+            fqn = m.group(1)
+            # Handle static imports: strip member name to get class name
+            parts = fqn.split(".")
+            simple_name = parts[-1]
+            # Wildcard imports (import foo.*) — never strip, too risky
+            if simple_name == "*":
+                continue
+            # Remove duplicate imports (same FQN seen before) — these cause
+            # checkstyle UnusedImports when the pipeline injects an import that
+            # already exists in the file (e.g. java.util.UUID added to a file
+            # that already imports it).
+            if fqn in seen_fqns:
+                new_lines[idx] = ""  # remove duplicate
+                count += 1
+                continue
+            seen_fqns[fqn] = idx
+            # Check if simple_name appears anywhere in the body
+            if simple_name not in body_text:
+                new_lines[idx] = ""  # remove this import line
+                count += 1
+
+        if count:
+            # Remove consecutive blank lines left by removed imports.
+            result: list[str] = []
+            prev_blank = False
+            for line in new_lines:
+                if line == "":
+                    continue  # was removed import — skip
+                is_blank = not line.strip()
+                if is_blank and prev_blank:
+                    continue  # collapse double-blank gaps
+                result.append(line)
+                prev_blank = is_blank
+
+            try:
+                with open(abs_path, "w", encoding="utf-8") as fh:
+                    fh.writelines(result)
+                removed[rel_path] = count
+                print(f"  [agent7] Stripped {count} unused import(s) from {rel_path}")
+            except Exception as e:
+                print(f"  [agent7] Failed to write {rel_path} after import strip: {e}")
+
+    return removed
+
+
+# ── Fix A helpers ──────────────────────────────────────────────────────────────
+
+def _is_already_applied(repo_path: str, patch_content: str) -> bool:
+    """
+    Return True if the patch has already been applied (reverse-check passes).
+    """
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".patch", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(patch_content)
+            tmp_path = tmp.name
+        r = subprocess.run(
+            ["git", "apply", "--reverse", "--check", "--ignore-space-change",
+             "--ignore-whitespace", tmp_path],
+            capture_output=True, text=True, cwd=repo_path,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
+def _remap_rst_path(patch_content: str, repo_path: str) -> str:
+    """
+    For release-notes .rst hunks whose target file does not exist on the target
+    branch, remap the path to the highest-version .rst file in the same directory.
+    Returns potentially modified patch_content.
+    """
+    rst_dir = os.path.join(repo_path, "docs", "appendices", "release-notes")
+    if not os.path.isdir(rst_dir):
+        return patch_content
+
+    # Find all .rst files that match X.Y.Z.rst pattern
+    try:
+        rst_files = [
+            f for f in os.listdir(rst_dir)
+            if re.match(r"^\d+\.\d+\.\d+\.rst$", f)
+        ]
+    except OSError:
+        return patch_content
+
+    if not rst_files:
+        return patch_content
+
+    def version_key(fname: str):
+        try:
+            parts = fname[:-4].split(".")
+            return tuple(int(p) for p in parts)
+        except ValueError:
+            return (0, 0, 0)
+
+    rst_files.sort(key=version_key, reverse=True)
+    highest_rst = rst_files[0]
+
+    # Look for lines like "+++ b/docs/appendices/release-notes/X.Y.Z.rst"
+    # where X.Y.Z.rst does not exist on disk.
+    lines = patch_content.splitlines(keepends=True)
+    new_lines = []
+    for line in lines:
+        if line.startswith("+++ b/docs/appendices/release-notes/") and line.strip().endswith(".rst"):
+            fname = line.strip().split("/")[-1]
+            target_abs = os.path.join(rst_dir, fname)
+            if not os.path.isfile(target_abs):
+                # Remap to highest existing version
+                line = line.replace(fname, highest_rst)
+        elif line.startswith("--- a/docs/appendices/release-notes/") and line.strip().endswith(".rst"):
+            fname = line.strip().split("/")[-1]
+            target_abs = os.path.join(rst_dir, fname)
+            if not os.path.isfile(target_abs):
+                line = line.replace(fname, highest_rst)
+        elif line.startswith("diff --git ") and "/docs/appendices/release-notes/" in line:
+            # Also fix the diff --git header
+            parts = line.strip().split()
+            if len(parts) >= 3:
+                for fname in rst_files:
+                    pass  # keep existing file references as-is
+        new_lines.append(line)
+    return "".join(new_lines)
+
+
 def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str, Any]:
     """
     Try git apply → git apply --ignore-whitespace → GNU patch, in order.
@@ -126,6 +351,8 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
         strategies = [
             ("git-strict",   ["git", "apply", "--recount", "--whitespace=nowarn", tmp_path]),
             ("git-tolerant", ["git", "apply", "--recount", "--ignore-space-change",
+                              "--ignore-whitespace", "--whitespace=nowarn", tmp_path]),
+            ("git-3way",     ["git", "apply", "--3way", "--ignore-space-change",
                               "--ignore-whitespace", "--whitespace=nowarn", tmp_path]),
         ]
         errors: list[str] = []
@@ -150,6 +377,12 @@ def _apply_patch_with_fallbacks(repo_path: str, patch_content: str) -> dict[str,
             errors.append(f"[gnu-patch] {(apply.stderr or apply.stdout or '').strip()}")
         else:
             errors.append(f"[gnu-patch-dry-run] {(dry.stderr or dry.stdout or '').strip()}")
+
+        # Already-applied check: if the patch was already applied (sibling backport),
+        # treat as success rather than failing.
+        if _is_already_applied(repo_path, patch_content):
+            print("  [agent7] Patch detected as already applied — treating as success")
+            return {"success": True, "output": "Already applied (reverse-check passed).", "strategy": "already-applied"}
 
         print("  [agent7] All patch application strategies failed")
         return {"success": False, "output": "\n".join(errors), "strategy": "all-failed"}
@@ -184,9 +417,20 @@ def _apply_synthesized_hunks(
         old_string = hunk.get("old_string", "")
         new_string = hunk.get("new_string", "")
 
-        if not file_path or not old_string:
-            print(f"  [agent7] Hunk missing file_path or old_string: {hunk}")
-            errors.append(f"synthesized hunk missing file_path or old_string: {hunk}")
+        if not file_path:
+            print(f"  [agent7] Hunk missing file_path: {hunk}")
+            errors.append(f"synthesized hunk missing file_path: {hunk}")
+            continue
+
+        # Fix G: new-file hunks have empty old_string — the file was already written by
+        # agent6. Just verify it exists on disk; no CLAW replacement needed.
+        if not old_string:
+            abs_path = os.path.join(repo_path, file_path)
+            if os.path.exists(abs_path):
+                if file_path not in applied_files:
+                    applied_files.append(file_path)
+            else:
+                errors.append(f"{file_path}: new-file hunk — file not found on disk after agent6 creation")
             continue
 
         abs_path = os.path.join(repo_path, file_path)
@@ -306,14 +550,25 @@ def _apply_developer_aux_hunks(
         for h in developer_aux_hunks:
             fp = h.get("file_path", "unknown")
             print(f"  [agent7] Applying raw patch for {fp}")
-            result = _apply_patch_with_fallbacks(repo_path, h["raw_patch"])
+            # Fix A: remap .rst paths that don't exist on the target branch
+            raw = h["raw_patch"]
+            if fp.endswith(".rst"):
+                raw = _remap_rst_path(raw, repo_path)
+            result = _apply_patch_with_fallbacks(repo_path, raw)
             if result["success"]:
                 applied_files.append(fp)
             else:
-                print(f"  [agent7] Raw patch apply failed for {fp}")
-                all_errors.append(f"aux patch apply failed for {fp}: {result['output'][:500]}")
-                restore_repo_state(repo_path)
-                return {"success": False, "output": "\n".join(all_errors), "applied_files": []}
+                # Fix A: non-critical aux hunks (release notes, non-test non-Java)
+                # log a warning and continue rather than aborting.
+                is_critical = _is_test_file(fp) or fp.endswith(".java")
+                if is_critical:
+                    print(f"  [agent7] Critical aux patch apply failed for {fp}")
+                    all_errors.append(f"aux patch apply failed for {fp}: {result['output'][:500]}")
+                    restore_repo_state(repo_path)
+                    return {"success": False, "output": "\n".join(all_errors), "applied_files": []}
+                else:
+                    print(f"  [agent7] Non-critical aux patch skipped for {fp}: {result['output'][:200]}")
+                    all_errors.append(f"[non-critical skip] {fp}: {result['output'][:300]}")
         print(f"  [agent7] Applied {len(applied_files)} raw aux patches")
         return {
             "success": True,
@@ -399,18 +654,25 @@ def _apply_developer_aux_hunks(
                 all_errors.append(f"aux hunk build error for {target_file}: {e}")
 
         if combined_patch:
+            # Fix A: remap .rst paths
+            if target_file.endswith(".rst"):
+                combined_patch = _remap_rst_path(combined_patch, repo_path)
             result = _apply_patch_with_fallbacks(repo_path, combined_patch)
             if not result["success"]:
-                all_errors.append(
-                    f"aux patch apply failed for {target_file}: {result['output'][:500]}"
-                )
-                # On aux apply failure restore and abort (these files must apply cleanly)
-                restore_repo_state(repo_path)
-                return {
-                    "success": False,
-                    "output": "\n".join(all_errors),
-                    "applied_files": [],
-                }
+                is_critical = _is_test_file(target_file) or target_file.endswith(".java")
+                if is_critical:
+                    all_errors.append(
+                        f"aux patch apply failed for {target_file}: {result['output'][:500]}"
+                    )
+                    restore_repo_state(repo_path)
+                    return {
+                        "success": False,
+                        "output": "\n".join(all_errors),
+                        "applied_files": [],
+                    }
+                else:
+                    print(f"  [agent7] Non-critical aux patch skipped for {target_file}")
+                    all_errors.append(f"[non-critical skip] {target_file}: {result['output'][:300]}")
 
     return {
         "success": True,
@@ -418,6 +680,104 @@ def _apply_developer_aux_hunks(
             "\nWarnings:\n" + "\n".join(all_errors) if all_errors else ""
         ),
         "applied_files": applied_files,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# File-operation executor (DELETED / RENAMED production Java files)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _execute_file_operations(
+    repo_path: str, file_operations: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """
+    Execute filesystem-level file operations queued by Agent 1:
+
+      RENAMED — move old_file_path → target_new_path (falls back to file_path when
+                target_new_path is absent).  Content changes were already applied to
+                old_file_path by the CLAW step, so we just rename the file.
+
+      DELETED — remove file_path from disk.  Missing files are silently skipped
+                (another hunk may have already removed them, or they never existed
+                in this target branch).
+
+    Renames are executed before deletions so that a file renamed and then deleted in
+    the same patch is handled correctly.
+
+    Returns {"success": True, "applied": [...], "errors": [...], "output": str}.
+    File operations are non-fatal by design — failures are logged but do not abort
+    the build step.  The build compiler will surface any resulting inconsistencies.
+    """
+    if not file_operations:
+        return {"success": True, "applied": [], "errors": [], "output": ""}
+
+    applied: list[str] = []
+    errors: list[str] = []
+
+    renames = [op for op in file_operations if op.get("operation") == "RENAMED"]
+    deletions = [op for op in file_operations if op.get("operation") == "DELETED"]
+
+    # ── Renames first ─────────────────────────────────────────────────────────
+    for op in renames:
+        old_rel = _norm_path(op.get("old_file_path") or "")
+        # Prefer the computed target-branch destination; fall back to the mainline new path.
+        new_rel = _norm_path(op.get("target_new_path") or op.get("file_path") or "")
+
+        if not old_rel or not new_rel:
+            errors.append(f"RENAME skipped: missing old_file_path or file_path in {op}")
+            continue
+
+        src = os.path.join(repo_path, old_rel)
+        dst = os.path.join(repo_path, new_rel)
+
+        if not os.path.isfile(src):
+            # Source already gone (e.g. a previous attempt renamed it).
+            if os.path.isfile(dst):
+                applied.append(f"RENAME already done: {old_rel} → {new_rel}")
+            else:
+                errors.append(f"RENAME skipped (src not found): {old_rel}")
+            continue
+
+        if os.path.isfile(dst) and dst != src:
+            # Destination already exists — content changes are already in src so we
+            # overwrite the destination (idempotent retry).
+            errors.append(
+                f"RENAME dst already exists ({new_rel}); overwriting with content from {old_rel}"
+            )
+
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            os.replace(src, dst)  # atomic on POSIX; overwrites dst if present
+            applied.append(f"RENAMED: {old_rel} → {new_rel}")
+            print(f"  [agent7] file_ops: renamed {old_rel} → {new_rel}")
+        except Exception as exc:
+            errors.append(f"RENAME failed ({old_rel} → {new_rel}): {exc}")
+
+    # ── Deletions ─────────────────────────────────────────────────────────────
+    for op in deletions:
+        rel = _norm_path(op.get("file_path") or "")
+        if not rel:
+            errors.append(f"DELETE skipped: missing file_path in {op}")
+            continue
+
+        abs_path = os.path.join(repo_path, rel)
+        if not os.path.isfile(abs_path):
+            applied.append(f"DELETE skipped (already absent): {rel}")
+            continue
+
+        try:
+            os.remove(abs_path)
+            applied.append(f"DELETED: {rel}")
+            print(f"  [agent7] file_ops: deleted {rel}")
+        except Exception as exc:
+            errors.append(f"DELETE failed ({rel}): {exc}")
+
+    output_parts = applied + ([f"ERRORS: {e}" for e in errors] if errors else [])
+    return {
+        "success": True,  # non-fatal — build will surface real problems
+        "applied": applied,
+        "errors": errors,
+        "output": "\n".join(output_parts),
     }
 
 
@@ -485,9 +845,11 @@ def _build_retry_context(
         "test_failure": "regenerate_hunk",
         "infrastructure": "abort_transient_failure",
     }
+    # Fix H: capture error tail (javac errors) rather than Docker preamble at the top.
+    diagnostic = _extract_error_tail(error_message)
     return PatchRetryContext(
         error_type=failure_category,
-        error_message=error_message[:2000],
+        error_message=diagnostic,
         attempt_count=attempt,
         suggested_action=action_map.get(failure_category, "inspect_and_retry"),
     )
@@ -549,8 +911,16 @@ def run_validation(state: BackportState) -> BackportState:
         restore_repo_state(repo_path)
 
     # ── Step 2: Apply synthesized hunks (CLAW) ────────────────────────────────
-    print(f"  agent7: applying {len(synthesized_hunks)} synthesized hunk(s)...")
-    synth_result = _apply_synthesized_hunks(repo_path, synthesized_hunks)
+    # If the pipeline already applied synthesized hunks to disk before capturing
+    # generated.patch (synthesized_hunks_pre_applied=True), skip re-application on
+    # the first attempt. On retries the repo is restored first, so we must re-apply.
+    pre_applied = state.get("synthesized_hunks_pre_applied", False) and attempts == 0
+    if pre_applied:
+        print(f"  agent7: synthesized hunks already on disk (pre-applied), skipping apply step")
+        synth_result = {"success": True, "output": "pre-applied by pipeline", "applied_files": []}
+    else:
+        print(f"  agent7: applying {len(synthesized_hunks)} synthesized hunk(s)...")
+        synth_result = _apply_synthesized_hunks(repo_path, synthesized_hunks)
     validation_results["hunk_application"] = {
         "success": synth_result["success"],
         "raw": synth_result["output"],
@@ -570,6 +940,23 @@ def run_validation(state: BackportState) -> BackportState:
         state["validation_results"] = validation_results
         state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
         return state
+
+    # ── Step 2.5: Execute structural file operations (RENAMED / DELETED) ────────
+    # These are queued by Agent 1 for production Java files whose mainline patch
+    # contained rename or delete operations.  Renames run before deletions.
+    # Content changes were already written by the CLAW step above; this step only
+    # moves or removes files at the filesystem level.
+    file_operations: list[dict[str, Any]] = state.get("file_operations") or []
+    if file_operations:
+        print(f"  agent7: executing {len(file_operations)} file operation(s)...")
+        file_ops_result = _execute_file_operations(repo_path, file_operations)
+        validation_results["file_operations"] = {
+            "applied": file_ops_result["applied"],
+            "errors": file_ops_result["errors"],
+            "output": file_ops_result["output"],
+        }
+        if file_ops_result["errors"]:
+            print(f"  agent7: file_ops warnings: {'; '.join(file_ops_result['errors'][:3])}")
 
     # ── Step 3: Apply developer aux hunks (git apply) ─────────────────────────
     print(f"  agent7: applying {len(developer_aux_hunks)} developer aux hunk(s)...")
@@ -591,6 +978,24 @@ def run_validation(state: BackportState) -> BackportState:
         state["validation_results"] = validation_results
         state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
         return state
+
+    # ── Step 3.5: Strip unused Java imports (pre-build checkstyle guard) ────────
+    # Collect all Java files written to disk during this attempt.
+    synth_java_files = [
+        h.get("file_path", "") for h in synthesized_hunks
+        if (h.get("file_path", "") or "").endswith(".java")
+    ]
+    aux_java_files = [
+        (h.get("file_path") or h.get("target_file") or "")
+        for h in developer_aux_hunks
+        if (h.get("file_path") or h.get("target_file") or "").endswith(".java")
+    ]
+    all_modified_java = sorted(set(synth_java_files + aux_java_files + [
+        h.get("file_path", "") for h in applied_hunks
+        if (h.get("file_path", "") or "").endswith(".java")
+    ]) - {""})
+    if all_modified_java:
+        _strip_unused_java_imports(repo_path, all_modified_java)
 
     # ── Step 4: Build ─────────────────────────────────────────────────────────
     print(f"  agent7: running build for {project}...")
@@ -617,10 +1022,18 @@ def run_validation(state: BackportState) -> BackportState:
         restore_repo_state(repo_path)
         ctx = _build_retry_context(mapped_category, build_res.output, attempts + 1)
         state["validation_passed"] = False
-        state["validation_error_context"] = (
-            f"Build failed ({build_res.mode}): "
-            + (build_res.output[-2000:] if len(build_res.output) > 2000 else build_res.output)
-        )
+        if compile_errors:
+            error_summary = "\n".join(
+                f"{e.file_path}:{e.line}: {e.message}" for e in compile_errors[:20]
+            )
+            state["validation_error_context"] = (
+                f"Build failed ({build_res.mode}) — compile errors:\n{error_summary}"
+            )
+        else:
+            excerpt = _extract_error_tail(build_res.output)
+            state["validation_error_context"] = (
+                f"Build failed ({build_res.mode}): {excerpt}"
+            )
         state["validation_failure_category"] = mapped_category
         state["validation_retry_files"] = retry_files
         state["validation_attempts"] = attempts + 1

@@ -1,0 +1,13 @@
+diff --git a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+index c57b34bf17..3f238d56cc 100644
+--- a/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
++++ b/server/src/main/java/io/crate/analyze/where/EqualityExtractor.java
+@@ -473,7 +473,7 @@ public class EqualityExtractor {
+                     proxyBelowPost = ctx.proxyBelow || proxyBelowPost;
+                 }
+                 if ((ctx.foundPKColumnUnderOr && ctx.foundNonPKColumnUnderOr) || ctx.foundPKColumnUnderNot) {
+-                    return null;
++                    return Literal.BOOLEAN_FALSE;
+                 }
+                 ctx.isUnderNotPredicate = prevIsUnderNotPredicate;
+                 ctx.proxyBelow = proxyBelowPost;

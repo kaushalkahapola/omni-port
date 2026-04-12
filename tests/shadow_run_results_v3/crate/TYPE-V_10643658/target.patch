@@ -1,0 +1,171 @@
+commit 884f41f152d1b2892076f8e1adc4e15705c3d063
+Author: Sebastian Utz <su@rtme.net>
+Date:   Thu Sep 26 10:55:58 2024 +0200
+
+    Handle concurrent calls at the QueryProfiler
+    
+    The QueryProfiler must be thread-safe as it needs to handle concurrent
+    access. Otherwise, this may lead to unexpected exception when profiling
+    queries using ``EXPLAIN ANALYZE`` statements
+    
+    Relates to https://github.com/elastic/elasticsearch/commit/947234a8ce2e3fae3605ee7b55075e0787ed986f.
+    
+    (cherry picked from commit 106436589bb5bde52346e54d66f681117fbc5a8d)
+    
+    # Conflicts:
+    #       docs/appendices/release-notes/5.8.4.rst
+    #       server/src/main/java/org/elasticsearch/search/profile/query/QueryProfiler.java
+
+diff --git a/docs/appendices/release-notes/5.8.4.rst b/docs/appendices/release-notes/5.8.4.rst
+index 0a582b7366..f1c006fc4c 100644
+--- a/docs/appendices/release-notes/5.8.4.rst
++++ b/docs/appendices/release-notes/5.8.4.rst
+@@ -85,3 +85,6 @@ Fixes
+ - Fixed an issue that caused :ref:`in <sql_in_array_comparison>` operator with
+   array typed column on left hand side of the arguments to return invalid
+   results.
++
++- Fixed an issue which may cause a ``EXPLAIN ANALYZE`` to throw exception due
++  to internal concurrent unsafe access.
+diff --git a/server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java b/server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java
+index a93d3c419a..3fdab4246d 100644
+--- a/server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java
++++ b/server/src/main/java/org/elasticsearch/search/profile/AbstractInternalProfileTree.java
+@@ -19,8 +19,6 @@
+ 
+ package org.elasticsearch.search.profile;
+ 
+-import org.elasticsearch.search.profile.query.QueryProfileBreakdown;
+-
+ import java.util.ArrayDeque;
+ import java.util.ArrayList;
+ import java.util.Collections;
+@@ -28,6 +26,8 @@ import java.util.Deque;
+ import java.util.List;
+ import java.util.Map;
+ 
++import org.elasticsearch.search.profile.query.QueryProfileBreakdown;
++
+ public abstract class AbstractInternalProfileTree<PB extends AbstractProfileBreakdown<?>, E> {
+ 
+     protected ArrayList<PB> timings;
+@@ -60,7 +60,7 @@ public abstract class AbstractInternalProfileTree<PB extends AbstractProfileBrea
+      * @param query The scoring query we wish to profile
+      * @return      A ProfileBreakdown for this query
+      */
+-    public PB getProfileBreakdown(E query) {
++    public synchronized PB getProfileBreakdown(E query) {
+         int token = currentToken;
+ 
+         boolean stackEmpty = stack.isEmpty();
+@@ -145,7 +145,7 @@ public abstract class AbstractInternalProfileTree<PB extends AbstractProfileBrea
+      * @param token  The node we are currently finalizing
+      * @return       A hierarchical representation of the tree inclusive of children at this level
+      */
+-    private ProfileResult doGetTree(int token) {
++    private synchronized ProfileResult doGetTree(int token) {
+         E element = elements.get(token);
+         PB breakdown = timings.get(token);
+         Map<String, Long> timings = breakdown.toTimingMap();
+diff --git a/server/src/test/java/org/elasticsearch/search/profile/query/QueryProfilerTest.java b/server/src/test/java/org/elasticsearch/search/profile/query/QueryProfilerTest.java
+new file mode 100644
+index 0000000000..2fca1aefe9
+--- /dev/null
++++ b/server/src/test/java/org/elasticsearch/search/profile/query/QueryProfilerTest.java
+@@ -0,0 +1,96 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package org.elasticsearch.search.profile.query;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicReference;
++
++import org.apache.lucene.search.MatchAllDocsQuery;
++import org.elasticsearch.test.ESTestCase;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++
++public class QueryProfilerTest extends ESTestCase {
++
++    private ExecutorService executor;
++
++    @Override
++    @Before
++    public void setUp() throws Exception {
++        super.setUp();
++        executor = Executors.newFixedThreadPool(20);
++    }
++
++    @Override
++    @After
++    public void tearDown() throws Exception {
++        executor.shutdown();
++        executor.awaitTermination(500, TimeUnit.MILLISECONDS);
++        super.tearDown();
++    }
++
++    @Test
++    public void test_ensure_thread_safety() throws Exception {
++        QueryProfiler profiler = new QueryProfiler();
++        final AtomicReference<Throwable> lastThrowable = new AtomicReference<>();
++
++        int concurrency = 20;
++
++        final CountDownLatch writeLatch = new CountDownLatch(concurrency);
++        for (int i = 0; i < concurrency; i++) {
++            executor.submit(() -> {
++                try {
++                    profiler.getQueryBreakdown(new MatchAllDocsQuery());
++                } catch (Exception e) {
++                    lastThrowable.set(e);
++                } finally {
++                    writeLatch.countDown();
++                }
++            });
++        }
++        writeLatch.await(10, TimeUnit.SECONDS);
++
++        assertThat(lastThrowable.get()).isNull();
++
++        final CountDownLatch readLatch = new CountDownLatch(concurrency);
++        for (int i = 0; i < concurrency; i++) {
++            executor.submit(() -> {
++                try {
++                    profiler.getTree();
++                } catch (Exception e) {
++                    lastThrowable.set(e);
++                } finally {
++                    readLatch.countDown();
++                }
++            });
++        }
++        readLatch.await(10, TimeUnit.SECONDS);
++
++        assertThat(lastThrowable.get()).isNull();
++    }
++}

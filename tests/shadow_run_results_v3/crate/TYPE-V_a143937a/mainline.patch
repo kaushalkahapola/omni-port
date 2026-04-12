@@ -1,0 +1,57 @@
+commit a143937ad274018991f53e8839a56249f7fdb9d4
+Author: Minsoo Jee <jeeminso@gmail.com>
+Date:   Wed Mar 20 17:53:32 2024 -0400
+
+    Fix UnsupportedFeatureException from join query caused by non equi-join condition
+
+diff --git a/docs/appendices/release-notes/5.6.3.rst b/docs/appendices/release-notes/5.6.3.rst
+index b6ed2450a0..b8b288518b 100644
+--- a/docs/appendices/release-notes/5.6.3.rst
++++ b/docs/appendices/release-notes/5.6.3.rst
+@@ -100,3 +100,10 @@ Fixes
+ 
+ - Fixed an issue that caused an inner join with a ``WHERE`` clause containing
+   a ``CASE`` expression to return invalid results.
++
++- Fixed an issue that caused an inner join query to throw an
++  ``UnsupportedFeatureException`` when the join condition contains columns from
++  more than one table and the ``WHERE`` clause contains an expression better
++  suited as the join condition e.g.::
++
++    SELECT * FROM t1 INNER JOIN t2 ON (t1.a = t2.b + t1.a) WHERE t1.a = t2.b + 1
+diff --git a/server/src/main/java/io/crate/planner/operators/JoinConditionSymbolsExtractor.java b/server/src/main/java/io/crate/planner/operators/JoinConditionSymbolsExtractor.java
+index 9edc8316e4..f073ebb60a 100644
+--- a/server/src/main/java/io/crate/planner/operators/JoinConditionSymbolsExtractor.java
++++ b/server/src/main/java/io/crate/planner/operators/JoinConditionSymbolsExtractor.java
+@@ -82,6 +82,14 @@ public final class JoinConditionSymbolsExtractor {
+ 
+         @Override
+         public Void visitFunction(Function function, Context context) {
++            // A join condition maybe an equi-join condition but its parts may not be.
++            // For example, consider `t1.a = t2.a AND t1.a = t1.a + t2.b`, as a whole
++            // it is an equi-join condition due to `t1.a = t2.b`
++            // but `t1.a = t1.a + t2.b` by itself is not an equi-join condition.
++            if (!EquiJoinDetector.isEquiJoin(function)) {
++                return null;
++            }
++
+             String functionName = function.name();
+             switch (functionName) {
+                 case AndOperator.NAME:
+diff --git a/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java b/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java
+index 066f29a89c..aab243d3ce 100644
+--- a/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java
++++ b/server/src/test/java/io/crate/planner/operators/HashJoinConditionSymbolsExtractorTest.java
+@@ -118,4 +118,12 @@ public class HashJoinConditionSymbolsExtractorTest extends CrateDummyClusterServ
+                 RelationName.fromIndexName("t1"),
+                 RelationName.fromIndexName("t2"));
+     }
++
++    @Test
++    public void test_can_skip_over_non_equi_join_part() {
++        Symbol joinCondition = sqlExpressions.asSymbol("t1.a = t1.a + t2.b AND t1.a = t2.b");
++        Map<RelationName, List<Symbol>> symbolsPerRelation = JoinConditionSymbolsExtractor.extract(joinCondition);
++        assertThat(symbolsPerRelation.get(tr1.relationName())).satisfiesExactly(isReference("a"));
++        assertThat(symbolsPerRelation.get(tr2.relationName())).satisfiesExactly(isReference("b"));
++    }
+ }

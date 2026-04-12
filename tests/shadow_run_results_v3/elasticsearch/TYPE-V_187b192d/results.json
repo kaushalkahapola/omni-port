@@ -1,0 +1,536 @@
+{
+  "run_timestamp": "2026-04-11T17:00:56.497881",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-V",
+  "original_commit": "187b192dfe7c6dc60bfa59fcd90c0ce1e6e3a857",
+  "backport_commit": "41f09bf1fcba928dd5e94f1a0bab9c747d71b312",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 19.52,
+      "error": null,
+      "java_hunks": 7,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 13,
+          "end_line": 21,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.948,
+          "start_line": 28,
+          "end_line": 33,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.921,
+          "start_line": 48,
+          "end_line": 54,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.958,
+          "start_line": 67,
+          "end_line": 75,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.845,
+          "start_line": 89,
+          "end_line": 100,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "method_used": "fuzzy",
+          "confidence": 0.888,
+          "start_line": 17,
+          "end_line": 22,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "method_used": "embedding",
+          "confidence": 0.744,
+          "start_line": 36,
+          "end_line": 45,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.77,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.85,
+        "reasoning": "The patch introduces a new deduplication mechanism for allocation stats calls, replacing direct calls to the allocationStatsService with a SingleResultDeduplicator and SubscribableListener pattern. This involves structural changes such as adding new fields, changing constructor logic, modifying the masterOperation method to use asynchronous deduplication, and adding assertions to ensure thread usage correctness. The patch also includes a new test verifying deduplication behavior. The localization evidence shows most hunks were found via fuzzy matching with high confidence, and one hunk via embedding with moderate confidence, indicating non-trivial structural changes rather than simple string replacements or formatting fixes. Therefore, the patch complexity aligns with TYPE_III, involving structural changes and new concurrency constructs, but not deep refactoring or complete redesign.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 24.86,
+      "error": null,
+      "adapted_count": 4
+    },
+    "agent5_structural": {
+      "elapsed_s": 128.88,
+      "error": null,
+      "refactored_count": 2
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 6,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "old_string": "import org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.core.Nullable;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.features.FeatureService;",
+          "new_string": "import org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.util.concurrent.EsExecutors;\nimport org.elasticsearch.core.Nullable;\nimport org.elasticsearch.core.TimeValue;\nimport org.elasticsearch.features.FeatureService;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "old_string": "\n    private final AllocationStatsService allocationStatsService;\n    private final DiskThresholdSettings diskThresholdSettings;\n    private final FeatureService featureService;",
+          "new_string": "\n    private final SingleResultDeduplicator<Map<String, NodeAllocationStats>> allocationStatsSupplier;\n    private final DiskThresholdSettings diskThresholdSettings;\n    private final FeatureService featureService;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "old_string": "import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShardsAllocator;\nimport org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.util.Maps;\n\nimport java.util.Map;",
+          "new_string": "import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShardsAllocator;\nimport org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.transport.Transports;\nimport org.elasticsearch.common.util.Maps;\n\nimport java.util.Map;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "old_string": "    public Map<String, NodeAllocationStats> stats() {\n        var state = clusterService.state();\n        var info = clusterInfoService.getClusterInfo();",
+          "new_string": "    public Map<String, NodeAllocationStats> stats() {\n        assert Transports.assertNotTransportThread(\"too expensive for a transport worker\");\n\n        var state = clusterService.state();\n        var info = clusterInfoService.getClusterInfo();",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "old_string": "        super(\n            TYPE.name(),\n            transportService,\n            clusterService,\n            threadPool,\n            actionFilters,\n            TransportGetAllocationStatsAction.Request::new,\n            TransportGetAllocationStatsAction.Response::new,\n            threadPool.executor(ThreadPool.Names.MANAGEMENT)",
+          "new_string": "        super(\n            TYPE.name(),\n            transportService,\n            clusterService,\n            threadPool,\n            actionFilters,\n            TransportGetAllocationStatsAction.Request::new,\n            TransportGetAllocationStatsAction.Response::new,\n            // DIRECT is ok here because we fork the allocation stats computation onto a MANAGEMENT thread if needed, or else we return\n            // very cheaply.\n            EsExecutors.DIRECT_EXECUTOR_SERVICE\n        );\n        final var managementExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);\n        this.allocationStatsSupplier = new SingleResultDeduplicator<>(\n            threadPool.getThreadContext(),\n            l -> managementExecutor.execute(ActionRunnable.supply(l, allocationStatsService::stats))\n        );\n        this.diskThresholdSettings = new DiskThresholdSettings(clusterService.getSettings(), clusterService.getClusterSettings());\n        this.featureService = featureService;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "old_string": "        super.doExecute(task, request, listener);\n    }\n\n    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        listener.onResponse(\n            new Response(\n                request.metrics().contains(Metric.ALLOCATIONS) ? allocationStatsService.stats() : Map.of(),\n                request.metrics().contains(Metric.FS)\n                    && featureService.clusterHasFeature(clusterService.state(), AllocationStatsFeatures.INCLUDE_DISK_THRESHOLD_SETTINGS)\n                        ? diskThresholdSettings\n                        : null",
+          "new_string": "        super.doExecute(task, request, listener);\n    }\n\n    @Override\n    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) throws Exception {\n        // NB we are still on a transport thread here - if adding more functionality here make sure to fork to a different pool\n\n        final SubscribableListener<Map<String, NodeAllocationStats>> allocationStatsStep = request.metrics().contains(Metric.ALLOCATIONS)\n            ? SubscribableListener.newForked(allocationStatsSupplier::execute)\n            : SubscribableListener.newSucceeded(Map.of());\n\n        allocationStatsStep.andThenApply(\n            allocationStats -> new Response(allocationStats, request.metrics().contains(Metric.FS) ? diskThresholdSettings : null)\n        ).addListener(listener);",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 7.23,
+      "error": null,
+      "syntax_repair_status": "failed",
+      "syntax_repair_attempts": 2,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "outcome": "failed",
+          "attempts": 2,
+          "remaining_errors": [
+            {
+              "line": 88,
+              "column": 5,
+              "message": "Parse error. Found \")\", expected one of  \";\" \"<\" \"@\" \"_\" \"abstract\" \"assert\" \"boolean\" \"byte\" \"char\" \"class\" \"default\" \"double\" \"enum\" \"exports\" \"final\" \"float\" \"int\" \"interface\" \"long\" \"module\" \"native\" \"non-sealed\" \"open\" \"opens\" \"permits\" \"private\" \"protected\" \"provides\" \"public\" \"record\" \"requires\" \"sealed\" \"short\" \"static\" \"strictfp\" \"synchronized\" \"to\" \"transient\" \"transitive\" \"uses\" \"void\" \"volatile\" \"when\" \"with\" \"yield\" \"{\" \"}\" <IDENTIFIER>"
+            }
+          ]
+        },
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 6
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "applied",
+      "fallback_attempts": 1,
+      "synthesized_count": 3,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Added imports for ActionRunnable, SingleResultDeduplicator, and SubscribableListener while removing the import of ClusterState only.",
+          "where_in_code": "Imports section of TransportGetAllocationStatsAction.java",
+          "intent": "To support asynchronous deduplication and subscription-based listener patterns for allocation stats retrieval.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "ActionRunnable",
+            "SingleResultDeduplicator",
+            "SubscribableListener"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Replaced import of FeatureService with import of EsExecutors.",
+          "where_in_code": "Imports section of TransportGetAllocationStatsAction.java",
+          "intent": "To use EsExecutors utilities, likely for executor management, instead of the unused FeatureService.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "EsExecutors"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Replaced the field allocationStatsService with a new field allocationStatsSupplier of type SingleResultDeduplicator.",
+          "where_in_code": "TransportGetAllocationStatsAction class fields",
+          "intent": "To enable deduplicated, single-result asynchronous computation of allocation stats instead of direct synchronous service calls.",
+          "change_type": "add_field",
+          "key_symbols": [
+            "allocationStatsSupplier",
+            "SingleResultDeduplicator"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Changed the constructor to use a direct executor for the superclass and initialized allocationStatsSupplier with a deduplicator that schedules stats computation on the MANAGEMENT thread pool. Removed direct assignment of allocationStatsService.",
+          "where_in_code": "TransportGetAllocationStatsAction constructor",
+          "intent": "To optimize execution by deduplicating concurrent requests for allocation stats and offloading expensive computation to a management thread pool, improving resource usage and responsiveness.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "allocationStatsSupplier",
+            "SingleResultDeduplicator",
+            "EsExecutors.DIRECT_EXECUTOR_SERVICE"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Refactored masterOperation method to use SubscribableListener with allocationStatsSupplier for asynchronous, deduplicated retrieval of allocation stats instead of direct synchronous calls to allocationStatsService.stats().",
+          "where_in_code": "TransportGetAllocationStatsAction.masterOperation",
+          "intent": "To avoid blocking transport threads with expensive stats computation by asynchronously fetching deduplicated results and composing the response accordingly.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "masterOperation",
+            "SubscribableListener",
+            "allocationStatsSupplier"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "what_changed": "Added import of Transports utility class.",
+          "where_in_code": "Imports section of AllocationStatsService.java",
+          "intent": "To enable assertions or utilities related to transport thread checks.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Transports"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "what_changed": "Added an assertion at the start of the stats() method to ensure it is not called from a transport thread, indicating the method is too expensive for such threads.",
+          "where_in_code": "AllocationStatsService.stats() method",
+          "intent": "To enforce that the expensive stats computation is not performed on transport worker threads, preventing potential performance degradation or thread starvation.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "stats",
+            "Transports.assertNotTransportThread"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (elasticsearch-helper) \u2014 compile errors:\nserver/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java:71: error: cannot find symbol\nserver/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java:77: error: cannot infer type arguments for SingleResultDeduplicator<>\nserver/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java:79: error: canno",
+      "validation_attempts": 1,
+      "retry_files": [
+        "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java"
+      ],
+      "build_success": false,
+      "build_mode": "elasticsearch-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "line": 71,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "line": 77,
+          "message": "error: cannot infer type arguments for SingleResultDeduplicator<>"
+        },
+        {
+          "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "line": 79,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "line": 104,
+          "message": "error: constructor SubscribableListener in class SubscribableListener<T> cannot be applied to given types;"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Added imports for ActionRunnable, SingleResultDeduplicator, and SubscribableListener while removing unused imports.",
+          "where_in_code": "import statements at the top of TransportGetAllocationStatsAction.java",
+          "intent": "To support asynchronous deduplication and subscription-based handling of allocation stats retrieval.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "ActionRunnable",
+            "SingleResultDeduplicator",
+            "SubscribableListener"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Replaced import of FeatureService with import of EsExecutors.",
+          "where_in_code": "import statements at the top of TransportGetAllocationStatsAction.java",
+          "intent": "To use EsExecutors for executor services instead of the previously imported FeatureService, likely for thread management.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "EsExecutors"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Replaced the AllocationStatsService field with a SingleResultDeduplicator field named allocationStatsSupplier.",
+          "where_in_code": "TransportGetAllocationStatsAction class fields",
+          "intent": "To enable deduplicated, single-result asynchronous computation of allocation stats, improving efficiency and concurrency handling.",
+          "change_type": "add_field",
+          "key_symbols": [
+            "allocationStatsSupplier",
+            "SingleResultDeduplicator"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Changed the executor used in the superclass constructor from a MANAGEMENT thread pool to a direct executor service; initialized allocationStatsSupplier with a deduplicator that schedules computation on the MANAGEMENT thread pool.",
+          "where_in_code": "TransportGetAllocationStatsAction constructor",
+          "intent": "To optimize thread usage by immediately returning cheaply on the direct executor and deferring expensive allocation stats computation to the MANAGEMENT thread pool via deduplication.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "allocationStatsSupplier",
+            "EsExecutors.DIRECT_EXECUTOR_SERVICE",
+            "managementExecutor"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java",
+          "what_changed": "Refactored masterOperation method to use SubscribableListener with allocationStatsSupplier for asynchronous, deduplicated retrieval of allocation stats instead of direct synchronous calls.",
+          "where_in_code": "TransportGetAllocationStatsAction.masterOperation method",
+          "intent": "To avoid blocking transport threads by asynchronously fetching allocation stats with deduplication and to improve scalability and responsiveness.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "masterOperation",
+            "SubscribableListener",
+            "allocationStatsSupplier"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "what_changed": "Added import of Transports utility class.",
+          "where_in_code": "import statements at the top of AllocationStatsService.java",
+          "intent": "To enable assertions or utilities related to transport thread checks in the service.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Transports"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/routing/allocation/AllocationStatsService.java",
+          "what_changed": "Added an assertion at the start of the stats() method to ensure it is not called from a transport thread due to its expensive computation.",
+          "where_in_code": "AllocationStatsService.stats() method",
+          "intent": "To prevent expensive allocation stats computation from running on transport threads, which could degrade performance or cause thread starvation.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "stats()",
+            "Transports.assertNotTransportThread"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 2,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": false,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.action.admin.cluster.allocation.TransportGetAllocationStatsActionTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.action.admin.cluster.allocation.TransportGetAllocationStatsActionTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.action.admin.cluster.allocation.TransportGetAllocationStatsActionTests#testDeduplicatesStatsComputations": "failed",
+          "org.elasticsearch.action.admin.cluster.allocation.TransportGetAllocationStatsActionTests#testReturnsOnlyRequestedStats": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.action.admin.cluster.allocation.TransportGetAllocationStatsActionTests": "failed"
+        },
+        "summary": {
+          "passed": 1,
+          "failed": 1,
+          "skipped": 0,
+          "total": 2
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "org.elasticsearch.action.admin.cluster.allocation.TransportGetAllocationStatsActionTests#testReturnsOnlyRequestedStats"
+        ],
+        "baseline_total": 0,
+        "patched_total": 2,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 10,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 2
+    },
+    "java_production_hunks": 7,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      5,
+      6,
+      3,
+      4
+    ],
+    "tokens_used": 8643,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 2,
+    "retry_contexts": [
+      {
+        "error_type": "api_mismatch",
+        "error_message": "/repo/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java:71: error: cannot find symbol\n  symbol:   variable EsExecutors\n/repo/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java:77: error: cannot infer type arguments for SingleResultDeduplicator<>\n/repo/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java:79: error: cannot find symbol\n  symbol:   method onResponse(Map<String,NodeAllocationStats>)\n/repo/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java:104: error: constructor SubscribableListener in class SubscribableListener<T> cannot be applied to given types;\n> Task :server:compileJava FAILED\n  /repo/server/src/main/java/org/elasticsearch/action/admin/cluster/allocation/TransportGetAllocationStatsAction.java:71: error: cannot find symbol\n    symbol:   variable EsExecutors\nBUILD FAILED in 9m 35s",
+        "attempt_count": 1,
+        "suggested_action": "route_to_namespace_or_structural"
+      }
+    ],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1297,
+    "target_patch_bytes": 9978,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "org.elasticsearch.action.admin.cluster.allocation.TransportGetAllocationStatsActionTests#testReturnsOnlyRequestedStats"
+      ],
+      "baseline_total": 0,
+      "patched_total": 2,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 1,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

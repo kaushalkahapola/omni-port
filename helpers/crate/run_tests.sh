@@ -70,7 +70,51 @@ if ${DOCKER_CMD} run --rm \
     bash -c "git config --global --add safe.directory /repo && \
     export MAVEN_OPTS=\"\${MAVEN_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPU}\" && \
     mkdir -p /root/.m2 && \
-    echo '<toolchains><toolchain><type>jdk</type><provides><version>24.0.2</version><vendor>temurin</vendor></provides><configuration><jdkHome>/opt/java/openjdk</jdkHome></configuration></toolchain></toolchains>' > /root/.m2/toolchains.xml && \
+    cat <<EOF > /root/.m2/toolchains.xml
+<toolchains>
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>24.0.2</version>
+      <vendor>temurin</vendor>
+    </provides>
+    <configuration>
+      <jdkHome>/opt/java/openjdk</jdkHome>
+    </configuration>
+  </toolchain>
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>22.0.2+9</version>
+      <vendor>temurin</vendor>
+    </provides>
+    <configuration>
+      <jdkHome>/opt/java/jdk-22.0.2+9</jdkHome>
+    </configuration>
+  </toolchain>
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>21.0.4+7</version>
+      <vendor>temurin</vendor>
+    </provides>
+    <configuration>
+      <jdkHome>/opt/java/jdk-21.0.4+7</jdkHome>
+    </configuration>
+  </toolchain>
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>17.0.12+7</version>
+      <vendor>temurin</vendor>
+    </provides>
+    <configuration>
+      <jdkHome>/opt/java/jdk-17.0.12+7</jdkHome>
+    </configuration>
+  </toolchain>
+</toolchains>
+EOF
+
     ${MVN_CMD} --global-toolchains /root/.m2/toolchains.xml; \
     MVN_EXIT_CODE=\$?; \
     echo '--- Test results are available in /repo/*/target/surefire-reports/ ---'; \

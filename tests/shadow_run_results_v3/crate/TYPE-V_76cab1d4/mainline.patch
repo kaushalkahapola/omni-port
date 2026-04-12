@@ -1,0 +1,150 @@
+commit 76cab1d4a51cda3329cf429e1ac6086dcbeb595e
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Thu Feb 22 12:11:23 2024 +0200
+
+    Fix issue with duplicate units for psql style INTERVALs
+    
+    Disallow duplicate units in the interval strings, as this can be
+    ambiguous and also not conforming with PostgreSQL behaviour.
+
+diff --git a/docs/appendices/release-notes/5.6.3.rst b/docs/appendices/release-notes/5.6.3.rst
+index 4b7c08993d..1ae72dee31 100644
+--- a/docs/appendices/release-notes/5.6.3.rst
++++ b/docs/appendices/release-notes/5.6.3.rst
+@@ -47,6 +47,11 @@ See the :ref:`version_5.6.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed an issue with PostgreSQL style :ref:`INTERVALs <type-interval>`, which
++  allowed duplicate unit definitions, e.g.::
++
++     SELECT '1 year 3 days 2 years'::INTERVAL
++
+ - Fixed an issue with PostgreSQL style :ref:`INTERVALs <type-interval>`, which
+   didn't allow units next to values without whitespace separation, e.g.::
+ 
+diff --git a/server/src/main/java/io/crate/interval/PGIntervalParser.java b/server/src/main/java/io/crate/interval/PGIntervalParser.java
+index 897c6790f4..dc8e2a9f2e 100644
+--- a/server/src/main/java/io/crate/interval/PGIntervalParser.java
++++ b/server/src/main/java/io/crate/interval/PGIntervalParser.java
+@@ -63,10 +63,13 @@ final class PGIntervalParser {
+         int minutes = 0;
+         int seconds = 0;
+         int milliSeconds = 0;
++        boolean weeksParsed = false;
++        boolean daysParsed = false;
+ 
+         try {
+             String unitToken = null;
+-            String valueToken = null;
++            String valueToken;
++            boolean timeParsed = false;
+             final StringTokenizer st = new StringTokenizer(strInterval);
+             while (st.hasMoreTokens()) {
+                 String token = st.nextToken();
+@@ -84,6 +87,10 @@ final class PGIntervalParser {
+ 
+                 int endHours = token.indexOf(':');
+                 if (endHours > 0) {
++                    if (timeParsed) {
++                        throw new IllegalArgumentException("Invalid interval format: " + value);
++                    }
++
+                     // This handles hours, minutes, seconds and microseconds for
+                     // ISO intervals
+                     int offset = (token.charAt(0) == '-') ? 1 : 0;
+@@ -101,6 +108,7 @@ final class PGIntervalParser {
+                         seconds = -seconds;
+                         milliSeconds = -milliSeconds;
+                     }
++                    timeParsed = true;
+                 } else {
+                     if (unitToken == null) {
+                         throw new IllegalArgumentException("Invalid interval format: " + value);
+@@ -112,15 +120,53 @@ final class PGIntervalParser {
+                 // are handled for Non-ISO intervals here.
+                 if (unitToken != null) {
+                     switch (unitToken) {
+-                        case "year", "years", "y" -> years = nullSafeIntGet(valueToken);
+-                        case "month", "months", "mon", "mons" -> months = nullSafeIntGet(valueToken);
+-                        case "day", "days", "d" -> days += nullSafeIntGet(valueToken);
+-                        case "week", "weeks", "w" -> days += nullSafeIntGet(valueToken) * 7;
+-                        case "hour", "hours", "h" -> hours = nullSafeIntGet(valueToken);
+-                        case "min", "mins", "minute", "minutes", "m" -> minutes = nullSafeIntGet(valueToken);
++                        case "year", "years", "y" -> {
++                            if (years > 0) {
++                                throw new IllegalArgumentException("Invalid interval format: " + value);
++                            }
++                            years = nullSafeIntGet(valueToken);
++                        }
++                        case "month", "months", "mon", "mons" -> {
++                            if (months > 0) {
++                                throw new IllegalArgumentException("Invalid interval format: " + value);
++                            }
++                            months = nullSafeIntGet(valueToken);
++                        }
++                        case "day", "days", "d" -> {
++                            if (daysParsed) {
++                                throw new IllegalArgumentException("Invalid interval format: " + value);
++                            }
++                            days += nullSafeIntGet(valueToken);
++                            daysParsed = true;
++                        }
++                        case "week", "weeks", "w" -> {
++                            if (weeksParsed) {
++                                throw new IllegalArgumentException("Invalid interval format: " + value);
++                            }
++                            days += nullSafeIntGet(valueToken) * 7;
++                            weeksParsed = true;
++                        }
++                        case "hour", "hours", "h" -> {
++                            if (hours > 0) {
++                                throw new IllegalArgumentException("Invalid interval format: " + value);
++                            }
++                            hours = nullSafeIntGet(valueToken);
++                            timeParsed = true;
++                        }
++                        case "min", "mins", "minute", "minutes", "m" -> {
++                            if (minutes > 0) {
++                                throw new IllegalArgumentException("Invalid interval format: " + value);
++                            }
++                            minutes = nullSafeIntGet(valueToken);
++                            timeParsed = true;
++                        }
+                         case "sec", "secs", "second", "seconds", "s" -> {
++                            if (seconds > 0 || milliSeconds > 0) {
++                                throw new IllegalArgumentException("Invalid interval format: " + value);
++                            }
+                             seconds = parseInteger(valueToken);
+                             milliSeconds = parseMilliSeconds(valueToken);
++                            timeParsed = true;
+                         }
+                         default -> throw new IllegalArgumentException("Invalid interval format: " + value);
+                     }
+diff --git a/server/src/test/java/io/crate/interval/IntervalParserTest.java b/server/src/test/java/io/crate/interval/IntervalParserTest.java
+index 809bdbb947..c51f33de37 100644
+--- a/server/src/test/java/io/crate/interval/IntervalParserTest.java
++++ b/server/src/test/java/io/crate/interval/IntervalParserTest.java
+@@ -232,6 +232,22 @@ public class IntervalParserTest extends ESTestCase {
+             .hasMessage("Invalid interval format: 1 week 2 monthss 3 days");
+     }
+ 
++    @Test
++    public void test_invalid_duplicate_units() {
++        assertThatThrownBy(() -> IntervalParser.apply("1 week 2 mons 3 days 4w"))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("Invalid interval format: 1 week 2 mons 3 days 4w");
++        assertThatThrownBy(() -> IntervalParser.apply("1y 11:22:33 11:22:33"))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("Invalid interval format: 1y 11:22:33 11:22:33");
++        assertThatThrownBy(() -> IntervalParser.apply("2sec 11:22:33"))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("Invalid interval format: 2sec 11:22:33");
++        assertThatThrownBy(() -> IntervalParser.apply("1 years 2 mons 3 days 2 years"))
++            .isExactlyInstanceOf(IllegalArgumentException.class)
++            .hasMessage("Invalid interval format: 1 years 2 mons 3 days 2 years");
++    }
++
+     @Test
+     public void test_normalization() {
+         var expected = new Period(1, 2, 0, 827, 4, 40, 43, 0)

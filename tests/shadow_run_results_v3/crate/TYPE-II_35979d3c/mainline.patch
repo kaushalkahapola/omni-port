@@ -1,0 +1,144 @@
+commit 35979d3c4226ce9e13f6d6d5bdf154bdb356ff31
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Mon Nov 11 14:16:49 2024 -0500
+
+    Fix exceptions thrown when querying nested object arrays' sub-columns
+    
+    - identify correct readTypes of subcolumns of nested object arrays
+    - fix parsing logic to be able to handle nested object arrays
+
+diff --git a/docs/appendices/release-notes/5.9.3.rst b/docs/appendices/release-notes/5.9.3.rst
+index 6de6a221a2..7fb94f8793 100644
+--- a/docs/appendices/release-notes/5.9.3.rst
++++ b/docs/appendices/release-notes/5.9.3.rst
+@@ -60,6 +60,9 @@ Fixes
+   :ref:`generated column <ddl-generated-columns>` from a table, even though no
+   error was returned.
+ 
++- Fixed an issue that caused exceptions when querying sub-columns of nested
++  object arrays.
++
+ - Fixed an issue that would cause an error to be thrown when attempting to
+   ``ORDER BY`` on top of a complex query (e.g. a ``JOIN``), using an expression
+   which contains a query parameter, e.g.::
+diff --git a/server/src/main/java/io/crate/expression/reference/doc/lucene/StoredRow.java b/server/src/main/java/io/crate/expression/reference/doc/lucene/StoredRow.java
+index 90d8c18151..fe768516cf 100644
+--- a/server/src/main/java/io/crate/expression/reference/doc/lucene/StoredRow.java
++++ b/server/src/main/java/io/crate/expression/reference/doc/lucene/StoredRow.java
+@@ -55,18 +55,7 @@ public interface StoredRow {
+             if (tmp instanceof Map) {
+                 m = (Map<?, ?>) tmp;
+             } else if (tmp instanceof List<?> list) {
+-                if (i + 1 == path.size()) {
+-                    return list;
+-                }
+-                ArrayList<Object> newList = new ArrayList<>(list.size());
+-                for (Object o : list) {
+-                    if (o instanceof Map) {
+-                        newList.add(extractValue((Map<?, ?>) o, path, i + 1));
+-                    } else {
+-                        newList.add(o);
+-                    }
+-                }
+-                return newList;
++                return extractValueHelper(list, path, i);
+             } else {
+                 if (i + 1 != path.size()) {
+                     return null;
+@@ -76,4 +65,21 @@ public interface StoredRow {
+         }
+         return tmp;
+     }
++
++    private static Object extractValueHelper(final List<?> list, List<String> path, int pathStartIndex) {
++        if (pathStartIndex + 1 == path.size()) {
++            return list;
++        }
++        ArrayList<Object> newList = new ArrayList<>(list.size());
++        for (Object o : list) {
++            if (o instanceof Map<?,?> m) {
++                newList.add(extractValue(m, path, pathStartIndex + 1));
++            } else if (o instanceof List<?> l) {
++                newList.add(extractValueHelper(l, path, pathStartIndex));
++            } else {
++                newList.add(o);
++            }
++        }
++        return newList;
++    }
+ }
+diff --git a/server/src/main/java/io/crate/metadata/table/TableInfo.java b/server/src/main/java/io/crate/metadata/table/TableInfo.java
+index b0969ca6b5..46a2e6524f 100644
+--- a/server/src/main/java/io/crate/metadata/table/TableInfo.java
++++ b/server/src/main/java/io/crate/metadata/table/TableInfo.java
+@@ -47,7 +47,7 @@ import io.crate.types.ObjectType;
+ public interface TableInfo extends RelationInfo {
+ 
+     Predicate<DataType<?>> IS_OBJECT_ARRAY =
+-        type -> type instanceof ArrayType && ((ArrayType<?>) type).innerType().id() == ObjectType.ID;
++        type -> type instanceof ArrayType && ArrayType.unnest(type).id() == ObjectType.ID;
+ 
+     /**
+      * returns information about a column with the given ident.
+@@ -144,7 +144,7 @@ public interface TableInfo extends RelationInfo {
+         int arrayDimensions = 0;
+         for (var parent : getParents(column)) {
+             if (IS_OBJECT_ARRAY.test(parent.valueType())) {
+-                arrayDimensions++;
++                arrayDimensions += ArrayType.dimensions(parent.valueType());
+             }
+         }
+         return makeArray(ref.valueType(), arrayDimensions);
+diff --git a/server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java b/server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java
+index d985a62879..de9d053237 100644
+--- a/server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java
++++ b/server/src/test/java/io/crate/analyze/SelectStatementAnalyzerTest.java
+@@ -31,6 +31,7 @@ import static io.crate.testing.Asserts.isFunction;
+ import static io.crate.testing.Asserts.isLiteral;
+ import static io.crate.testing.Asserts.isReference;
+ import static io.crate.testing.Asserts.toCondition;
++import static io.crate.types.ArrayType.makeArray;
+ import static org.assertj.core.api.Assertions.anyOf;
+ import static org.assertj.core.api.Assertions.assertThatThrownBy;
+ 
+@@ -2870,4 +2871,14 @@ public class SelectStatementAnalyzerTest extends CrateDummyClusterServiceUnitTes
+                 .hasDataType(DataTypes.INTEGER)
+         );
+     }
++
++    @Test
++    public void test_sub_columns_of_nested_object_arrays() throws IOException {
++        var executor = SQLExecutor.of(clusterService)
++            .addTable("create table t (o object as (a int)[][])");
++        QueriedSelectRelation relation = executor.analyze("select o['a'] from t");
++        assertThat(relation.outputs()).satisfiesExactly(
++            output -> assertThat(output.valueType()).isEqualTo(makeArray(DataTypes.INTEGER, 2))
++        );
++    }
+ }
+diff --git a/server/src/test/java/io/crate/expression/reference/doc/lucene/StoredRowLookupTest.java b/server/src/test/java/io/crate/expression/reference/doc/lucene/StoredRowLookupTest.java
+index bbce4f5937..7002bef7e8 100644
+--- a/server/src/test/java/io/crate/expression/reference/doc/lucene/StoredRowLookupTest.java
++++ b/server/src/test/java/io/crate/expression/reference/doc/lucene/StoredRowLookupTest.java
+@@ -65,4 +65,21 @@ public class StoredRowLookupTest {
+         Map<String, Map<String, Integer>> m = singletonMap("x", singletonMap("a", 1)); // such that x['a'] = 1
+         assertThat(StoredRow.extractValue(m, Arrays.asList("x", "a", "a"), 0)).isNull(); // x['a']['a'] should return null
+     }
++
++    @Test
++    public void test_extract_sub_columns_of_nested_object_arrays() {
++        Map<String, List<List<Map<String, Integer>>>> m = singletonMap(
++            "o",
++            Arrays.asList(
++                List.of(singletonMap("a", 1)),
++                List.of(singletonMap("a", 2), singletonMap("a", 3)),
++                null)
++        );
++        assertThat(StoredRow.extractValue(m, Arrays.asList("o", "a"), 0)).isEqualTo(
++            Arrays.asList(
++                List.of(1),
++                List.of(2, 3),
++                null)
++        );
++    }
+ }

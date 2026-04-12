@@ -1,0 +1,204 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "866a1a09b1accb2fb89fdb0e94b2f7f37d59b359",
+  "backport_commit": "867f46001c2add2045c120d1765e62cbde5778e6",
+  "description": "master \u2192 5.8",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.73,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 83,
+          "end_line": 88,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 1008,
+          "end_line": 1017,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.17,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.9,
+        "reasoning": "The patch modifies existing logic in DocTableInfo.java to preserve the number of shards for existing partitions when altering a table. The change involves adding a conditional to use the index's own number of shards if it is a partitioned index, instead of applying the table's number of shards. This is a subtle behavioral fix addressing a regression. The patch also updates release notes and adds a test case. The main code change is a small conditional adjustment, not a structural or API redesign. The localization evidence shows one hunk found via 'git_pickaxe' with 0.90 confidence and another via 'git_exact' with 1.00 confidence, indicating some fuzzy matching is needed. Overall, this is a whitespace/formatting drift or minor logic adjustment requiring fuzzy matching, consistent with TYPE_II complexity.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 3.3,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "old_string": "import io.crate.metadata.ColumnIdent;\nimport io.crate.metadata.CoordinatorTxnCtx;\nimport io.crate.metadata.GeneratedReference;\nimport io.crate.metadata.IndexReference;\nimport io.crate.metadata.NodeContext;\nimport io.crate.metadata.PartitionName;",
+          "new_string": "import io.crate.metadata.ColumnIdent;\nimport io.crate.metadata.CoordinatorTxnCtx;\nimport io.crate.metadata.GeneratedReference;\nimport io.crate.metadata.IndexParts;\nimport io.crate.metadata.IndexReference;\nimport io.crate.metadata.NodeContext;\nimport io.crate.metadata.PartitionName;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.17,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.metadata.doc.DocTableInfoTest.xml"
+        ],
+        "target_classes": [
+          "DocTableInfoTest"
+        ],
+        "test_cases": {
+          "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_dropped_columns_are_included_in_oid_to_column_map": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column": "passed"
+        },
+        "classes": {
+          "io.crate.metadata.doc.DocTableInfoTest": "passed"
+        },
+        "summary": {
+          "passed": 15,
+          "failed": 0,
+          "skipped": 0,
+          "total": 15
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 15,
+        "patched_total": 15,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 8,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 15
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      1,
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 2268,
+    "target_patch_bytes": 7072,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 15,
+      "patched_total": 15,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

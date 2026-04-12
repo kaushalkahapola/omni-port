@@ -1,0 +1,182 @@
+{
+  "run_timestamp": "2026-04-11T16:04:33.302350",
+  "repo": "crate",
+  "patch_type": "TYPE-V",
+  "original_commit": "3dea6f6fb4a1fabd94a442fade1747ea3d4a1915",
+  "backport_commit": "6c771f9afe2f1b60bbd8dd7385f40ac8bdff7de7",
+  "description": "master \u2192 5.8",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.77,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.867,
+          "start_line": 175,
+          "end_line": 180,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.17,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.87,
+        "reasoning": "The patch modifies the ArrayUpperFunction.java file by adding a conditional check for nested array types to fall back to a generic function query. This is a small addition that does not change the overall structure or API but requires understanding of the existing code and some fuzzy matching to apply correctly. The patch also adds tests and updates documentation, which are straightforward. The localization evidence shows the main hunk was found via 'git_pickaxe' with high confidence, indicating a non-trivial but not deeply structural change. Therefore, the patch is best classified as TYPE_II (whitespace/formatting drift or small logic additions requiring fuzzy matching).",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 8.82,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
+          "old_string": "        int cmpVal = cmpNumber.intValue();",
+          "new_string": "        int cmpVal = cmpNumber.intValue();\n\n        DataType<?> innerType = ((ArrayType<?>) arrayRef.valueType()).innerType();\n        if (innerType instanceof ArrayType<?>) {\n            // Cannot utilize `_array_length_` index for arrays in tables created before 5.9\n            return null;\n        }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.03,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.lucene.ArrayLengthQueryBuilderTest.xml"
+        ],
+        "target_classes": [
+          "ArrayLengthQueryBuilderTest"
+        ],
+        "test_cases": {
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt1UsesNumTermsPerOrAndGenericFunction": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLt1IsNoMatch": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_NumTermsPerDocQuery_maps_column_idents_to_oids": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGte1UsesNumTermsPerDocQuery": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_array_length_on_array_sub_columns_of_array_of_objects": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGt0UsesExistsQuery": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtColumnIsNotOptimized": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthLte0IsNoMatch": "passed",
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#testArrayLengthGtNULLDoesNotMatch": "passed"
+        },
+        "classes": {
+          "io.crate.lucene.ArrayLengthQueryBuilderTest": "passed"
+        },
+        "summary": {
+          "passed": 9,
+          "failed": 0,
+          "skipped": 0,
+          "total": 9
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.lucene.ArrayLengthQueryBuilderTest#test_array_length_on_array_sub_columns_of_array_of_objects"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 9,
+        "patched_total": 9,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 9
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1038,
+    "target_patch_bytes": 2753,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.lucene.ArrayLengthQueryBuilderTest#test_array_length_on_array_sub_columns_of_array_of_objects"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 9,
+      "patched_total": 9,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

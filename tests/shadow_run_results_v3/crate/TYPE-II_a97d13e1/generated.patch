@@ -1,0 +1,28 @@
+diff --git a/server/src/main/java/io/crate/expression/predicate/NotPredicate.java b/server/src/main/java/io/crate/expression/predicate/NotPredicate.java
+index 1343e2e356..f12bbbd58f 100644
+--- a/server/src/main/java/io/crate/expression/predicate/NotPredicate.java
++++ b/server/src/main/java/io/crate/expression/predicate/NotPredicate.java
+@@ -94,7 +94,6 @@ public class NotPredicate extends Scalar<Boolean, Boolean> {
+         return value != null ? !value : null;
+     }
+ 
+-
+     private final NullabilityVisitor INNER_VISITOR = new NullabilityVisitor();
+ 
+     private static class NullabilityContext {
+@@ -149,6 +148,7 @@ public class NotPredicate extends Scalar<Boolean, Boolean> {
+                 var b = function.arguments().get(1);
+                 if (a instanceof Reference ref && b instanceof Literal<?>) {
+                     if (ref.valueType().id() == DataTypes.UNTYPED_OBJECT.id()) {
++                        context.enforceThreeValuedLogic = true;
+                         return null;
+                     }
+                 }
+@@ -176,7 +176,6 @@ public class NotPredicate extends Scalar<Boolean, Boolean> {
+         }
+     }
+ 
+-
+     @Override
+     public Query toQuery(Function input, LuceneQueryBuilder.Context context) {
+         assert input != null : "function must not be null";

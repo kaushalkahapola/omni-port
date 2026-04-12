@@ -14,11 +14,326 @@ NOTE: applied_hunks from Agent 3 are already written to disk and must NOT be
 re-synthesized or re-applied here.
 """
 
+import glob
+import json
+import logging
+import os
+import re
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 from src.core.state import BackportState, LocalizationResult, PatchRetryContext
+from src.core.llm_router import get_default_router, LLMTier
+
+logger = logging.getLogger(__name__)
+
+# Matches Java member-declaration lvalues:  [modifiers] Type name =
+# Captures the declared name so we can detect duplicates introduced by new_string.
+_JAVA_DECL_NAME_RE = re.compile(
+    r"(?:public|private|protected|static|final|volatile|transient"
+    r"|synchronized|abstract|native|strictfp)(?:\s+(?:public|private|protected"
+    r"|static|final|volatile|transient|synchronized|abstract|native|strictfp))*"
+    r"\s+[\w<>\[\],\s]+?\s+(\w+)\s*(?:=|[{(])",
+    re.MULTILINE,
+)
+
+# Fix D: method boundary pattern — blank line followed by an access modifier.
+_METHOD_BOUNDARY_RE = re.compile(
+    r"\n\n(?=\s*(?:public|private|protected|static|final|abstract|synchronized|@Override)\b)",
+)
+
+# Fix C: Java keywords to exclude from variable-availability heuristic.
+_JAVA_KEYWORDS = frozenset({
+    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
+    "class", "const", "continue", "default", "do", "double", "else", "enum",
+    "extends", "final", "finally", "float", "for", "goto", "if", "implements",
+    "import", "instanceof", "int", "interface", "long", "native", "new",
+    "null", "package", "private", "protected", "public", "return", "short",
+    "static", "strictfp", "super", "switch", "synchronized", "this", "throw",
+    "throws", "transient", "try", "void", "volatile", "while", "true", "false",
+    "var", "record", "sealed", "permits", "yield", "String", "Object",
+    "Integer", "Long", "Double", "Float", "Boolean", "List", "Map", "Set",
+    "Optional", "Collection", "Iterator", "Iterable", "Comparable",
+})
+
+
+def _declared_names(code: str) -> set:
+    """Return the set of Java identifier names declared in *code*."""
+    return {m.group(1) for m in _JAVA_DECL_NAME_RE.finditer(code)}
+
+
+def _new_string_introduces_duplicates(
+    file_content: str,
+    old_string: str,
+    new_string: str,
+) -> bool:
+    """
+    Return True if *new_string* would introduce duplicate Java declarations.
+
+    Two distinct failure modes are caught:
+
+    1. Internal duplicates in new_string itself — the LLM echoed the same
+       declaration twice (e.g. two ``public static final Version V_5_10_1``
+       inside new_string).  These are always compile errors.
+
+    2. Cross-file duplicates — new_string introduces a name that is NOT being
+       replaced (not in old_string) but already exists elsewhere in the file
+       (e.g. a constant that was already backported independently).
+    """
+    # ── Check 1: internal duplicates inside new_string ────────────────────────
+    matches = list(_JAVA_DECL_NAME_RE.finditer(new_string))
+    seen: set = set()
+    for m in matches:
+        name = m.group(1)
+        if name in seen:
+            return True
+        seen.add(name)
+
+    # ── Check 2: cross-file duplicates (new names already in the remainder) ───
+    introduced = _declared_names(new_string) - _declared_names(old_string)
+    if not introduced:
+        return False
+    remaining = file_content.replace(old_string, "", 1)
+    existing = _declared_names(remaining)
+    return bool(introduced & existing)
+
+
+# ── Fix C: parsability gate ───────────────────────────────────────────────────
+
+def _count_braces(text: str) -> Tuple[int, int]:
+    """
+    Count { and } in text, ignoring string literals and comments.
+    Returns (open_count, close_count).
+    """
+    opens = closes = 0
+    in_single_line_comment = False
+    in_multi_line_comment = False
+    in_string = False
+    in_char = False
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if in_single_line_comment:
+            if c == "\n":
+                in_single_line_comment = False
+        elif in_multi_line_comment:
+            if c == "*" and i + 1 < len(text) and text[i + 1] == "/":
+                in_multi_line_comment = False
+                i += 1
+        elif in_string:
+            if c == "\\" and i + 1 < len(text):
+                i += 1  # skip escaped char
+            elif c == '"':
+                in_string = False
+        elif in_char:
+            if c == "\\" and i + 1 < len(text):
+                i += 1
+            elif c == "'":
+                in_char = False
+        else:
+            if c == "/" and i + 1 < len(text):
+                if text[i + 1] == "/":
+                    in_single_line_comment = True
+                    i += 1
+                elif text[i + 1] == "*":
+                    in_multi_line_comment = True
+                    i += 1
+            elif c == '"':
+                in_string = True
+            elif c == "'":
+                in_char = True
+            elif c == "{":
+                opens += 1
+            elif c == "}":
+                closes += 1
+        i += 1
+    return opens, closes
+
+
+def _has_duplicate_adjacent_imports(text: str) -> bool:
+    """Return True if there are two identical adjacent import lines."""
+    lines = text.splitlines()
+    for i in range(len(lines) - 1):
+        if lines[i].strip().startswith("import ") and lines[i].strip() == lines[i + 1].strip():
+            return True
+    return False
+
+
+def _check_simulated_brace_balance(
+    file_content: str,
+    old_string: str,
+    new_string: str,
+) -> bool:
+    """
+    Return True if the simulated replacement keeps brace balance.
+    Unbalanced braces in new_string relative to old_string are a strong signal
+    that the LLM produced malformed code.
+
+    Critical case: if old_string is a PARTIAL view of a method body (old_net > 0,
+    meaning it opens more braces than it closes), then new_string must NOT close
+    more braces than old_string did. If new_net < old_net, the LLM completed the
+    full method body inside new_string while old_string only covers the beginning —
+    this creates orphaned code after the replacement point (the body continuation
+    that was not part of old_string remains verbatim, after the newly-inserted
+    closing brace).
+    """
+    old_open, old_close = _count_braces(old_string)
+    new_open, new_close = _count_braces(new_string)
+    old_net = old_open - old_close
+    new_net = new_open - new_close
+    # Directional guard: if old_string is partially open (old_net > 0), new_string
+    # must not close more braces than old_string. new_net < old_net means the LLM
+    # emitted an extra closing brace, completing a body that was not fully in old_string.
+    if old_net > 0 and new_net < old_net:
+        return False
+    # Allow at most 1 unit of tolerance for edge cases where context expansion
+    # includes an outer class brace.
+    return abs(new_net - old_net) <= 1
+
+
+def _check_variable_availability(
+    old_string: str,
+    new_string: str,
+    context_snapshot: str,
+) -> bool:
+    """
+    Heuristic dataflow check: identifiers used in new_string should be available
+    in the surrounding context (old_string + context_snapshot).
+
+    Returns True (gate passes) when fewer than 3 identifiers in new_string are
+    missing from the combined context.  The threshold prevents false positives
+    on large new methods that introduce new local variable names.
+    """
+    # Extract lowercase-starting identifiers from new_string that look like
+    # variable/field references (not declarations, keywords, or type names).
+    new_ids = set(re.findall(r"\b([a-z][a-zA-Z0-9_]*)\b", new_string))
+    new_ids -= _JAVA_KEYWORDS
+    # Remove identifiers that are *declared* in new_string (they're introduced, not used)
+    new_decl = set(re.findall(r"\b([a-z][a-zA-Z0-9_]*)\s*(?:=|;|\()", new_string))
+    new_ids -= new_decl
+    if not new_ids:
+        return True
+
+    combined_context = old_string + "\n" + context_snapshot
+    context_ids = set(re.findall(r"\b([a-zA-Z][a-zA-Z0-9_]*)\b", combined_context))
+
+    missing = new_ids - context_ids - _JAVA_KEYWORDS
+    # Tolerate up to 2 missing identifiers (new helper methods, constants, etc.)
+    return len(missing) < 3
+
+
+def _validate_new_string(
+    file_content: str,
+    old_string: str,
+    new_string: str,
+    loc_result: LocalizationResult,
+) -> Tuple[bool, str]:
+    """
+    Fix C: Combined parsability gate.
+    Returns (passes, reason_if_rejected).
+
+    Checks brace balance and duplicate imports only. Variable availability was
+    removed: LLM-generated new_string routinely references identifiers from the
+    wider file context that are absent from old_string/context_snapshot, causing
+    too many false positives for structurally-refactored hunks.
+    """
+    if not new_string.strip():
+        return False, "new_string is empty"
+    if _has_duplicate_adjacent_imports(new_string):
+        return False, "duplicate adjacent imports in new_string"
+    if not _check_simulated_brace_balance(file_content, old_string, new_string):
+        return False, "unbalanced braces in new_string relative to old_string"
+    return True, ""
+
+
+# ── Fix D: AST-guided sub-hunk splitting ──────────────────────────────────────
+
+# Module-level accumulator for extra hunks produced by splitting.
+_PENDING_EXTRA_HUNKS: List["SynthesizedHunk"] = []
+
+
+def _split_at_boundaries(old_string: str, new_string: str) -> List[Tuple[str, str]]:
+    """
+    Split old_string and new_string at method boundaries.
+    Returns a list of (old_chunk, new_chunk) pairs, one per method.
+    """
+    old_parts = re.split(_METHOD_BOUNDARY_RE, old_string)
+    new_parts = re.split(_METHOD_BOUNDARY_RE, new_string)
+    if len(old_parts) <= 1 or len(new_parts) <= 1:
+        return []
+    # Align: pair each old part with the corresponding new part if counts match,
+    # otherwise fall back to one-to-one pairing of the common prefix.
+    pairs = []
+    for i in range(min(len(old_parts), len(new_parts))):
+        op = old_parts[i].strip()
+        np = new_parts[i].strip()
+        if op and np:
+            pairs.append((op, np))
+    return pairs
+
+
+def _try_split_hunk(
+    hunk: Dict[str, Any],
+    loc_result: LocalizationResult,
+    file_content: str,
+    synthesizer: "HunkSynthesizer",
+) -> Optional["SynthesizedHunk"]:
+    """
+    Fix D: when synthesis fails for a large hunk, try splitting at method boundaries
+    and synthesize each sub-hunk independently.  Returns the FIRST successful sub-hunk
+    (head); remaining sub-hunks are appended to _PENDING_EXTRA_HUNKS.
+    """
+    global _PENDING_EXTRA_HUNKS
+    old_string = hunk.get("old_content", "").rstrip("\n")
+    new_string = hunk.get("new_content", "").rstrip("\n")
+
+    # Only attempt splitting for large hunks (> 15 lines)
+    if old_string.count("\n") < 15:
+        return None
+
+    pairs = _split_at_boundaries(old_string, new_string)
+    if len(pairs) < 2:
+        return None
+
+    successful: List[SynthesizedHunk] = []
+    file_path = loc_result.file_path
+
+    for old_chunk, new_chunk in pairs:
+        verified, confidence = synthesizer.verify_old_string_exists(file_content, old_chunk)
+        if not verified:
+            # Try with 2 context lines
+            chunk_lines = old_chunk.splitlines()
+            mid = max(0, len(chunk_lines) // 2)
+            slice_content = synthesizer.extract_lines_with_context(
+                file_content,
+                loc_result.start_line + mid,
+                loc_result.end_line,
+                2,
+            )
+            verified, confidence = synthesizer.verify_old_string_exists(file_content, slice_content)
+            if verified:
+                old_chunk = slice_content
+
+        if verified:
+            gate_ok, _ = _validate_new_string(file_content, old_chunk, new_chunk, loc_result)
+            if gate_ok and not _new_string_introduces_duplicates(file_content, old_chunk, new_chunk):
+                successful.append(SynthesizedHunk(
+                    file_path=file_path,
+                    old_string=old_chunk,
+                    new_string=new_chunk,
+                    confidence=confidence * 0.8,  # penalise split hunks slightly
+                    context_lines_included=0,
+                    verified=True,
+                ))
+
+    if not successful:
+        return None
+
+    # Return head, stash the rest for the draining pass
+    head = successful[0]
+    _PENDING_EXTRA_HUNKS.extend(successful[1:])
+    return head
 
 
 # ── Data models ───────────────────────────────────────────────────────────────
@@ -59,7 +374,7 @@ class HunkSynthesizer:
         file_content: str,
         start_line: int,
         end_line: int,
-        context_lines: int = 5,
+        context_lines: int = 30,
     ) -> str:
         """
         Extracts [start_line..end_line] (1-indexed) plus context_lines on each side
@@ -159,7 +474,27 @@ class HunkSynthesizer:
 
         # Attempt 0: raw old_string.
         verified, confidence = self.verify_old_string_exists(file_content, old_string)
-        if verified:
+        if verified and confidence >= 1.0:
+            if _new_string_introduces_duplicates(file_content, old_string, new_string):
+                return SynthesizedHunk(
+                    file_path=file_path,
+                    old_string=old_string,
+                    new_string=new_string,
+                    confidence=0.0,
+                    context_lines_included=0,
+                    verified=False,
+                )
+            # Fix C: parsability gate at attempt 0.
+            gate_ok, gate_reason = _validate_new_string(file_content, old_string, new_string, loc_result)
+            if not gate_ok:
+                return SynthesizedHunk(
+                    file_path=file_path,
+                    old_string=old_string,
+                    new_string=new_string,
+                    confidence=0.0,
+                    context_lines_included=0,
+                    verified=False,
+                )
             return SynthesizedHunk(
                 file_path=file_path,
                 old_string=old_string,
@@ -171,7 +506,7 @@ class HunkSynthesizer:
 
         # Attempts 1-4: expand context from the TARGET FILE around the localized region.
         # new_string does NOT change — CLAW replaces only the old_string portion.
-        for context_lines in [3, 5, 7, 10]:
+        for context_lines in [3, 10, 20, 30]:
             expanded_old = self.extract_lines_with_context(
                 file_content,
                 loc_result.start_line,
@@ -179,7 +514,7 @@ class HunkSynthesizer:
                 context_lines,
             )
             verified, confidence = self.verify_old_string_exists(file_content, expanded_old)
-            if verified:
+            if verified and confidence >= 1.0:
                 # Build the expanded new_string: same surrounding context lines
                 # from the file, but with the core replacement swapped in.
                 context_before = self.extract_lines_with_context(
@@ -196,6 +531,19 @@ class HunkSynthesizer:
                 )
                 expanded_new = context_before + new_string + "\n" + context_after
 
+                if _new_string_introduces_duplicates(file_content, expanded_old, expanded_new):
+                    return SynthesizedHunk(
+                        file_path=file_path,
+                        old_string=expanded_old,
+                        new_string=expanded_new,
+                        confidence=0.0,
+                        context_lines_included=context_lines,
+                        verified=False,
+                    )
+                # Fix C: parsability gate at each context expansion.
+                gate_ok, gate_reason = _validate_new_string(file_content, expanded_old, expanded_new, loc_result)
+                if not gate_ok:
+                    continue  # try next expansion level
                 return SynthesizedHunk(
                     file_path=file_path,
                     old_string=expanded_old,
@@ -204,6 +552,11 @@ class HunkSynthesizer:
                     context_lines_included=context_lines,
                     verified=True,
                 )
+
+        # Fix D: try AST-guided sub-hunk splitting for large hunks.
+        split_result = _try_split_hunk(hunk, loc_result, file_content, self)
+        if split_result is not None:
+            return split_result
 
         # Do NOT attempt fuzzy fallback for code hunks. If localization failed to find
         # an exact match via git/context expansion, fuzzy search often finds the WRONG
@@ -218,6 +571,57 @@ class HunkSynthesizer:
             confidence=0.0,
             context_lines_included=0,
             verified=False,
+        )
+
+    def synthesize_pure_addition(
+        self,
+        hunk: Dict[str, Any],
+        file_path: str,
+    ) -> SynthesizedHunk:
+        """
+        For hunks with empty old_content (pure insertion of new method/block).
+        Inserts before the final closing brace of the file (end of class body).
+        Only used when localization failed entirely and old_content is empty.
+        Confidence is 0.7 to flag for review — heuristic insertion point.
+        """
+        new_string = hunk.get("new_content", "").rstrip("\n")
+        if not new_string:
+            return SynthesizedHunk(
+                file_path=file_path, old_string="", new_string="",
+                confidence=0.0, context_lines_included=0, verified=False,
+            )
+
+        file_content = self.read_file(file_path)
+        if not file_content:
+            return SynthesizedHunk(
+                file_path=file_path, old_string="", new_string="",
+                confidence=0.0, context_lines_included=0, verified=False,
+            )
+
+        # Find the last line that is exactly `}` — the outermost class closing brace.
+        lines = file_content.splitlines(keepends=True)
+        for i in range(len(lines) - 1, -1, -1):
+            stripped = lines[i].strip()
+            if stripped == "}":
+                # Use the closing brace + a few lines of context as the anchor
+                # to ensure uniqueness (bare `}` may not be unique on its own).
+                context_start = max(0, i - 2)
+                anchor = "".join(lines[context_start : i + 1])
+                if anchor in file_content:
+                    expanded_new = "".join(lines[context_start:i]) + new_string + "\n" + lines[i]
+                    return SynthesizedHunk(
+                        file_path=file_path,
+                        old_string=anchor,
+                        new_string=expanded_new,
+                        confidence=0.7,
+                        context_lines_included=0,
+                        verified=True,
+                    )
+                break
+
+        return SynthesizedHunk(
+            file_path=file_path, old_string="", new_string="",
+            confidence=0.0, context_lines_included=0, verified=False,
         )
 
     def synthesize_batch(
@@ -257,6 +661,210 @@ class HunkSynthesizer:
         )
 
 
+# ── Fix B: structural fallback for conf=0 hunks ───────────────────────────────
+
+def _structural_fallback_for_failed_loc(
+    hunk: Dict[str, Any],
+    file_path: str,
+    repo_path: str,
+) -> Optional[SynthesizedHunk]:
+    """
+    Fix B: when all 5 localization stages returned confidence=0, attempt a
+    full-file structural rewrite via Agent 5's skeleton-rewrite entrypoint.
+    Returns a SynthesizedHunk if successful, else None.
+    """
+    from src.agents.agent5_structural import StructuralRefactor
+    from src.core.llm_router import get_default_router, LLMTier
+
+    try:
+        router = get_default_router()
+        llm_client = router.get_model(LLMTier.REASONING)
+    except Exception:
+        return None
+
+    synthesizer = HunkSynthesizer(repo_path)
+    file_content = synthesizer.read_file(file_path)
+    if not file_content:
+        return None
+
+    refactor = StructuralRefactor(repo_path, llm_client)
+    output = refactor.rewrite_from_target_skeleton(hunk, file_content, file_path)
+    if not output.success or not output.refactored_code.strip():
+        return None
+
+    # Parse JSON result: {"old_string": "...", "new_string": "..."}
+    try:
+        content = output.refactored_code.strip()
+        if content.startswith("```"):
+            content = "\n".join(content.splitlines()[1:])
+            if content.endswith("```"):
+                content = content[:-3].strip()
+        data = json.loads(content)
+        old_str = data.get("old_string", "").strip()
+        new_str = data.get("new_string", "").strip()
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+    if not old_str:
+        return None
+
+    # Verify the returned old_string actually exists in the file.
+    if old_str not in file_content:
+        return None
+
+    # Apply parsability gate.
+    stub_loc = LocalizationResult(
+        method_used="structural_fallback",
+        confidence=0.6,
+        context_snapshot=old_str,
+        file_path=file_path,
+        start_line=0,
+        end_line=0,
+    )
+    gate_ok, _ = _validate_new_string(file_content, old_str, new_str, stub_loc)
+    if not gate_ok:
+        return None
+    if _new_string_introduces_duplicates(file_content, old_str, new_str):
+        return None
+
+    return SynthesizedHunk(
+        file_path=file_path,
+        old_string=old_str,
+        new_string=new_str,
+        confidence=0.6,
+        context_lines_included=0,
+        verified=True,
+    )
+
+
+# ── New-file content adaptation ───────────────────────────────────────────────
+
+_JAVA_IMPORT_LINE_RE = re.compile(r"^import\s+(?:static\s+)?([\w.]+(?:\.\*)?);", re.MULTILINE)
+_JAVA_PACKAGE_RE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
+
+_MAX_SIBLING_FILES = 3
+_MAX_SIBLING_LINES = 60  # lines read from each sibling for context
+
+
+def _find_sibling_files(repo_path: str, file_path: str) -> List[str]:
+    """
+    Return up to _MAX_SIBLING_FILES other .java files from the same directory as
+    *file_path* in the target repo.  Returns repo-relative paths.
+    """
+    abs_dir = os.path.dirname(os.path.join(repo_path, file_path))
+    if not os.path.isdir(abs_dir):
+        # Directory doesn't exist yet — go one level up.
+        abs_dir = os.path.dirname(abs_dir)
+    if not os.path.isdir(abs_dir):
+        return []
+    siblings = [
+        os.path.relpath(os.path.join(abs_dir, f), repo_path).replace("\\", "/")
+        for f in os.listdir(abs_dir)
+        if f.endswith(".java") and f != os.path.basename(file_path)
+    ]
+    return siblings[:_MAX_SIBLING_FILES]
+
+
+def _read_file_head(repo_path: str, rel_path: str, max_lines: int) -> str:
+    try:
+        abs_path = os.path.join(repo_path, rel_path)
+        with open(abs_path, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+        return "".join(lines[:max_lines])
+    except Exception:
+        return ""
+
+
+def _build_new_file_adaptation_prompt(
+    file_path: str,
+    raw_content: str,
+    sibling_snippets: List[Tuple[str, str]],
+) -> str:
+    sibling_block = ""
+    for sibling_path, snippet in sibling_snippets:
+        sibling_block += f"\n--- {sibling_path} (first {_MAX_SIBLING_LINES} lines) ---\n```java\n{snippet}\n```\n"
+
+    return f"""You are helping backport a Java source file to an older branch of the same repository.
+
+The NEW FILE below was taken verbatim from the mainline (newer) branch.  The TARGET BRANCH
+may use different package names, different import paths, or different class/method names
+for the same concepts.
+
+Your task: adapt ONLY the `package` declaration and `import` statements so they work on the
+target branch.  Do NOT change any logic, method bodies, class names, annotations, or
+non-import declarations.  If an import looks correct as-is, keep it unchanged.
+
+=== FILE TO ADAPT ===
+Path: {file_path}
+```java
+{raw_content}
+```
+
+=== SIBLING FILES FROM TARGET BRANCH (for import-path context) ===
+{sibling_block if sibling_block else "(no sibling files found — use best judgement)"}
+
+=== INSTRUCTIONS ===
+1. Compare the imports in the new file against the imports used in sibling files.
+2. If a sibling file uses a different package path for the same class (e.g.
+   `io.crate.newpkg.Foo` in mainline vs `io.crate.oldpkg.Foo` in target), update the import.
+3. If an import references a class that clearly does not exist in the target (no sibling
+   uses it or a recognizable equivalent), add a `// TODO: verify import` comment after it
+   rather than removing it — the build will catch genuine missing classes.
+4. Return ONLY the complete adapted Java file content, no explanations, no markdown fences.
+"""
+
+
+def _adapt_new_file_content(
+    file_path: str,
+    raw_content: str,
+    repo_path: str,
+    tokens_used: int,
+) -> Tuple[str, int]:
+    """
+    Attempt to adapt the import section of a new Java file for the target branch.
+
+    Returns (adapted_content, updated_tokens_used).  On any error the original
+    raw_content is returned unchanged so the pipeline can still proceed.
+    """
+    if not raw_content.strip():
+        return raw_content, tokens_used
+
+    # Only bother if the file actually has imports.
+    if not _JAVA_IMPORT_LINE_RE.search(raw_content):
+        return raw_content, tokens_used
+
+    siblings = _find_sibling_files(repo_path, file_path)
+    sibling_snippets = [
+        (s, _read_file_head(repo_path, s, _MAX_SIBLING_LINES))
+        for s in siblings
+        if _read_file_head(repo_path, s, _MAX_SIBLING_LINES).strip()
+    ]
+
+    # If there are no sibling files to provide context, skip adaptation —
+    # we have no basis for choosing alternative import paths.
+    if not sibling_snippets:
+        logger.debug("agent6 new_file: no sibling files found for %s, skipping adaptation", file_path)
+        return raw_content, tokens_used
+
+    prompt = _build_new_file_adaptation_prompt(file_path, raw_content, sibling_snippets)
+    try:
+        router = get_default_router()
+        llm = router.get_model(LLMTier.BALANCED, tokens_used)
+        response = llm.invoke(prompt)
+        raw_response = response.content if hasattr(response, "content") else str(response)
+        tokens_used += len(prompt.split()) + len(raw_response.split())
+        # Strip accidental markdown fences.
+        adapted = re.sub(r"^```(?:java)?\s*\n?", "", raw_response.strip(), flags=re.MULTILINE)
+        adapted = re.sub(r"\n?```\s*$", "", adapted.strip(), flags=re.MULTILINE)
+        if adapted.strip():
+            logger.info("agent6 new_file: adapted imports for %s", file_path)
+            return adapted, tokens_used
+    except Exception as exc:
+        logger.warning("agent6 new_file: adaptation LLM call failed for %s: %s", file_path, exc)
+
+    return raw_content, tokens_used
+
+
 # ── LangGraph node ────────────────────────────────────────────────────────────
 
 def hunk_synthesizer_agent(state: BackportState) -> BackportState:
@@ -270,6 +878,8 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
 
     applied_hunks (Agent 3 output) are already on disk and are excluded.
     """
+    global _PENDING_EXTRA_HUNKS
+
     repo_path = state["target_repo_path"]
     synthesizer = HunkSynthesizer(repo_path)
 
@@ -277,12 +887,16 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     loc_results = state.get("localization_results", [])
     processed_indices = set(state.get("processed_hunk_indices", []))
     retry_contexts: List[PatchRetryContext] = list(state.get("retry_contexts", []))
+    tokens_used: int = state.get("tokens_used", 0)
 
     # ── Build synthesis batches ───────────────────────────────────────────────
 
     # Initialize accumulator lists.
     all_synthesized: List[Dict[str, Any]] = []
     all_failed: List[Dict[str, Any]] = []
+
+    # Reset the pending extra hunks accumulator for this invocation.
+    _PENDING_EXTRA_HUNKS = []
 
     # 1. Adapted hunks (Agent 4).
     adapted = state.get("adapted_hunks", [])
@@ -293,23 +907,72 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     refactored_loc_indices = [h.get("loc_index", i) for i, h in enumerate(refactored)]
 
     # 3. Unprocessed raw hunks: indices not claimed by any prior agent.
-    # Attempt synthesis for ALL unclaimed hunks with a valid file location.
-    # Agent 3 already tried exact-match for every hunk — if a hunk reaches here
-    # unclaimed it means Agent 3/4/5 didn't pick it up. Try synthesis anyway;
-    # if old_string doesn't exist in file, synthesize_hunk will return verified=False
-    # and we'll fail cleanly rather than silently dropping the hunk.
     passthrough = []
     for i, h in enumerate(hunks):
         if i not in processed_indices and i < len(loc_results):
             loc_result = loc_results[i]
+
+            # Fix G: new-file hunk — create the file directly, with import adaptation.
+            if loc_result.method_used == "new_file":
+                file_path = loc_result.file_path or h.get("file_path", "")
+                new_content = h.get("new_content", "").rstrip("\n")
+                if file_path and new_content:
+                    abs_path = Path(repo_path) / file_path
+                    try:
+                        # Adapt imports/package declaration for the target branch
+                        # before writing to disk.  Falls back to raw content on error.
+                        adapted_content, tokens_used = _adapt_new_file_content(
+                            file_path, new_content, repo_path, tokens_used
+                        )
+                        abs_path.parent.mkdir(parents=True, exist_ok=True)
+                        abs_path.write_text(adapted_content, encoding="utf-8")
+                        # Add a sentinel SynthesizedHunk with empty old_string
+                        # so agent7 knows the file was created (skip CLAW replace).
+                        all_synthesized.append(SynthesizedHunk(
+                            file_path=file_path,
+                            old_string="",
+                            new_string=adapted_content,
+                            confidence=1.0,
+                            context_lines_included=0,
+                            verified=True,
+                        ).model_dump())
+                    except Exception as e:
+                        all_failed.append({**h, "error": f"new-file creation failed: {e}"})
+                continue
+
+            # renamed_file sentinel — pure rename with no content changes; nothing to synthesize.
+            if loc_result.method_used == "renamed_file":
+                continue
+
+            # deleted_file sentinel — deletion is executed by Agent 7 via file_operations; skip.
+            if loc_result.method_used == "deleted_file":
+                continue
+
             if loc_result.method_used != "failed" and loc_result.file_path:
                 passthrough.append((i, h))
             else:
+                # Before dropping: check if this is a pure-addition hunk (empty old_content).
+                hunk_file = h.get("file_path") or h.get("target_file") or ""
+                old_content = h.get("old_content", "")
+                if not old_content and hunk_file:
+                    result = synthesizer.synthesize_pure_addition(h, hunk_file)
+                    if result.verified:
+                        all_synthesized.append(result.model_dump())
+                        continue
+
+                # Fix B: structural fallback for conf=0 hunks.
+                hunk_file = hunk_file or (loc_result.file_path if loc_result else "")
+                if hunk_file:
+                    fb_result = _structural_fallback_for_failed_loc(h, hunk_file, repo_path)
+                    if fb_result is not None:
+                        all_synthesized.append(fb_result.model_dump())
+                        continue
+
                 all_failed.append(h)
                 retry_contexts.append(
                     PatchRetryContext(
                         error_type="synthesis_skipped_no_localization",
-                        error_message=f"Hunk unclaimed; localization failed entirely",
+                        error_message="Hunk unclaimed; localization failed entirely",
                         attempt_count=state.get("current_attempt", 1),
                         suggested_action="manual_review",
                     )
@@ -329,7 +992,45 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
             continue
         output = synthesizer.synthesize_batch(batch, loc_results, loc_index_override=loc_idx_list)
         all_synthesized.extend(h.model_dump() for h in output.synthesized_hunks)
-        all_failed.extend(output.failed_hunks)
+
+        # For all failed hunks, try the structural fallback (Agent 5's skeleton
+        # rewrite) as a last resort. For "adapted" hunks, Agent 4 stored the
+        # original mainline old/new content so the LLM has accurate context.
+        # For "passthrough" and "refactored" hunks, use the hunk content as-is.
+        for failed_hunk in output.failed_hunks:
+            file_path_for_fallback = None
+            proxy = dict(failed_hunk)
+
+            if label == "adapted":
+                loc_idx = failed_hunk.get("loc_index")
+                if loc_idx is not None and loc_idx < len(loc_results):
+                    loc_r = loc_results[loc_idx]
+                    file_path_for_fallback = loc_r.file_path
+                    # Restore original mainline content so the LLM sees the full patch intent.
+                    if failed_hunk.get("original_old_content"):
+                        proxy["old_content"] = failed_hunk["original_old_content"]
+                        proxy["new_content"] = failed_hunk.get("original_new_content", "")
+            elif label == "refactored":
+                loc_idx = failed_hunk.get("loc_index")
+                if loc_idx is not None and loc_idx < len(loc_results):
+                    file_path_for_fallback = loc_results[loc_idx].file_path
+                if not file_path_for_fallback:
+                    file_path_for_fallback = failed_hunk.get("file_path") or failed_hunk.get("target_file")
+            else:  # passthrough
+                file_path_for_fallback = failed_hunk.get("file_path") or failed_hunk.get("target_file")
+
+            if file_path_for_fallback:
+                fb = _structural_fallback_for_failed_loc(proxy, file_path_for_fallback, repo_path)
+                if fb is not None:
+                    all_synthesized.append(fb.model_dump())
+                    continue
+
+            all_failed.append(failed_hunk)
+
+    # Fix D: drain any extra sub-hunks produced by the split path.
+    if _PENDING_EXTRA_HUNKS:
+        all_synthesized.extend(h.model_dump() for h in _PENDING_EXTRA_HUNKS)
+        _PENDING_EXTRA_HUNKS = []
 
     # ── Retry contexts for failures ───────────────────────────────────────────
     for _ in all_failed:
@@ -352,4 +1053,5 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
     state["synthesis_status"] = synthesis_status
     state["retry_contexts"] = retry_contexts
     state["current_attempt"] = state.get("current_attempt", 1) + 1
+    state["tokens_used"] = tokens_used
     return state

@@ -1,0 +1,291 @@
+commit 2c1210da4dc9e2ff29f8d6781b2c32e03ab49eae
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Thu Dec 11 19:50:37 2025 +0100
+
+    Account for direct buffers when constructing an http result set
+    
+    (cherry picked from commit 834640ed7b3fee5d11a6433ee42ef66115e5f316)
+
+diff --git a/docs/appendices/release-notes/6.1.3.rst b/docs/appendices/release-notes/6.1.3.rst
+index e559cc56bd..b06ec6166c 100644
+--- a/docs/appendices/release-notes/6.1.3.rst
++++ b/docs/appendices/release-notes/6.1.3.rst
+@@ -52,3 +52,7 @@ Fixes
+ 
+ - Fixed an issue causing memory leaks if requests to the ``HTTP`` endpoint
+   failed due to a missing :ref:`HBA <admin_hba>` entry or wrong credentials.
++
++- Fixed an issue that caused direct memory under-accounting, potentially leading
++  to an ``OutOfMemoryError`` when a large result set was returned by the
++  ``HTTP`` endpoint.
+diff --git a/server/src/main/java/io/crate/netty/AccountedByteBuf.java b/server/src/main/java/io/crate/netty/AccountedByteBuf.java
+index 55ff5490ac..5b1f39e87d 100644
+--- a/server/src/main/java/io/crate/netty/AccountedByteBuf.java
++++ b/server/src/main/java/io/crate/netty/AccountedByteBuf.java
+@@ -21,34 +21,70 @@
+ 
+ package io.crate.netty;
+ 
++import org.elasticsearch.common.breaker.CircuitBreakingException;
++import org.elasticsearch.monitor.jvm.JvmInfo;
++
+ import io.crate.data.breaker.RamAccounting;
+ import io.netty.buffer.ByteBuf;
+ import io.netty.buffer.WrappedByteBuf;
+ 
+-public class AccountedByteBuf extends WrappedByteBuf {
++public class AccountedByteBuf {
++
++    public static final long SINGLE_DIRECT_BUF_LIMIT = (long) (JvmInfo.jvmInfo().getDirectMemorySize() * 0.60);
+ 
+-    private final ByteBuf delegate;
+-    private final RamAccounting ramAccounting;
++    private AccountedByteBuf() {}
+ 
+     public static ByteBuf of(ByteBuf delegate, RamAccounting ramAccounting) {
+-        return delegate.isDirect()
+-            ? delegate
+-            : new AccountedByteBuf(delegate, ramAccounting);
++        if (delegate.isDirect()) {
++            return new AccountedDirectByteBuf(delegate);
++        }
++        return new AccountedHeapByteBuf(delegate, ramAccounting);
+     }
+ 
+-    private AccountedByteBuf(ByteBuf delegate, RamAccounting ramAccounting) {
+-        super(delegate);
+-        this.delegate = delegate;
+-        this.ramAccounting = ramAccounting;
+-        ramAccounting.addBytes(delegate.capacity());
++    static class AccountedHeapByteBuf extends WrappedByteBuf {
++        private final RamAccounting accounting;
++
++        protected AccountedHeapByteBuf(ByteBuf buf, RamAccounting accounting) {
++            super(buf);
++            this.accounting = accounting;
++        }
++
++        @Override
++        public ByteBuf writeBytes(byte[] src, int srcIndex, int length) {
++            int oldCapacity = buf.capacity();
++            ByteBuf result = buf.writeBytes(src, srcIndex, length);
++            int newCapacity = buf.capacity();
++            int delta = newCapacity - oldCapacity;
++            accounting.addBytes(delta);
++            return result;
++        }
+     }
+ 
+-    @Override
+-    public ByteBuf writeBytes(byte[] src, int srcIndex, int length) {
+-        int oldCapacity = delegate.capacity();
+-        ByteBuf result = buf.writeBytes(src, srcIndex, length);
+-        int newCapacity = delegate.capacity();
+-        ramAccounting.addBytes(newCapacity - oldCapacity);
+-        return result;
++    /**
++     * Doesn't allow a single buffer to grow more than 60% of total direct memory.
++     * We can't use ByteBufAllocatorMetric.usedDirectMemory() to check total direct memory usage
++     * as it doesn't return precise results for big allocations (big result sets), see https://github.com/netty/netty/issues/16068.
++     */
++    static class AccountedDirectByteBuf extends WrappedByteBuf {
++        private long usedBytes = 0;
++
++        protected AccountedDirectByteBuf(ByteBuf buf) {
++            super(buf);
++        }
++
++        @Override
++        public ByteBuf writeBytes(byte[] src, int srcIndex, int length) {
++            if (usedBytes + length > SINGLE_DIRECT_BUF_LIMIT) {
++                throw new CircuitBreakingException(length, usedBytes + length, SINGLE_DIRECT_BUF_LIMIT, "result-buffer");
++            }
++            try {
++                usedBytes += length;
++                return buf.writeBytes(src, srcIndex, length);
++            } catch (OutOfMemoryError error) {
++                // writeBytes call will not leave a buffer in an inconsistent state (see issue linked above).
++                // It's safe to catch OOM as a last resort and re-throw it as a CBE.
++                throw new CircuitBreakingException(length, usedBytes + length, SINGLE_DIRECT_BUF_LIMIT, "result-buffer");
++            }
++        }
+     }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/monitor/jvm/JvmInfo.java b/server/src/main/java/org/elasticsearch/monitor/jvm/JvmInfo.java
+index 942ad558df..b5240f1b23 100644
+--- a/server/src/main/java/org/elasticsearch/monitor/jvm/JvmInfo.java
++++ b/server/src/main/java/org/elasticsearch/monitor/jvm/JvmInfo.java
+@@ -84,6 +84,7 @@ public class JvmInfo implements Writeable {
+         String useSerialGC = "unknown";
+         long configuredInitialHeapSize = -1;
+         long configuredMaxHeapSize = -1;
++        long directMemorySize = 0;
+         try {
+             @SuppressWarnings("unchecked") Class<? extends PlatformManagedObject> clazz =
+                     (Class<? extends PlatformManagedObject>)Class.forName("com.sun.management.HotSpotDiagnosticMXBean");
+@@ -134,6 +135,20 @@ public class JvmInfo implements Writeable {
+             } catch (Exception ignored) {
+             }
+ 
++            try {
++                Object maxDirectMemorySizeVmOptionObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "MaxDirectMemorySize");
++                // Default is 0 when not specified.
++                // When not specified, Runtime.getRuntime().maxMemory() is used,
++                // https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/jdk/internal/misc/VM.java#L138
++                // Compute final actual value once, so that components that need it can take without default checks.
++                directMemorySize = Long.parseLong((String) valueMethod.invoke(maxDirectMemorySizeVmOptionObject));
++                if (directMemorySize == 0) {
++                    directMemorySize = Runtime.getRuntime().maxMemory();
++                }
++
++            } catch (Exception ignored) {
++            }
++
+         } catch (Exception ignored) {
+ 
+         }
+@@ -147,6 +162,7 @@ public class JvmInfo implements Writeable {
+             runtimeMXBean.getStartTime(),
+             configuredInitialHeapSize,
+             configuredMaxHeapSize,
++            directMemorySize,
+             mem,
+             inputArguments,
+             bootClassPath,
+@@ -174,6 +190,7 @@ public class JvmInfo implements Writeable {
+     private final long startTime;
+     private final long configuredInitialHeapSize;
+     private final long configuredMaxHeapSize;
++    private final long directMemorySize;
+     private final Mem mem;
+     private final String[] inputArguments;
+     private final String bootClassPath;
+@@ -188,9 +205,10 @@ public class JvmInfo implements Writeable {
+     private final String useSerialGC;
+ 
+     private JvmInfo(long pid, String version, String vmName, String vmVersion, String vmVendor, long startTime,
+-                   long configuredInitialHeapSize, long configuredMaxHeapSize, Mem mem, String[] inputArguments, String bootClassPath,
+-                   String classPath, Map<String, String> systemProperties, String[] gcCollectors, String[] memoryPools, String onError,
+-                   String onOutOfMemoryError, String useCompressedOops, String useG1GC, String useSerialGC) {
++                    long configuredInitialHeapSize, long configuredMaxHeapSize, long directMemorySize,
++                    Mem mem, String[] inputArguments, String bootClassPath,
++                    String classPath, Map<String, String> systemProperties, String[] gcCollectors, String[] memoryPools, String onError,
++                    String onOutOfMemoryError, String useCompressedOops, String useG1GC, String useSerialGC) {
+         this.pid = pid;
+         this.version = version;
+         this.vmName = vmName;
+@@ -199,6 +217,7 @@ public class JvmInfo implements Writeable {
+         this.startTime = startTime;
+         this.configuredInitialHeapSize = configuredInitialHeapSize;
+         this.configuredMaxHeapSize = configuredMaxHeapSize;
++        this.directMemorySize = directMemorySize;
+         this.mem = mem;
+         this.inputArguments = inputArguments;
+         this.bootClassPath = bootClassPath;
+@@ -234,6 +253,7 @@ public class JvmInfo implements Writeable {
+         //the following members are only used locally for bootstrap checks, never serialized nor printed out
+         this.configuredMaxHeapSize = -1;
+         this.configuredInitialHeapSize = -1;
++        this.directMemorySize = 0;
+         this.onError = null;
+         this.onOutOfMemoryError = null;
+         this.useG1GC = "unknown";
+@@ -296,6 +316,10 @@ public class JvmInfo implements Writeable {
+         return configuredMaxHeapSize;
+     }
+ 
++    public long getDirectMemorySize() {
++        return directMemorySize;
++    }
++
+     public String onError() {
+         return onError;
+     }
+diff --git a/server/src/test/java/io/crate/netty/AccountedByteBufTest.java b/server/src/test/java/io/crate/netty/AccountedByteBufTest.java
+new file mode 100644
+index 0000000000..c03a5f4bec
+--- /dev/null
++++ b/server/src/test/java/io/crate/netty/AccountedByteBufTest.java
+@@ -0,0 +1,82 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.netty;
++
++import static io.crate.netty.AccountedByteBuf.SINGLE_DIRECT_BUF_LIMIT;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import static org.mockito.ArgumentMatchers.eq;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
++import java.nio.charset.StandardCharsets;
++
++import org.elasticsearch.common.breaker.CircuitBreakingException;
++import org.junit.Test;
++
++import io.crate.data.breaker.RamAccounting;
++import io.crate.test.integration.CrateDummyClusterServiceUnitTest;
++import io.netty.buffer.ByteBuf;
++
++public class AccountedByteBufTest extends CrateDummyClusterServiceUnitTest {
++
++    @Test
++    public void test_delegate_direct_buffer_throws_cbe_on_OOM() {
++        // It's hard and expensive to trigger real OOM.
++        // When not specified in JVM args, direct memory is similar to XMX (equal to Runtime.getRuntime().maxMemory()).
++        // We would need to write small buffer to bypass SINGLE_DIRECT_BUF_LIMIT check
++        // and also allocate many large direct buffers (concurrently to write) to imitate direct buffer saturation.
++        // It's not feasible and can be flaky, hence using mocks.
++        ByteBuf delegate = mock(ByteBuf.class);
++        when(delegate.isDirect()).thenReturn(true);
++        byte[] data = "test".getBytes(StandardCharsets.UTF_8);
++        when(delegate.writeBytes(eq(data), eq(0), eq(data.length))).thenThrow(new OutOfMemoryError("dummy"));
++
++        ByteBuf buf = AccountedByteBuf.of(delegate, RamAccounting.NO_ACCOUNTING);
++
++        assertThatThrownBy(() -> buf.writeBytes(data, 0, data.length))
++            .isExactlyInstanceOf(CircuitBreakingException.class);
++    }
++
++    @Test
++    public void test_single_buffer_cant_exceed_given_threshold() {
++        // When not specified in JVM args, direct memory is similar to XMX (equal to Runtime.getRuntime().maxMemory()).
++        // Using mock to avoid allocating 60% of Runtime.getRuntime().maxMemory().
++        // Writing bytes is not important for this test, it only checks increment of usedBytes + eventual trigger of CBE.
++        ByteBuf delegate = mock(ByteBuf.class);
++        when(delegate.isDirect()).thenReturn(true);
++
++        ByteBuf buf = AccountedByteBuf.of(delegate, RamAccounting.NO_ACCOUNTING);
++
++        // If CI runs on a large heap, 60% of heap/direct memory can be > Integer.MAX_VALUE
++        // length in writeBytes is int, so we increment usedBytes to the point when it's about to reach the limit.
++        int iters = (int) (SINGLE_DIRECT_BUF_LIMIT / Integer.MAX_VALUE);
++        for (int i = 0; i < iters; i++) {
++            // Cheap, writeBytes is not doing anything, only incrementing "written" bytes.
++            buf.writeBytes(new byte[] {}, 0, Integer.MAX_VALUE);
++        }
++
++        int minToThrow = (int) (SINGLE_DIRECT_BUF_LIMIT % Integer.MAX_VALUE) + 1;
++        assertThatThrownBy(() -> buf.writeBytes(new byte[] {}, 0, minToThrow))
++            .isExactlyInstanceOf(CircuitBreakingException.class);
++    }
++
++}

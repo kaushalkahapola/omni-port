@@ -1,0 +1,112 @@
+commit 55aaacf8795c18ec41f12e7428155fbd10a179d8
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Wed Mar 27 13:30:58 2024 +0200
+
+    Register has_database/schema_privilege functions under pg_catalog
+    
+    Although those 2 functions were available in the search path, they were
+    not registered under `pg_catalog` schema, as the should, and as a result
+    pg compatible tools which my use full path (e.g.
+    `pg_catalog.has_shema_privilege()`) would get an `Uknown Function` error.
+    
+    Fixes: #15749
+    (cherry picked from commit 0eb245b8c752ffaaa5a11ae1d02bfdd96298670f)
+    
+    # Conflicts:
+    #       server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java
+    #       server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java
+
+diff --git a/docs/appendices/release-notes/5.6.4.rst b/docs/appendices/release-notes/5.6.4.rst
+index 91f720fcd4..dd94fce006 100644
+--- a/docs/appendices/release-notes/5.6.4.rst
++++ b/docs/appendices/release-notes/5.6.4.rst
+@@ -47,4 +47,6 @@ See the :ref:`version_5.6.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
+-None
++- Changed :ref:`scalar-has-database-priv` and :ref:`scalar-has-schema-priv`
++  functions to be registered under :ref:`postgres-pg_catalog` schema, to be
++  compatible with PostgreSQL behaviour.
+diff --git a/server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java b/server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java
+index 8d426a99b3..401f0b5910 100644
+--- a/server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java
+@@ -30,8 +30,10 @@ import org.jetbrains.annotations.Nullable;
+ 
+ import io.crate.Constants;
+ import io.crate.common.FourFunction;
++import io.crate.metadata.FunctionName;
+ import io.crate.metadata.functions.BoundSignature;
+ import io.crate.metadata.functions.Signature;
++import io.crate.metadata.pgcatalog.PgCatalogSchemaInfo;
+ import io.crate.role.Permission;
+ import io.crate.role.Privilege;
+ import io.crate.role.Role;
+@@ -41,7 +43,7 @@ import io.crate.types.DataTypes;
+ 
+ public class HasDatabasePrivilegeFunction extends HasPrivilegeFunction {
+ 
+-    public static final String NAME = "has_database_privilege";
++    public static final FunctionName NAME = new FunctionName(PgCatalogSchemaInfo.NAME, "has_database_privilege");
+ 
+     private static final FourFunction<Roles, Role, Object, Collection<Permission>, Boolean> CHECK_BY_DB_NAME =
+         (roles, user, db, permissions) -> {
+diff --git a/server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java b/server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java
+index 61b8839fe9..ce765567bd 100644
+--- a/server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java
+@@ -29,8 +29,10 @@ import java.util.function.BiFunction;
+ import org.jetbrains.annotations.Nullable;
+ 
+ import io.crate.common.FourFunction;
++import io.crate.metadata.FunctionName;
+ import io.crate.metadata.functions.BoundSignature;
+ import io.crate.metadata.functions.Signature;
++import io.crate.metadata.pgcatalog.PgCatalogSchemaInfo;
+ import io.crate.metadata.pgcatalog.PgCatalogTableDefinitions;
+ import io.crate.role.Permission;
+ import io.crate.role.Role;
+@@ -40,7 +42,7 @@ import io.crate.types.DataTypes;
+ 
+ public class HasSchemaPrivilegeFunction extends HasPrivilegeFunction {
+ 
+-    public static final String NAME = "has_schema_privilege";
++    public static final FunctionName NAME = new FunctionName(PgCatalogSchemaInfo.NAME, "has_schema_privilege");
+ 
+     private static final FourFunction<Roles, Role, Object, Collection<Permission>, Boolean> CHECK_BY_SCHEMA_NAME =
+         (roles, user, schema, permissions) -> {
+diff --git a/server/src/test/java/io/crate/expression/scalar/HasDatabasePrivilegeFunctionTest.java b/server/src/test/java/io/crate/expression/scalar/HasDatabasePrivilegeFunctionTest.java
+index 14b43043bb..884c2153c9 100644
+--- a/server/src/test/java/io/crate/expression/scalar/HasDatabasePrivilegeFunctionTest.java
++++ b/server/src/test/java/io/crate/expression/scalar/HasDatabasePrivilegeFunctionTest.java
+@@ -65,6 +65,12 @@ public class HasDatabasePrivilegeFunctionTest extends ScalarTestCase {
+             List.of(Role.CRATE_USER, TEST_USER, TEST_USER_WITH_CREATE));
+     }
+ 
++    @Test
++    public void test_function_registered_under_pg_catalog() {
++        sqlExpressions = new SqlExpressions(tableSources, null, Role.CRATE_USER);
++        assertEvaluate("pg_catalog.has_database_privilege('crate', 'crate', 'CONNECT')", true);
++    }
++
+     @Test
+     public void test_no_user_compile_gets_new_instance() {
+         assertCompileAsSuperUser("has_database_privilege(name, 'CONNECT')", isNotSameInstance());
+diff --git a/server/src/test/java/io/crate/expression/scalar/HasSchemaPrivilegeFunctionTest.java b/server/src/test/java/io/crate/expression/scalar/HasSchemaPrivilegeFunctionTest.java
+index a09add86b7..96246ff15b 100644
+--- a/server/src/test/java/io/crate/expression/scalar/HasSchemaPrivilegeFunctionTest.java
++++ b/server/src/test/java/io/crate/expression/scalar/HasSchemaPrivilegeFunctionTest.java
+@@ -61,6 +61,12 @@ public class HasSchemaPrivilegeFunctionTest extends ScalarTestCase {
+             tableSources, null, randomFrom(TEST_USER_WITH_AL_ON_CLUSTER, TEST_USER_WITH_DQL_ON_SYS, Role.CRATE_USER), List.of(TEST_USER));
+     }
+ 
++    @Test
++    public void test_function_registered_under_pg_catalog() {
++        sqlExpressions = new SqlExpressions(tableSources, null, Role.CRATE_USER);
++        assertEvaluate("pg_catalog.has_schema_privilege('crate', 'sys', 'USAGE')", true);
++    }
++
+     @Test
+     public void test_no_user_compile_gets_new_instance() {
+         assertCompileAsSuperUser("has_schema_privilege(name, 'USAGE')", isNotSameInstance());

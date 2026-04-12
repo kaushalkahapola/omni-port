@@ -1,0 +1,256 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "0eb245b8c752ffaaa5a11ae1d02bfdd96298670f",
+  "backport_commit": "55aaacf8795c18ec41f12e7428155fbd10a179d8",
+  "description": "master \u2192 5.6",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 1.45,
+      "error": null,
+      "java_hunks": 4,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.912,
+          "start_line": 30,
+          "end_line": 38,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 41,
+          "end_line": 47,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java",
+          "method_used": "fuzzy",
+          "confidence": 0.943,
+          "start_line": 28,
+          "end_line": 36,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 40,
+          "end_line": 46,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.22,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies the registration of two functions to be under the 'pg_catalog' schema by changing the function name constants to use a new schema prefix. The changes are localized and involve minor structural adjustments (changing string constants to FunctionName objects with schema info). The localization evidence shows that the main code changes were found via 'fuzzy' matching with high confidence (0.91 and 0.94), indicating some formatting or minor structural drift but no deep refactoring or redesign. The test additions are straightforward and do not add complexity. Overall, the patch is more than a trivial string replacement but does not involve deep structural or API changes, fitting the TYPE_II classification.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 7.4,
+      "error": null,
+      "adapted_count": 2
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 2,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java",
+          "old_string": "\nimport io.crate.Constants;\nimport io.crate.common.FourFunction;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.role.Permission;\nimport io.crate.role.Privilege;\nimport io.crate.role.Role;\nimport io.crate.role.Roles;",
+          "new_string": "\nimport io.crate.Constants;\nimport io.crate.common.FourFunction;\nimport io.crate.metadata.FunctionName;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.metadata.pgcatalog.PgCatalogSchemaInfo;\nimport io.crate.role.Permission;\nimport io.crate.role.Privilege;\nimport io.crate.role.Role;\nimport io.crate.role.Roles;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java",
+          "old_string": "import org.jetbrains.annotations.Nullable;\n\nimport io.crate.common.FourFunction;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.metadata.pgcatalog.PgCatalogTableDefinitions;\nimport io.crate.role.Permission;\nimport io.crate.role.Role;",
+          "new_string": "import org.jetbrains.annotations.Nullable;\n\nimport io.crate.common.FourFunction;\nimport io.crate.metadata.FunctionName;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.metadata.pgcatalog.PgCatalogSchemaInfo;\nimport io.crate.metadata.pgcatalog.PgCatalogTableDefinitions;\nimport io.crate.role.Permission;\nimport io.crate.role.Role;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.18,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasDatabasePrivilegeFunction.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/scalar/HasSchemaPrivilegeFunction.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 2
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest.xml"
+        ],
+        "target_classes": [
+          "HasDatabasePrivilegeFunctionTest",
+          "HasSchemaPrivilegeFunctionTest"
+        ],
+        "test_cases": {
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_throws_error_when_invalid_privilege": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_throws_error_when_user_is_not_found": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_create_privilege": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_no_privilege_for_db_other_than_crate": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_throws_error_when_user_is_not_super_user_checking_for_other_user": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_function_registered_under_pg_catalog": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_throws_error_when_user_is_not_super_user_checking_for_other_user_for_compiled": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_at_least_one_arg_is_null_returns_null": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_no_user_compile_gets_new_instance": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_same_results_for_name_and_oid": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_no_privilege_other_than_connect": "passed",
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_user_is_literal_compile_gets_new_instance": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_throws_error_when_user_is_not_found": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_no_user_compile_gets_new_instance": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_user_without_permission_doesnt_have_privilege_for_regular_schema": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_same_results_for_name_and_oid": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_function_registered_under_pg_catalog": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_throws_error_when_invalid_privilege": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_throws_error_when_user_without_related_privileges_is_checking_for_other_user": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_at_least_one_arg_is_null_returns_null": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_throws_error_when_user_without_related_privileges_is_checking_for_other_user_for_compiled": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_user_without_permission_has_USAGE_but_not_CREATE_privilege_for_public_schemas": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_user_is_literal_compile_gets_new_instance": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_user_with_DQL_permission_has_USAGE_but_not_CREATE_privilege_for_regular_schema": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_user_with_DDL_permission_has_CREATE_but_not_USAGE_privilege_for_regular_schema": "passed"
+        },
+        "classes": {
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest": "passed",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest": "passed"
+        },
+        "summary": {
+          "passed": 25,
+          "failed": 0,
+          "skipped": 0,
+          "total": 25
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_function_registered_under_pg_catalog",
+          "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_function_registered_under_pg_catalog"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 25,
+        "patched_total": 25,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 7,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 25
+    },
+    "java_production_hunks": 4,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      1,
+      3,
+      0,
+      2
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 2,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 2595,
+    "target_patch_bytes": 5997,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.expression.scalar.HasDatabasePrivilegeFunctionTest#test_function_registered_under_pg_catalog",
+        "io.crate.expression.scalar.HasSchemaPrivilegeFunctionTest#test_function_registered_under_pg_catalog"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 25,
+      "patched_total": 25,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 2,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

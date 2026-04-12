@@ -1,0 +1,266 @@
+{
+  "run_timestamp": "2026-04-11T17:00:56.497881",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-V",
+  "original_commit": "734dd070e719f0bac49953fbfb983fe8f19bd1de",
+  "backport_commit": "c5a3eb86ffd964343865e2f48423f850f8f916ad",
+  "description": "main \u2192 8.19",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 10.37,
+      "error": null,
+      "java_hunks": 5,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "method_used": "fuzzy",
+          "confidence": 0.806,
+          "start_line": 18,
+          "end_line": 23,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "method_used": "fuzzy",
+          "confidence": 0.942,
+          "start_line": 39,
+          "end_line": 47,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "method_used": "fuzzy",
+          "confidence": 0.817,
+          "start_line": 61,
+          "end_line": 66,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "method_used": "fuzzy",
+          "confidence": 0.922,
+          "start_line": 126,
+          "end_line": 137,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 338,
+          "end_line": 344,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.37,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.9,
+        "reasoning": "The patch introduces new logic to order shard queries based on node roles, adding new methods and modifying existing ones. It changes data structures (HashMap to LinkedHashMap) and sorting logic, indicating structural changes rather than simple string replacements or formatting. The patch was found mostly via fuzzy matching with high confidence, except one hunk found exactly, supporting the structural change classification. The changes are non-trivial but not a deep refactoring or complete redesign, fitting TYPE_III complexity.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 15.36,
+      "error": null,
+      "adapted_count": 2
+    },
+    "agent5_structural": {
+      "elapsed_s": 96.15,
+      "error": null,
+      "refactored_count": 2
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 4,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "old_string": "import org.elasticsearch.action.search.ShardSearchFailure;\nimport org.elasticsearch.action.support.TransportActions;\nimport org.elasticsearch.cluster.node.DiscoveryNode;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.breaker.CircuitBreakingException;\nimport org.elasticsearch.common.util.Maps;",
+          "new_string": "import org.elasticsearch.action.search.ShardSearchFailure;\nimport org.elasticsearch.action.support.TransportActions;\nimport org.elasticsearch.cluster.node.DiscoveryNode;\nimport org.elasticsearch.cluster.node.DiscoveryNodeRole;\nimport org.elasticsearch.cluster.service.ClusterService;\nimport org.elasticsearch.common.breaker.CircuitBreakingException;\nimport org.elasticsearch.common.util.Maps;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "old_string": "\nimport java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.HashMap;\nimport java.util.HashSet;\nimport java.util.IdentityHashMap;\nimport java.util.Iterator;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Queue;",
+          "new_string": "import java.util.ArrayList;\nimport java.util.Collections;\nimport java.util.Comparator;\nimport java.util.HashMap;\nimport java.util.HashSet;\nimport java.util.IdentityHashMap;\nimport java.util.Iterator;\nimport java.util.LinkedHashMap;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Queue;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "old_string": "abstract class DataNodeRequestSender {\n\n    private final ClusterService clusterService;\n    private final TransportService transportService;\n    private final Executor esqlExecutor;\n    private final CancellableTask rootTask;",
+          "new_string": "abstract class DataNodeRequestSender {\n\n    /**\n     * Query order according to the\n     * <a href=\"https://www.elastic.co/guide/en/elasticsearch/reference/current/node-roles-overview.html\">node roles</a>.\n     */\n    private static final List<String> NODE_QUERY_ORDER = List.of(\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.SEARCH_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_CONTENT_NODE_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_HOT_NODE_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_WARM_NODE_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_COLD_NODE_ROLE.roleName(),\n        org.elasticsearch.cluster.node.DiscoveryNodeRole.DATA_FROZEN_NODE_ROLE.roleName()\n    );\n\n    private final ClusterService clusterService;\n    private final TransportService transportService;\n    private final Executor esqlExecutor;\n    private final CancellableTask rootTask;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "old_string": "                    )\n                )\n            ) {\n                pendingShardIds.addAll(targetShards.shards.keySet());\n                trySendingRequestsForPendingShards(targetShards, computeListener);\n            }\n        }, listener::onFailure));\n    }\n\n    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {\n        changed.set(true);\n        final ActionListener<Void> listener = computeListener.acquireAvoid();",
+          "new_string": "                    )\n                )\n            ) {\n                pendingShardIds.addAll(order(targetShards));\n                trySendingRequestsForPendingShards(targetShards, computeListener);\n            }\n        }, listener::onFailure));\n    }\n\n    private static List<ShardId> order(TargetShards targetShards) {\n        var computedNodeOrder = new HashMap<DiscoveryNode, Integer>();\n        var ordered = new ArrayList<>(targetShards.shards.keySet());\n        ordered.sort(Comparator.comparingInt(shardId -> nodesOrder(targetShards.getShard(shardId).remainingNodes, computedNodeOrder)));\n        return ordered;\n    }\n\n    private static int nodesOrder(List<DiscoveryNode> nodes, Map<DiscoveryNode, Integer> computedNodeOrder) {\n        if (nodes.isEmpty()) {\n            return Integer.MAX_VALUE;\n        }\n        var order = 0;\n        for (var node : nodes) {\n            order = Math.max(order, computedNodeOrder.computeIfAbsent(node, DataNodeRequestSender::nodeOrder));\n        }\n        return order;\n    }\n\n    private static int nodeOrder(DiscoveryNode node) {\n        for (int i = 0; i < NODE_QUERY_ORDER.size(); i++) {\n            if (node.hasRole(NODE_QUERY_ORDER.get(i))) {\n                return i;\n            }\n        }\n        return Integer.MAX_VALUE;\n    }\n\n    private void trySendingRequestsForPendingShards(TargetShards targetShards, ComputeListener computeListener) {\n        changed.set(true);\n        final ActionListener<Void> listener = computeListener.acquireAvoid();",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.07,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/plugin/DataNodeRequestSender.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 4
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/omni-port/repos/elasticsearch/x-pack/plugin/esql/build/test-results/test/TEST-org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryMultipleMovedShards": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testDoesNotRetryMovedShardIndefinitely": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testDoNotRetryOnRequestLevelFailure": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testNonFatalFailedOnAllNodes": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirst": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testOnePass": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryUnassignedShardWithPartialResults": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryButFail": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testEmpty": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testSkipRemovesPriorNonFatalErrors": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testLimitConcurrentNodes": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirstWhenIlmMovesShard": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testAllowPartialResults": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testSkipNodes": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryOnlyMovedShards": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryUnassignedShardWithoutPartialResults": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testDoNotRetryCircuitBreakerException": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testNonFatalErrorIsRetriedOnAnotherShard": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryThenSuccess": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testMissingShards": "passed",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testRetryMovedShard": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests": "passed"
+        },
+        "summary": {
+          "passed": 21,
+          "failed": 0,
+          "skipped": 0,
+          "total": 21
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirst",
+          "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirstWhenIlmMovesShard"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 21,
+        "patched_total": 21,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 12,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 21
+    },
+    "java_production_hunks": 5,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      4,
+      0,
+      1,
+      2,
+      3
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 4,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 4728,
+    "target_patch_bytes": 11789,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirst",
+        "org.elasticsearch.xpack.esql.plugin.DataNodeRequestSenderTests#testQueryHotShardsFirstWhenIlmMovesShard"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 21,
+      "patched_total": 21,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 2,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

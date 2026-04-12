@@ -24,6 +24,9 @@ Usage:
   # Skip validation (run agents 1-6 only, same as v2)
   python run_full_pipeline_shadow_v3.py --skip-validation
 
+  # Force re-run even if results folder already exists
+  python run_full_pipeline_shadow_v3.py --force
+
 For each patch, creates a folder under tests/shadow_run_results_v3/<project>/<TYPE>_<sha>/ with:
   mainline.patch    — original commit diff (what we're backporting FROM)
   target.patch      — actual backport commit (ground truth)
@@ -60,7 +63,9 @@ from src.agents.agent3_fastapply import fast_apply_agent
 from src.agents.agent4_namespace import namespace_adapter_agent
 from src.agents.agent5_structural import structural_refactor_agent
 from src.agents.agent6_synthesizer import hunk_synthesizer_agent
-from src.agents.agent7_validator import run_validation, run_phase0_baseline
+from src.agents.agent7_validator import run_validation, run_phase0_baseline, _apply_synthesized_hunks
+from src.agents.agent8_syntax_repair import syntax_repair_agent
+from src.core.graph import build_validator_fallback_graph
 from src.tools.notification_service import TelegramNotifier
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -105,7 +110,7 @@ def get_patches_from_config(
             if type_filter and patch.get("type") != type_filter:
                 continue
             original_commit = patch.get("original_commit", "")
-            if commit_filter and original_commit != commit_filter:
+            if commit_filter and not original_commit.startswith(commit_filter):
                 continue
             patches.append({
                 "repo": repo_name,
@@ -157,7 +162,7 @@ def get_patches_from_csv(
                 continue
             if type_filter and patch_type != type_filter:
                 continue
-            if commit_filter and original_commit != commit_filter:
+            if commit_filter and not original_commit.startswith(commit_filter):
                 continue
 
             rel_path = REPO_PATH_MAP.get(project)
@@ -563,6 +568,7 @@ def process_patch(
     item: dict[str, Any],
     run_ts: str,
     skip_validation: bool = False,
+    force: bool = False,
 ) -> None:
     patch_type = item["type"]
     original_commit = item["original_commit"]
@@ -572,6 +578,13 @@ def process_patch(
     description = item.get("description", "")
 
     out_dir = OUTPUT_DIR / repo_name / f"{patch_type}_{original_commit[:8]}"
+
+    # Skip if results.json already exists in out_dir, unless --force is used
+    results_file = out_dir / "results.json"
+    if results_file.exists() and not force:
+        print(f"\n  [pipeline] Skipping {patch_type} | repo={repo_name} | commit={original_commit[:12]} (already processed)")
+        return
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*64}")
@@ -661,6 +674,14 @@ def process_patch(
         "validation_failure_category": "",
         "validation_retry_files": [],
         "validation_results": {},
+        # Agent 8 — Syntax Repair
+        "syntax_repair_status": "skipped",
+        "syntax_repair_attempts": 0,
+        "syntax_repair_log": [],
+        # Agent 9 — Fallback
+        "fallback_status": "not_run",
+        "fallback_attempts": 0,
+        "hunk_descriptions": [],
         "tokens_used": 0,
         "wall_clock_time": 0.0,
         "status": "started",
@@ -755,45 +776,160 @@ def process_patch(
     results["agents"]["agent6_synthesizer"]["synthesis_status"] = state.get("synthesis_status", "")
     results["agents"]["agent6_synthesizer"]["synthesized_hunks"] = make_serializable(synthesized)
 
-    # ── 6. Capture generated diff (before Agent 7 restores on failure) ──────────
-    # Agent 3's fast-apply hunks are already on disk at this point.
-    # Agent 7 may call restore_repo_state() on build/test failure, wiping the diff.
-    # Capture now so generated.patch always reflects what the agents produced.
+    # ── Fix E: per-file atomic apply ─────────────────────────────────────────
+    # If any hunk in a file failed synthesis, roll back ALL changes to that file
+    # so the build does not see a half-migrated state that obscures the real error.
+    failed_hunks_state = state.get("failed_hunks", [])
+    if failed_hunks_state:
+        failed_files = {
+            (h.get("file_path") or h.get("target_file") or "").split("/")[-1]: (
+                h.get("file_path") or h.get("target_file") or ""
+            )
+            for h in failed_hunks_state
+        }
+        # Identify files that also have SUCCESSFUL synthesized hunks — those must be
+        # rolled back since they are now partial.
+        affected_files = set()
+        for fp_name, fp in failed_files.items():
+            if fp:
+                affected_files.add(fp)
+        if affected_files:
+            for fp in sorted(affected_files):
+                if fp:
+                    r = subprocess.run(
+                        ["git", "-C", repo_path, "checkout", "HEAD", "--", fp],
+                        capture_output=True, text=True,
+                    )
+                    if r.returncode == 0:
+                        print(f"  [pipeline] Fix E: rolled back partial changes to {fp}")
+                    else:
+                        print(f"  [pipeline] Fix E: could not roll back {fp}: {r.stderr[:200]}")
+            # Remove synthesized hunks for affected files from state so agent7 doesn't try to re-apply.
+            synthesized = [
+                h for h in synthesized
+                if (h.get("file_path") or "") not in affected_files
+            ]
+            state["synthesized_hunks"] = synthesized
+
+    # ── 6.5. Agent 8: Syntax Repair (in-memory, must run BEFORE pre-apply) ──────
+    # Applies synthesized_hunks to in-memory copies of each affected file and
+    # calls the Java microservice parse-check endpoint. If syntax errors are
+    # found, an LLM repairs the offending new_string(s). Must run here (before
+    # hunks are written to disk) so it reads the unmodified disk state.
+
+    state = run_agent("agent8_syntax_repair", syntax_repair_agent, state, results["agents"])
+    synthesized = state.get("synthesized_hunks", [])
+    results["agents"]["agent8_syntax_repair"].update({
+        "syntax_repair_status": state.get("syntax_repair_status", ""),
+        "syntax_repair_attempts": state.get("syntax_repair_attempts", 0),
+        "syntax_repair_log": state.get("syntax_repair_log", []),
+        "synthesized_count_after_repair": len(synthesized),
+    })
+
+    # ── 7. Apply synthesized hunks to disk, then capture the diff ────────────────
+    # Only pre-apply if Agent 8 did NOT fail. If syntax repair failed, the hunks
+    # are still broken — writing them to disk would give the build garbage input.
+    # The graph will route to fallback_agent instead of validator in that case.
+    syntax_ok = state.get("syntax_repair_status", "skipped") != "failed"
+    if synthesized and syntax_ok:
+        pre_apply_result = _apply_synthesized_hunks(repo_path, synthesized)
+        state["synthesized_hunks_pre_applied"] = True
+        if not pre_apply_result["success"]:
+            print(f"  [pipeline] WARNING: pre-apply of synthesized hunks had errors: {pre_apply_result['output'][:200]}")
+    elif synthesized and not syntax_ok:
+        print("  [pipeline] Syntax repair FAILED — skipping pre-apply, routing to fallback via graph")
     generated_patch = git_diff(repo_path)
     (out_dir / "generated.patch").write_text(generated_patch, encoding="utf-8")
     print(f"\n  generated.patch written ({len(generated_patch)} bytes)")
 
-    # ── 7. Run Agent 7 (Validation) ──────────────────────────────────────────
+    # ── 8. Validator + fallback cycle via graph ───────────────────────────────
+    # build_validator_fallback_graph() wires:
+    #   START → validator → [fallback_agent → syntax_repair → validator]* → END
+    #
+    # When Agent 8 already failed above, the graph is invoked with
+    # syntax_repair_status="failed" so the first node (validator) is skipped and
+    # control goes directly to fallback_agent — matching the main graph routing.
+    # The graph handles up to 2 fallback rounds via state["fallback_attempts"].
 
     if not skip_validation:
-        state = run_agent("agent7_validator", run_validation, state, results["agents"])
+        val_fb_graph = build_validator_fallback_graph()
+        # build_validator_fallback_graph() uses a conditional edge from START:
+        #   syntax_repair_status == "failed"  → fallback_agent  (no wasted build)
+        #   otherwise                         → validator
+        # The state["syntax_repair_status"] set by the Agent 8 run above drives
+        # this decision automatically — no extra wiring needed here.
 
+        print("\n  [pipeline] Starting validator + fallback graph (agents 7/8/9)...")
+        _validator_run_count = 0
+
+        for chunk in val_fb_graph.stream(state):
+            for node_name, node_output in chunk.items():
+                # Merge node output into accumulated state.
+                state = {**state, **node_output}
+
+                if node_name == "validator":
+                    _validator_run_count += 1
+                    _attempt = state.get("validation_attempts", _validator_run_count)
+                    label = "agent7_validator" if _validator_run_count == 1 else f"agent7_validator_retry{_validator_run_count - 1}"
+                    val_passed = state.get("validation_passed", False)
+                    val_cat = state.get("validation_failure_category", "")
+                    val_ctx = state.get("validation_error_context", "")
+                    val_res = state.get("validation_results", {})
+                    results["agents"][label] = {
+                        "validation_passed": val_passed,
+                        "validation_failure_category": val_cat,
+                        "validation_error_context": val_ctx[:500] if val_ctx else "",
+                        "validation_attempts": _attempt,
+                        "retry_files": state.get("validation_retry_files", []),
+                        "build_success": (val_res.get("build") or {}).get("success"),
+                        "build_mode": (val_res.get("build") or {}).get("mode"),
+                        "test_success": (val_res.get("tests") or {}).get("success"),
+                        "test_mode": (val_res.get("tests") or {}).get("mode"),
+                        "test_state": val_res.get("tests", {}).get("test_state"),
+                        "test_state_transition": (val_res.get("tests") or {}).get("state_transition"),
+                        "compile_errors": (val_res.get("build") or {}).get("compile_errors", []),
+                    }
+                    status_str = "PASSED ✓" if val_passed else f"FAILED — {val_cat}"
+                    print(f"    [pipeline] {label}: {status_str}")
+                    if val_ctx:
+                        print(f"      {val_ctx[:200]}")
+                    transition = (val_res.get("tests") or {}).get("state_transition") or {}
+                    if transition:
+                        f2p = transition.get("fail_to_pass", [])
+                        p2f = transition.get("pass_to_fail", [])
+                        newly = transition.get("newly_passing", [])
+                        print(f"      Test transition: fail→pass={len(f2p)}, pass→fail={len(p2f)}, newly_passing={len(newly)}")
+
+                elif node_name == "fallback_agent":
+                    fb_attempt = state.get("fallback_attempts", 1)
+                    label = f"agent9_fallback_{fb_attempt}"
+                    results["agents"][label] = {
+                        "fallback_status": state.get("fallback_status", ""),
+                        "fallback_attempts": fb_attempt,
+                        "synthesized_count": len(state.get("synthesized_hunks", [])),
+                        "hunk_descriptions": make_serializable(state.get("hunk_descriptions", [])),
+                    }
+                    print(f"    [pipeline] {label}: status={state.get('fallback_status', '?')}, "
+                          f"hunks={len(state.get('synthesized_hunks', []))}")
+
+                elif node_name == "syntax_repair":
+                    # syntax_repair inside the fallback loop
+                    fb_attempt = state.get("fallback_attempts", 1)
+                    label = f"agent8_syntax_repair_fallback_{fb_attempt}"
+                    results["agents"][label] = {
+                        "syntax_repair_status": state.get("syntax_repair_status", ""),
+                        "syntax_repair_attempts": state.get("syntax_repair_attempts", 0),
+                        "syntax_repair_log": state.get("syntax_repair_log", []),
+                    }
+                    print(f"    [pipeline] {label}: {state.get('syntax_repair_status', '?')}")
+
+        # Use the final validator result for the summary (last validator run).
         val_passed = state.get("validation_passed", False)
         val_cat = state.get("validation_failure_category", "")
         val_ctx = state.get("validation_error_context", "")
         val_res = state.get("validation_results", {})
-
-        results["agents"]["agent7_validator"].update({
-            "validation_passed": val_passed,
-            "validation_failure_category": val_cat,
-            "validation_error_context": val_ctx[:500] if val_ctx else "",
-            "validation_attempts": state.get("validation_attempts", 0),
-            "retry_files": state.get("validation_retry_files", []),
-            "build_success": (val_res.get("build") or {}).get("success"),
-            "build_mode": (val_res.get("build") or {}).get("mode"),
-            "test_success": (val_res.get("tests") or {}).get("success"),
-            "test_mode": (val_res.get("tests") or {}).get("mode"),
-            "test_state": val_res.get("tests", {}).get("test_state"),
-            "test_state_transition": (val_res.get("tests") or {}).get("state_transition"),
-            "compile_errors": (val_res.get("build") or {}).get("compile_errors", []),
-        })
-
-        print(f"\n  Validation: {'PASSED ✓' if val_passed else f'FAILED — {val_cat}'}")
-        if val_ctx:
-            print(f"  {val_ctx[:200]}")
-
-        # Print test transition if available
         transition = (val_res.get("tests") or {}).get("state_transition") or {}
+        print(f"\n  Final validation: {'PASSED ✓' if val_passed else f'FAILED — {val_cat}'}")
         if transition:
             f2p = transition.get("fail_to_pass", [])
             p2f = transition.get("pass_to_fail", [])
@@ -806,6 +942,9 @@ def process_patch(
 
     # ── 8. Build summary ──────────────────────────────────────────────────────
 
+    # Re-read synthesized from final state — fallback agent may have replaced hunks.
+    synthesized = state.get("synthesized_hunks", [])
+
     val_res = state.get("validation_results", {})
     transition = (val_res.get("tests") or {}).get("state_transition") or {}
 
@@ -816,6 +955,10 @@ def process_patch(
         "applied_on_disk_ag3": len(state.get("applied_hunks", [])),
         "synthesized_count": len(synthesized),
         "failed_hunks_total": len(state.get("failed_hunks", [])),
+        # Agent 8 / 9 outcomes
+        "syntax_repair_status": state.get("syntax_repair_status", "skipped"),
+        "fallback_status": state.get("fallback_status", "not_run"),
+        "fallback_attempts": state.get("fallback_attempts", 0),
         "retry_contexts": make_serializable(state.get("retry_contexts", [])),
         "failed_hunks": make_serializable(state.get("failed_hunks", [])),
         "generated_patch_bytes": len(generated_patch),
@@ -856,6 +999,11 @@ def process_patch(
     print(f"  │  Synthesized (Agent 6): {s['synthesized_count']}")
     print(f"  │  Failed total         : {s['failed_hunks_total']}")
     print(f"  │  Synthesis status     : {s['synthesis_status']}")
+    print(f"  │  Syntax repair (Ag 8) : {s.get('syntax_repair_status', 'skipped')}")
+    fb_status = s.get('fallback_status', 'not_run')
+    fb_attempts = s.get('fallback_attempts', 0)
+    if fb_attempts > 0:
+        print(f"  │  Fallback    (Ag 9)  : {fb_status} ({fb_attempts} attempt(s))")
     if not skip_validation:
         v_label = "PASSED ✓" if s.get("validation_passed") else f"FAILED ({s.get('validation_failure_category', '?')})"
         print(f"  │  Validation           : {v_label}")
@@ -883,6 +1031,7 @@ Examples:
   python run_full_pipeline_shadow_v3.py --count 3
   python run_full_pipeline_shadow_v3.py --project elasticsearch --commit abc123def456
   python run_full_pipeline_shadow_v3.py --skip-validation
+  python run_full_pipeline_shadow_v3.py --force
         """,
     )
     parser.add_argument("--mode", choices=["yaml", "dataset"], default="yaml",
@@ -904,6 +1053,8 @@ Examples:
                         help="Limit to N patches")
     parser.add_argument("--skip-validation", action="store_true",
                         help="Run agents 1-6 only (no build/test)")
+    parser.add_argument("--force", action="store_true",
+                        help="Force re-run even if results.json exists")
     parser.add_argument("--no-notifications", action="store_true",
                         help="Disable Telegram notifications")
 
@@ -957,7 +1108,7 @@ Examples:
             continue
         print(f"\n[{i}/{len(patches)}]", end="")
         try:
-            process_patch(item, run_ts, skip_validation=args.skip_validation)
+            process_patch(item, run_ts, skip_validation=args.skip_validation, force=args.force)
         except Exception:
             print(f"\n  FATAL ERROR for {item['type']}:")
             traceback.print_exc()

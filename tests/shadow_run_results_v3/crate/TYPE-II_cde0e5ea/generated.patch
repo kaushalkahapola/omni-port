@@ -1,0 +1,25 @@
+diff --git a/server/src/main/java/io/crate/types/NumericType.java b/server/src/main/java/io/crate/types/NumericType.java
+index a257c2f43f..21d8b9ab0c 100644
+--- a/server/src/main/java/io/crate/types/NumericType.java
++++ b/server/src/main/java/io/crate/types/NumericType.java
+@@ -75,10 +75,10 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
+             if (precision == null) {
+                 throw new IllegalArgumentException("If scale is set for NUMERIC, precision must be set too");
+             }
+-            if (scale >= precision) {
++            if (scale > precision) {
+                 throw new IllegalArgumentException(String.format(
+                     Locale.ENGLISH,
+-                    "Scale of numeric must be less than the precision. NUMERIC(%d, %d) is unsupported.",
++                    "Scale of numeric must be less or equal the precision. NUMERIC(%d, %d) is unsupported.",
+                     precision,
+                     scale
+                 ));
+@@ -190,7 +190,6 @@ public class NumericType extends DataType<BigDecimal> implements Streamer<BigDec
+         return new ColumnType<>(getName(), List.of(precision, scale));
+     }
+ 
+-
+     /**
+      * Returns the size of {@link BigDecimal} in bytes
+      */

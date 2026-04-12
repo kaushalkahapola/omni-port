@@ -1,0 +1,17 @@
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+index de67516753..bb4467678c 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+@@ -175,6 +175,12 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+         }
+         int cmpVal = cmpNumber.intValue();
+ 
++        DataType<?> innerType = ((ArrayType<?>) arrayRef.valueType()).innerType();
++        if (innerType instanceof ArrayType<?>) {
++            // Cannot utilize `_array_length_` index for arrays in tables created before 5.9
++            return null;
++        }
++
+         // For numeric types all values are stored, so the doc-value-count represents the number of not-null values
+         // Only unique values are stored for IP and TEXT types, so the doc-value-count represents the number of unique not-null  values
+         // [a, a, a]

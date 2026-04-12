@@ -1,0 +1,52 @@
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java
+index d10fefd0e7..b5bafe5964 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java
+@@ -50,7 +50,7 @@ class ArrayLowerFunction extends Scalar<Integer, Object> {
+                     DataTypes.INTEGER.getTypeSignature(),
+                     DataTypes.INTEGER.getTypeSignature()
+                 ).withTypeVariableConstraints(typeVariable("E"))
+-                .withFeature(Feature.NULLABLE),
++                .withFeature(Feature.DETERMINISTIC),
+             ArrayLowerFunction::new
+         );
+     }
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
+index f5e89e86ad..d2aaa8c6b4 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
+@@ -51,7 +51,7 @@ public class ArrayMinFunction<T> extends Scalar<T, List<T>> {
+                     new ArrayType(DataTypes.NUMERIC).getTypeSignature(),
+                     DataTypes.NUMERIC.getTypeSignature()
+                 )
+-                .withFeature(Feature.NULLABLE),
++                .withFeature(Feature.DETERMINISTIC),
+             ArrayMinFunction::new
+         );
+ 
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java b/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java
+index 9f26eb7ad7..09527d9db0 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java
+@@ -50,7 +50,7 @@ public class ArraySumFunction<T extends Number, R extends Number> extends Scalar
+             NAME,
+             new ArrayType<>(elementType).getTypeSignature(),
+             returnType.getTypeSignature()
+-        ).withFeature(Feature.NULLABLE);
++        ).withFeature(Feature.DETERMINISTIC);
+     }
+ 
+     public static void register(Functions.Builder builder) {
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+index 7d555b087c..de67516753 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+@@ -73,7 +73,7 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+                         DataTypes.INTEGER.getTypeSignature(),
+                         DataTypes.INTEGER.getTypeSignature()
+                     ).withTypeVariableConstraints(typeVariable("E"))
+-                    .withFeature(Feature.NULLABLE),
++                    .withFeature(Feature.DETERMINISTIC),
+                 ArrayUpperFunction::new
+             );
+         }

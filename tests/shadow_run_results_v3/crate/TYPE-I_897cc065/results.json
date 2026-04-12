@@ -1,0 +1,247 @@
+{
+  "run_timestamp": "2026-04-10T16:08:57.247497",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "897cc0651cf51d8c520fba0cbadcfa4a5009bc07",
+  "backport_commit": "a735d95e81af2d67af2a23ac3279b0d4b403f266",
+  "description": "master \u2192 6.0",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 65,
+          "end_line": 70,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 75,
+          "end_line": 81,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.72,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch consists of exact string replacements and additions that align closely with the target branch code, as evidenced by the localization showing 'git_exact' matches with high confidence (1.00) for the main code changes. The changes are straightforward: adding a new method, modifying a condition to use this method, and adding tests and documentation. There are no structural or API-level refactorings, nor complex merges or redesigns. The patch is a typical bug fix with minor additions, fitting the TYPE_I classification for trivial backport. The confidence is slightly below 1.0 due to the added test code and documentation, but overall the patch is simple and direct.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent7_validator": {
+      "elapsed_s": 318.2,
+      "error": null,
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.planner.operators.EquiJoinDetectorTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest.xml"
+        ],
+        "target_classes": [
+          "io.crate.planner.operators.EquiJoinDetectorTest",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest"
+        ],
+        "test_cases": {
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_condition_inside_cast": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerContainingEqCondition": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_case_expression_with_nested_equality": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnNotWrappingEq": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerContainingEqAndAnyCondition": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerWithoutAnyEqCondition": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_expression_followed_by_case_expression": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_if_expression_with_nested_equality": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerContainingEqOrAnyCondition": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerWithEqAndScalarOnMultipleRelations": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_not_hash_join_possible_if_join_condition_refers_to_columns_from_a_single_relation": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_and_many_relations_in_boolean_join_condition_hash_join_not_possible": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_detect_pure_equi_join": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnEqWithoutRelationFieldsOnBothSides": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_or_in_boolean_join_condition_hash_join_possible": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_inequality_in_boolean_join_condition_hash_join_possible": "passed",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerWithEqAndScalarOnOneRelation": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_filter_on_smaller_side": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_non_equi_joins": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_filter_on_larger_side": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_complex_equi_join_conditions_are_not_supported": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_if_source_is_not_a_collect": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_lookup_join_lhs_is_larger": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_no_stats": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_lookup_join_rhs_is_larger": "passed"
+        },
+        "classes": {
+          "io.crate.planner.operators.EquiJoinDetectorTest": "passed",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest": "passed"
+        },
+        "summary": {
+          "passed": 25,
+          "failed": 0,
+          "skipped": 0,
+          "total": 25
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnEqWithoutRelationFieldsOnBothSides",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerContainingEqOrAnyCondition",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerWithEqAndScalarOnMultipleRelations",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerWithoutAnyEqCondition",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnNotWrappingEq",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerContainingEqAndAnyCondition",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerContainingEqCondition",
+          "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerWithEqAndScalarOnOneRelation",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_case_expression_with_nested_equality",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_detect_pure_equi_join",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_and_many_relations_in_boolean_join_condition_hash_join_not_possible",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_condition_inside_cast",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_expression_followed_by_case_expression",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_if_expression_with_nested_equality",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_inequality_in_boolean_join_condition_hash_join_possible",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_not_hash_join_possible_if_join_condition_refers_to_columns_from_a_single_relation",
+          "io.crate.planner.operators.EquiJoinDetectorTest#test_or_in_boolean_join_condition_hash_join_possible",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_complex_equi_join_conditions_are_not_supported",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_filter_on_larger_side",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_filter_on_smaller_side",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_lookup_join_lhs_is_larger",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_lookup_join_rhs_is_larger",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_if_source_is_not_a_collect",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_no_stats",
+          "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_non_equi_joins"
+        ],
+        "baseline_total": 0,
+        "patched_total": 25,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 8,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1766,
+    "target_patch_bytes": 6716,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnEqWithoutRelationFieldsOnBothSides",
+        "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerContainingEqOrAnyCondition",
+        "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerWithEqAndScalarOnMultipleRelations",
+        "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnInnerWithoutAnyEqCondition",
+        "io.crate.planner.operators.EquiJoinDetectorTest#testNotPossibleOnNotWrappingEq",
+        "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerContainingEqAndAnyCondition",
+        "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerContainingEqCondition",
+        "io.crate.planner.operators.EquiJoinDetectorTest#testPossibleOnInnerWithEqAndScalarOnOneRelation",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_case_expression_with_nested_equality",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_detect_pure_equi_join",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_and_many_relations_in_boolean_join_condition_hash_join_not_possible",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_condition_inside_cast",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_equality_expression_followed_by_case_expression",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_if_expression_with_nested_equality",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_inequality_in_boolean_join_condition_hash_join_possible",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_not_hash_join_possible_if_join_condition_refers_to_columns_from_a_single_relation",
+        "io.crate.planner.operators.EquiJoinDetectorTest#test_or_in_boolean_join_condition_hash_join_possible",
+        "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_complex_equi_join_conditions_are_not_supported",
+        "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_filter_on_larger_side",
+        "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_filter_on_smaller_side",
+        "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_lookup_join_lhs_is_larger",
+        "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_lookup_join_rhs_is_larger",
+        "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_if_source_is_not_a_collect",
+        "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_no_stats",
+        "io.crate.planner.optimizer.rule.EquiJoinToLookupJoinTest#test_skip_non_equi_joins"
+      ],
+      "baseline_total": 0,
+      "patched_total": 25,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 25,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

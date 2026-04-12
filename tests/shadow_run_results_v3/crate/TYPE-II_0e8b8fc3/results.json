@@ -1,0 +1,206 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "0e8b8fc34bc388e70b9f48e14cd256c54a15d37c",
+  "backport_commit": "cf9a4b14d7cbc6cd14d4423b41cffaf33be549e2",
+  "description": "master \u2192 5.9",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.03,
+      "error": null,
+      "java_hunks": 3,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 275,
+          "end_line": 281,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/metadata/GeneratedReference.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 232,
+          "end_line": 238,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 247,
+          "end_line": 253,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.9,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "All code changes are exact matches to existing code locations in the target branch, found via 'git_exact' with high confidence (1.00). The modifications are straightforward bug fixes involving adding a condition to filter out dropped generated columns and correcting the isDropped() method to delegate properly. The test addition is a standard unit test to verify the fix. There are no structural or API changes, no renames or refactorings. The patch is a trivial backport of a bug fix, fitting TYPE_I classification.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 3,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/execution/ddl/tables/MappingUtil.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/metadata/GeneratedReference.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.execution.ddl.tables.DropColumnTaskTest.xml"
+        ],
+        "target_classes": [
+          "DropColumnTaskTest"
+        ],
+        "test_cases": {
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_can_drop_subcolumn": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_drop_column_with_table_level_check_constraint": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_is_no_op_if_columns_exist": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_drop_column_with_check_constraint": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_can_drop_subcolumn_and_parent_together": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_can_drop_simple_column": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_cannot_drop_column_used_in_generated_expression": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_drop_subcolumn_with_check_constraint_on_children": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_can_drop_generated_column": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_drop_column_with_check_constraint_from_partitioned_table": "passed",
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_drop_subcolumn_with_check_constraint": "passed"
+        },
+        "classes": {
+          "io.crate.execution.ddl.tables.DropColumnTaskTest": "passed"
+        },
+        "summary": {
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0,
+          "total": 11
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.execution.ddl.tables.DropColumnTaskTest#test_can_drop_generated_column"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 11,
+        "patched_total": 11,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 11
+    },
+    "java_production_hunks": 3,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 3,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 3008,
+    "target_patch_bytes": 5725,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.execution.ddl.tables.DropColumnTaskTest#test_can_drop_generated_column"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 11,
+      "patched_total": 11,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

@@ -1,0 +1,285 @@
+commit 27413adb352fbfcb967c8c6900e8123446232307
+Author: Minsoo Jee <jeeminso@gmail.com>
+Date:   Tue Jul 16 13:47:06 2024 -0400
+
+    Remove STRICTNULL flag from incorrectly marked array functions
+
+diff --git a/docs/appendices/release-notes/5.7.4.rst b/docs/appendices/release-notes/5.7.4.rst
+index 745b449146..2ab28aeceb 100644
+--- a/docs/appendices/release-notes/5.7.4.rst
++++ b/docs/appendices/release-notes/5.7.4.rst
+@@ -55,3 +55,9 @@ Fixes
+ 
+ - Fixed an issue that could lead to ``ANALYZE`` over account the number of
+   documents in a table if shards were relocating.
++
++- Fixed an issue that caused ``WHERE`` clause to fail to filter rows when
++  the clause contained array scalar functions under ``NOT`` operator. The
++  affected scalars include :ref:`scalar-array_min`, :ref:`scalar-array_max`,
++  :ref:`scalar-array_sum`, :ref:`scalar-array_avg`, :ref:`scalar-array_upper`,
++  :ref:`scalar-array_lower` and :ref:`scalar-array_length`.
+diff --git a/docs/appendices/release-notes/5.8.1.rst b/docs/appendices/release-notes/5.8.1.rst
+index 4d02ed77cf..e835d0bbe6 100644
+--- a/docs/appendices/release-notes/5.8.1.rst
++++ b/docs/appendices/release-notes/5.8.1.rst
+@@ -60,3 +60,9 @@ Fixes
+ 
+ - Fixed a regression introduced in 5.8.0 that prevented cluster to become GREEN
+   after a rolling upgrade.
++
++- Fixed an issue that caused ``WHERE`` clause to fail to filter rows when
++  the clause contained array scalar functions under ``NOT`` operator. The
++  affected scalars include :ref:`scalar-array_min`, :ref:`scalar-array_max`,
++  :ref:`scalar-array_sum`, :ref:`scalar-array_avg`, :ref:`scalar-array_upper`,
++  :ref:`scalar-array_lower` and :ref:`scalar-array_length`.
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java
+index 0ea7990202..14d730babe 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayAvgFunction.java
+@@ -29,10 +29,13 @@ import java.util.Objects;
+ 
+ import org.jetbrains.annotations.Nullable;
+ 
++import io.crate.data.Input;
+ import io.crate.expression.scalar.array.ArraySummationFunctions;
+ import io.crate.metadata.FunctionType;
+ import io.crate.metadata.Functions;
++import io.crate.metadata.NodeContext;
+ import io.crate.metadata.Scalar;
++import io.crate.metadata.TransactionContext;
+ import io.crate.metadata.functions.Signature;
+ import io.crate.types.ArrayType;
+ import io.crate.types.DataTypes;
+@@ -91,42 +94,54 @@ public class ArrayAvgFunction {
+             Signature.builder(NAME, FunctionType.SCALAR)
+                 .argumentTypes(new ArrayType<>(DataTypes.NUMERIC).getTypeSignature())
+                 .returnType(DataTypes.NUMERIC.getTypeSignature())
+-                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)
++                .features(Scalar.Feature.DETERMINISTIC)
+                 .build(),
+-            (signature, boundSignature) -> new UnaryScalar<>(
++            (signature, boundSignature) -> new Scalar<>(
+                 signature,
+-                boundSignature,
+-                new ArrayType<>(DataTypes.NUMERIC),
+-                ArrayAvgFunction::avgBigDecimal
+-            )
++                boundSignature
++            ) {
++                @SafeVarargs
++                @Override
++                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {
++                    return avgBigDecimal(new ArrayType<>(DataTypes.NUMERIC).sanitizeValue(args[0].value()));
++                }
++            }
+         );
+ 
+         builder.add(
+             Signature.builder(NAME, FunctionType.SCALAR)
+                 .argumentTypes(new ArrayType<>(DataTypes.FLOAT).getTypeSignature())
+                 .returnType(DataTypes.FLOAT.getTypeSignature())
+-                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)
++                .features(Scalar.Feature.DETERMINISTIC)
+                 .build(),
+-            (signature, boundSignature) -> new UnaryScalar<>(
++            (signature, boundSignature) -> new Scalar<>(
+                 signature,
+-                boundSignature,
+-                new ArrayType<>(DataTypes.FLOAT),
+-                ArrayAvgFunction::avgFloat
+-            )
++                boundSignature
++            ) {
++                @SafeVarargs
++                @Override
++                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {
++                    return avgFloat(new ArrayType<>(DataTypes.FLOAT).sanitizeValue(args[0].value()));
++                }
++            }
+         );
+ 
+         builder.add(
+             Signature.builder(NAME, FunctionType.SCALAR)
+                 .argumentTypes(new ArrayType<>(DataTypes.DOUBLE).getTypeSignature())
+                 .returnType(DataTypes.DOUBLE.getTypeSignature())
+-                .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)
++                .features(Scalar.Feature.DETERMINISTIC)
+                 .build(),
+-            (signature, boundSignature) -> new UnaryScalar<>(
++            (signature, boundSignature) -> new Scalar<>(
+                 signature,
+-                boundSignature,
+-                new ArrayType<>(DataTypes.DOUBLE),
+-                ArrayAvgFunction::avgDouble
+-            )
++                boundSignature
++            ) {
++                @SafeVarargs
++                @Override
++                public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {
++                    return avgDouble(new ArrayType<>(DataTypes.DOUBLE).sanitizeValue(args[0].value()));
++                }
++            }
+         );
+ 
+ 
+@@ -136,14 +151,18 @@ public class ArrayAvgFunction {
+                     Signature.builder(NAME, FunctionType.SCALAR)
+                         .argumentTypes(new ArrayType<>(supportedType).getTypeSignature())
+                         .returnType(DataTypes.NUMERIC.getTypeSignature())
+-                        .features(Scalar.Feature.DETERMINISTIC, Scalar.Feature.STRICTNULL)
++                        .features(Scalar.Feature.DETERMINISTIC)
+                         .build(),
+-                    (signature, boundSignature) -> new UnaryScalar<>(
++                    (signature, boundSignature) -> new Scalar<>(
+                         signature,
+-                        boundSignature,
+-                        new ArrayType<>(supportedType),
+-                        ArrayAvgFunction::avgNumber
+-                    )
++                        boundSignature
++                    ) {
++                        @SafeVarargs
++                        @Override
++                        public final Object evaluate(TransactionContext txnCtx, NodeContext nodeContext, Input<Object>... args) {
++                            return avgNumber(new ArrayType<>(supportedType).sanitizeValue(args[0].value()));
++                        }
++                    }
+                 );
+             }
+         }
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java
+index 2e20216b85..d689f9fd1d 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayLowerFunction.java
+@@ -49,7 +49,7 @@ class ArrayLowerFunction extends Scalar<Integer, Object> {
+                 .argumentTypes(TypeSignature.parse("array(E)"),
+                     DataTypes.INTEGER.getTypeSignature())
+                 .returnType(DataTypes.INTEGER.getTypeSignature())
+-                .features(Feature.DETERMINISTIC, Feature.STRICTNULL)
++                .features(Feature.DETERMINISTIC)
+                 .typeVariableConstraints(typeVariable("E"))
+                 .build(),
+             ArrayLowerFunction::new
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java
+index 61eec8f525..4bfe7207fd 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayMaxFunction.java
+@@ -50,7 +50,7 @@ public class ArrayMaxFunction<T> extends Scalar<T, List<T>> {
+             Signature.builder(NAME, FunctionType.SCALAR)
+                 .argumentTypes(new ArrayType(DataTypes.NUMERIC).getTypeSignature())
+                 .returnType(DataTypes.NUMERIC.getTypeSignature())
+-                .features(Feature.DETERMINISTIC, Feature.STRICTNULL)
++                .features(Feature.DETERMINISTIC)
+                 .build(),
+             ArrayMaxFunction::new
+         );
+@@ -60,7 +60,7 @@ public class ArrayMaxFunction<T> extends Scalar<T, List<T>> {
+                 Signature.builder(NAME, FunctionType.SCALAR)
+                     .argumentTypes(new ArrayType(supportedType).getTypeSignature())
+                     .returnType(supportedType.getTypeSignature())
+-                    .features(Feature.DETERMINISTIC, Feature.STRICTNULL)
++                    .features(Feature.DETERMINISTIC)
+                     .build(),
+                 ArrayMaxFunction::new
+             );
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
+index 881122e83c..8c2be2abdd 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayMinFunction.java
+@@ -50,7 +50,7 @@ public class ArrayMinFunction<T> extends Scalar<T, List<T>> {
+             Signature.builder(NAME, FunctionType.SCALAR)
+                 .argumentTypes(new ArrayType(DataTypes.NUMERIC).getTypeSignature())
+                 .returnType(DataTypes.NUMERIC.getTypeSignature())
+-                .features(Feature.DETERMINISTIC, Feature.STRICTNULL)
++                .features(Feature.DETERMINISTIC)
+                 .build(),
+             ArrayMinFunction::new
+         );
+@@ -60,7 +60,7 @@ public class ArrayMinFunction<T> extends Scalar<T, List<T>> {
+                 Signature.builder(NAME, FunctionType.SCALAR)
+                     .argumentTypes(new ArrayType(supportedType).getTypeSignature())
+                     .returnType(supportedType.getTypeSignature())
+-                    .features(Feature.DETERMINISTIC, Feature.STRICTNULL)
++                    .features(Feature.DETERMINISTIC)
+                     .build(),
+                 ArrayMinFunction::new
+             );
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java b/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java
+index 5277ac8a9a..9f2452e238 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArraySumFunction.java
+@@ -50,7 +50,7 @@ public class ArraySumFunction<T extends Number, R extends Number> extends Scalar
+         return Signature.builder(NAME, FunctionType.SCALAR)
+             .argumentTypes(new ArrayType<>(elementType).getTypeSignature())
+             .returnType(returnType.getTypeSignature())
+-            .features(Feature.DETERMINISTIC, Feature.STRICTNULL)
++            .features(Feature.DETERMINISTIC)
+             .build();
+     }
+ 
+diff --git a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+index 08abe1244b..fc24db3efc 100644
+--- a/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
++++ b/server/src/main/java/io/crate/expression/scalar/ArrayUpperFunction.java
+@@ -73,7 +73,7 @@ public class ArrayUpperFunction extends Scalar<Integer, Object> {
+                                     DataTypes.INTEGER.getTypeSignature())
+                             .returnType(DataTypes.INTEGER.getTypeSignature())
+                             .typeVariableConstraints(typeVariable("E"))
+-                            .features(Feature.DETERMINISTIC, Feature.STRICTNULL)
++                            .features(Feature.DETERMINISTIC)
+                             .build(),
+                     ArrayUpperFunction::new
+             );
+diff --git a/server/src/test/java/io/crate/expression/predicate/NotPredicateTest.java b/server/src/test/java/io/crate/expression/predicate/NotPredicateTest.java
+index af4aedbd03..f95ec2171e 100644
+--- a/server/src/test/java/io/crate/expression/predicate/NotPredicateTest.java
++++ b/server/src/test/java/io/crate/expression/predicate/NotPredicateTest.java
+@@ -120,4 +120,47 @@ public class NotPredicateTest extends ScalarTestCase {
+             }
+         }
+     }
++
++    @Test
++    public void test_neq_on_array_scalars_that_evaluate_non_null_inputs_to_nulls() throws Exception {
++        var listOfNulls = new ArrayList<Integer>();
++        listOfNulls.add(null);
++        listOfNulls.add(null);
++        Object[] values = new Object[] {List.of(), listOfNulls}; // '[]' and [null, null]
++        try (QueryTester tester = new QueryTester.Builder(
++            THREAD_POOL,
++            clusterService,
++            Version.CURRENT,
++            "create table t (xs array(int))"
++        ).indexValues("xs", values).build()) {
++
++            String query = "array_max(xs) != 1";
++            List<Object> result = tester.runQuery("xs", query);
++            Asserts.assertThat(result).isEmpty();
++
++            query = "array_min(xs) != 1";
++            result = tester.runQuery("xs", query);
++            Asserts.assertThat(result).isEmpty();
++
++            query = "array_avg(xs) != 1";
++            result = tester.runQuery("xs", query);
++            Asserts.assertThat(result).isEmpty();
++
++            query = "array_sum(xs) != 1";
++            result = tester.runQuery("xs", query);
++            Asserts.assertThat(result).isEmpty();
++
++            query = "array_length(xs, -1) != 1";
++            result = tester.runQuery("xs", query);
++            Asserts.assertThat(result).isEmpty();
++
++            query = "array_lower(xs, -1) != 1";
++            result = tester.runQuery("xs", query);
++            Asserts.assertThat(result).isEmpty();
++
++            query = "array_lower(xs, -1) != 1";
++            result = tester.runQuery("xs", query);
++            Asserts.assertThat(result).isEmpty();
++        }
++    }
+ }

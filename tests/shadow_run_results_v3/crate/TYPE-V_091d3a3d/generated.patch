@@ -1,0 +1,151 @@
+diff --git a/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java b/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java
+index 8b700cd461..13290b6ad7 100644
+--- a/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java
++++ b/server/src/main/java/io/crate/execution/ddl/tables/GCDanglingArtifactsRequest.java
+@@ -22,19 +22,46 @@
+ package io.crate.execution.ddl.tables;
+ 
+ import java.io.IOException;
++import java.util.List;
+ 
++import org.elasticsearch.Version;
+ import org.elasticsearch.action.support.master.AcknowledgedRequest;
+ import org.elasticsearch.common.io.stream.StreamInput;
++import org.elasticsearch.common.io.stream.StreamOutput;
+ 
+ public class GCDanglingArtifactsRequest extends AcknowledgedRequest<GCDanglingArtifactsRequest> {
+ 
+-    public static final GCDanglingArtifactsRequest INSTANCE = new GCDanglingArtifactsRequest();
++    public static final GCDanglingArtifactsRequest ALL = new GCDanglingArtifactsRequest(List.of());
+ 
+-    private GCDanglingArtifactsRequest() {
++    private final List<String> indexUUIDs;
++
++    /// @param indexUUIDs indexUUIDs to delete. If empty, all dangling indices UUIDs are deleted.
++    public GCDanglingArtifactsRequest(List<String> indexUUIDs) {
+         super();
++        this.indexUUIDs = indexUUIDs;
+     }
+ 
+     public GCDanglingArtifactsRequest(StreamInput in) throws IOException {
+         super(in);
++        Version version = in.getVersion();
++        if (version.after(Version.V_6_0_3) && !version.equals(Version.V_6_1_0)) {
++            this.indexUUIDs = in.readStringList();
++        } else {
++            this.indexUUIDs = List.of();
++        }
++    }
++
++    @Override
++    public void writeTo(StreamOutput out) throws IOException {
++        super.writeTo(out);
++        Version version = out.getVersion();
++        if (version.after(Version.V_6_0_3) && !version.equals(Version.V_6_1_0)) {
++            out.writeStringCollection(indexUUIDs);
++        }
++    }
++
++    /// Dangling indices to delete. Empty = all dangling indices
++    public List<String> indexUUIDs() {
++        return indexUUIDs;
+     }
+ }
+diff --git a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
+index 466ad54e85..12f1f8cf1f 100644
+--- a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
++++ b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
+@@ -92,10 +92,29 @@ public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCD
+                         IndexMetadata::getIndex)
+                     );
+                 }
+-                for (ObjectCursor<IndexMetadata> indexMetadata : metadata.indices().values()) {
+-                    Index index = indexMetadata.value.getIndex();
+-                    if (allTableIndices.contains(index) == false) {
+-                        danglingIndicesToDelete.add(index);
++                if (gcDanglingArtifactsRequest.indexUUIDs().isEmpty()) {
++                    for (ObjectCursor<IndexMetadata> cursor : metadata.indices().values()) {
++                        Index index = cursor.value.getIndex();
++                        RelationMetadata relation = metadata.getRelation(index.getUUID());
++                        if (relation == null) {
++                            if (allTableIndices.contains(index) == false) {
++                                danglingIndicesToDelete.add(index);
++                            }
++                        }
++                    }
++                } else {
++                    for (String indexUUID : gcDanglingArtifactsRequest.indexUUIDs()) {
++                        IndexMetadata indexMetadata = metadata.index(indexUUID);
++                        if (indexMetadata == null) {
++                            continue;
++                        }
++                        RelationMetadata relation = metadata.getRelation(indexUUID);
++                        if (relation == null) {
++                            Index index = indexMetadata.getIndex();
++                            if (allTableIndices.contains(index) == false) {
++                                danglingIndicesToDelete.add(index);
++                            }
++                        }
+                     }
+                 }
+ 
+diff --git a/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java b/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java
+index 637adb3b7b..28751dec36 100644
+--- a/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java
++++ b/server/src/main/java/io/crate/planner/GCDanglingArtifactsPlan.java
+@@ -42,7 +42,7 @@ public final class GCDanglingArtifactsPlan implements Plan {
+                               Row params,
+                               SubQueryResults subQueryResults) {
+         var listener = OneRowActionListener.oneIfAcknowledged(consumer);
+-        dependencies.client().execute(TransportGCDanglingArtifacts.ACTION, GCDanglingArtifactsRequest.INSTANCE)
++        dependencies.client().execute(TransportGCDanglingArtifacts.ACTION, GCDanglingArtifactsRequest.ALL)
+             .whenComplete(listener);
+     }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/Version.java b/server/src/main/java/org/elasticsearch/Version.java
+index e0b2f2f0c8..fc2a7e5833 100644
+--- a/server/src/main/java/org/elasticsearch/Version.java
++++ b/server/src/main/java/org/elasticsearch/Version.java
+@@ -206,6 +206,7 @@ public class Version implements Comparable<Version> {
+     public static final Version V_6_0_1 = new Version(9_00_01_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
+     public static final Version V_6_0_2 = new Version(9_00_02_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
+     public static final Version V_6_0_3 = new Version(9_00_03_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
++    public static final Version V_6_0_4 = new Version(9_00_04_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);
+ 
+     public static final Version V_6_1_0 = new Version(9_01_00_99, false, org.apache.lucene.util.Version.LUCENE_10_2_2);
+     public static final Version V_6_1_1 = new Version(9_01_01_99, true, org.apache.lucene.util.Version.LUCENE_10_2_2);
+diff --git a/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java b/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java
+index 5fd8fdb7d7..4ad292bc37 100644
+--- a/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java
++++ b/server/src/main/java/org/elasticsearch/action/admin/indices/shrink/TransportResize.java
+@@ -19,6 +19,7 @@
+ package org.elasticsearch.action.admin.indices.shrink;
+ 
+ import java.io.IOException;
++import java.util.List;
+ 
+ import org.elasticsearch.Version;
+ import org.elasticsearch.action.ActionListener;
+@@ -79,7 +80,6 @@ public class TransportResize extends TransportMasterNodeAction<ResizeRequest, Re
+         this.client = client;
+     }
+ 
+-
+     @Override
+     protected String executor() {
+         // we go async right away
+@@ -120,10 +120,11 @@ public class TransportResize extends TransportMasterNodeAction<ResizeRequest, Re
+             .thenCompose(resizeResp -> {
+                 if (resizeResp.isAcknowledged() && resizeResp.isShardsAcknowledged()) {
+                     SwapAndDropIndexRequest req = new SwapAndDropIndexRequest(resizedIndexUUID, sourceIndexUUID);
+-                    return swapAndDropIndexAction.execute(req).thenApply(ignored -> resizeResp);
++                    return swapAndDropIndexAction.execute(req).thenApply(_ -> resizeResp);
+                 } else {
+-                    return gcDanglingArtifactsAction.execute(GCDanglingArtifactsRequest.INSTANCE).handle(
+-                        (ignored, err) -> {
++                    GCDanglingArtifactsRequest gcReq = new GCDanglingArtifactsRequest(List.of(resizedIndexUUID));
++                    return gcDanglingArtifactsAction.execute(gcReq).handle(
++                        (_, err) -> {
+                             throw new IllegalStateException(
+                                 "Resize operation wasn't acknowledged. Check shard allocation and retry", err);
+                         });

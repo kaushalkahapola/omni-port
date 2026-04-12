@@ -1,0 +1,127 @@
+commit 607d738b93ecc8ea82e38cc5c6aef2ca0e6d9f4e
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Thu Dec 4 14:34:32 2025 -0500
+
+    Fix serialization of TDigestState
+    
+    Calling `centroids()` also compresses the state, which can lead to fewer
+    items than what `centroidCount()` returned before compression.
+    That led to errors like:
+    
+        java.io.EOFException
+        at org.elasticsearch.common.io.stream.InputStreamStreamInput.readByte(InputStreamStreamInput.java:59)
+        at org.elasticsearch.common.io.stream.StreamInput.readInt(StreamInput.java:214)
+        at org.elasticsearch.common.io.stream.StreamInput.readLong(StreamInput.java:256)
+        at org.elasticsearch.common.io.stream.StreamInput.readDouble(StreamInput.java:523)
+        at io.crate.execution.engine.aggregation.impl.TDigestState.read(TDigestState.java:92)
+    
+    Because the receiving side received a `count` higher than the actual
+    mount of items sent.
+
+diff --git a/docs/appendices/release-notes/6.1.2.rst b/docs/appendices/release-notes/6.1.2.rst
+index cd595a51ea..29b6ebdeb6 100644
+--- a/docs/appendices/release-notes/6.1.2.rst
++++ b/docs/appendices/release-notes/6.1.2.rst
+@@ -57,3 +57,6 @@ Fixes
+   Example::
+ 
+     SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id;
++
++- Fixed ``EOFException`` and ``unexpected byte`` errors that could be raised
++  when using the :ref:`percentile aggregation <aggregation-percentile>`.
+diff --git a/server/src/main/java/io/crate/execution/engine/aggregation/impl/TDigestState.java b/server/src/main/java/io/crate/execution/engine/aggregation/impl/TDigestState.java
+index 4ee8a063a0..cc45d80b34 100644
+--- a/server/src/main/java/io/crate/execution/engine/aggregation/impl/TDigestState.java
++++ b/server/src/main/java/io/crate/execution/engine/aggregation/impl/TDigestState.java
+@@ -22,6 +22,7 @@
+ package io.crate.execution.engine.aggregation.impl;
+ 
+ import java.io.IOException;
++import java.util.Collection;
+ 
+ import org.apache.lucene.util.RamUsageEstimator;
+ import org.elasticsearch.common.io.stream.StreamInput;
+@@ -73,10 +74,11 @@ class TDigestState extends MergingDigest {
+     public static void write(TDigestState state, StreamOutput out) throws IOException {
+         out.writeDouble(state.compression());
+         out.writeDoubleArray(state.fractions);
++        Collection<Centroid> centroids = state.centroids();
+         out.writeVInt(state.centroidCount());
+-        for (Centroid centroid : state.centroids()) {
++        for (Centroid centroid : centroids) {
+             out.writeDouble(centroid.mean());
+-            out.writeVLong(centroid.count());
++            out.writeVInt(centroid.count());
+         }
+     }
+ 
+diff --git a/server/src/test/java/io/crate/execution/engine/aggregation/impl/TDigestStateTest.java b/server/src/test/java/io/crate/execution/engine/aggregation/impl/TDigestStateTest.java
+index c413f797e3..cd02b9b695 100644
+--- a/server/src/test/java/io/crate/execution/engine/aggregation/impl/TDigestStateTest.java
++++ b/server/src/test/java/io/crate/execution/engine/aggregation/impl/TDigestStateTest.java
+@@ -23,23 +23,65 @@ package io.crate.execution.engine.aggregation.impl;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
++import java.util.Iterator;
++import java.util.stream.IntStream;
++
+ import org.assertj.core.data.Offset;
++import org.elasticsearch.Version;
+ import org.elasticsearch.common.io.stream.BytesStreamOutput;
+ import org.elasticsearch.common.io.stream.StreamInput;
+ import org.junit.Test;
+ 
++import com.tdunning.math.stats.Centroid;
++
+ import io.crate.Streamer;
+ 
+ public class TDigestStateTest {
+ 
+     @Test
+     public void testStreaming() throws Exception {
++        TDigestState digestState1 = new TDigestState(250, new double[]{0.5, 0.8});
++        digestState1.add(1.1);
++        digestState1.add(2.2);
++        digestState1.add(3.3);
++        IntStream.range(0, 128).forEach(i -> digestState1.add(4.4));
++        BytesStreamOutput out = new BytesStreamOutput();
++        TDigestStateType digestStateType = TDigestStateType.INSTANCE;
++        Streamer<TDigestState> streamer = digestStateType.streamer();
++        streamer.writeValueTo(out, digestState1);
++        StreamInput in = out.bytes().streamInput();
++        TDigestState digestState2 = streamer.readValueFrom(in);
++
++        assertThat(digestState1.compression()).isEqualTo(digestState2.compression(), Offset.offset(0.001d));
++        assertThat(digestState1.fractions()[0]).isEqualTo(digestState2.fractions()[0], Offset.offset(0.001d));
++        assertThat(digestState1.fractions()[1]).isEqualTo(digestState2.fractions()[1], Offset.offset(0.001d));
++
++        // T-digest does not guarantee the same collection of centroids after serialization.
++        // This simple test happens to produce matching centroids, allowing a sanity-check
++        // of the streaming logic.
++        var c1 = digestState1.centroids();
++        var c2 = digestState2.centroids();
++        assertThat(c1.size()).isEqualTo(c2.size());
++        Iterator<Centroid> it1 = c1.iterator();
++        Iterator<Centroid> it2 = c2.iterator();
++        while (it1.hasNext()) {
++            Centroid a = it1.next();
++            Centroid b = it2.next();
++            assertThat(a.mean()).isEqualTo(b.mean());
++            assertThat(a.count()).isEqualTo(b.count());
++        }
++    }
++
++    @Test
++    public void testStreaming_on_or_before_6_1_1() throws Exception {
+         TDigestState digestState1 = new TDigestState(250, new double[]{0.5, 0.8});
+         BytesStreamOutput out = new BytesStreamOutput();
++        out.setVersion(Version.V_6_1_1);
+         TDigestStateType digestStateType = TDigestStateType.INSTANCE;
+         Streamer<TDigestState> streamer = digestStateType.streamer();
+         streamer.writeValueTo(out, digestState1);
+         StreamInput in = out.bytes().streamInput();
++        in.setVersion(Version.V_6_1_1);
+         TDigestState digestState2 = streamer.readValueFrom(in);
+ 
+         assertThat(digestState1.compression()).isEqualTo(digestState2.compression(), Offset.offset(0.001d));

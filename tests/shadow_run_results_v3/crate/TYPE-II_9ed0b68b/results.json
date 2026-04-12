@@ -1,0 +1,185 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "9ed0b68b5eaf0677f1e202957b0ea8035433fc9e",
+  "backport_commit": "5445954ce4469af3734ab14efa88f7bf32961974",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.1,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/types/ObjectType.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 200,
+          "end_line": 205,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.3,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch consists of an exact string addition and modification in the ObjectType.java file and its corresponding test and documentation. The main code hunk was found via 'git_exact' with confidence 1.00, indicating an exact match in the target branch. The changes are straightforward additions of a method and a test, and an update to the release notes, without structural or API changes. Therefore, this is a trivial backport classified as TYPE_I with high confidence.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/types/ObjectType.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.types.ObjectTypeTest.xml"
+        ],
+        "target_classes": [
+          "ObjectTypeTest"
+        ],
+        "test_cases": {
+          "io.crate.types.ObjectTypeTest#test_value_streaming_roundtrip": "passed",
+          "io.crate.types.ObjectTypeTest#test_reference_resolver_index_off": "skipped",
+          "io.crate.types.ObjectTypeTest#test_translog_streaming_roundtrip": "passed",
+          "io.crate.types.ObjectTypeTest#test_reference_resolver_docvalues_off": "skipped",
+          "io.crate.types.ObjectTypeTest#test_object_type_to_signature_to_object_type_round_trip": "passed",
+          "io.crate.types.ObjectTypeTest#test_reference_resolver_index_and_docvalues_off": "skipped",
+          "io.crate.types.ObjectTypeTest#test_value_bytes_accounts_for_deep_objects": "passed",
+          "io.crate.types.ObjectTypeTest#testStreamingOfNullValueWithInnerTypes": "passed",
+          "io.crate.types.ObjectTypeTest#testStreamingOfValueWithoutInnerTypes": "passed",
+          "io.crate.types.ObjectTypeTest#testStreamingWithInnerTypes": "passed",
+          "io.crate.types.ObjectTypeTest#test_raises_conversion_exception_on_string_parsing_errors": "passed",
+          "io.crate.types.ObjectTypeTest#test_type_streaming_roundtrip": "passed",
+          "io.crate.types.ObjectTypeTest#test_reference_resolver": "passed",
+          "io.crate.types.ObjectTypeTest#test_valueForInsert_on_nested_object": "passed",
+          "io.crate.types.ObjectTypeTest#testStreamingWithoutInnerTypes": "passed",
+          "io.crate.types.ObjectTypeTest#testStreamingWithEmptyInnerTypes": "passed",
+          "io.crate.types.ObjectTypeTest#testResolveInnerType": "passed",
+          "io.crate.types.ObjectTypeTest#testStreamingOfValueWithInnerTypes": "passed",
+          "io.crate.types.ObjectTypeTest#testStreamingOfNullValueWithoutInnerTypes": "passed",
+          "io.crate.types.ObjectTypeTest#test_reference_resolver_with_list": "passed"
+        },
+        "classes": {
+          "io.crate.types.ObjectTypeTest": "passed"
+        },
+        "summary": {
+          "passed": 17,
+          "failed": 0,
+          "skipped": 3,
+          "total": 20
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.types.ObjectTypeTest#test_valueForInsert_on_nested_object"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 20,
+        "patched_total": 20,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 3,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 20
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 812,
+    "target_patch_bytes": 2667,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.types.ObjectTypeTest#test_valueForInsert_on_nested_object"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 20,
+      "patched_total": 20,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

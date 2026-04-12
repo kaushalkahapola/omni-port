@@ -1,0 +1,120 @@
+commit eec83a184b28a99a880e89dd2c0307ca3dad8d33
+Author: Marios Trivyzas <matriv@gmail.com>
+Date:   Wed Oct 22 15:49:10 2025 +0300
+
+    Fixed an issue that led to deletion of persisted table stats
+    
+    The `update()` call with empty stats led to deleting all stats,
+    since the method first deletes all existing table and col stats
+    before starting to rewrite them to disk.
+    
+    Follows: #18244
+    (cherry picked from commit 114e47c51d454af27064a2e9b2af0bb94f590026)
+
+diff --git a/docs/appendices/release-notes/6.1.1.rst b/docs/appendices/release-notes/6.1.1.rst
+index b9860480fe..d87bc55ce3 100644
+--- a/docs/appendices/release-notes/6.1.1.rst
++++ b/docs/appendices/release-notes/6.1.1.rst
+@@ -48,3 +48,7 @@ Fixes
+ 
+ - Fixed an issue where generated and default sub-columns were missing from
+   results returned by the ``RETURNING`` clause.
++
++- Fixed an issue that led to deleting persisted
++  :ref:`pg_catalog.pg_stats <pg_stats>` during full cluster restart, thus making
++  it necessary to run again :ref:`analyze`.
+diff --git a/server/src/main/java/io/crate/statistics/TableStatsService.java b/server/src/main/java/io/crate/statistics/TableStatsService.java
+index c2f977f175..e0d46c3409 100644
+--- a/server/src/main/java/io/crate/statistics/TableStatsService.java
++++ b/server/src/main/java/io/crate/statistics/TableStatsService.java
+@@ -188,9 +188,6 @@ public class TableStatsService extends AbstractLifecycleComponent implements Run
+             this.tablesSearcherManager = new SearcherManager(tablesWriter, null);
+             this.colsWriter = new IndexWriter(colsDirectory, colsIndexWriterConfig);
+             this.colsSearcherManager = new SearcherManager(colsWriter, null);
+-
+-            // ensure index files exist for reads
+-            this.update(Map.of());
+         } catch (IOException e) {
+             throw new UncheckedIOException(e);
+         }
+@@ -298,6 +295,7 @@ public class TableStatsService extends AbstractLifecycleComponent implements Run
+         }
+     }
+ 
++    @VisibleForTesting
+     public void clear() {
+         try {
+             tablesWriter.deleteAll();
+diff --git a/server/src/test/java/io/crate/integrationtests/AnalyzeITest.java b/server/src/test/java/io/crate/integrationtests/AnalyzeITest.java
+index 278a767e17..351e56a5d3 100644
+--- a/server/src/test/java/io/crate/integrationtests/AnalyzeITest.java
++++ b/server/src/test/java/io/crate/integrationtests/AnalyzeITest.java
+@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.data.Percentage.withPercentage;
+ 
+ import java.util.List;
++import java.util.stream.IntStream;
+ 
+ import org.elasticsearch.test.IntegTestCase;
+ import org.junit.Test;
+@@ -35,31 +36,40 @@ public class AnalyzeITest extends IntegTestCase {
+ 
+     @Test
+     @SuppressWarnings("unchecked")
+-    public void test_analyze_statement_refreshes_table_stats_and_stats_are_visible_in_pg_class_and_pg_stats() {
++    public void test_analyze_statement_refreshes_table_stats_and_stats_are_visible_in_pg_class_and_pg_stats_also_after_restart()
++        throws Exception {
++
+         execute("create table doc.tbl (x int)");
+         execute("insert into doc.tbl (x) values (1), (2), (3), (null), (3), (3)");
+         execute("refresh table doc.tbl");
+         execute("analyze");
+-        execute("select reltuples from pg_class where relname = 'tbl'");
+-        assertThat(response.rows()[0][0]).isEqualTo(6.0f);
+ 
+-        execute(
+-            "select " +
+-            "   null_frac," +
+-            "   avg_width," +
+-            "   n_distinct," +
+-            "   most_common_vals," +
+-            "   most_common_freqs," +
+-            "   histogram_bounds " +
+-            "from pg_stats where tablename = 'tbl'");
+-        Object[] row = response.rows()[0];
+-        assertThat(((Float) row[0]).doubleValue()).isCloseTo(0.166, withPercentage(1));
+-        assertThat(row[1]).isEqualTo(DataTypes.INTEGER.fixedSize());
+-        assertThat(row[2]).isEqualTo(3.0f);
+-        assertThat(((List<String>) row[3])).containsExactly("3", "2", "1");
+-        assertThat(((List<Float>) row[4])).hasSize(3);
+-        assertThat(((List<Float>) row[4]).get(0)).isEqualTo(0.5f);
+-        assertThat(((List<String>) row[5])).isEmpty();
++        for (int i : IntStream.of(1, 2).toArray()) {
++            if (i == 2) {
++                cluster().fullRestart();
++                ensureGreen();
++            }
++            execute("select reltuples from pg_class where relname = 'tbl'");
++            assertThat(response.rows()[0][0]).isEqualTo(6.0f);
++
++            execute(
++                "select " +
++                    "   null_frac," +
++                    "   avg_width," +
++                    "   n_distinct," +
++                    "   most_common_vals," +
++                    "   most_common_freqs," +
++                    "   histogram_bounds " +
++                    "from pg_stats where tablename = 'tbl'");
++            Object[] row = response.rows()[0];
++            assertThat(((Float) row[0]).doubleValue()).isCloseTo(0.166, withPercentage(1));
++            assertThat(row[1]).isEqualTo(DataTypes.INTEGER.fixedSize());
++            assertThat(row[2]).isEqualTo(3.0f);
++            assertThat(((List<String>) row[3])).containsExactly("3", "2", "1");
++            assertThat(((List<Float>) row[4])).hasSize(3);
++            assertThat(((List<Float>) row[4]).get(0)).isEqualTo(0.5f);
++            assertThat(((List<String>) row[5])).isEmpty();
++        }
+     }
+ 
+     @Test

@@ -76,8 +76,14 @@ def parse_xml(xml_paths: list[str], target_classes: set[str]) -> tuple[dict[str,
             name = (case.attrib.get("name") or "").strip()
             if not classname or not name:
                 continue
-            if target_classes and classname not in target_classes:
-                continue
+            if target_classes:
+                matched = False
+                for target in target_classes:
+                    if classname == target or classname.endswith("." + target):
+                        matched = True
+                        break
+                if not matched:
+                    continue
 
             if case.find("failure") is not None:
                 status = "failed"
@@ -110,8 +116,14 @@ def parse_console(console_text: str, target_classes: set[str]) -> dict[str, str]
 
     for m in re.finditer(r"^\[INFO\] Tests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+)[^\n]*-- in ([\w.$-]+)", clean, re.MULTILINE):
         _, failures, errors, skipped, cls = m.groups()
-        if target_classes and cls not in target_classes:
-            continue
+        if target_classes:
+            matched = False
+            for target in target_classes:
+                if cls == target or cls.endswith("." + target):
+                    matched = True
+                    break
+            if not matched:
+                continue
         fail = int(failures) + int(errors)
         skip = int(skipped)
         if fail > 0:

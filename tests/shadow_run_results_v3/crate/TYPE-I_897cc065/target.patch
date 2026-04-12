@@ -1,0 +1,131 @@
+commit a735d95e81af2d67af2a23ac3279b0d4b403f266
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Wed Oct 15 14:35:45 2025 -0400
+
+    Fix incorrect application of equi_join_to_lookup_join on complex equi-join query
+    
+    (cherry picked from commit 897cc0651cf51d8c520fba0cbadcfa4a5009bc07)
+
+diff --git a/docs/appendices/release-notes/6.0.4.rst b/docs/appendices/release-notes/6.0.4.rst
+index 20a0f9558f..1b37dd22eb 100644
+--- a/docs/appendices/release-notes/6.0.4.rst
++++ b/docs/appendices/release-notes/6.0.4.rst
+@@ -64,3 +64,10 @@ Fixes
+   preventing bootstrap of CrateDB, if ``PowerShell`` was used instead of plain
+   ``CMD`` and parameters were passed with ``-C<key>=value`` command line
+   arguments.
++
++- Fixed a ``SQLParseException`` thrown when ``optimizer_equi_join_to_lookup_join``
++  was incorrectly applied to a complex equi-join query. The optimizer rule
++  currently supports only simple equi-join queries like ::
++
++    SELECT * FROM t INNER JOIN t2 ON t.a = t2.a;
++
+diff --git a/server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java b/server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java
+index d18a40b149..f96137dc82 100644
+--- a/server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java
++++ b/server/src/main/java/io/crate/planner/operators/EquiJoinDetector.java
+@@ -65,6 +65,13 @@ public final class EquiJoinDetector {
+         return context.isHashJoinPossible;
+     }
+ 
++    /**
++     * Returns true if the join condition is a simple equi join condition of the form, 'col1 = col2'.
++     */
++    public static boolean isTopLevelEquiJoin(Symbol joinCondition) {
++        return joinCondition instanceof Function f && f.signature().equals(EqOperator.SIGNATURE) && isEquiJoin(joinCondition);
++    }
++
+     /**
+      * insideEqualOperand is used to mark starting point of the computation of the either sides of equality.
+      *
+diff --git a/server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java b/server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java
+index 66d46c0bde..96173b584e 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java
++++ b/server/src/main/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoin.java
+@@ -75,7 +75,7 @@ public class EquiJoinToLookupJoin implements Rule<JoinPlan> {
+             // only inner-equi-joins
+             j.joinType() == JoinType.INNER &&
+             j.joinCondition() != null &&
+-            EquiJoinDetector.isEquiJoin(j.joinCondition()) &&
++            EquiJoinDetector.isTopLevelEquiJoin(j.joinCondition()) &&
+             // no nested subqueries
+             j.lhs().relationNames().size() == 1 &&
+             j.rhs().relationNames().size() == 1
+diff --git a/server/src/test/java/io/crate/planner/operators/EquiJoinDetectorTest.java b/server/src/test/java/io/crate/planner/operators/EquiJoinDetectorTest.java
+index ea2588943e..98e64e8acf 100644
+--- a/server/src/test/java/io/crate/planner/operators/EquiJoinDetectorTest.java
++++ b/server/src/test/java/io/crate/planner/operators/EquiJoinDetectorTest.java
+@@ -165,4 +165,23 @@ public class EquiJoinDetectorTest extends CrateDummyClusterServiceUnitTest {
+         Symbol joinCondition = sqlExpressions.asSymbol("(t1.a > 1) = (t2.b < 5 OR t2.b > 10)");
+         assertThat(EquiJoinDetector.isEquiJoin(joinCondition)).isTrue();
+     }
++
++    @Test
++    public void test_detect_pure_equi_join() {
++        Symbol joinCondition = sqlExpressions.asSymbol("t1.a = t2.b AND t1.x = t2.y");
++        assertThat(EquiJoinDetector.isEquiJoin(joinCondition)).isTrue();
++        assertThat(EquiJoinDetector.isTopLevelEquiJoin(joinCondition)).isFalse();
++
++        joinCondition = sqlExpressions.asSymbol("t1.x = t2.y");
++        assertThat(EquiJoinDetector.isEquiJoin(joinCondition)).isTrue();
++        assertThat(EquiJoinDetector.isTopLevelEquiJoin(joinCondition)).isTrue();
++
++        joinCondition = sqlExpressions.asSymbol("abs(t1.x) + 10 = abs(t2.y) - 10");
++        assertThat(EquiJoinDetector.isEquiJoin(joinCondition)).isTrue();
++        assertThat(EquiJoinDetector.isTopLevelEquiJoin(joinCondition)).isTrue();
++
++        joinCondition = sqlExpressions.asSymbol("t1.x = t2.y AND t1.x = 10 AND t2.y = 20");
++        assertThat(EquiJoinDetector.isEquiJoin(joinCondition)).isTrue();
++        assertThat(EquiJoinDetector.isTopLevelEquiJoin(joinCondition)).isFalse();
++    }
+ }
+diff --git a/server/src/test/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoinTest.java b/server/src/test/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoinTest.java
+index a1dd069159..b4a765f898 100644
+--- a/server/src/test/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoinTest.java
++++ b/server/src/test/java/io/crate/planner/optimizer/rule/EquiJoinToLookupJoinTest.java
+@@ -21,6 +21,7 @@
+ 
+ package io.crate.planner.optimizer.rule;
+ 
++import java.io.IOException;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+@@ -50,8 +51,6 @@ import static io.crate.testing.Asserts.assertThat;
+ public class EquiJoinToLookupJoinTest extends CrateDummyClusterServiceUnitTest {
+ 
+     private SQLExecutor e;
+-    private Reference x;
+-    private Reference y;
+     private Collect lhs;
+     private Collect rhs;
+     private DocTableInfo lhsDocTableInfo;
+@@ -67,8 +66,8 @@ public class EquiJoinToLookupJoinTest extends CrateDummyClusterServiceUnitTest {
+         lhsDocTableInfo = e.resolveTableInfo("lhs");
+         rhsDocTableInfo = e.resolveTableInfo("rhs");
+ 
+-        x = (Reference) e.asSymbol("x");
+-        y = (Reference) e.asSymbol("y");
++        Reference x = (Reference) e.asSymbol("x");
++        Reference y = (Reference) e.asSymbol("y");
+ 
+         lhs = new Collect(new DocTableRelation(lhsDocTableInfo), List.of(x), WhereClause.MATCH_ALL);
+         rhs = new Collect(new DocTableRelation(rhsDocTableInfo), List.of(y), WhereClause.MATCH_ALL);
+@@ -280,4 +279,16 @@ public class EquiJoinToLookupJoinTest extends CrateDummyClusterServiceUnitTest {
+         assertThat(result).isNull();
+     }
+ 
++    @Test
++    public void test_complex_equi_join_conditions_are_not_supported() throws IOException {
++        var e = SQLExecutor.builder(clusterService)
++            .build()
++            .addTable("create table doc.lhs (x int, x2 int)")
++            .addTable("create table doc.rhs (y int, y2 int)");
++        var joinCondition = e.asSymbol("lhs.x = rhs.y AND lhs.x2 = rhs.y2");
++        var join = new JoinPlan(lhs, rhs, JoinType.INNER, joinCondition);
++        var rule = new EquiJoinToLookupJoin();
++        Match<JoinPlan> match = rule.pattern().accept(join, Captures.empty());
++        Assertions.assertThat(match.isPresent()).isFalse();
++    }
+ }

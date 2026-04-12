@@ -1,0 +1,35 @@
+diff --git a/server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java b/server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java
+index 78da6f45a3..d8b8a67e8b 100644
+--- a/server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java
++++ b/server/src/main/java/io/crate/analyze/TableElementsAnalyzer.java
+@@ -200,7 +200,6 @@ public class TableElementsAnalyzer implements FieldProvider<Reference> {
+         private GenericProperties<Symbol> storageProperties = GenericProperties.empty();
+         private List<Symbol> indexSources = List.of();
+ 
+-
+         /**
+          * cached result
+          **/
+@@ -244,7 +243,6 @@ public class TableElementsAnalyzer implements FieldProvider<Reference> {
+             ReferenceIdent refIdent = new ReferenceIdent(tableName, name);
+             int position = -1;
+ 
+-
+             if (defaultExpression != null) {
+                 defaultExpression = bindParameter.apply(defaultExpression);
+             }
+@@ -516,7 +514,13 @@ public class TableElementsAnalyzer implements FieldProvider<Reference> {
+                     parentBuilder.builtReference = parentRef;
+                     columns.put(parent, parentBuilder);
+                 } else {
+-                    columns.put(parent, new RefBuilder(parent, ObjectType.UNTYPED));
++                    /*
++                      Parent can be missing in the table, but present in the same statement, e.g.:
++                      ALTER TABLE tbl
++                        ADD COLUMN obj['arr'] array(object(dynamic)),
++                        ADD COLUMN obj['arr']['id'] integer
++                     */
++                    columns.computeIfAbsent(parent, _ -> new RefBuilder(parent, ObjectType.UNTYPED));
+                 }
+             }
+             Reference reference = table.getReference(columnName);

@@ -1,0 +1,177 @@
+{
+  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "repo": "crate",
+  "patch_type": "TYPE-II",
+  "original_commit": "308d7c9b1f6f7885c38b762db2b79c7c766ca705",
+  "backport_commit": "0648f7af17268b9826512a6149405926ceab16bd",
+  "description": "master \u2192 5.9",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.61,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/common/settings/IndexScopedSettings.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.897,
+          "start_line": 151,
+          "end_line": 157,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.95,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch involves a small removal of a line in IndexScopedSettings.java, which is a straightforward code change but not a simple string replacement. It also adds a new test method in AlterTableClusterStateExecutorTest.java, which is a moderate addition but does not involve structural or API changes. The release notes update is a documentation change. The patch was localized via 'git_pickaxe' with high confidence, indicating some minor drift or fuzzy matching is needed. Overall, the patch complexity fits TYPE_II, involving minor code and test changes requiring some fuzzy matching but no structural refactoring or redesign.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 4.0,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.03,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/common/settings/IndexScopedSettings.java",
+          "old_string": "            case IndexMetadata.SETTING_CREATION_DATE:\n            case IndexMetadata.SETTING_INDEX_UUID:\n            case IndexMetadata.SETTING_VERSION_CREATED:\n            case IndexMetadata.SETTING_HISTORY_UUID:\n            case IndexMetadata.SETTING_VERSION_UPGRADED:\n            case IndexMetadata.SETTING_INDEX_PROVIDED_NAME:\n            case MergePolicyConfig.INDEX_MERGE_ENABLED:",
+          "new_string": "            case IndexMetadata.SETTING_CREATION_DATE:\n            case IndexMetadata.SETTING_INDEX_UUID:\n            case IndexMetadata.SETTING_HISTORY_UUID:\n            case IndexMetadata.SETTING_VERSION_UPGRADED:\n            case IndexMetadata.SETTING_INDEX_PROVIDED_NAME:\n            case MergePolicyConfig.INDEX_MERGE_ENABLED:",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.03,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/org/elasticsearch/common/settings/IndexScopedSettings.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.metadata.cluster.AlterTableClusterStateExecutorTest.xml"
+        ],
+        "target_classes": [
+          "AlterTableClusterStateExecutorTest"
+        ],
+        "test_cases": {
+          "io.crate.metadata.cluster.AlterTableClusterStateExecutorTest#testPrivateSettingsAreRemovedOnUpdateTemplate": "passed",
+          "io.crate.metadata.cluster.AlterTableClusterStateExecutorTest#test_altering_settings_do_not_modify_version_created": "passed",
+          "io.crate.metadata.cluster.AlterTableClusterStateExecutorTest#test_group_settings_are_not_filtered_out": "passed",
+          "io.crate.metadata.cluster.AlterTableClusterStateExecutorTest#testMarkArchivedSettings": "passed"
+        },
+        "classes": {
+          "io.crate.metadata.cluster.AlterTableClusterStateExecutorTest": "passed"
+        },
+        "summary": {
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0,
+          "total": 4
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.metadata.cluster.AlterTableClusterStateExecutorTest#test_altering_settings_do_not_modify_version_created"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 4,
+        "patched_total": 4,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 4
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 836,
+    "target_patch_bytes": 5174,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.metadata.cluster.AlterTableClusterStateExecutorTest#test_altering_settings_do_not_modify_version_created"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 4,
+      "patched_total": 4,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

@@ -1,0 +1,98 @@
+commit c08290ccf4521eabe33d32c5f146aedcf167dbdf
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Tue Dec 23 11:45:05 2025 +0100
+
+    Ensure that JoinGraph adds only edges for equi-join conditions
+    
+    Fixes a regression, introduced with https://github.com/crate/crate/commit/1ece4b40e51ea2b95af0ac8894318cba5359bbda
+    
+    In fact, referenced commit only revealed issue with join graphs construction as it enabled rule being applied for broken graphs.
+    
+    The root cause is JoinGraph is not fulfilling the contract declared in it
+    >  we are only interested in equi-join conditions
+    
+    Solution is to use existing isEquiJoin check before adding an edge.
+    EquiJoinDetector can handle exactly the same JOIN ON CASE condition,
+    it was done in https://github.com/crate/crate/commit/d85eba28a369253079aca3676f102996e75fbc96
+    
+    With an empty graph,
+    EliminateCrossJoin hits joinGraph.edges().isEmpty() check and gets short-circuited
+    
+    (cherry picked from commit 4f42b38d70b18e2b3c1d760e4f406c00b163c465)
+
+diff --git a/docs/appendices/release-notes/6.1.3.rst b/docs/appendices/release-notes/6.1.3.rst
+index b06ec6166c..39e62c9c74 100644
+--- a/docs/appendices/release-notes/6.1.3.rst
++++ b/docs/appendices/release-notes/6.1.3.rst
+@@ -56,3 +56,12 @@ Fixes
+ - Fixed an issue that caused direct memory under-accounting, potentially leading
+   to an ``OutOfMemoryError`` when a large result set was returned by the
+   ``HTTP`` endpoint.
++
++- Fixed a regression introduced with :ref:`version_6.0.0` that led to wrong
++  results when mixing ``CROSS JOIN`` and ``INNER JOIN`` on a condition with a
++  :ref:`CASE<scalar-case-when-then-end>` referring to one of the cross joined
++  tables. e.g.::
++
++    SELECT * FROM t1, t0
++    INNER JOIN (SELECT 1 AS col0) AS sub0
++    ON (CASE sub0.col0 WHEN sub0.col0 THEN t0.c0 ELSE false END)
+diff --git a/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java b/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java
+index 2cb52c63a2..0d431629da 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java
++++ b/server/src/main/java/io/crate/planner/optimizer/joinorder/JoinGraph.java
+@@ -21,6 +21,8 @@
+ 
+ package io.crate.planner.optimizer.joinorder;
+ 
++import static io.crate.planner.operators.EquiJoinDetector.isEquiJoin;
++
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.LinkedHashMap;
+@@ -189,7 +191,7 @@ public record JoinGraph(List<LogicalPlan> nodes,
+                     // (a,b) -> (a.x = b.y) and we can ignore any other
+                     // filters. Therefore, we only want entries where we have
+                     // two keys.
+-                    if (entry.getKey().size() == 2) {
++                    if (entry.getKey().size() == 2 && isEquiJoin(entry.getValue())) {
+                         entry.getValue().accept(edgeCollector, context);
+                     } else {
+                         filters.add(entry.getValue());
+diff --git a/server/src/test/java/io/crate/planner/operators/LogicalPlannerTest.java b/server/src/test/java/io/crate/planner/operators/LogicalPlannerTest.java
+index 368c2d9166..50934eefe1 100644
+--- a/server/src/test/java/io/crate/planner/operators/LogicalPlannerTest.java
++++ b/server/src/test/java/io/crate/planner/operators/LogicalPlannerTest.java
+@@ -838,4 +838,32 @@ public class LogicalPlannerTest extends CrateDummyClusterServiceUnitTest {
+         // if multiphased execution failed on sub-query and addWithoutBreaking() was never called.
+         verify(circuitBreaker, times(1)).addWithoutBreaking(anyLong());
+     }
++
++    /**
++     * Verifies a fix for a regression
++     * introduced with <a href="https://github.com/crate/crate/commit/1ece4b40e51ea2b95af0ac8894318cba5359bbda">...</a>
++     * Tests scenario from <a href="https://github.com/crate/crate/issues/18860">...</a>.
++     */
++    @Test
++    public void test_do_not_apply_eliminate_cross_join_for_non_equi_join() throws Exception {
++        LogicalPlan plan = sqlExecutor.logicalPlan("""
++            SELECT t1.*, users.awesome FROM t1, users
++            INNER JOIN (SELECT 1 AS col0) AS sub0
++            ON (CASE sub0.col0 WHEN sub0.col0 THEN users.awesome ELSE false END)
++            """
++        );
++        // An INNER JOIN of users and subquery table is done first (on CASE expression).
++        // A CROSS JOIN of t1 and users used to be done first due to incorrect EliminateCrossJoin rule application.
++        assertThat(plan)
++            .as("Must first do an INNER JOIN of users and subquery table")
++            .hasOperators(
++                "Eval[a, x, i, awesome]",
++                "  └ NestedLoopJoin[CROSS]",
++                "    ├ Collect[doc.t1 | [a, x, i] | true]",
++                "    └ NestedLoopJoin[INNER | CASE WHEN (col0 = col0) THEN awesome ELSE false END]",
++                "      ├ Collect[doc.users | [awesome] | true]",
++                "      └ Rename[col0] AS sub0",
++                "        └ TableFunction[empty_row | [1 AS col0] | true]"
++            );
++    }
+ }

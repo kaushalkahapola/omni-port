@@ -1,0 +1,110 @@
+diff --git a/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java b/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
+index 94d5284b68..64d680e8b3 100644
+--- a/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
++++ b/server/src/main/java/io/crate/rest/action/RestResultSetReceiver.java
+@@ -31,7 +31,6 @@ import org.jetbrains.annotations.Nullable;
+ 
+ import io.crate.session.ResultReceiver;
+ import io.crate.data.Row;
+-import io.crate.data.breaker.RowAccounting;
+ import io.crate.expression.symbol.Symbol;
+ 
+ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+@@ -39,19 +38,17 @@ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+     private final List<Symbol> outputFields;
+     private final ResultToXContentBuilder builder;
+     private final long startTimeNs;
+-    private final RowAccounting<Row> rowAccounting;
+     private final CompletableFuture<XContentBuilder> result = new CompletableFuture<>();
+ 
+     private long rowCount;
+ 
+     RestResultSetReceiver(XContentBuilder builder,
++                          
+                           List<Symbol> outputFields,
+                           long startTimeNs,
+-                          RowAccounting<Row> rowAccounting,
+                           boolean includeTypesOnResponse) throws IOException {
+         this.outputFields = outputFields;
+         this.startTimeNs = startTimeNs;
+-        this.rowAccounting = rowAccounting;
+         this.builder = ResultToXContentBuilder.builder(builder);
+         this.builder.cols(outputFields);
+         if (includeTypesOnResponse) {
+@@ -64,7 +61,6 @@ class RestResultSetReceiver implements ResultReceiver<XContentBuilder> {
+     @Nullable
+     public CompletableFuture<Void> setNextRow(Row row) {
+         try {
+-            rowAccounting.accountForAndMaybeBreak(row);
+             builder.addRow(row, outputFields.size());
+             rowCount++;
+             return null;
+diff --git a/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java b/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
+index 960d55615f..863afd6e39 100644
+--- a/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
++++ b/server/src/main/java/io/crate/rest/action/SqlHttpHandler.java
+@@ -29,6 +29,7 @@ import static io.crate.session.Session.UNNAMED;
+ import static java.util.Collections.emptyList;
+ import static java.util.Collections.singletonList;
+ 
++import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.util.List;
+ import java.util.Map;
+@@ -56,8 +57,6 @@ import io.crate.auth.AuthSettings;
+ import io.crate.auth.Credentials;
+ import io.crate.auth.HttpAuthUpstreamHandler;
+ import io.crate.auth.Protocol;
+-import io.crate.breaker.TypedRowAccounting;
+-import io.crate.common.collections.Lists;
+ import io.crate.data.breaker.BlockBasedRamAccounting;
+ import io.crate.data.breaker.RamAccounting;
+ import io.crate.exceptions.SQLExceptions;
+@@ -259,13 +258,9 @@ public class SqlHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest>
+                 b -> breaker.addEstimateBytesAndMaybeBreak(b, "http-result"),
+                 MAX_BLOCK_SIZE_IN_BYTES);
+             resultReceiver = new RestResultSetReceiver(
+-                JsonXContent.builder(),
++                new XContentBuilder(JsonXContent.JSON_XCONTENT, new RamAccountingOutputStream(ramAccounting)),
+                 resultFields,
+                 startTimeInNs,
+-                new TypedRowAccounting(
+-                    Lists.map(resultFields, Symbol::valueType),
+-                    ramAccounting
+-                ),
+                 includeTypes
+             );
+             resultReceiver.completionFuture().whenComplete((result, error) -> ramAccounting.close());
+@@ -336,4 +331,32 @@ public class SqlHttpHandler extends SimpleChannelInboundHandler<FullHttpRequest>
+     private static boolean bothProvided(@Nullable List<Object> args, @Nullable List<List<Object>> bulkArgs) {
+         return args != null && !args.isEmpty() && bulkArgs != null && !bulkArgs.isEmpty();
+     }
++
++    static final class RamAccountingOutputStream extends ByteArrayOutputStream {
++
++        private final RamAccounting ramAccounting;
++
++        public RamAccountingOutputStream(RamAccounting ramAccounting) {
++            super();
++            this.ramAccounting = ramAccounting;
++        }
++
++        @Override
++        public void write(byte[] b, int off, int len) {
++            ramAccounting.addBytes(len);
++            super.write(b, off, len);
++        }
++
++        @Override
++        public void write(int b) {
++            ramAccounting.addBytes(1);
++            super.write(b);
++        }
++
++        @Override
++        public void close() throws IOException {
++            ramAccounting.release();
++            super.close();
++        }
++    }
+ }

@@ -1,0 +1,312 @@
+commit e45819fd5822dca162ef9adf7710ea40f73d1745
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Fri Oct 3 17:41:42 2025 -0400
+
+    Fix `RETURNING` columns omitting generated sub-columns
+
+diff --git a/docs/appendices/release-notes/6.0.4.rst b/docs/appendices/release-notes/6.0.4.rst
+index f0e24af43d..dd7de25369 100644
+--- a/docs/appendices/release-notes/6.0.4.rst
++++ b/docs/appendices/release-notes/6.0.4.rst
+@@ -75,3 +75,5 @@ Fixes
+   ``OutOfMemoryError`` when a large result set was returned by the ``HTTP``
+   endpoint.
+ 
++- Fixed an issue where generated and default sub-columns were missing from
++  results returned by the ``RETURNING`` clause.
+diff --git a/docs/appendices/release-notes/6.1.0.rst b/docs/appendices/release-notes/6.1.0.rst
+index 20aece0d57..59a25309af 100644
+--- a/docs/appendices/release-notes/6.1.0.rst
++++ b/docs/appendices/release-notes/6.1.0.rst
+@@ -94,3 +94,6 @@ Administration and Operations
+   available after a cluster restart.
+ 
+ - Added ``last_job_id`` column to the :ref:`sys.sessions <sys-sessions>` table.
++
++- Fixed an issue where generated and default sub-columns were missing from
++  results returned by the ``RETURNING`` clause.
+diff --git a/libs/shared/src/main/java/io/crate/common/collections/Maps.java b/libs/shared/src/main/java/io/crate/common/collections/Maps.java
+index b8293b3abb..167a254e98 100644
+--- a/libs/shared/src/main/java/io/crate/common/collections/Maps.java
++++ b/libs/shared/src/main/java/io/crate/common/collections/Maps.java
+@@ -139,6 +139,27 @@ public final class Maps {
+         return newList;
+     }
+ 
++    public static boolean pathExists(Map<?, ?> map, List<String> path) {
++        Map<?, ?> current = map;
++        for (int i = 0; i < path.size(); i++) {
++            String key = path.get(i);
++            // must use Map.containsKey instead of Map.get because a column can be mapped to a null value
++            if (!current.containsKey(key)) {
++                return false;
++            }
++            if (i + 1 == path.size()) {
++                return true;
++            }
++            var val = current.get(key);
++            if (val instanceof Map<?, ?> nested) {
++                current = nested;
++            } else {
++                return false;
++            }
++        }
++        return true;
++    }
++
+     @Nullable
+     @SuppressWarnings("unchecked")
+     public static <T> T removeByPath(Map<String, T> map, List<String> path) {
+@@ -271,4 +292,31 @@ public final class Maps {
+         }
+         return null;
+     }
++
++    /**
++     * Returns a modifiable deep copy of the given map.
++     */
++    public static <K, V> Map<K, V> deepCopy(Map<K, V> map) {
++        Map<K, V> copy = new HashMap<>();
++        for (Map.Entry<K, V> e : map.entrySet()) {
++            K key = e.getKey();
++            V value = e.getValue();
++            if (value instanceof Map<?, ?> nested) {
++                copy.put(key, (V) deepCopy(nested));
++            } else if (value instanceof List<?> list) {
++                List<Object> newList = new ArrayList<>();
++                for (Object item : list) {
++                    if (item instanceof Map<?, ?> m) {
++                        newList.add(deepCopy(m));
++                    } else {
++                        newList.add(item);
++                    }
++                }
++                copy.put(key, (V) newList);
++            } else {
++                copy.put(key, value);
++            }
++        }
++        return copy;
++    }
+ }
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index a78d7bb617..24f46065a9 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -243,7 +243,7 @@ public class Indexer {
+                 Object val = item.insertValues()[rootIndex];
+                 if (val instanceof Map<?, ?> m) {
+                     List<String> path = column.path();
+-                    val = Maps.getByPath((Map<String, Object>) m, path);
++                    val = Maps.getByPath(m, path);
+                 }
+                 if (val == null) {
+                     Symbol defaultExpression = ref.defaultExpression();
+@@ -601,7 +601,9 @@ public class Indexer {
+                     // across indexing and return values
+                     Synthetic synthetic = synthetics.get(ref.column());
+                     if (synthetic == null) {
+-                        return ctxForRefs.add(ref);
++                        Input<?> input = ctxForRefs.add(ref);
++                        // If 'ref' is an object column with synthetic children, the synthetic values need to be merged
++                        return () -> mergeSyntheticChildren(ref, input);
+                     } else {
+                         return synthetic;
+                     }
+@@ -637,6 +639,53 @@ public class Indexer {
+         return indexColumns;
+     }
+ 
++    /**
++     * Creates a copy of the given value and merges in its synthetic children for object columns; otherwise returns the
++     * original value unchanged.
++     * <p>
++     * Mainly used for `RETURNING` clause returning objects with synthetic sub-columns where the result set is expected
++     * to contain all children.
++     * <p>
++     * Background: the reason for creating a copy and merging - the current design for INSERT/UPDATE does not merge the
++     * insert values with synthetic sub-columns.
++     * They are held separately in {@link IndexItem#insertValues} and {@link Indexer#synthetics} to save the cost
++     * of streaming to replicas.
++     */
++    private Object mergeSyntheticChildren(Reference parentRef, Input<?> input) {
++        Object value = input.value();
++        if (value instanceof Map<?, ?>) {
++            @SuppressWarnings("unchecked")
++            Map<String, Object> m = Maps.deepCopy((Map<String, Object>) value);
++            ColumnIdent parentColumn = parentRef.column();
++            for (Synthetic childSynthetic : synthetics.values()) {
++                ColumnIdent childSyntheticColumn = childSynthetic.ref.column();
++                if (!childSyntheticColumn.isChildOf(parentColumn) ||
++                    // Sometimes Indexer#synthetics contains a non-synthetic object column
++                    // if it is a parent of a synthetic
++                    (!childSynthetic.ref.isGenerated() && childSynthetic.ref.defaultExpression() == null)) {
++                    continue;
++                }
++                var childSyntheticPath = childSyntheticColumn.path();
++
++                // preserve any existing synthetic children's values - even nulls
++                if (Maps.pathExists(m, childSyntheticPath)) {
++                    continue;
++                }
++
++                Maps.mergeInto(
++                    m,
++                    childSyntheticPath.getFirst(),
++                    childSyntheticPath.subList(1, childSyntheticPath.size()),
++                    childSynthetic.value(),
++                    Map::put,
++                    false);
++            }
++            return m;
++        } else {
++            return value;
++        }
++    }
++
+     /**
+      * To ensure default or generated expressions of object children are evaluated
+      * it's necessary to ensure the parent has values (or is present in the insert)
+diff --git a/server/src/test/java/io/crate/execution/dml/IndexerTest.java b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+index 763667ec75..61378159c4 100644
+--- a/server/src/test/java/io/crate/execution/dml/IndexerTest.java
++++ b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+@@ -1592,6 +1592,138 @@ public class IndexerTest extends CrateDummyClusterServiceUnitTest {
+         assertTranslogParses(parsedDocument, table);
+     }
+ 
++    @Test
++    public void test_returning_clause_containing_synthetic_columns() throws Exception {
++        SQLExecutor executor = SQLExecutor.of(clusterService)
++            .addTable("""
++                create table t (
++                    a int,
++                    o object as (
++                        a2 int,
++                        b2 int as a+o['a2']+o['c2'],
++                        c2 int default 2,
++                        d2 timestamp default now(),
++                        e2 timestamp as now()
++                    ),
++                    b int as a+o['a2']+o['c2'],
++                    c int default 2,
++                    d timestamp default now(),
++                    e timestamp as now()
++                )
++                """);
++        DocTableInfo table = executor.resolveTableInfo("t");
++
++        var targetColumns = List.of(table.getReference(ColumnIdent.of("a")), table.getReference(ColumnIdent.of("o")));
++        Indexer indexer = new Indexer(
++            List.of(),
++            table,
++            Version.CURRENT,
++            new CoordinatorTxnCtx(executor.getSessionSettings()),
++            executor.nodeCtx,
++            new ArrayList<>(targetColumns),
++            null,
++            List.of(
++                table.getReference(ColumnIdent.of("a")),
++                table.getReference(ColumnIdent.of("o")),
++                table.getReference(ColumnIdent.of("b")),
++                table.getReference(ColumnIdent.of("c")),
++                table.getReference(ColumnIdent.of("d")),
++                table.getReference(ColumnIdent.of("e"))
++            ).toArray(Symbol[]::new)
++        );
++
++        // insert into t(a,o) values (1, {a2=10}) returning *
++        var returning = indexer.returnValues(item(1, MapBuilder.newMapBuilder().put("a2", 10).map()));
++
++        assertThat(returning[0]).isEqualTo(1);
++        assertThat(returning[1]).hasFieldOrPropertyWithValue("a2", 10);
++        assertThat(returning[1]).hasFieldOrPropertyWithValue("b2", 13);
++        assertThat(returning[1]).hasFieldOrPropertyWithValue("c2", 2);
++        assertThat(returning[1]).hasFieldOrProperty("d2");
++        assertThat(returning[1]).hasFieldOrProperty("e2");
++
++        // columns(b,c,d,e) that are not included in Indexer.targetColumns but still need to be returned
++        assertThat(returning[2]).isEqualTo(13);
++        assertThat(returning[3]).isEqualTo(2);
++        assertThat(returning[4]).isNotNull();
++        assertThat(returning[5]).isNotNull();
++    }
++
++    @Test
++    public void test_returning_clause_containing_nested_synthetic_columns() throws Exception {
++        SQLExecutor executor = SQLExecutor.of(clusterService)
++            .addTable("""
++                create table t (
++                    a int,
++                    o object as (
++                        a int,
++                        oo object as (
++                            a int,
++                            b int as a + o['a'] + o['oo']['a']
++                        )
++                    )
++                )
++                """);
++        DocTableInfo table = executor.resolveTableInfo("t");
++
++        Indexer indexer = new Indexer(
++            List.of(),
++            table,
++            Version.CURRENT,
++            new CoordinatorTxnCtx(executor.getSessionSettings()),
++            executor.nodeCtx,
++            new ArrayList<>(List.of(table.getReference(ColumnIdent.of("a")), table.getReference(ColumnIdent.of("o")))),
++            null,
++            List.of(
++                table.getReference(ColumnIdent.of("a")),
++                table.getReference(ColumnIdent.of("o"))
++            ).toArray(Symbol[]::new)
++        );
++
++        // insert into t values (1, {a=2, oo={a=3}}) returning *
++        var returning = indexer.returnValues(item(1, MapBuilder.newMapBuilder().put("a", 2).put("oo", MapBuilder.newMapBuilder().put("a", 3).map()).map()));
++
++        assertThat(returning[0]).isEqualTo(1);
++        assertThat(returning[1]).isEqualTo(Map.of("a", 2, "oo", Map.of("a", 3, "b", 6)));
++    }
++
++    @Test
++    public void test_inserting_null_with_returning_clause_containing_synthetic_sub_columns() throws Exception {
++        SQLExecutor executor = SQLExecutor.of(clusterService)
++            .addTable("""
++                create table t (
++                    o object as (
++                        a int,
++                        b int as o['a']+1,
++                        c int default 10
++                    )
++                )
++                """);
++        DocTableInfo table = executor.resolveTableInfo("t");
++
++        Indexer indexer = new Indexer(
++            List.of(),
++            table,
++            Version.CURRENT,
++            new CoordinatorTxnCtx(executor.getSessionSettings()),
++            executor.nodeCtx,
++            new ArrayList<>(List.of(table.getReference(ColumnIdent.of("o")))),
++            null,
++            List.of(
++                table.getReference(ColumnIdent.of("o"))
++            ).toArray(Symbol[]::new)
++        );
++
++        // insert into t values (null) returning *
++        var returning = indexer.returnValues(item(new Object[]{null}));
++        assertThat(returning[0]).isNull();
++
++        // insert into t values ({a=null, c=null}) returning *
++        returning = indexer.returnValues(item(MapBuilder.newMapBuilder().put("a", null).put("c", null).map()));
++        // {a=null, b=null, c=null} - 'b' is correctly generated and 'c' is not defaulted to 10
++        assertThat(returning[0]).isEqualTo(MapBuilder.newMapBuilder().put("a", null).put("b", null).put("c", null).map());
++    }
++
+     public static void assertTranslogParses(ParsedDocument doc, DocTableInfo info) {
+         assertTranslogParses(doc, info, Version.CURRENT);
+     }

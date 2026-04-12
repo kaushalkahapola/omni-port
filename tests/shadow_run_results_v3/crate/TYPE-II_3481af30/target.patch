@@ -1,0 +1,123 @@
+commit 35345ac31e769e84d64bb2b8dd0559cab006542b
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Wed Nov 13 19:02:36 2024 +0100
+
+    Use floatValue and doubleValue to validate values
+    
+    We don't need intermediate conversion to the BigInteger
+    as it can lead to heavy computations of pow(BigInteger.TEN, big_exponent)
+    causing queries to hang.
+    
+    (cherry picked from commit 3481af304449c3b306d769af3f7f2e40f58d3170)
+
+diff --git a/docs/appendices/release-notes/5.9.3.rst b/docs/appendices/release-notes/5.9.3.rst
+index 7fb94f8793..db490b5c1d 100644
+--- a/docs/appendices/release-notes/5.9.3.rst
++++ b/docs/appendices/release-notes/5.9.3.rst
+@@ -148,3 +148,8 @@ Fixes
+   ``ORDER BY`` expression contained a nested function. For example::
+ 
+     SELECT * FROM t ORDER BY LEFT(txt_col, 1) = ANY(['a']);
++
++- Fixed an issue that caused casting values of the ``NUMERIC`` type to the
++  ``float`` or ``double`` types to hang. For example::
++
++    SELECT exp(-1110102730.1852759636)::float;
+diff --git a/server/src/main/java/io/crate/types/DoubleType.java b/server/src/main/java/io/crate/types/DoubleType.java
+index bfcd0d3342..8dfa2530a4 100644
+--- a/server/src/main/java/io/crate/types/DoubleType.java
++++ b/server/src/main/java/io/crate/types/DoubleType.java
+@@ -23,7 +23,6 @@ package io.crate.types;
+ 
+ import java.io.IOException;
+ import java.math.BigDecimal;
+-import java.math.BigInteger;
+ import java.util.List;
+ import java.util.function.Function;
+ 
+@@ -119,8 +118,8 @@ public class DoubleType extends DataType<Double> implements FixedWidthType, Stre
+         }
+     };
+ 
+-    private static final BigInteger DOUBLE_MAX = BigDecimal.valueOf(Double.MAX_VALUE).toBigInteger();
+-    private static final BigInteger DOUBLE_MIN = BigDecimal.valueOf(-Double.MAX_VALUE).toBigInteger();
++    private static final BigDecimal DOUBLE_MAX = BigDecimal.valueOf(Double.MAX_VALUE);
++    private static final BigDecimal DOUBLE_MIN = BigDecimal.valueOf(-Double.MAX_VALUE);
+ 
+     private DoubleType() {
+     }
+@@ -159,8 +158,12 @@ public class DoubleType extends DataType<Double> implements FixedWidthType, Stre
+         } else if (value instanceof String s) {
+             return Double.valueOf(s);
+         } else if (value instanceof BigDecimal bigDecimalValue) {
+-            if (DOUBLE_MAX.compareTo(bigDecimalValue.toBigInteger()) <= 0
+-                || DOUBLE_MIN.compareTo(bigDecimalValue.toBigInteger()) >= 0) {
++            // Preferring compareTo over equals as it gives safer equality check.
++            // From the compareTo docs:
++            // Two BigDecimal objects that are equal in value but have a different scale (like 2.0 and 2.00)
++            // are considered equal by this method.
++            if (DOUBLE_MAX.compareTo(bigDecimalValue) <= 0
++                || DOUBLE_MIN.compareTo(bigDecimalValue) >= 0) {
+                 throw new IllegalArgumentException(getName() + " value out of range: " + value);
+             }
+             return bigDecimalValue.doubleValue();
+diff --git a/server/src/main/java/io/crate/types/FloatType.java b/server/src/main/java/io/crate/types/FloatType.java
+index 6274eb8a0b..9ad4969142 100644
+--- a/server/src/main/java/io/crate/types/FloatType.java
++++ b/server/src/main/java/io/crate/types/FloatType.java
+@@ -23,7 +23,6 @@ package io.crate.types;
+ 
+ import java.io.IOException;
+ import java.math.BigDecimal;
+-import java.math.BigInteger;
+ import java.util.List;
+ import java.util.function.Function;
+ 
+@@ -119,8 +118,8 @@ public class FloatType extends DataType<Float> implements Streamer<Float>, Fixed
+         }
+     };
+ 
+-    private static final BigInteger MAX = BigDecimal.valueOf(Float.MAX_VALUE).toBigInteger();
+-    private static final BigInteger MIN = BigDecimal.valueOf(-Float.MAX_VALUE).toBigInteger();
++    private static final BigDecimal MAX = BigDecimal.valueOf(Float.MAX_VALUE);
++    private static final BigDecimal MIN = BigDecimal.valueOf(-Float.MAX_VALUE);
+ 
+     private FloatType() {
+     }
+@@ -159,8 +158,12 @@ public class FloatType extends DataType<Float> implements Streamer<Float>, Fixed
+         } else if (value instanceof String s) {
+             return Float.parseFloat(s);
+         } else if (value instanceof BigDecimal bigDecimalValue) {
+-            if (MAX.compareTo(bigDecimalValue.toBigInteger()) <= 0
+-                || MIN.compareTo(bigDecimalValue.toBigInteger()) >= 0) {
++            // Preferring compareTo over equals as it gives safer equality check.
++            // From the compareTo docs:
++            // Two BigDecimal objects that are equal in value but have a different scale (like 2.0 and 2.00)
++            // are considered equal by this method.
++            if (MAX.compareTo(bigDecimalValue) <= 0
++                || MIN.compareTo(bigDecimalValue) >= 0) {
+                 throw new IllegalArgumentException("float value out of range: " + value);
+             }
+             return bigDecimalValue.floatValue();
+diff --git a/server/src/test/java/io/crate/planner/SelectPlannerTest.java b/server/src/test/java/io/crate/planner/SelectPlannerTest.java
+index 06066af965..c5ab497d7c 100644
+--- a/server/src/test/java/io/crate/planner/SelectPlannerTest.java
++++ b/server/src/test/java/io/crate/planner/SelectPlannerTest.java
+@@ -1631,4 +1631,17 @@ public class SelectPlannerTest extends CrateDummyClusterServiceUnitTest {
+         );
+     }
+ 
++    @Test
++    public void test_float_and_double_implicit_cast_dont_hang_on_range_validation() throws Exception {
++        var e = SQLExecutor.of(clusterService);
++
++        // Used to hang in the value range validation in FloatType.implicitCast.
++        LogicalPlan logicalPlan = e.logicalPlan("SELECT EXP(-1110102730.1852759636)::float");
++        assertThat(logicalPlan).hasOperators("TableFunction[empty_row | [0.0] | true]");
++
++        // Used to hang in the value range validation in DoubleType.implicitCast.
++        logicalPlan = e.logicalPlan("SELECT EXP(-1110102730.1852759636)::double");
++        assertThat(logicalPlan).hasOperators("TableFunction[empty_row | [0.0] | true]");
++    }
++
+ }
