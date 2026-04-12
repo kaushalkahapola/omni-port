@@ -690,7 +690,6 @@ class HunkSynthesizer:
         start_line: int,
         end_line: int,
         context_lines: int = 30,
-        context_lines: int = 30,
     ) -> str:
         """
         Extracts [start_line..end_line] (1-indexed) plus context_lines on each side
@@ -844,7 +843,6 @@ class HunkSynthesizer:
         # Attempts 1-4: expand context from the TARGET FILE around the localized region.
         # new_string does NOT change — CLAW replaces only the old_string portion.
         for context_lines in [3, 10, 20, 30]:
-        for context_lines in [3, 10, 20, 30]:
             expanded_old = self.extract_lines_with_context(
                 file_content,
                 loc_result.start_line,
@@ -852,7 +850,6 @@ class HunkSynthesizer:
                 context_lines,
             )
             verified, confidence = self.verify_old_string_exists(file_content, expanded_old)
-            if verified and confidence >= 1.0:
             if verified and confidence >= 1.0:
                 # Build the expanded new_string: same surrounding context lines
                 # from the file, but with the core replacement swapped in.
@@ -1415,7 +1412,6 @@ def hunk_synthesizer_agent(state: BackportState) -> BackportState:
                 retry_contexts.append(
                     PatchRetryContext(
                         error_type="synthesis_skipped_no_localization",
-                        error_message="Hunk unclaimed; localization failed entirely",
                         error_message="Hunk unclaimed; localization failed entirely",
                         attempt_count=state.get("current_attempt", 1),
                         suggested_action="manual_review",

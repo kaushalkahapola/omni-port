@@ -422,15 +422,27 @@ def _apply_synthesized_hunks(
             errors.append(f"synthesized hunk missing file_path: {hunk}")
             continue
 
-        # Fix G: new-file hunks have empty old_string — the file was already written by
-        # agent6. Just verify it exists on disk; no CLAW replacement needed.
+        # Fix G: new-file hunks have empty old_string — the file was written by agent6.
+        # On the first pass it already exists; on retry passes (after repo restore wipes
+        # the file) recreate it from new_string so the build sees the file.
         if not old_string:
             abs_path = os.path.join(repo_path, file_path)
             if os.path.exists(abs_path):
                 if file_path not in applied_files:
                     applied_files.append(file_path)
+            elif new_string:
+                # Repo restore deleted the file — recreate it from the sentinel's new_string.
+                try:
+                    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                    with open(abs_path, "w", encoding="utf-8") as f:
+                        f.write(new_string)
+                    if file_path not in applied_files:
+                        applied_files.append(file_path)
+                    print(f"  [agent7] Re-created new file after repo restore: {file_path}")
+                except Exception as e:
+                    errors.append(f"{file_path}: failed to recreate new file — {e}")
             else:
-                errors.append(f"{file_path}: new-file hunk — file not found on disk after agent6 creation")
+                errors.append(f"{file_path}: new-file hunk — file not found on disk and new_string is empty")
             continue
 
         abs_path = os.path.join(repo_path, file_path)

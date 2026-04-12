@@ -1,0 +1,196 @@
+{
+  "run_timestamp": "2026-04-12T05:06:45.578385",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "0ce13db97eee63f04f07a9823e956a451ed7b9af",
+  "backport_commit": "0901a6f909f62b1ee142c9eb0566ac24989561f8",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/execution/IncrementalPageBucketReceiver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 30,
+          "end_line": 35,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/execution/IncrementalPageBucketReceiver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 98,
+          "end_line": 104,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.6,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies the IncrementalPageBucketReceiver.java file by adding a try-catch block around the processRows call inside a whenComplete callback. This is a small structural addition to handle exceptions properly and complete a future exceptionally. The change is localized and does not involve renaming or deep refactoring, but it is more than a simple string replacement, involving exception handling logic. The test additions are straightforward and related to the new behavior. The patch was found with exact matches in the target branch, indicating minimal drift. Therefore, the patch complexity is best classified as TYPE_II (whitespace/formatting drift or minor structural changes requiring fuzzy matching). The confidence is high due to exact localization and the nature of the change. The token budget estimate is moderate due to the added logic and test code.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/execution/IncrementalPageBucketReceiver.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/execution/IncrementalPageBucketReceiver.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.execution.IncrementalPageBucketReceiverTest.xml"
+        ],
+        "target_classes": [
+          "IncrementalPageBucketReceiverTest"
+        ],
+        "test_cases": {
+          "io.crate.execution.IncrementalPageBucketReceiverTest#test_processing_future_completed_when_finisher_throws": "passed",
+          "io.crate.execution.IncrementalPageBucketReceiverTest#test_listener_doesnt_need_more_when_processRows_throws": "passed"
+        },
+        "classes": {
+          "io.crate.execution.IncrementalPageBucketReceiverTest": "passed"
+        },
+        "summary": {
+          "passed": 2,
+          "failed": 0,
+          "skipped": 0,
+          "total": 2
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.execution.IncrementalPageBucketReceiverTest#test_listener_doesnt_need_more_when_processRows_throws"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 2,
+        "patched_total": 2,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 6,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 2
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1507,
+    "target_patch_bytes": 7216,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.execution.IncrementalPageBucketReceiverTest#test_listener_doesnt_need_more_when_processRows_throws"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 2,
+      "patched_total": 2,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

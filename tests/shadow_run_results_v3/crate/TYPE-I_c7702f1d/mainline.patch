@@ -1,0 +1,130 @@
+commit c7702f1de3a49bfa1b25d522792fa365c8570b8c
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Tue Jul 15 18:20:00 2025 -0400
+
+    Fix intermittent subscription loss in logical replication during rolling upgrades
+    
+    PublicationsStateAction.Response instances may be passed between
+    publisher nodes before being forwarded to subscriber node. During
+    rolling upgrades, this forwarding behaviour leads to a chain of
+    cross-version conversions of the Response instance: 5.10 -> 6.0 -> 5.10.
+    The final Response sent to the subscriber node is missing
+    relationsInPublications, resulting in subscription loss.
+    
+    Relates to #17960.
+
+diff --git a/docs/appendices/release-notes/6.0.1.rst b/docs/appendices/release-notes/6.0.1.rst
+index fec7cc35e2..538cb4224a 100644
+--- a/docs/appendices/release-notes/6.0.1.rst
++++ b/docs/appendices/release-notes/6.0.1.rst
+@@ -47,4 +47,5 @@ series.
+ Fixes
+ =====
+ 
+-None
++- Fix intermittent subscription loss in logical replication during rolling
++  upgrades.
+diff --git a/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java b/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
+index e53de1a8ec..f1cbb031bb 100644
+--- a/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
++++ b/server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java
+@@ -52,6 +52,7 @@ import org.elasticsearch.threadpool.ThreadPool;
+ import org.elasticsearch.transport.TransportActionProxy;
+ import org.elasticsearch.transport.TransportResponse;
+ import org.elasticsearch.transport.TransportService;
++import org.jetbrains.annotations.Nullable;
+ 
+ import io.crate.metadata.RelationName;
+ import io.crate.replication.logical.metadata.PublicationsMetadata;
+@@ -196,15 +197,26 @@ public class PublicationsStateAction extends ActionType<PublicationsStateAction.
+ 
+         private final Metadata metadata;
+         private final List<String> unknownPublications;
++        /**
++         * The action is registered as a proxy action,
++         * thus a node may forward the request/response to/from its master node.
++         * In such cases, the received metadata won't be upgraded,
++         * and we cannot recreate this old payload using the new RelationMetadata.
++         * The payload is then stored and send out as-is.
++         */
++        @Nullable
++        private final Map<RelationName, RelationMetadata> relationsInPublications;
+ 
+         public Response(Metadata metadata, List<String> unknownPublications) {
+             this.metadata = metadata;
+             this.unknownPublications = unknownPublications;
++            this.relationsInPublications = null;
+         }
+ 
+         public Response(StreamInput in) throws IOException {
+             if (in.getVersion().before(Version.V_6_0_0)) {
+                 Map<RelationName, RelationMetadata> relationsInPublications = in.readMap(RelationName::new, RelationMetadata::new);
++                this.relationsInPublications = relationsInPublications;
+                 Metadata.Builder mdBuilder = Metadata.builder();
+                 for (Map.Entry<RelationName, RelationMetadata> entry : relationsInPublications.entrySet()) {
+                     RelationMetadata relationMetadata = entry.getValue();
+@@ -218,6 +230,7 @@ public class PublicationsStateAction extends ActionType<PublicationsStateAction.
+                 }
+                 metadata = mdBuilder.build();
+             } else {
++                relationsInPublications = null;
+                 metadata = Metadata.readFrom(in);
+             }
+             unknownPublications = in.readList(StreamInput::readString);
+@@ -226,7 +239,8 @@ public class PublicationsStateAction extends ActionType<PublicationsStateAction.
+         @Override
+         public void writeTo(StreamOutput out) throws IOException {
+             if (out.getVersion().before(Version.V_6_0_0)) {
+-                Map<RelationName, RelationMetadata> relationsInPublications =
++                Map<RelationName, RelationMetadata> relationsInPublications = this.relationsInPublications != null ?
++                    this.relationsInPublications :
+                     metadata.relations(org.elasticsearch.cluster.metadata.RelationMetadata.Table.class).stream()
+                         .map(table -> RelationMetadata.fromMetadata(table, metadata))
+                         .collect(Collectors.toMap(RelationMetadata::name, x -> x));
+diff --git a/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java b/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java
+index 17d2ff1c9a..c70b3680b3 100644
+--- a/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java
++++ b/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java
+@@ -27,6 +27,7 @@ import static io.crate.testing.TestingHelpers.createNodeContext;
+ import static java.util.Collections.singletonList;
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
++import java.io.IOException;
+ import java.util.Collection;
+ import java.util.List;
+ import java.util.Map;
+@@ -459,4 +460,34 @@ public class PublicationsStateActionTest extends CrateDummyClusterServiceUnitTes
+             }
+         }
+     }
++
++    @Test
++    public void test_ensure_streaming_response_received_from_5_10_can_be_forwarded_to_5_10() throws IOException {
++        var relName = new RelationName("doc", "x");
++        var indexMetadata = IndexMetadata.builder("x").settings(settings(Version.CURRENT)).numberOfShards(1).numberOfReplicas(0).build();
++        Map<RelationName, RelationMetadata> relationsInPublications = Map.of(
++            relName,
++            new RelationMetadata(relName, List.of(indexMetadata), null));
++        List<String> unknownPublications = List.of();
++
++        BytesStreamOutput out = new BytesStreamOutput();
++        out.setVersion(Version.V_5_10_0);
++
++        out.writeMap(relationsInPublications, (o, v) -> v.writeTo(out), (o, v) -> v.writeTo(out));
++        out.writeStringCollection(unknownPublications);
++
++        try (var in = out.bytes().streamInput()) {
++            in.setVersion(Version.V_5_10_0);
++            PublicationsStateAction.Response response = new PublicationsStateAction.Response(in); // Response received from 5.10
++            var out2 = new BytesStreamOutput();
++            out2.setVersion(Version.V_5_10_0);
++            response.writeTo(out2); // Response forwarded to 5.10
++
++            try (var in2 = out2.bytes().streamInput()) {
++                // Check that the response forwarded to 5.10 == the response received from 5.10
++                Map<RelationName, RelationMetadata> relationsInPublications2 = in2.readMap(RelationName::new, RelationMetadata::new);
++                assertThat(relationsInPublications2).isEqualTo(relationsInPublications);
++            }
++        }
++    }
+ }

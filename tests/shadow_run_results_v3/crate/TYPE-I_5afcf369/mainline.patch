@@ -1,0 +1,309 @@
+commit 5afcf36990a94941c8fe4909953c5ed3bb5981cd
+Author: Mathias Fussenegger <f.mathias@zignar.net>
+Date:   Mon Sep 15 14:38:35 2025 +0200
+
+    Fix a race condition swallowing pgwire messages
+    
+    The `DelayableWriteChannel` had a race where:
+    
+    - Thread1: Calls .write, channel is blocked and retrieves `delayedWrites`
+    - Thread2: Calls .writePendingMessages; unblocks and processes all delayed writes
+    - Thread1: Continues, adding the msg to the `delayedWrites` instance.
+    
+    Given that there's no more reference to `delayedWrites`, the msg was
+    lost.
+    
+    On the 5.10 branch this resulted in test failures like:
+    
+        Error:  Failures:
+        Error:    PostgresITest>ESTestCase.after:331->ESTestCase.checkStaticState:438
+        Expecting empty but was: ["LEAK: ByteBuf.release() was not called before it's garbage-collected. See https://netty.io/wiki/reference-counted-objects.html for more information.
+        Recent access records:
+        #1:
+            io.netty.buffer.AdvancedLeakAwareByteBuf.writeInt(AdvancedLeakAwareByteBuf.java:563)
+            io.crate.protocols.postgres.Messages.sendShortMsg(Messages.java:513)
+            io.crate.protocols.postgres.Messages.sendBindComplete(Messages.java:487)
+            io.crate.protocols.postgres.PostgresWireProtocol.handleBindMessage(PostgresWireProtocol.java:645)
+    
+    On master I suspect it was responsible for:
+    
+        java.lang.AssertionError: Shouldn't throw an exception: Received resultset tuples, but no field structure for them
+        at __randomizedtesting.SeedInfo.seed([6F84DB7A48589F86:8B9A58F08FB7751D]:0)
+        at io.crate.integrationtests.PostgresJobsLogsITest.lambda$assertJobLogContains$0(PostgresJobsLogsITest.java:200)
+        at org.elasticsearch.test.ESTestCase.assertBusy(ESTestCase.java:709)
+        at org.elasticsearch.test.ESTestCase.assertBusy(ESTestCase.java:683)
+        at io.crate.integrationtests.PostgresJobsLogsITest.assertJobLogContains(PostgresJobsLogsITest.java:186)
+        at io.crate.integrationtests.PostgresJobsLogsITest.testBatchOperationStatsTableFailure(PostgresJobsLogsITest.java:176)
+
+diff --git a/docs/appendices/release-notes/5.10.12.rst b/docs/appendices/release-notes/5.10.12.rst
+index 628a6e657e..58fa978bad 100644
+--- a/docs/appendices/release-notes/5.10.12.rst
++++ b/docs/appendices/release-notes/5.10.12.rst
+@@ -47,6 +47,13 @@ See the :ref:`version_5.10.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed a race condition in the PostgreSQL wire protocol implementation that
++  could lead to it swallowing outbound messages. This led to undefined client
++  behavior and a memory leak on the server The JDBC client for example would
++  sometimes fail with::
++
++    Received resultset tuples, but no field structure for them
++
+ - Fixed an issue that led to replication errors due to the ``seqNo`` and
+   ``primaryTerm`` information missing when replicating new records written as
+   part of ``INSERT INTO`` or ``COPY FROM`` statements from the primary to
+diff --git a/docs/appendices/release-notes/6.0.1.rst b/docs/appendices/release-notes/6.0.1.rst
+index 97de104b2e..2d8f4c5369 100644
+--- a/docs/appendices/release-notes/6.0.1.rst
++++ b/docs/appendices/release-notes/6.0.1.rst
+@@ -47,6 +47,13 @@ series.
+ Fixes
+ =====
+ 
++- Fixed a race condition in the PostgreSQL wire protocol implementation that
++  could lead to it swallowing outbound messages. This led to undefined client
++  behavior and a memory leak on the server The JDBC client for example would
++  sometimes fail with::
++
++    Received resultset tuples, but no field structure for them
++
+ - Fixed an issue that led to replication errors due to the ``seqNo`` and
+   ``primaryTerm`` information missing when replicating new records written as
+   part of ``INSERT INTO`` or ``COPY FROM`` statements from the primary to
+diff --git a/server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java b/server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java
+index 8b3a86c940..d7fd559f2c 100644
+--- a/server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java
++++ b/server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java
+@@ -23,7 +23,6 @@ package io.crate.protocols.postgres;
+ 
+ import java.net.SocketAddress;
+ import java.util.ArrayDeque;
+-import java.util.concurrent.atomic.AtomicReference;
+ 
+ import org.jetbrains.annotations.Nullable;
+ 
+@@ -47,13 +46,11 @@ import io.netty.util.ReferenceCountUtil;
+ public class DelayableWriteChannel implements Channel {
+ 
+     private final Channel delegate;
+-    private final AtomicReference<DelayedWrites> delay = new AtomicReference<>(null);
++    private DelayedWrites delay = null;
+ 
+     public DelayableWriteChannel(Channel channel) {
+         this.delegate = channel;
+-        channel.closeFuture().addListener(f -> {
+-            discardDelayedWrites();
+-        });
++        channel.closeFuture().addListener(_ -> discardDelayedWrites());
+     }
+ 
+     @Override
+@@ -131,26 +128,6 @@ public class DelayableWriteChannel implements Channel {
+         return this.write(msg, newPromise());
+     }
+ 
+-    @Override
+-    public ChannelFuture write(Object msg, ChannelPromise promise) {
+-        DelayedWrites currentDelay = delay.get();
+-        if (currentDelay != null) {
+-            currentDelay.add(msg, () -> delegate.write(msg, promise));
+-            return promise;
+-        }
+-        return delegate.write(msg, promise);
+-    }
+-
+-    @Override
+-    public ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
+-        DelayedWrites currentDelay = delay.get();
+-        if (currentDelay != null) {
+-            currentDelay.add(msg, () -> delegate.writeAndFlush(msg, promise));
+-            return promise;
+-        }
+-        return delegate.writeAndFlush(msg, promise);
+-    }
+-
+     @Override
+     public ChannelFuture writeAndFlush(Object msg) {
+         return this.writeAndFlush(msg, newPromise());
+@@ -285,47 +262,67 @@ public class DelayableWriteChannel implements Channel {
+         return delegate;
+     }
+ 
+-    public void discardDelayedWrites() {
+-        DelayedWrites currentDelay = delay.getAndSet(null);
+-        if (currentDelay != null) {
+-            var parent = currentDelay.parent;
++
++    @Override
++    public ChannelFuture write(Object msg, ChannelPromise promise) {
++        synchronized (this) {
++            if (delay != null) {
++                delay.add(msg, () -> delegate.write(msg, promise));
++                return promise;
++            }
++        }
++        return delegate.write(msg, promise);
++    }
++
++    @Override
++    public ChannelFuture writeAndFlush(Object msg, ChannelPromise promise) {
++        synchronized (this) {
++            if (delay != null) {
++                delay.add(msg, () -> delegate.writeAndFlush(msg, promise));
++                return promise;
++            }
++        }
++        return delegate.writeAndFlush(msg, promise);
++    }
++
++    public synchronized void discardDelayedWrites() {
++        if (delay != null) {
++            var parent = delay.parent;
+             while (parent != null) {
+                 parent.discard();
+                 parent = parent.parent;
+             }
+-            currentDelay.discard();
++            delay.discard();
++            delay = null;
+         }
+     }
+ 
+-    public void writePendingMessages(DelayedWrites delayedWrites) {
+-        delay.compareAndSet(delayedWrites, null);
++    public synchronized void writePendingMessages(DelayedWrites delayedWrites) {
++        if (delay == delayedWrites) {
++            delay = null;
++        }
+         delayedWrites.writeDelayed();
+     }
+ 
+-    public void writePendingMessages() {
+-        DelayedWrites currentDelay = delay.getAndSet(null);
+-        if (currentDelay != null) {
+-            var parent = currentDelay.parent;
++    public synchronized void writePendingMessages() {
++        if (delay != null) {
++            var parent = delay.parent;
+             while (parent != null) {
+                 parent.writeDelayed();
+                 parent = parent.parent;
+             }
+-            currentDelay.writeDelayed();
++            delay.writeDelayed();
++            delay = null;
+         }
+     }
+ 
+     public DelayedWrites delayWrites() {
+-        return delay.updateAndGet(DelayedWrites::new);
++        DelayedWrites delayedWrites = new DelayedWrites(delay);
++        delay = delayedWrites;
++        return delayedWrites;
+     }
+ 
+-    static class DelayedMsg {
+-        final Runnable runnable;
+-        final Object msg;
+-
+-        public DelayedMsg(Object msg, Runnable runnable) {
+-            this.runnable = runnable;
+-            this.msg = msg;
+-        }
++    record DelayedMsg(Object msg, Runnable runnable) {
+     }
+ 
+     static class DelayedWrites {
+@@ -339,25 +336,19 @@ public class DelayableWriteChannel implements Channel {
+ 
+         public void discard() {
+             DelayedMsg delayedMsg;
+-            synchronized (delayed) {
+-                while ((delayedMsg = delayed.poll()) != null) {
+-                    ReferenceCountUtil.safeRelease(delayedMsg.msg);
+-                }
++            while ((delayedMsg = delayed.poll()) != null) {
++                ReferenceCountUtil.safeRelease(delayedMsg.msg);
+             }
+         }
+ 
+         public void add(Object msg, Runnable runnable) {
+-            synchronized (delayed) {
+-                delayed.add(new DelayedMsg(msg, runnable));
+-            }
++            delayed.add(new DelayedMsg(msg, runnable));
+         }
+ 
+         private void writeDelayed() {
+             DelayedMsg delayedMsg;
+-            synchronized (delayed) {
+-                while ((delayedMsg = delayed.poll()) != null) {
+-                    delayedMsg.runnable.run();
+-                }
++            while ((delayedMsg = delayed.poll()) != null) {
++                delayedMsg.runnable.run();
+             }
+         }
+     }
+diff --git a/server/src/test/java/io/crate/protocols/postgres/DelayableWriteChannelTest.java b/server/src/test/java/io/crate/protocols/postgres/DelayableWriteChannelTest.java
+index f16aa06d4b..4515a9d614 100644
+--- a/server/src/test/java/io/crate/protocols/postgres/DelayableWriteChannelTest.java
++++ b/server/src/test/java/io/crate/protocols/postgres/DelayableWriteChannelTest.java
+@@ -23,13 +23,16 @@ package io.crate.protocols.postgres;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
++import java.util.concurrent.atomic.AtomicInteger;
++
++import org.elasticsearch.test.ESTestCase;
+ import org.junit.Test;
+ 
+ import io.netty.buffer.ByteBuf;
+ import io.netty.buffer.Unpooled;
+ import io.netty.channel.embedded.EmbeddedChannel;
+ 
+-public class DelayableWriteChannelTest {
++public class DelayableWriteChannelTest extends ESTestCase {
+ 
+     @Test
+     public void test_delayed_writes_are_released_on_close() throws Exception {
+@@ -40,4 +43,38 @@ public class DelayableWriteChannelTest {
+         channel.close();
+         assertThat(buffer.refCnt()).isEqualTo(0);
+     }
++
++    @Test
++    public void test_can_add_and_unblock_from_different_threads() throws Exception {
++        AtomicInteger numMessages = new AtomicInteger(50);
++        EmbeddedChannel innerChannel = new EmbeddedChannel();
++        var channel = new DelayableWriteChannel(innerChannel);
++        try {
++            channel.delayWrites();
++            var thread1 = new Thread(() -> {
++                while (numMessages.decrementAndGet() >= 0) {
++                    ByteBuf msg = channel.alloc().buffer();
++                    msg.setInt(0, 1);
++                    channel.write(msg);
++                }
++            });
++            var thread2 = new Thread(() -> {
++                while (numMessages.get() > 0) {
++                    channel.writePendingMessages();
++                    channel.delayWrites();
++                }
++            });
++            thread1.start();
++            thread2.start();
++
++            thread1.join();
++            thread2.join();
++
++            channel.writePendingMessages();
++            channel.flush();
++            assertThat(innerChannel.outboundMessages()).hasSize(50);
++        } finally {
++            innerChannel.finishAndReleaseAll();
++        }
++    }
+ }

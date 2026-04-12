@@ -850,8 +850,9 @@ def namespace_adapter_agent(state: BackportState) -> BackportState:
 
         loc_result = loc_results[i]
 
-        # Skip only completely failed localization (no file found at all).
-        if loc_result.method_used == "failed" or not loc_result.file_path:
+        # Skip completely failed localization and special file-operation hunks
+        # (new_file/renamed_file/deleted_file are handled by agents 6 and 7, not here).
+        if loc_result.method_used in ("failed", "new_file", "renamed_file", "deleted_file") or not loc_result.file_path:
             continue
 
         # Read target file for exact-match check and context.

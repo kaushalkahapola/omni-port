@@ -1,0 +1,222 @@
+{
+  "run_timestamp": "2026-04-12T05:06:45.578385",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "d555d31dd8c2ba07fdf04439a644bb2f99f79416",
+  "backport_commit": "dfb822a63738eaac98f4e239cdb3ac1fc230d483",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 27,
+          "end_line": 32,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 218,
+          "end_line": 229,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.32,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies existing logic in RolesMetadata.java by adding iteration and conditional checks to prevent duplicate role grants and to allow the 'crate' superuser to revoke any granted roles. The changes involve adding loops and conditionals but do not restructure the code significantly or change method signatures. The patch also updates tests and release notes. The hunks were found via 'git_exact' with high confidence, indicating minimal drift. Overall, the patch is more than trivial string replacement but does not involve deep structural refactoring, so it fits TYPE_II complexity.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.role.metadata.RolesMetadataTest.xml"
+        ],
+        "target_classes": [
+          "RolesMetadataTest"
+        ],
+        "test_cases": {
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_with_attributes_streaming": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_streaming": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_revoke_roles_from_user": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_add_old_users_metadata_to_roles_metadata": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_do_not_loose_existing_privileges": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_superuser_crate_can_revoke_any_granted_roles": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_cannot_grant_already_granted_role_by_different_grantor": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_jwt_properties_from_invalid_x_content": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_to_user": "passed",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_from_cluster_state": "passed"
+        },
+        "classes": {
+          "io.crate.role.metadata.RolesMetadataTest": "passed"
+        },
+        "summary": {
+          "passed": 10,
+          "failed": 0,
+          "skipped": 0,
+          "total": 10
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.role.metadata.RolesMetadataTest#test_add_old_users_metadata_to_roles_metadata",
+          "io.crate.role.metadata.RolesMetadataTest#test_cannot_grant_already_granted_role_by_different_grantor",
+          "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_do_not_loose_existing_privileges",
+          "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_to_user",
+          "io.crate.role.metadata.RolesMetadataTest#test_jwt_properties_from_invalid_x_content",
+          "io.crate.role.metadata.RolesMetadataTest#test_revoke_roles_from_user",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_from_cluster_state",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_streaming",
+          "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_with_attributes_streaming",
+          "io.crate.role.metadata.RolesMetadataTest#test_superuser_crate_can_revoke_any_granted_roles"
+        ],
+        "baseline_total": 0,
+        "patched_total": 10,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 2398,
+    "target_patch_bytes": 6563,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.role.metadata.RolesMetadataTest#test_add_old_users_metadata_to_roles_metadata",
+        "io.crate.role.metadata.RolesMetadataTest#test_cannot_grant_already_granted_role_by_different_grantor",
+        "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_do_not_loose_existing_privileges",
+        "io.crate.role.metadata.RolesMetadataTest#test_grant_roles_to_user",
+        "io.crate.role.metadata.RolesMetadataTest#test_jwt_properties_from_invalid_x_content",
+        "io.crate.role.metadata.RolesMetadataTest#test_revoke_roles_from_user",
+        "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_from_cluster_state",
+        "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_streaming",
+        "io.crate.role.metadata.RolesMetadataTest#test_roles_metadata_with_attributes_streaming",
+        "io.crate.role.metadata.RolesMetadataTest#test_superuser_crate_can_revoke_any_granted_roles"
+      ],
+      "baseline_total": 0,
+      "patched_total": 10,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 10,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

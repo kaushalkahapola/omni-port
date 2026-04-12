@@ -1,0 +1,194 @@
+{
+  "run_timestamp": "2026-04-12T05:06:45.578385",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "422c9d48ae8aee46e0e7550e26d8d326cfa6468d",
+  "backport_commit": "d17ad1dfa72d576ede22aa9bf792dac6d291079d",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 231,
+          "end_line": 236,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.11,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch involves a straightforward addition of a validation loop to an existing method, ensuring that symbols in the 'partition by' clause also appear in the 'group by' clause. The change is localized to a single method with an exact match in the target branch, indicating a trivial backport. The modifications to documentation and tests are also straightforward and do not involve structural changes. Therefore, this patch is best classified as TYPE_I with high confidence.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/expression/symbol/GroupAndAggregateSemantics.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.analyze.SelectWindowFunctionAnalyzerTest.xml"
+        ],
+        "target_classes": [
+          "SelectWindowFunctionAnalyzerTest"
+        ],
+        "test_cases": {
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testNonAggregateAndNonWindowFunctionCannotAcceptIgnoreOrRespectNullsFlag": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testAggregatesCannotAcceptIgnoreOrRespectNullsFlag": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testOverWithPartitionByClause": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#test_over_references_window_that_references_subsequent_window": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testEmptyOverClause": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testInvalidOrderByField": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testOverWithFrameDefinition": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#test_over_with_order_by_references_window_with_partition_by": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testOnlyAggregatesAndWindowFunctionsAreAllowedWithOver": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#test_window_function_symbols_not_in_grouping_raises_an_error": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testInvalidPartitionByField": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testOverWithOrderByClause": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#test_over_references_not_defined_window": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#testOverWithPartitionAndOrderByClauses": "passed",
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#test_window_function_partition_symbols_not_in_grouping_raises_an_error": "passed"
+        },
+        "classes": {
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest": "passed"
+        },
+        "summary": {
+          "passed": 15,
+          "failed": 0,
+          "skipped": 0,
+          "total": 15
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.analyze.SelectWindowFunctionAnalyzerTest#test_window_function_partition_symbols_not_in_grouping_raises_an_error"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 15,
+        "patched_total": 15,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 15
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 825,
+    "target_patch_bytes": 3514,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.analyze.SelectWindowFunctionAnalyzerTest#test_window_function_partition_symbols_not_in_grouping_raises_an_error"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 15,
+      "patched_total": 15,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

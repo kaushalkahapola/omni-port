@@ -1,0 +1,136 @@
+commit dfb822a63738eaac98f4e239cdb3ac1fc230d483
+Author: jeeminso <jeeminso@gmail.com>
+Date:   Thu Jul 3 13:44:58 2025 -0400
+
+    Fix for duplicate roles granted to a user by different grantors
+    
+    Also, allowed 'crate' to be able to revoke any granted roles.
+    
+    Fixes #18099
+    
+    (cherry picked from commit d555d31dd8c2ba07fdf04439a644bb2f99f79416)
+
+diff --git a/docs/appendices/release-notes/5.10.11.rst b/docs/appendices/release-notes/5.10.11.rst
+index 42f7b97798..a2bb69fffe 100644
+--- a/docs/appendices/release-notes/5.10.11.rst
++++ b/docs/appendices/release-notes/5.10.11.rst
+@@ -74,3 +74,9 @@ Fixes
+ - Fixed incorrect JSON response formatting for bulk operations with a single
+   argument that results in a runtime error. The response now follows the
+   structure specified in :ref:`bulk-errors <http-bulk-errors>`.
++
++- Fixed an issue that caused a user to have duplicate roles granted by
++  different grantors.
++
++- Fixed an issue that prevented the superuser ``crate`` from revoking granted
++  roles.
+diff --git a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+index 9e0826de82..99251639fd 100644
+--- a/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
++++ b/server/src/main/java/io/crate/role/metadata/RolesMetadata.java
+@@ -27,6 +27,7 @@ import java.util.Collection;
+ import java.util.EnumSet;
+ import java.util.HashMap;
+ import java.util.HashSet;
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+@@ -218,12 +219,28 @@ public class RolesMetadata extends AbstractNamedDiffable<Metadata.Custom> implem
+         for (var roleNameToApply : newGrantedRolesChange.roleNames()) {
+ 
+             if (newGrantedRolesChange.policy() == Policy.GRANT) {
+-                if (grantedRoles.add(new GrantedRole(roleNameToApply, newGrantedRolesChange.grantor()))) {
++                boolean roleAlreadyGranted = false;
++                for (GrantedRole grantedRole : grantedRoles) {
++                    if (grantedRole.roleName().equals(roleNameToApply)) {
++                        roleAlreadyGranted = true;
++                        break;
++                    }
++                }
++                if (!roleAlreadyGranted) {
++                    grantedRoles.add(new GrantedRole(roleNameToApply, newGrantedRolesChange.grantor()));
+                     affectedCount++;
+                 }
+             } else if (newGrantedRolesChange.policy() == Policy.REVOKE) {
+-                if (grantedRoles.remove(new GrantedRole(roleNameToApply, newGrantedRolesChange.grantor()))) {
+-                    affectedCount++;
++                Iterator<GrantedRole> iterator = grantedRoles.iterator();
++                while (iterator.hasNext()) {
++                    GrantedRole grantedRole = iterator.next();
++                    if (grantedRole.roleName().equals(roleNameToApply) &&
++                        (grantedRole.grantor().equals(newGrantedRolesChange.grantor()) || Role.CRATE_USER.name().equals(newGrantedRolesChange.grantor()))) {
++                        iterator.remove();
++                        affectedCount++;
++                        // search all granted roles because duplicate roles could be granted due to a bug
++                        // https://github.com/crate/crate/issues/18099
++                    }
+                 }
+             }
+         }
+diff --git a/server/src/test/java/io/crate/role/metadata/RolesMetadataTest.java b/server/src/test/java/io/crate/role/metadata/RolesMetadataTest.java
+index 11090daea7..a3aad524af 100644
+--- a/server/src/test/java/io/crate/role/metadata/RolesMetadataTest.java
++++ b/server/src/test/java/io/crate/role/metadata/RolesMetadataTest.java
+@@ -254,4 +254,61 @@ public class RolesMetadataTest extends ESTestCase {
+         assertThat(affectedRolePrivileges).isEqualTo(1);
+         assertThat(rolesMetadata.roles().get("Ford").privileges().size()).isEqualTo(1);
+     }
++
++    @Test
++    public void test_cannot_grant_already_granted_role_by_different_grantor() {
++        var rolesMetadata = new RolesMetadata();
++        rolesMetadata.roles().put("Ford", userOf(
++            "Ford",
++            Set.of(),
++            Set.of(),
++            getSecureHash("fords-pwd"))
++        );
++        rolesMetadata.roles().put("role1", roleOf("role1"));
++        var affectedRolePrivileges = rolesMetadata.applyRolePrivileges(List.of("Ford"), new GrantedRolesChange(
++            Policy.GRANT,
++            Set.of("role1"),
++            "theGrantor1"));
++        assertThat(affectedRolePrivileges).isEqualTo(1);
++
++        // try re-granting 'role1' by the same grantor, 'theGrantor1'
++        affectedRolePrivileges = rolesMetadata.applyRolePrivileges(List.of("Ford"), new GrantedRolesChange(
++            Policy.GRANT,
++            Set.of("role1"),
++            "theGrantor1"));
++        assertThat(affectedRolePrivileges).isEqualTo(0);
++        assertThat(rolesMetadata.roles().get("Ford").grantedRoles()).containsExactly(new GrantedRole("role1", "theGrantor1"));
++
++        // try re-granting 'role1' by a different grantor, 'theGrantor2'
++        affectedRolePrivileges = rolesMetadata.applyRolePrivileges(List.of("Ford"), new GrantedRolesChange(
++            Policy.GRANT,
++            Set.of("role1"),
++            "theGrantor2"));
++        assertThat(affectedRolePrivileges).isEqualTo(0);
++        assertThat(rolesMetadata.roles().get("Ford").grantedRoles()).containsExactly(new GrantedRole("role1", "theGrantor1"));
++    }
++
++    @Test
++    public void test_superuser_crate_can_revoke_any_granted_roles() {
++        var rolesMetadata = new RolesMetadata();
++        rolesMetadata.roles().put("Ford", userOf(
++            "Ford",
++            Set.of(),
++            Set.of(),
++            getSecureHash("fords-pwd"))
++        );
++        rolesMetadata.roles().put("role1", roleOf("role1"));
++        rolesMetadata.applyRolePrivileges(List.of("Ford"), new GrantedRolesChange(
++            Policy.GRANT,
++            Set.of("role1"),
++            "theGrantor1"));
++        assertThat(rolesMetadata.roles().get("Ford").grantedRoles()).containsExactly(new GrantedRole("role1", "theGrantor1"));
++
++        var affectedRolePrivileges = rolesMetadata.applyRolePrivileges(List.of("Ford"), new GrantedRolesChange(
++            Policy.REVOKE,
++            Set.of("role1"),
++            Role.CRATE_USER.name()));
++        assertThat(affectedRolePrivileges).isEqualTo(1);
++        assertThat(rolesMetadata.roles().get("Ford").grantedRoles()).isEmpty();
++    }
+ }
