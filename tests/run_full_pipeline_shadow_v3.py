@@ -330,24 +330,66 @@ def save_phase0_cache(project: str, backport_commit: str, baseline: dict) -> Non
 
 # ── Aux-hunk extraction from target patch ─────────────────────────────────────
 
-def _extract_all_files_from_patch(patch_text: str) -> list[str]:
+def _extract_file_entries_from_patch(patch_text: str) -> list[tuple[str, str]]:
     """
-    Extract ALL changed file paths from a unified diff patch.
-    Used to ensure phase 0 and validation use the same test targets
-    (the files the developer actually changed in their backport).
+    Extract (status, filepath) pairs from a unified diff patch.
+    Status is one of: "M" (modified), "A" (added), "R" (renamed), "D" (deleted).
+    Used to pass exact file-change information to per-project get_test_targets.py
+    helpers so both phase 0 and validation detect identical test targets.
     """
-    files = []
+    entries: list[tuple[str, str]] = []
     seen: set[str] = set()
+
+    src_path = ""
+    tgt_path = ""
+    is_added = False
+    is_deleted = False
+    is_rename = False
+
+    def _norm(p: str) -> str:
+        p = p.strip().replace("\\", "/")
+        while p.startswith("a/") or p.startswith("b/"):
+            p = p[2:]
+        return "" if p in ("/dev/null", "dev/null") else p
+
+    def _flush():
+        nonlocal src_path, tgt_path, is_added, is_deleted, is_rename
+        path = tgt_path or src_path
+        if path and path not in seen:
+            seen.add(path)
+            if is_added:
+                status = "A"
+            elif is_deleted:
+                status = "D"
+            elif is_rename:
+                status = "R"
+            else:
+                status = "M"
+            entries.append((status, path))
+        src_path = tgt_path = ""
+        is_added = is_deleted = is_rename = False
+
     for line in (patch_text or "").splitlines():
-        if line.startswith("+++ "):
-            raw = line[4:].split("\t")[0].strip().replace("\\", "/")
-            # Strip leading a/ or b/ prefixes
-            while raw.startswith("a/") or raw.startswith("b/"):
-                raw = raw[2:]
-            if raw and raw != "/dev/null" and raw not in seen:
-                seen.add(raw)
-                files.append(raw)
-    return files
+        if line.startswith("diff --git "):
+            _flush()
+        elif line.startswith("new file mode"):
+            is_added = True
+        elif line.startswith("deleted file mode"):
+            is_deleted = True
+        elif line.startswith("rename from ") or line.startswith("rename to "):
+            is_rename = True
+        elif line.startswith("--- "):
+            src_path = _norm(line[4:].split("\t")[0])
+        elif line.startswith("+++ "):
+            tgt_path = _norm(line[4:].split("\t")[0])
+
+    _flush()
+    return entries
+
+
+def _extract_all_files_from_patch(patch_text: str) -> list[str]:
+    """Backwards-compat wrapper — returns just the file paths."""
+    return [path for _, path in _extract_file_entries_from_patch(patch_text)]
 
 
 def _build_aux_hunks_from_target_patch(target_patch: str) -> list[dict]:
@@ -753,8 +795,9 @@ def process_patch(
 
     # Extract ALL changed files from target.patch — used for consistent test target detection
     # in both phase 0 and validation so both steps run the exact same set of tests.
-    target_patch_files = _extract_all_files_from_patch(target_patch)
-    print(f"  Extracted {len(target_patch_files)} changed file(s) from target.patch for test target detection")
+    target_patch_file_entries = _extract_file_entries_from_patch(target_patch)
+    target_patch_files = [path for _, path in target_patch_file_entries]
+    print(f"  Extracted {len(target_patch_file_entries)} changed file(s) from target.patch for test target detection")
 
     # ── 4. Initialise state ───────────────────────────────────────────────────
 
@@ -800,6 +843,7 @@ def process_patch(
         # All files changed in the developer's target.patch — ensures phase 0 and
         # validation detect identical test targets regardless of worktree state.
         "target_patch_changed_files": target_patch_files,
+        "target_patch_file_entries": target_patch_file_entries,
         "skip_test": skip_test,
     }
 
@@ -819,9 +863,10 @@ def process_patch(
             baseline_result = cached_baseline
         else:
             print(f"  [pipeline] phase0 cache: miss — starting baseline run for {project}")
-            # Use target_patch_files so phase 0 detects the same test targets as validation.
+            # Use target_patch_file_entries so phase 0 detects the same test targets as validation.
             baseline_result = run_phase0_baseline(
-                repo_path, project, developer_aux_hunks, target_patch_files
+                repo_path, project, developer_aux_hunks,
+                target_patch_file_entries,
             )
             if not baseline_result.get("skipped"):
                 save_phase0_cache(project, backport_commit, baseline_result)

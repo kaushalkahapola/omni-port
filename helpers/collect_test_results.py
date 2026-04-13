@@ -25,7 +25,7 @@ PROJECT_CONFIG = {
     "spring-framework": {"report_pattern": "**/build/test-results/**/*.xml"},
     "logstash": {"report_pattern": "**/build/test-results/**/*.xml"},
     "sql": {"report_pattern": "**/build/test-results/**/*.xml"},
-    "hibernate-orm": {"report_pattern": "**/target/{test-results,reports}/tests/**/TEST-*.xml"},
+    "hibernate-orm": {"report_pattern": "**/build/test-results/**/*.xml"},
     "grpc-java": {"report_pattern": "**/*.xml"},
     "crate": {"report_pattern": "**/target/surefire-reports/*.xml"},
     "jdk11u-dev": {"report_pattern": "**/JTwork/**/*.xml"},
@@ -87,7 +87,11 @@ def parse_xml(xml_paths: list[str], target_classes: set[str]) -> tuple[dict[str,
                         if classname == prefix or classname.startswith(prefix + "."):
                             matched = True
                             break
-                    elif classname == target or classname.endswith("." + target):
+                    elif (classname == target
+                          or classname.endswith("." + target)
+                          or classname.startswith(target + "$")):
+                        # Also match nested/parameterized classes like
+                        # "org.foo.BarTest$InnerCase" when target is "org.foo.BarTest"
                         matched = True
                         break
                 if not matched:

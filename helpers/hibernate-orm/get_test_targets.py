@@ -121,23 +121,12 @@ def main() -> None:
         action="store_true",
         help="Analyse the current worktree diff (HEAD vs working tree)",
     )
+    parser.add_argument("--files-json", help="JSON array of [status, filepath] pairs (skips git)")
     args = parser.parse_args()
 
     empty = {"modified": [], "added": [], "source_modules": [], "all_modules": []}
 
-    if not args.commit and not args.worktree:
-        print(json.dumps(empty))
-        return
-
-    # Get changed-file list
-    if args.worktree:
-        cmd = ["git", "diff", "--name-status", "--diff-filter=AMRT"]
-    else:
-        cmd = ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", args.commit]
-
-    try:
-        output = subprocess.check_output(cmd, cwd=args.repo, text=True, timeout=60)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    if not args.commit and not args.worktree and not args.files_json:
         print(json.dumps(empty))
         return
 
@@ -147,10 +136,34 @@ def main() -> None:
     all_modules: set[str] = set()
     changed_files: list[str] = []
 
-    for status, f in _parse_status_output(output):
+    if args.files_json:
+        try:
+            raw_entries = json.loads(args.files_json)
+            entries: list[tuple[str, str]] = []
+            for item in raw_entries:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    entries.append((str(item[0]), str(item[1])))
+                else:
+                    entries.append(("M", str(item)))
+        except Exception:
+            entries = []
+    else:
+        if args.worktree:
+            cmd = ["git", "diff", "--name-status", "--diff-filter=AMRT"]
+        else:
+            cmd = ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", args.commit]
+
+        try:
+            output = subprocess.check_output(cmd, cwd=args.repo, text=True, timeout=60)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            print(json.dumps(empty))
+            return
+
+        entries = _parse_status_output(output)
+
+    for status, f in entries:
         module = _find_gradle_module(args.repo, f)
 
-        # Skip ignored modules
         top_level = module.split("/")[0] if module else ""
         if top_level in IGNORED_MODULES:
             continue
@@ -158,7 +171,6 @@ def main() -> None:
         if module:
             all_modules.add(module)
 
-        # Track touched source modules
         if _is_main_source(f) and module:
             source_modules.add(module)
 
@@ -167,7 +179,6 @@ def main() -> None:
 
         changed_files.append(f)
 
-        # Build "module:ClassName" token
         class_name = _extract_class_name(f)
         target = f"{module}:{class_name}" if module else class_name
 

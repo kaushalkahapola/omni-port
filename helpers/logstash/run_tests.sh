@@ -4,10 +4,14 @@ set -e
 echo "=== Running Tests for ${COMMIT_SHA:0:7} ==="
 echo "Target: ${TEST_TARGETS}"
 
-# 1. Use Fixed Builder Image
-IMAGE_TAG="logstash-builder:latest"
+# Use the image tag passed by the harness, fall back to the legacy name
+IMAGE_TAG="${BUILDER_IMAGE_TAG:-${IMAGE_TAG:-logstash-builder:latest}}"
 
 echo "--- Using Docker Image: ${IMAGE_TAG} ---"
+
+# BUILD_DIR: where test results are copied after the run.
+# Default to a temp dir so the script works even when not set by the harness.
+BUILD_DIR="${BUILD_DIR:-${PROJECT_DIR}/build}"
 
 # 2. Configure Test Command
 if [ "${TEST_TARGETS}" == "ALL" ]; then

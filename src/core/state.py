@@ -154,6 +154,12 @@ class BackportState(TypedDict):
     # Populated by the pipeline harness from target.patch before phase 0.
     target_patch_changed_files: List[str]
 
+    # (status, filepath) pairs extracted from target.patch — richer than
+    # target_patch_changed_files because it preserves add/modify/rename status.
+    # Passed to detect_test_targets so helpers skip their git step and derive
+    # targets directly from the patch, guaranteeing phase 0 == validation targets.
+    target_patch_file_entries: List[tuple]
+
     # Metrics
     tokens_used: int
     llm_token_usage: Dict[str, Dict[str, int]]

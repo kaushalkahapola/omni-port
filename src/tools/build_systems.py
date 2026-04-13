@@ -487,7 +487,7 @@ def collect_test_results(
             if tc_set:
                 matched = False
                 for target in tc_set:
-                    if cls == target or cls.endswith("." + target):
+                    if cls == target or cls.endswith("." + target) or cls.startswith(target + "$"):
                         matched = True
                         break
                 if not matched:
@@ -564,48 +564,51 @@ def detect_test_targets(
     repo_path: str,
     project: str,
     changed_files: list[str] | None = None,
+    file_entries: list[tuple[str, str]] | None = None,
 ) -> TestTargetInfo:
     """
-    Detect which tests to run based on changed files.
+    Detect which tests to run based on test files touched in target.patch.
+
+    When file_entries (status+path pairs from target.patch) are provided, only
+    the test files among them are passed to the helper — production Java and
+    non-Java files are irrelevant for target detection and are filtered out here.
 
     Priority:
-      1) If changed_files is provided (e.g. from target.patch), use path-based detection
-         directly — ensures phase 0 and validation use the SAME targets regardless of
-         worktree state.
-      2) helpers/{project}/get_test_targets.py --worktree (git diff based)
-      3) Infer from changed_files list (path-based heuristic, fallback)
+      1) helpers/{project}/get_test_targets.py --files-json <json>
+         Passes only the test-file entries from target.patch directly, skipping
+         the helper's git step.  Guarantees phase 0 and validation use identical
+         targets regardless of worktree state.
+      2) helpers/{project}/get_test_targets.py --worktree
+         Fallback when no file_entries are provided (e.g. ad-hoc calls).
+      3) Internal path-based heuristic (last resort).
     """
     normalized = project.strip().lower()
     print(f"  [build_systems] Detecting test targets for project {normalized}")
 
-    # When caller explicitly provides changed_files (from target.patch), derive targets
-    # directly from those paths.  This guarantees consistent targets between phase 0
-    # (only test hunks applied) and validation (all hunks applied).
-    if changed_files:
-        print(f"  [build_systems] Using {len(changed_files)} explicit changed_files for target detection")
-        test_targets, source_modules, all_modules = _detect_targets_from_paths(repo_path, changed_files)
-        
-        targets_list = sorted(test_targets)
-        if normalized == "elasticsearch" and targets_list:
-            targets_list, _ = _filter_elasticsearch_test_targets(targets_list)
-
-        print(f"  [build_systems] Explicit files detection found {len(targets_list)} targets")
-        return TestTargetInfo(
-            test_targets=targets_list,
-            source_modules=sorted(source_modules),
-            all_modules=sorted(all_modules),
-            raw={"source": "target_patch_files", "changed_files": sorted(set(changed_files))},
-        )
-
     helper_script = os.path.join(_helper_dir(normalized), "get_test_targets.py")
 
     if os.path.exists(helper_script):
-        print(f"  [build_systems] Using helper script: {helper_script}")
-        res = _run_cmd(
-            ["python3", helper_script, "--repo", os.path.abspath(repo_path), "--worktree"],
-            cwd=repo_path,
-            timeout=60,
-        )
+        if file_entries is not None:
+            # Filter to test files only — production Java and non-Java files
+            # are not relevant for test target detection.
+            test_entries = [(s, p) for s, p in file_entries if _is_test_file(p)]
+            files_json = json.dumps(test_entries)
+            print(f"  [build_systems] Using helper script with --files-json "
+                  f"({len(test_entries)} test file entries of {len(file_entries)} total): {helper_script}")
+            res = _run_cmd(
+                ["python3", helper_script, "--repo", os.path.abspath(repo_path),
+                 "--files-json", files_json],
+                cwd=repo_path,
+                timeout=60,
+            )
+        else:
+            print(f"  [build_systems] Using helper script with --worktree: {helper_script}")
+            res = _run_cmd(
+                ["python3", helper_script, "--repo", os.path.abspath(repo_path), "--worktree"],
+                cwd=repo_path,
+                timeout=60,
+            )
+
         if res["success"]:
             try:
                 parsed = json.loads(res["output"])
@@ -631,12 +634,12 @@ def detect_test_targets(
                     raw=parsed,
                 )
             except json.JSONDecodeError:
-                print("  [build_systems] Helper returned invalid JSON")
-                pass
+                print("  [build_systems] Helper returned invalid JSON, falling back")
 
     # Path-based fallback
     print("  [build_systems] Using path-based fallback for test target detection")
-    test_targets, source_modules, all_modules = _detect_targets_from_paths(repo_path, changed_files or [])
+    files = changed_files or [path for _, path in (file_entries or [])]
+    test_targets, source_modules, all_modules = _detect_targets_from_paths(repo_path, files)
 
     targets_list = sorted(test_targets)
     if normalized == "elasticsearch" and targets_list:
@@ -647,7 +650,7 @@ def detect_test_targets(
         test_targets=targets_list,
         source_modules=sorted(source_modules),
         all_modules=sorted(all_modules),
-        raw={"source": "changed_files", "changed_files": sorted(set(changed_files or []))},
+        raw={"source": "changed_files", "changed_files": sorted(set(files))},
     )
 
 
@@ -768,9 +771,17 @@ def run_tests(
             image_tag, err = _ensure_docker_image(normalized, repo_path)
             if image_tag:
                 abs_repo_path = os.path.realpath(repo_path)
-                target_classes_only = [
-                    t.split(":", 1)[1] for t in test_targets if ":" in t
-                ]
+
+                # Extract bare class names for result collection.
+                # Logstash targets look like ":logstash-core:test --tests org.logstash.Foo"
+                # Other projects look like "module:org.pkg.FooTest"
+                def _extract_class_name_from_target(t: str) -> str:
+                    if "--tests " in t:
+                        return t.split("--tests ", 1)[1].strip()
+                    if ":" in t:
+                        return t.split(":", 1)[1]
+                    return t
+
                 env = os.environ.copy()
                 env.update({
                     "PROJECT_NAME": normalized,
@@ -789,9 +800,9 @@ def run_tests(
                 output = res["output"]
                 is_compile_error = (not res["success"]) and "compilation error" in output.lower()
 
-                # Collect results
+                # Collect results — use bare class names so XML matching works
                 target_classes_for_collection = [
-                    t.split(":", 1)[1] if ":" in t else t for t in test_targets
+                    _extract_class_name_from_target(t) for t in test_targets
                 ]
                 print(f"  [build_systems] Collecting results for {len(target_classes_for_collection)} classes")
                 test_state = collect_test_results(
