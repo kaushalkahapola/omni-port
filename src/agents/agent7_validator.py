@@ -828,7 +828,9 @@ def run_phase0_baseline(
         restore_repo_state(repo_path)
         return {"test_state": {}, "mode": "baseline-apply-failed", "skipped": True}
 
-    # Detect targets from the changed files (same as agent7 will use later).
+    # Detect targets from the changed files (derived from target.patch by the pipeline).
+    # Passing changed_files ensures path-based detection (not worktree-state-based), which
+    # keeps phase 0 and validation targets in sync.
     target_info = detect_test_targets(repo_path, project, changed_files)
     print(f"  [agent7] phase0: running baseline tests ({len(target_info.test_targets)} targets) directly...")
     test_res = run_tests(repo_path, project, target_info=target_info, changed_files=changed_files)
@@ -1011,7 +1013,7 @@ def run_validation(state: BackportState) -> BackportState:
 
     # ── Step 4: Build ─────────────────────────────────────────────────────────
     print(f"  agent7: running build for {project}...")
-    build_res: BuildResult = run_build(repo_path, project)
+    build_res: BuildResult = run_build(repo_path, project, changed_files=all_modified_java)
     validation_results["build"] = {
         "success": build_res.success,
         "raw": build_res.output,
@@ -1053,16 +1055,25 @@ def run_validation(state: BackportState) -> BackportState:
         state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
         return state
 
-    # ── Step 5: Detect test targets from all changed files ────────────────────
-    all_changed_files: list[str] = list(
-        {
-            h.get("file_path") or h.get("target_file") or ""
-            for h in (synthesized_hunks + developer_aux_hunks + applied_hunks)
-        }
-    )
-    all_changed_files = [f for f in all_changed_files if f]
+    # ── Step 5: Detect test targets ───────────────────────────────────────────
+    # Prefer target_patch_changed_files (extracted from the developer's target.patch)
+    # so phase 0 and validation always run the SAME set of tests.
+    # Fall back to deriving from the hunks applied in this run if not available.
+    target_patch_files: list[str] = state.get("target_patch_changed_files") or []
+    if target_patch_files:
+        files_for_detection = target_patch_files
+        print(f"  agent7: using {len(files_for_detection)} files from target.patch for test targets")
+    else:
+        files_for_detection = list(
+            {
+                h.get("file_path") or h.get("target_file") or ""
+                for h in (synthesized_hunks + developer_aux_hunks + applied_hunks)
+            }
+        )
+        files_for_detection = [f for f in files_for_detection if f]
+        print(f"  agent7: using {len(files_for_detection)} files from applied hunks for test targets")
 
-    test_targets = detect_test_targets(repo_path, project, all_changed_files)
+    test_targets = detect_test_targets(repo_path, project, files_for_detection)
     validation_results["test_target_detection"] = {
         "success": True,
         "raw": test_targets.__dict__,
@@ -1074,7 +1085,7 @@ def run_validation(state: BackportState) -> BackportState:
         f"({len(test_targets.test_targets)} target(s))..."
     )
     test_res: TestResult = run_tests(
-        repo_path, project, target_info=test_targets, changed_files=all_changed_files
+        repo_path, project, target_info=test_targets, changed_files=files_for_detection
     )
 
     # ── Step 7: Evaluate test state transition vs baseline ────────────────────

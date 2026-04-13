@@ -148,6 +148,11 @@ class BackportState(TypedDict):
     # not need a separate file_operations entry.
     file_operations: List[Dict[str, Any]]
 
+    # All file paths changed in the developer's backport commit (target.patch).
+    # Used to ensure phase 0 and validation run the same test targets.
+    # Populated by the pipeline harness from target.patch before phase 0.
+    target_patch_changed_files: List[str]
+
     # Metrics
     tokens_used: int
     llm_token_usage: Dict[str, Dict[str, int]]

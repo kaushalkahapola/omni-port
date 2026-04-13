@@ -1,0 +1,17 @@
+diff --git a/hibernate-core/src/main/java/org/hibernate/internal/util/SubSequence.java b/hibernate-core/src/main/java/org/hibernate/internal/util/SubSequence.java
+index f670f73be4..eacf855b5b 100644
+--- a/hibernate-core/src/main/java/org/hibernate/internal/util/SubSequence.java
++++ b/hibernate-core/src/main/java/org/hibernate/internal/util/SubSequence.java
+@@ -33,10 +33,10 @@ public char charAt(int index) {
+ 
+ 	@Override
+ 	public CharSequence subSequence(int start, int end) {
+-		if ( start < 0 || start >= length ) {
++		if ( start < 0 || start > length ) {
+ 			throw new StringIndexOutOfBoundsException( start );
+ 		}
+-		if ( end > length ) {
++		if ( end < start || end > length ) {
+ 			throw new StringIndexOutOfBoundsException( end );
+ 		}
+ 		return sequence.subSequence( this.start + start, this.start + end );

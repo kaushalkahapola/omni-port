@@ -214,9 +214,21 @@ def _find_module_for_path(repo_path: str, rel_path: str) -> str:
     head = (rel_path or "").replace("\\", "/")
     while head:
         head = os.path.dirname(head)
+        # Standard names first
         for bf in ("pom.xml", "build.gradle", "build.gradle.kts"):
             if os.path.exists(os.path.join(repo_path, head, bf)):
                 return head
+        
+        # Check for any .gradle/.gradle.kts file (often [module-name].gradle in Hibernate ORM)
+        try:
+            full_dir = os.path.join(repo_path, head)
+            if os.path.isdir(full_dir):
+                for f in os.listdir(full_dir):
+                    if (f.endswith(".gradle") or f.endswith(".gradle.kts")) and not f.startswith("settings.gradle"):
+                        return head
+        except Exception:
+            pass
+
     for bf in ("pom.xml", "build.gradle", "build.gradle.kts"):
         if os.path.exists(os.path.join(repo_path, bf)):
             return ""
@@ -244,6 +256,22 @@ def _clear_junit_reports(repo_path: str) -> None:
     ):
         if os.path.isdir(test_results_dir):
             shutil.rmtree(test_results_dir, ignore_errors=True)
+    # Clear target/test-results directories (Hibernate ORM Gradle custom output path
+    # and other projects that redirect Gradle XML output under target/).
+    # Note: Using a more inclusive pattern to ensure nested results are also cleared.
+    for test_results_dir in glob.glob(
+        os.path.join(repo_path, "**", "target", "test-results"), recursive=True
+    ):
+        if os.path.isdir(test_results_dir):
+            shutil.rmtree(test_results_dir, ignore_errors=True)
+    
+    # Also explicitly clear any surefire-reports or failsafe-reports under target/
+    for reports_dir in glob.glob(
+        os.path.join(repo_path, "**", "target", "*-reports"), recursive=True
+    ):
+        if os.path.isdir(reports_dir):
+            shutil.rmtree(reports_dir, ignore_errors=True)
+
     aggregate = os.path.join(repo_path, "build", "all-test-results")
     if os.path.isdir(aggregate):
         shutil.rmtree(aggregate, ignore_errors=True)
@@ -430,6 +458,7 @@ def collect_test_results(
     patterns = [
         os.path.join(repo_path, "**", "surefire-reports", "TEST-*.xml"),
         os.path.join(repo_path, "**", "build", "test-results", "**", "TEST-*.xml"),
+        os.path.join(repo_path, "**", "target", "test-results", "**", "TEST-*.xml"),
         os.path.join(repo_path, "build", "all-test-results", "TEST-*.xml"),
         os.path.join(repo_path, "**/target/surefire-reports/*.xml"),
         os.path.join(repo_path, "**/JTwork/**/*.xml"),
@@ -502,14 +531,79 @@ def detect_test_targets(
     changed_files: list[str] | None = None,
 ) -> TestTargetInfo:
     """
-    Detect which tests to run based on changed files in the worktree.
+    Detect which tests to run based on changed files.
 
     Priority:
-      1) helpers/{project}/get_test_targets.py --worktree (git diff based)
-      2) Infer from changed_files list (path-based heuristic)
+      1) If changed_files is provided (e.g. from target.patch), use path-based detection
+         directly — ensures phase 0 and validation use the SAME targets regardless of
+         worktree state.
+      2) helpers/{project}/get_test_targets.py --worktree (git diff based)
+      3) Infer from changed_files list (path-based heuristic, fallback)
     """
     normalized = project.strip().lower()
     print(f"  [build_systems] Detecting test targets for project {normalized}")
+
+    # When caller explicitly provides changed_files (from target.patch), derive targets
+    # directly from those paths.  This guarantees consistent targets between phase 0
+    # (only test hunks applied) and validation (all hunks applied).
+    if changed_files:
+        print(f"  [build_systems] Using {len(changed_files)} explicit changed_files for target detection")
+        test_targets: set[str] = set()
+        source_modules: set[str] = set()
+        all_modules: set[str] = set()
+        ignored = {"web-console", "distribution", "docs", "examples", "benchmarks", "qa"}
+
+        source_package_wildcards: set[str] = set()
+
+        for rel_path in changed_files:
+            p = (rel_path or "").replace("\\", "/")
+            if not p:
+                continue
+            module = _find_module_for_path(repo_path, p)
+            top_level = module.split("/")[0] if module else ""
+            if top_level in ignored:
+                continue
+            if module:
+                all_modules.add(module)
+            if p.endswith(".java") and "/src/main/java/" in p and module:
+                source_modules.add(module)
+                # Derive a package wildcard from the source file path so that
+                # tests exercising this production code are also run, even if
+                # they aren't listed in target.patch.
+                src_marker = "/src/main/java/"
+                if src_marker in p:
+                    pkg_path = p.split(src_marker, 1)[1]  # e.g. org/foo/bar/Baz.java
+                    pkg = ".".join(pkg_path.replace(".java", "").split("/")[:-1])  # org.foo.bar
+                    if pkg:
+                        source_package_wildcards.add(f"{module}:{pkg}.*")
+            if not _is_test_file(p):
+                continue
+            matched = next((d for d in _TEST_SOURCE_DIRS if d in p), None)
+            if matched:
+                class_part = p.split(matched, 1)[1].replace("/", ".").replace(".java", "")
+                target = f"{module}:{class_part}" if module else class_part
+                test_targets.add(target)
+
+        # Add package-level wildcards for changed production files so that any
+        # test in the same package (or a mirrored test package) is also run.
+        # These complement the explicit test-file targets from target.patch.
+        for wildcard in source_package_wildcards:
+            test_targets.add(wildcard)
+
+        targets_list = sorted(test_targets)
+        if normalized == "elasticsearch" and targets_list:
+            targets_list, _ = _filter_elasticsearch_test_targets(targets_list)
+
+        explicit_count = len([t for t in targets_list if not t.endswith(".*")])
+        wildcard_count = len([t for t in targets_list if t.endswith(".*")])
+        print(f"  [build_systems] Explicit files detection found {explicit_count} targets + {wildcard_count} package wildcard(s)")
+        return TestTargetInfo(
+            test_targets=targets_list,
+            source_modules=sorted(source_modules),
+            all_modules=sorted(all_modules),
+            raw={"source": "target_patch_files", "changed_files": sorted(set(changed_files))},
+        )
+
     helper_script = os.path.join(_helper_dir(normalized), "get_test_targets.py")
 
     if os.path.exists(helper_script):
@@ -589,7 +683,7 @@ def detect_test_targets(
     )
 
 
-def run_build(repo_path: str, project: str = "") -> BuildResult:
+def run_build(repo_path: str, project: str = "", changed_files: list[str] | None = None) -> BuildResult:
     """
     Compile the project.
 

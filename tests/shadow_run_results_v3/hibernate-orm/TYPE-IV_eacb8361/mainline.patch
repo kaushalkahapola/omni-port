@@ -1,0 +1,661 @@
+commit eacb8361af412dbcc3ea92eb9dd21ed6e29cfbdc
+Author: Christian Beikov <christian.beikov@gmail.com>
+Date:   Thu Aug 28 17:14:34 2025 +0200
+
+    HHH-18217 Properly handle empty value bindings for merge operations
+
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/MySQLDeleteOrUpsertOperation.java b/hibernate-core/src/main/java/org/hibernate/dialect/MySQLDeleteOrUpsertOperation.java
+index 53d4a5cf9f..06775f55c0 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/MySQLDeleteOrUpsertOperation.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/MySQLDeleteOrUpsertOperation.java
+@@ -22,6 +22,7 @@
+ /**
+  * @author Jan Schatteman
+  */
++@Deprecated(forRemoval = true)
+ public class MySQLDeleteOrUpsertOperation extends DeleteOrUpsertOperation {
+ 
+ 	private Expectation customExpectation;
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/MariaDBSqlAstTranslator.java b/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/MariaDBSqlAstTranslator.java
+index 30958f0fe4..ffb43eba07 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/MariaDBSqlAstTranslator.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/MariaDBSqlAstTranslator.java
+@@ -416,7 +416,7 @@ INSERT INTO employees (id, name, salary, version)
+ 				salary = values(salary)
+ 	*/
+ 	@Override
+-	protected void renderUpdatevalue(ColumnValueBinding columnValueBinding) {
++	protected void renderUpdateValue(ColumnValueBinding columnValueBinding) {
+ 		appendSql( "values(" );
+ 		appendSql( columnValueBinding.getColumnReference().getColumnExpression() );
+ 		appendSql( ")" );
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/MySQLSqlAstTranslator.java b/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/MySQLSqlAstTranslator.java
+index f71014d744..1a69c8c351 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/MySQLSqlAstTranslator.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/MySQLSqlAstTranslator.java
+@@ -449,7 +449,7 @@ protected void renderNewRowAlias() {
+ 	}
+ 
+ 	@Override
+-	protected void renderUpdatevalue(ColumnValueBinding columnValueBinding) {
++	protected void renderUpdateValue(ColumnValueBinding columnValueBinding) {
+ 		renderAlias();
+ 		appendSql( "." );
+ 		appendSql( columnValueBinding.getColumnReference().getColumnExpression() );
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/SqlAstTranslatorWithOnDuplicateKeyUpdate.java b/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/SqlAstTranslatorWithOnDuplicateKeyUpdate.java
+index 73fab31d26..2ad1b55b76 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/SqlAstTranslatorWithOnDuplicateKeyUpdate.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/sql/ast/SqlAstTranslatorWithOnDuplicateKeyUpdate.java
+@@ -5,8 +5,9 @@
+ package org.hibernate.dialect.sql.ast;
+ 
+ 
+-import org.hibernate.dialect.MySQLDeleteOrUpsertOperation;
++import org.hibernate.StaleStateException;
+ import org.hibernate.engine.spi.SessionFactoryImplementor;
++import org.hibernate.jdbc.Expectation;
+ import org.hibernate.persister.entity.mutation.EntityTableMapping;
+ import org.hibernate.sql.ast.spi.SqlAstTranslatorWithUpsert;
+ import org.hibernate.sql.ast.tree.Statement;
+@@ -14,8 +15,10 @@
+ import org.hibernate.sql.model.MutationOperation;
+ import org.hibernate.sql.model.ast.ColumnValueBinding;
+ import org.hibernate.sql.model.internal.OptionalTableUpdate;
++import org.hibernate.sql.model.jdbc.DeleteOrUpsertOperation;
+ import org.hibernate.sql.model.jdbc.UpsertOperation;
+ 
++import java.sql.PreparedStatement;
+ import java.util.List;
+ 
+ /**
+@@ -37,10 +40,11 @@ public MutationOperation createMergeOperation(OptionalTableUpdate optionalTableU
+ 				optionalTableUpdate.getMutatingTable().getTableMapping(),
+ 				optionalTableUpdate.getMutationTarget(),
+ 				getSql(),
++				new MySQLRowCountExpectation(),
+ 				getParameterBinders()
+ 		);
+ 
+-		return new MySQLDeleteOrUpsertOperation(
++		return new DeleteOrUpsertOperation(
+ 				optionalTableUpdate.getMutationTarget(),
+ 				(EntityTableMapping) optionalTableUpdate.getMutatingTable().getTableMapping(),
+ 				upsertOperation,
+@@ -48,6 +52,19 @@ public MutationOperation createMergeOperation(OptionalTableUpdate optionalTableU
+ 		);
+ 	}
+ 
++	private static class MySQLRowCountExpectation implements Expectation {
++		@Override
++		public final void verifyOutcome(int rowCount, PreparedStatement statement, int batchPosition, String sql) {
++			if ( rowCount > 2 ) {
++				throw new StaleStateException(
++						"Unexpected row count"
++						+ " (the expected row count for an ON DUPLICATE KEY UPDATE statement should be either 0, 1 or 2 )"
++						+ " [" + sql + "]"
++				);
++			}
++		}
++	}
++
+ 	@Override
+ 	protected void renderUpsertStatement(OptionalTableUpdate optionalTableUpdate) {
+ 		renderInsertInto( optionalTableUpdate );
+@@ -56,34 +73,39 @@ protected void renderUpsertStatement(OptionalTableUpdate optionalTableUpdate) {
+ 	}
+ 
+ 	protected void renderInsertInto(OptionalTableUpdate optionalTableUpdate) {
+-		appendSql( "insert into " );
++		if ( optionalTableUpdate.getValueBindings().isEmpty() ) {
++			appendSql( "insert ignore into " );
++		}
++		else {
++			appendSql( "insert into " );
++		}
+ 		appendSql( optionalTableUpdate.getMutatingTable().getTableName() );
+-		appendSql( " (" );
++		appendSql( " " );
+ 
+ 		final List<ColumnValueBinding> keyBindings = optionalTableUpdate.getKeyBindings();
++		char separator = '(';
+ 		for ( ColumnValueBinding keyBinding : keyBindings ) {
++			appendSql( separator );
+ 			appendSql( keyBinding.getColumnReference().getColumnExpression() );
+-			appendSql( ',' );
++			separator = ',';
+ 		}
+ 
+ 		optionalTableUpdate.forEachValueBinding( (columnPosition, columnValueBinding) -> {
+-				appendSql( columnValueBinding.getColumnReference().getColumnExpression() );
+-			if ( columnPosition != optionalTableUpdate.getValueBindings().size() - 1  ) {
+-				appendSql( ',' );
+-			}
++			appendSql( ',' );
++			appendSql( columnValueBinding.getColumnReference().getColumnExpression() );
+ 		} );
+ 
+-		appendSql( ") values (" );
++		appendSql( ") values " );
+ 
++		separator = '(';
+ 		for ( ColumnValueBinding keyBinding : keyBindings ) {
++			appendSql( separator );
+ 			keyBinding.getValueExpression().accept( this );
+-			appendSql( ',' );
++			separator = ',';
+ 		}
+ 
+ 		optionalTableUpdate.forEachValueBinding( (columnPosition, columnValueBinding) -> {
+-			if ( columnPosition > 0 ) {
+-				appendSql( ',' );
+-			}
++			appendSql( ',' );
+ 			columnValueBinding.getValueExpression().accept( this );
+ 		} );
+ 		appendSql(") ");
+@@ -94,19 +116,21 @@ protected void renderNewRowAlias() {
+ 	}
+ 
+ 	protected void renderOnDuplicateKeyUpdate(OptionalTableUpdate optionalTableUpdate) {
+-		appendSql( "on duplicate key update " );
+-		optionalTableUpdate.forEachValueBinding( (columnPosition, columnValueBinding) -> {
+-			final String columnName = columnValueBinding.getColumnReference().getColumnExpression();
+-			if ( columnPosition > 0 ) {
+-				appendSql( ',' );
+-			}
+-			appendSql( columnName );
+-			append( " = " );
+-			renderUpdatevalue( columnValueBinding );
+-		} );
++		if  ( !optionalTableUpdate.getValueBindings().isEmpty() ) {
++			appendSql( "on duplicate key update " );
++			optionalTableUpdate.forEachValueBinding( (columnPosition, columnValueBinding) -> {
++				final String columnName = columnValueBinding.getColumnReference().getColumnExpression();
++				if ( columnPosition > 0 ) {
++					appendSql( ',' );
++				}
++				appendSql( columnName );
++				append( " = " );
++				renderUpdateValue( columnValueBinding );
++			} );
++		}
+ 	}
+ 
+-	protected void renderUpdatevalue(ColumnValueBinding columnValueBinding) {
++	protected void renderUpdateValue(ColumnValueBinding columnValueBinding) {
+ 	}
+ 
+ }
+diff --git a/hibernate-core/src/main/java/org/hibernate/jdbc/Expectation.java b/hibernate-core/src/main/java/org/hibernate/jdbc/Expectation.java
+index 941eb5e65d..3e29db80f4 100644
+--- a/hibernate-core/src/main/java/org/hibernate/jdbc/Expectation.java
++++ b/hibernate-core/src/main/java/org/hibernate/jdbc/Expectation.java
+@@ -179,6 +179,31 @@ protected int expectedRowCount() {
+ 		}
+ 	}
+ 
++	/**
++	 * Row count checking. A row count is an integer value returned by
++	 * {@link java.sql.PreparedStatement#executeUpdate()} or
++	 * {@link java.sql.Statement#executeBatch()}. The row count is checked
++	 * against an expected value, but is also allowed to be 0.
++	 * For example, the expected row count for an {@code UPSERT} statement is 0 or 1.
++	 */
++	class OptionalRowCount implements Expectation {
++		@Override
++		public final void verifyOutcome(int rowCount, PreparedStatement statement, int batchPosition, String sql) {
++			if ( rowCount != 0 ) {
++				if ( batchPosition < 0 ) {
++					checkNonBatched( expectedRowCount(), rowCount, sql );
++				}
++				else {
++					checkBatched( expectedRowCount(), rowCount, batchPosition, sql );
++				}
++			}
++		}
++
++		protected int expectedRowCount() {
++			return 1;
++		}
++	}
++
+ 	/**
+ 	 * Essentially identical to {@link RowCount} except that the row count
+ 	 * is obtained via an output parameter of a {@linkplain CallableStatement
+diff --git a/hibernate-core/src/main/java/org/hibernate/persister/entity/AbstractEntityPersister.java b/hibernate-core/src/main/java/org/hibernate/persister/entity/AbstractEntityPersister.java
+index 76d9652c8e..d64878d30b 100644
+--- a/hibernate-core/src/main/java/org/hibernate/persister/entity/AbstractEntityPersister.java
++++ b/hibernate-core/src/main/java/org/hibernate/persister/entity/AbstractEntityPersister.java
+@@ -3461,14 +3461,7 @@ protected UpdateCoordinator buildUpdateCoordinator() {
+ 	}
+ 
+ 	protected UpdateCoordinator buildMergeCoordinator() {
+-		// we only have updates to issue for entities with one or more singular attributes
+-		for ( int i = 0; i < attributeMappings.size(); i++ ) {
+-			if ( attributeMappings.get( i ) instanceof SingularAttributeMapping ) {
+-				return new MergeCoordinator( this, factory );
+-			}
+-		}
+-		// otherwise, nothing to update
+-		return new UpdateCoordinatorNoOp( this );
++		return new MergeCoordinator( this, factory );
+ 	}
+ 
+ 	protected DeleteCoordinator buildDeleteCoordinator() {
+diff --git a/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/MergeCoordinator.java b/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/MergeCoordinator.java
+index 1b6f78497d..b8733df5a3 100644
+--- a/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/MergeCoordinator.java
++++ b/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/MergeCoordinator.java
+@@ -5,6 +5,7 @@
+ package org.hibernate.persister.entity.mutation;
+ 
+ import org.hibernate.engine.spi.SessionFactoryImplementor;
++import org.hibernate.engine.spi.SharedSessionContractImplementor;
+ import org.hibernate.persister.entity.EntityPersister;
+ import org.hibernate.sql.model.MutationOperation;
+ import org.hibernate.sql.model.ast.builder.AbstractTableUpdateBuilder;
+@@ -26,4 +27,49 @@ protected <O extends MutationOperation> AbstractTableUpdateBuilder<O> newTableUp
+ 		return new TableMergeBuilder<>( entityPersister(), tableMapping, factory() );
+ 	}
+ 
++	@Override
++	protected UpdateValuesAnalysisImpl analyzeUpdateValues(
++			Object entity,
++			Object[] values,
++			Object oldVersion,
++			Object[] oldValues,
++			int[] dirtyAttributeIndexes,
++			InclusionChecker inclusionChecker,
++			InclusionChecker lockingChecker,
++			InclusionChecker dirtinessChecker,
++			Object rowId,
++			boolean forceDynamicUpdate,
++			SharedSessionContractImplementor session) {
++		final UpdateValuesAnalysisImpl updateValuesAnalysis = super.analyzeUpdateValues(
++				entity,
++				values,
++				oldVersion,
++				oldValues,
++				dirtyAttributeIndexes,
++				inclusionChecker,
++				lockingChecker,
++				dirtinessChecker,
++				rowId,
++				forceDynamicUpdate,
++				session
++		);
++		if ( oldValues == null ) {
++			final TableSet tablesNeedingUpdate = updateValuesAnalysis.getTablesNeedingUpdate();
++			final TableSet tablesWithNonNullValues = updateValuesAnalysis.getTablesWithNonNullValues();
++			final TableSet tablesWithPreviousNonNullValues = updateValuesAnalysis.getTablesWithPreviousNonNullValues();
++			for ( EntityTableMapping tableMapping : entityPersister().getTableMappings() ) {
++				// Need to upsert into all non-optional table mappings
++				if ( !tableMapping.isOptional() ) {
++					// If the table was previously not needing an update, remove it from tablesWithPreviousNonNullValues
++					// to avoid triggering a delete-statement for this operation
++					if ( !tablesNeedingUpdate.contains( tableMapping ) ) {
++						tablesWithPreviousNonNullValues.remove( tableMapping );
++					}
++					tablesNeedingUpdate.add( tableMapping );
++					tablesWithNonNullValues.add( tableMapping );
++				}
++			}
++		}
++		return updateValuesAnalysis;
++	}
+ }
+diff --git a/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/TableSet.java b/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/TableSet.java
+index 4d2de0f42b..e8fb90cf81 100644
+--- a/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/TableSet.java
++++ b/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/TableSet.java
+@@ -34,6 +34,13 @@ public void add(final TableMapping tableMapping) {
+ 		bits.set( tableMapping.getRelativePosition() );
+ 	}
+ 
++	public void remove(final TableMapping tableMapping) {
++		if ( bits != null ) {
++			assert addForChecks( tableMapping );
++			bits.set( tableMapping.getRelativePosition(), false );
++		}
++	}
++
+ 	public boolean isEmpty() {
+ 		return bits == null;
+ 	}
+diff --git a/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/UpdateCoordinatorStandard.java b/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/UpdateCoordinatorStandard.java
+index f2c9fc3f21..c6e15517c6 100644
+--- a/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/UpdateCoordinatorStandard.java
++++ b/hibernate-core/src/main/java/org/hibernate/persister/entity/mutation/UpdateCoordinatorStandard.java
+@@ -600,7 +600,7 @@ protected boolean[] getPropertiesToUpdate(final int[] dirtyProperties, final boo
+ 		}
+ 	}
+ 
+-	private UpdateValuesAnalysisImpl analyzeUpdateValues(
++	protected UpdateValuesAnalysisImpl analyzeUpdateValues(
+ 			Object entity,
+ 			Object[] values,
+ 			Object oldVersion,
+@@ -1018,7 +1018,10 @@ protected BatchKey getVersionUpdateBatchkey(){
+ 	}
+ 
+ 	private boolean resultCheck(
+-			Object id, PreparedStatementDetails statementDetails, int affectedRowCount, int batchPosition) {
++			Object id,
++			PreparedStatementDetails statementDetails,
++			int affectedRowCount,
++			int batchPosition) {
+ 		return identifiedResultsCheck(
+ 				statementDetails,
+ 				affectedRowCount,
+diff --git a/hibernate-core/src/main/java/org/hibernate/sql/ast/spi/SqlAstTranslatorWithMerge.java b/hibernate-core/src/main/java/org/hibernate/sql/ast/spi/SqlAstTranslatorWithMerge.java
+index ee1cee398c..2368ac99e6 100644
+--- a/hibernate-core/src/main/java/org/hibernate/sql/ast/spi/SqlAstTranslatorWithMerge.java
++++ b/hibernate-core/src/main/java/org/hibernate/sql/ast/spi/SqlAstTranslatorWithMerge.java
+@@ -8,6 +8,7 @@
+ 
+ import org.hibernate.engine.spi.SessionFactoryImplementor;
+ import org.hibernate.internal.util.StringHelper;
++import org.hibernate.jdbc.Expectation;
+ import org.hibernate.sql.ast.tree.Statement;
+ import org.hibernate.sql.exec.spi.JdbcOperation;
+ import org.hibernate.sql.model.ast.ColumnValueBinding;
+@@ -44,6 +45,10 @@ public MergeOperation createMergeOperation(OptionalTableUpdate optionalTableUpda
+ 				optionalTableUpdate.getMutatingTable().getTableMapping(),
+ 				optionalTableUpdate.getMutationTarget(),
+ 				getSql(),
++				// Without value bindings, the upsert may have an update count of 0
++				optionalTableUpdate.getValueBindings().isEmpty()
++						? new Expectation.OptionalRowCount()
++						: new Expectation.RowCount(),
+ 				getParameterBinders()
+ 		);
+ 	}
+@@ -232,16 +237,18 @@ protected void renderMergeUpdate(OptionalTableUpdate optionalTableUpdate) {
+ 		final List<ColumnValueBinding> valueBindings = optionalTableUpdate.getValueBindings();
+ 		final List<ColumnValueBinding> optimisticLockBindings = optionalTableUpdate.getOptimisticLockBindings();
+ 
+-		renderWhenMatched( optimisticLockBindings );
+-		appendSql( " then update set " );
+-		for ( int i = 0; i < valueBindings.size(); i++ ) {
+-			final ColumnValueBinding binding = valueBindings.get( i );
+-			if ( i > 0 ) {
+-				appendSql( ", " );
++		if ( !valueBindings.isEmpty() ) {
++			renderWhenMatched( optimisticLockBindings );
++			appendSql( " then update set " );
++			for ( int i = 0; i < valueBindings.size(); i++ ) {
++				final ColumnValueBinding binding = valueBindings.get( i );
++				if ( i > 0 ) {
++					appendSql( ", " );
++				}
++				binding.getColumnReference().appendColumnForWrite( this, null );
++				appendSql( "=" );
++				binding.getColumnReference().appendColumnForWrite( this, "s" );
+ 			}
+-			binding.getColumnReference().appendColumnForWrite( this, null );
+-			appendSql( "=" );
+-			binding.getColumnReference().appendColumnForWrite( this, "s" );
+ 		}
+ 	}
+ 
+diff --git a/hibernate-core/src/main/java/org/hibernate/sql/ast/spi/SqlAstTranslatorWithUpsert.java b/hibernate-core/src/main/java/org/hibernate/sql/ast/spi/SqlAstTranslatorWithUpsert.java
+index b914a4270d..e594d9a5f5 100644
+--- a/hibernate-core/src/main/java/org/hibernate/sql/ast/spi/SqlAstTranslatorWithUpsert.java
++++ b/hibernate-core/src/main/java/org/hibernate/sql/ast/spi/SqlAstTranslatorWithUpsert.java
+@@ -7,6 +7,7 @@
+ import java.util.List;
+ 
+ import org.hibernate.engine.spi.SessionFactoryImplementor;
++import org.hibernate.jdbc.Expectation;
+ import org.hibernate.persister.entity.mutation.EntityTableMapping;
+ import org.hibernate.sql.ast.tree.Statement;
+ import org.hibernate.sql.exec.spi.JdbcOperation;
+@@ -37,6 +38,10 @@ public MutationOperation createMergeOperation(OptionalTableUpdate optionalTableU
+ 				optionalTableUpdate.getMutatingTable().getTableMapping(),
+ 				optionalTableUpdate.getMutationTarget(),
+ 				getSql(),
++				// Without value bindings, the upsert may have an update count of 0
++				optionalTableUpdate.getValueBindings().isEmpty()
++						? new Expectation.OptionalRowCount()
++						: new Expectation.RowCount(),
+ 				getParameterBinders()
+ 		);
+ 
+@@ -203,17 +208,19 @@ protected void renderMergeUpdate(OptionalTableUpdate optionalTableUpdate) {
+ 		final List<ColumnValueBinding> valueBindings = optionalTableUpdate.getValueBindings();
+ 		final List<ColumnValueBinding> optimisticLockBindings = optionalTableUpdate.getOptimisticLockBindings();
+ 
+-		appendSql( "when matched then update set " );
+-		for ( int i = 0; i < valueBindings.size(); i++ ) {
+-			final ColumnValueBinding binding = valueBindings.get( i );
+-			if ( i > 0 ) {
+-				appendSql( ", " );
++		if ( !valueBindings.isEmpty() ) {
++			appendSql( "when matched then update set " );
++			for ( int i = 0; i < valueBindings.size(); i++ ) {
++				final ColumnValueBinding binding = valueBindings.get( i );
++				if ( i > 0 ) {
++					appendSql( ", " );
++				}
++				binding.getColumnReference().appendColumnForWrite( this, "t" );
++				appendSql( "=" );
++				binding.getColumnReference().appendColumnForWrite( this, "s" );
+ 			}
+-			binding.getColumnReference().appendColumnForWrite( this, "t" );
+-			appendSql( "=" );
+-			binding.getColumnReference().appendColumnForWrite( this, "s" );
++			renderMatchedWhere( optimisticLockBindings );
+ 		}
+-		renderMatchedWhere( optimisticLockBindings );
+ 	}
+ 
+ 	private void renderMatchedWhere(List<ColumnValueBinding> optimisticLockBindings) {
+diff --git a/hibernate-core/src/main/java/org/hibernate/sql/model/ast/builder/TableMergeBuilder.java b/hibernate-core/src/main/java/org/hibernate/sql/model/ast/builder/TableMergeBuilder.java
+index 75054ef7e7..754676cf0f 100644
+--- a/hibernate-core/src/main/java/org/hibernate/sql/model/ast/builder/TableMergeBuilder.java
++++ b/hibernate-core/src/main/java/org/hibernate/sql/model/ast/builder/TableMergeBuilder.java
+@@ -12,7 +12,6 @@
+ import org.hibernate.sql.model.ast.MutatingTableReference;
+ import org.hibernate.sql.model.ast.RestrictedTableMutation;
+ import org.hibernate.sql.model.internal.OptionalTableUpdate;
+-import org.hibernate.sql.model.internal.TableUpdateNoSet;
+ 
+ import java.util.List;
+ 
+@@ -39,9 +38,6 @@ public TableMergeBuilder(
+ 	@Override
+ 	public RestrictedTableMutation<O> buildMutation() {
+ 		final List<ColumnValueBinding> valueBindings = combine( getValueBindings(), getKeyBindings(), getLobValueBindings() );
+-		if ( valueBindings.isEmpty() ) {
+-			return (RestrictedTableMutation<O>) new TableUpdateNoSet( getMutatingTable(), getMutationTarget() );
+-		}
+ 
+ 		// TODO: add getMergeDetails()
+ //		if ( getMutatingTable().getTableMapping().getUpdateDetails().getCustomSql() != null ) {
+diff --git a/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/DeleteOrUpsertOperation.java b/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/DeleteOrUpsertOperation.java
+index 5042cc87be..2a759c77b9 100644
+--- a/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/DeleteOrUpsertOperation.java
++++ b/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/DeleteOrUpsertOperation.java
+@@ -41,8 +41,6 @@ public class DeleteOrUpsertOperation implements SelfExecutingUpdateOperation {
+ 
+ 	private final OptionalTableUpdate optionalTableUpdate;
+ 
+-	private final Expectation expectation = getExpectation();
+-
+ 	public DeleteOrUpsertOperation(
+ 			EntityMutationTarget mutationTarget,
+ 			EntityTableMapping tableMapping,
+@@ -233,6 +231,6 @@ public OptionalTableUpdate getOptionalTableUpdate() {
+ 	}
+ 
+ 	protected Expectation getExpectation() {
+-		return new Expectation.RowCount();
++		return upsertOperation.getExpectation();
+ 	}
+ }
+diff --git a/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/MergeOperation.java b/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/MergeOperation.java
+index 0e1bf7d0dd..ad7dabcd7c 100644
+--- a/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/MergeOperation.java
++++ b/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/MergeOperation.java
+@@ -23,7 +23,16 @@ public MergeOperation(
+ 			MutationTarget<?> mutationTarget,
+ 			String sql,
+ 			List<? extends JdbcParameterBinder> parameterBinders) {
+-		super( tableDetails, mutationTarget, sql, false, new Expectation.RowCount(), parameterBinders );
++		this( tableDetails, mutationTarget, sql, new Expectation.RowCount(), parameterBinders );
++	}
++
++	public MergeOperation(
++			TableMapping tableDetails,
++			MutationTarget<?> mutationTarget,
++			String sql,
++			Expectation expectation,
++			List<? extends JdbcParameterBinder> parameterBinders) {
++		super( tableDetails, mutationTarget, sql, false, expectation, parameterBinders );
+ 	}
+ 
+ 	@Override
+diff --git a/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/OptionalTableUpdateOperation.java b/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/OptionalTableUpdateOperation.java
+index 70362dc28f..7978e09a80 100644
+--- a/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/OptionalTableUpdateOperation.java
++++ b/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/OptionalTableUpdateOperation.java
+@@ -153,11 +153,17 @@ public void performMutation(
+ 							performInsert( jdbcValueBindings, session );
+ 						}
+ 						catch (ConstraintViolationException cve) {
+-							throw cve.getKind() == UNIQUE
++							if ( cve.getKind() == UNIQUE ) {
++								// Ignore primary key violation if the insert is composed of just the primary key
++								if ( !valueBindings.isEmpty() ) {
+ 									// assume it was the primary key constraint which was violated,
+ 									// due to a new version of the row existing in the database
+-									? new StaleStateException( mutationTarget.getRolePath(), cve )
+-									: cve;
++									throw new StaleStateException( mutationTarget.getRolePath(), cve );
++								}
++							}
++							else {
++								throw cve;
++							}
+ 						}
+ 					}
+ 				}
+diff --git a/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/UpsertOperation.java b/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/UpsertOperation.java
+index 6ba371d381..23b671724d 100644
+--- a/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/UpsertOperation.java
++++ b/hibernate-core/src/main/java/org/hibernate/sql/model/jdbc/UpsertOperation.java
+@@ -23,7 +23,16 @@ public UpsertOperation(
+ 			MutationTarget<?> mutationTarget,
+ 			String sql,
+ 			List<? extends JdbcParameterBinder> parameterBinders) {
+-		super( tableDetails, mutationTarget, sql, false, new Expectation.RowCount(), parameterBinders );
++		this( tableDetails, mutationTarget, sql, new Expectation.RowCount(), parameterBinders );
++	}
++
++	public UpsertOperation(
++			TableMapping tableDetails,
++			MutationTarget<?> mutationTarget,
++			String sql,
++			Expectation expectation,
++			List<? extends JdbcParameterBinder> parameterBinders) {
++		super( tableDetails, mutationTarget, sql, false, expectation, parameterBinders );
+ 	}
+ 
+ 	@Override
+diff --git a/hibernate-core/src/test/java/org/hibernate/orm/test/stateless/UpsertTest.java b/hibernate-core/src/test/java/org/hibernate/orm/test/stateless/UpsertTest.java
+index fd739add12..44fd0b57bf 100644
+--- a/hibernate-core/src/test/java/org/hibernate/orm/test/stateless/UpsertTest.java
++++ b/hibernate-core/src/test/java/org/hibernate/orm/test/stateless/UpsertTest.java
+@@ -6,6 +6,8 @@
+ 
+ import jakarta.persistence.Entity;
+ import jakarta.persistence.Id;
++import jakarta.persistence.Inheritance;
++import jakarta.persistence.InheritanceType;
+ import org.hibernate.dialect.MariaDBDialect;
+ import org.hibernate.dialect.MySQLDialect;
+ import org.hibernate.testing.jdbc.SQLStatementInspector;
+@@ -21,7 +23,12 @@
+ import static org.junit.jupiter.api.Assertions.assertNotNull;
+ 
+ @SessionFactory(useCollectingStatementInspector = true)
+-@DomainModel(annotatedClasses = {UpsertTest.Record.class, UpsertTest.IdOnly.class})
++@DomainModel(annotatedClasses = {
++		UpsertTest.Record.class,
++		UpsertTest.IdOnly.class,
++		UpsertTest.IdOnlyIntermediate.class,
++		UpsertTest.IdOnlySubtype.class
++})
+ public class UpsertTest {
+ 	@Test void test(SessionFactoryScope scope) {
+ 		scope.getSessionFactory().getSchemaManager().truncate();
+@@ -102,11 +109,32 @@ public class UpsertTest {
+ 
+ 		scope.inStatelessTransaction(s-> {
+ 			s.upsert(new IdOnly(123L));
+-			s.upsert(new IdOnly(456L));
+ 		});
+ 		scope.inStatelessTransaction(s-> {
+ 			assertNotNull(s.get( IdOnly.class,123L));
+-			assertNotNull(s.get( IdOnly.class,456L));
++		});
++		scope.inStatelessTransaction(s-> {
++			s.upsert(new IdOnly(123L));
++		});
++		scope.inStatelessTransaction(s-> {
++			assertNotNull(s.get( IdOnly.class,123L));
++		});
++	}
++
++	@Test void testIdOnlySubtype(SessionFactoryScope scope) {
++		scope.getSessionFactory().getSchemaManager().truncate();
++
++		scope.inStatelessTransaction(s-> {
++			s.upsert(new IdOnlySubtype(123L));
++		});
++		scope.inStatelessTransaction(s-> {
++			assertNotNull(s.get( IdOnlySubtype.class,123L));
++		});
++		scope.inStatelessTransaction(s-> {
++			s.upsert(new IdOnlySubtype(123L));
++		});
++		scope.inStatelessTransaction(s-> {
++			assertNotNull(s.get( IdOnlySubtype.class,123L));
+ 		});
+ 	}
+ 
+@@ -132,6 +160,7 @@ static class Record {
+ 	}
+ 
+ 	@Entity(name = "IdOnly")
++	@Inheritance(strategy = InheritanceType.JOINED)
+ 	static class IdOnly {
+ 		@Id Long id;
+ 
+@@ -142,4 +171,26 @@ static class IdOnly {
+ 		IdOnly() {
+ 		}
+ 	}
++
++	@Entity(name = "IdOnlyIntermediate")
++	static class IdOnlyIntermediate extends IdOnly {
++		IdOnlyIntermediate(Long id) {
++			super( id );
++		}
++
++		IdOnlyIntermediate() {
++		}
++	}
++
++	@Entity(name = "IdOnlySubtype")
++	static class IdOnlySubtype extends IdOnlyIntermediate {
++		String name;
++
++		IdOnlySubtype(Long id) {
++			super( id );
++		}
++
++		IdOnlySubtype() {
++		}
++	}
+ }

@@ -25,7 +25,7 @@ PROJECT_CONFIG = {
     "spring-framework": {"report_pattern": "**/build/test-results/**/*.xml"},
     "logstash": {"report_pattern": "**/build/test-results/**/*.xml"},
     "sql": {"report_pattern": "**/build/test-results/**/*.xml"},
-    "hibernate-orm": {"report_pattern": "**/*.xml"},
+    "hibernate-orm": {"report_pattern": "**/target/test-results/test/TEST-*.xml"},
     "grpc-java": {"report_pattern": "**/*.xml"},
     "crate": {"report_pattern": "**/target/surefire-reports/*.xml"},
     "jdk11u-dev": {"report_pattern": "**/JTwork/**/*.xml"},
@@ -79,7 +79,15 @@ def parse_xml(xml_paths: list[str], target_classes: set[str]) -> tuple[dict[str,
             if target_classes:
                 matched = False
                 for target in target_classes:
-                    if classname == target or classname.endswith("." + target):
+                    if target.endswith(".*"):
+                        # Package wildcard: match any class whose fully-qualified
+                        # name starts with the prefix (e.g. "org.foo.bar.*" matches
+                        # "org.foo.bar.BazTest" and "org.foo.bar.sub.QuxTest").
+                        prefix = target[:-2]  # strip trailing ".*"
+                        if classname == prefix or classname.startswith(prefix + "."):
+                            matched = True
+                            break
+                    elif classname == target or classname.endswith("." + target):
                         matched = True
                         break
                 if not matched:
@@ -119,7 +127,12 @@ def parse_console(console_text: str, target_classes: set[str]) -> dict[str, str]
         if target_classes:
             matched = False
             for target in target_classes:
-                if cls == target or cls.endswith("." + target):
+                if target.endswith(".*"):
+                    prefix = target[:-2]
+                    if cls == prefix or cls.startswith(prefix + "."):
+                        matched = True
+                        break
+                elif cls == target or cls.endswith("." + target):
                     matched = True
                     break
             if not matched:

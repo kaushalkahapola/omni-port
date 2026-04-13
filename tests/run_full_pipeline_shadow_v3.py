@@ -80,6 +80,7 @@ REPO_PATH_MAP: dict[str, str] = {
     "elasticsearch": "repos/elasticsearch",
     "crate": "repos/crate",
     "druid": "repos/druid",
+    "hibernate-orm": "repos/hibernate-orm",
 }
 
 
@@ -226,6 +227,69 @@ def git_diff(repo_path: str) -> str:
     return result.stdout
 
 
+def _extract_production_diff_hunks(patch_text: str) -> str:
+    """
+    Split patch into per-file sections, drop test/aux/non-Java files (same
+    criteria as _build_aux_hunks_from_target_patch), then normalise the
+    remaining production-Java sections by removing commit headers and SHA-
+    bearing index lines.  Returns a canonical string for exact comparison.
+    """
+    from src.agents.agent1_localizer import _is_test_file, _is_auto_generated_java_file
+
+    def _norm_path(raw: str) -> str:
+        p = raw.strip().replace("\\", "/")
+        while p.startswith("a/") or p.startswith("b/"):
+            p = p[2:]
+        return "" if p in ("/dev/null", "dev/null") else p
+
+    # Split on "diff --git" boundaries
+    sections: list[str] = []
+    buf: list[str] = []
+    for line in (patch_text or "").splitlines(keepends=True):
+        if line.startswith("diff --git ") and buf:
+            sections.append("".join(buf))
+            buf = []
+        buf.append(line)
+    if buf:
+        sections.append("".join(buf))
+
+    kept: list[str] = []
+    for section in sections:
+        tgt_path = ""
+        for line in section.splitlines():
+            if line.startswith("+++ "):
+                tgt_path = _norm_path(line[4:].split("\t")[0])
+                break
+        if not tgt_path:
+            continue
+        # Skip test, non-Java, and auto-generated files — same as aux hunk logic
+        if (not tgt_path.lower().endswith(".java")
+                or _is_test_file(tgt_path)
+                or _is_auto_generated_java_file(tgt_path)):
+            continue
+
+        # Normalise: drop index/mode lines that carry commit-specific SHAs
+        norm_lines = []
+        for line in section.splitlines():
+            if line.startswith("index ") or line.startswith("old mode") or line.startswith("new mode"):
+                continue
+            norm_lines.append(line)
+        kept.append("\n".join(norm_lines).strip())
+
+    return "\n".join(kept).strip()
+
+
+def patches_are_equivalent(generated: str, target: str) -> bool:
+    """
+    Return True when the generated patch produces the same production-Java code
+    changes as the developer's target patch, ignoring test/aux file sections
+    and commit metadata.
+    """
+    gen_hunks = _extract_production_diff_hunks(generated)
+    tgt_hunks = _extract_production_diff_hunks(target)
+    return bool(gen_hunks) and gen_hunks == tgt_hunks
+
+
 KNOWN_TYPES = ["TYPE-I", "TYPE-II", "TYPE-III", "TYPE-IV", "TYPE-V"]
 
 # Phase 0 baseline cache — keyed by (project, backport_commit).
@@ -264,6 +328,26 @@ def save_phase0_cache(project: str, backport_commit: str, baseline: dict) -> Non
 
 
 # ── Aux-hunk extraction from target patch ─────────────────────────────────────
+
+def _extract_all_files_from_patch(patch_text: str) -> list[str]:
+    """
+    Extract ALL changed file paths from a unified diff patch.
+    Used to ensure phase 0 and validation use the same test targets
+    (the files the developer actually changed in their backport).
+    """
+    files = []
+    seen: set[str] = set()
+    for line in (patch_text or "").splitlines():
+        if line.startswith("+++ "):
+            raw = line[4:].split("\t")[0].strip().replace("\\", "/")
+            # Strip leading a/ or b/ prefixes
+            while raw.startswith("a/") or raw.startswith("b/"):
+                raw = raw[2:]
+            if raw and raw != "/dev/null" and raw not in seen:
+                seen.add(raw)
+                files.append(raw)
+    return files
+
 
 def _build_aux_hunks_from_target_patch(target_patch: str) -> list[dict]:
     """
@@ -480,9 +564,12 @@ def update_summary_md(output_dir: Path, no_notifications: bool = False) -> None:
         newly = s.get("newly_passing_count", 0)
         p2f = s.get("pass_to_fail_count", 0)
         cat = s.get("validation_failure_category", "")
+        exact_match = s.get("patch_exact_match", False)
 
         transition = s.get("test_transition", {})
         details = []
+        if exact_match:
+            details.append("patch=exact")
         if f2p > 0:
             details.append(f"F→P: {', '.join(transition.get('fail_to_pass', []))}")
         if newly > 0:
@@ -661,6 +748,11 @@ def process_patch(
     print(f"  Extracted {len(developer_aux_hunks)} aux hunk(s) from target.patch")
     results["summary"]["developer_aux_hunks_from_target"] = len(developer_aux_hunks)
 
+    # Extract ALL changed files from target.patch — used for consistent test target detection
+    # in both phase 0 and validation so both steps run the exact same set of tests.
+    target_patch_files = _extract_all_files_from_patch(target_patch)
+    print(f"  Extracted {len(target_patch_files)} changed file(s) from target.patch for test target detection")
+
     # ── 4. Initialise state ───────────────────────────────────────────────────
 
     state: BackportState = {
@@ -702,6 +794,9 @@ def process_patch(
         "tokens_used": 0,
         "wall_clock_time": 0.0,
         "status": "started",
+        # All files changed in the developer's target.patch — ensures phase 0 and
+        # validation detect identical test targets regardless of worktree state.
+        "target_patch_changed_files": target_patch_files,
     }
 
     # ── 5. Phase 0: Baseline test run ────────────────────────────────────────
@@ -712,9 +807,6 @@ def process_patch(
     if not skip_validation and developer_aux_hunks:
         print("\n  [pipeline] Phase 0 (baseline):")
         project = os.path.basename(repo_path).strip().lower()
-        changed_files_for_baseline = list({
-            h.get("file_path", "") for h in all_hunks if h.get("file_path")
-        })
 
         # Check cache first — baseline is deterministic for a given backport_commit
         cached_baseline = load_phase0_cache(project, backport_commit)
@@ -723,8 +815,9 @@ def process_patch(
             baseline_result = cached_baseline
         else:
             print(f"  [pipeline] phase0 cache: miss — starting baseline run for {project}")
+            # Use target_patch_files so phase 0 detects the same test targets as validation.
             baseline_result = run_phase0_baseline(
-                repo_path, project, developer_aux_hunks, changed_files_for_baseline
+                repo_path, project, developer_aux_hunks, target_patch_files
             )
             if not baseline_result.get("skipped"):
                 save_phase0_cache(project, backport_commit, baseline_result)
@@ -996,6 +1089,7 @@ def process_patch(
         "failed_hunks": make_serializable(state.get("failed_hunks", [])),
         "generated_patch_bytes": len(generated_patch),
         "target_patch_bytes": len(target_patch),
+        "patch_exact_match": patches_are_equivalent(generated_patch, target_patch),
         # Validation outcomes
         "validation_passed": state.get("validation_passed", None) if not skip_validation else "skipped",
         "validation_failure_category": state.get("validation_failure_category", ""),
@@ -1006,9 +1100,11 @@ def process_patch(
         "fail_to_pass_count": len(transition.get("fail_to_pass", [])),
         "newly_passing_count": len(transition.get("newly_passing", [])),
         "pass_to_fail_count": len(transition.get("pass_to_fail", [])),
-        # Success = at least one fail→pass OR newly_passing test observed
+        # Success = generated patch exactly matches developer's target patch,
+        # OR at least one fail→pass / newly_passing test was observed.
         "backport_success": (
-            len(transition.get("fail_to_pass", [])) > 0
+            patches_are_equivalent(generated_patch, target_patch)
+            or len(transition.get("fail_to_pass", [])) > 0
             or len(transition.get("newly_passing", [])) > 0
         ) if not skip_validation else None,
     })
@@ -1037,6 +1133,9 @@ def process_patch(
     fb_attempts = s.get('fallback_attempts', 0)
     if fb_attempts > 0:
         print(f"  │  Fallback    (Ag 9)  : {fb_status} ({fb_attempts} attempt(s))")
+    exact = s.get("patch_exact_match")
+    if exact is not None:
+        print(f"  │  Patch exact match    : {'YES ✓' if exact else 'no'}")
     if not skip_validation:
         v_label = "PASSED ✓" if s.get("validation_passed") else f"FAILED ({s.get('validation_failure_category', '?')})"
         print(f"  │  Validation           : {v_label}")
