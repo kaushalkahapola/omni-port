@@ -1,0 +1,349 @@
+commit a8f08ad3e101e05aefecca4765d484d1992a12b3
+Author: Kai Huang <105710027+ahkcs@users.noreply.github.com>
+Date:   Mon Oct 13 09:23:20 2025 -0700
+
+    Support Regex for replace eval function (#4456)
+
+diff --git a/core/src/main/java/org/opensearch/sql/expression/function/PPLFuncImpTable.java b/core/src/main/java/org/opensearch/sql/expression/function/PPLFuncImpTable.java
+index b93472a27..8b9bdcf90 100644
+--- a/core/src/main/java/org/opensearch/sql/expression/function/PPLFuncImpTable.java
++++ b/core/src/main/java/org/opensearch/sql/expression/function/PPLFuncImpTable.java
+@@ -239,12 +239,15 @@ import java.util.Map;
+ import java.util.Optional;
+ import java.util.StringJoiner;
+ import java.util.concurrent.ConcurrentHashMap;
++import java.util.regex.Pattern;
++import java.util.regex.PatternSyntaxException;
+ import java.util.stream.Collectors;
+ import java.util.stream.Stream;
+ import javax.annotation.Nullable;
+ import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.rex.RexBuilder;
+ import org.apache.calcite.rex.RexLambda;
++import org.apache.calcite.rex.RexLiteral;
+ import org.apache.calcite.rex.RexNode;
+ import org.apache.calcite.sql.SqlAggFunction;
+ import org.apache.calcite.sql.SqlOperator;
+@@ -683,7 +686,49 @@ public class PPLFuncImpTable {
+       registerOperator(LOWER, SqlStdOperatorTable.LOWER);
+       registerOperator(POSITION, SqlStdOperatorTable.POSITION);
+       registerOperator(LOCATE, SqlStdOperatorTable.POSITION);
+-      registerOperator(REPLACE, SqlStdOperatorTable.REPLACE);
++      // Register REPLACE with automatic PCRE-to-Java backreference conversion
++      register(
++          REPLACE,
++          (RexBuilder builder, RexNode... args) -> {
++            // Validate regex pattern at query planning time
++            if (args.length >= 2 && args[1] instanceof RexLiteral) {
++              RexLiteral patternLiteral = (RexLiteral) args[1];
++              String pattern = patternLiteral.getValueAs(String.class);
++              if (pattern != null) {
++                try {
++                  // Compile pattern to validate it - this will throw PatternSyntaxException if
++                  // invalid
++                  Pattern.compile(pattern);
++                } catch (PatternSyntaxException e) {
++                  // Convert to IllegalArgumentException so it's treated as a client error (400)
++                  throw new IllegalArgumentException(
++                      String.format("Invalid regex pattern '%s': %s", pattern, e.getDescription()),
++                      e);
++                }
++              }
++            }
++
++            if (args.length == 3 && args[2] instanceof RexLiteral) {
++              RexLiteral literal = (RexLiteral) args[2];
++              String replacement = literal.getValueAs(String.class);
++              if (replacement != null) {
++                // Convert PCRE/sed backreferences (\1, \2) to Java style ($1, $2)
++                String javaReplacement = replacement.replaceAll("\\\\(\\d+)", "\\$$1");
++                if (!javaReplacement.equals(replacement)) {
++                  RexNode convertedLiteral =
++                      builder.makeLiteral(
++                          javaReplacement,
++                          literal.getType(),
++                          literal.getTypeName() != SqlTypeName.CHAR);
++                  return builder.makeCall(
++                      SqlLibraryOperators.REGEXP_REPLACE_3, args[0], args[1], convertedLiteral);
++                }
++              }
++            }
++            return builder.makeCall(SqlLibraryOperators.REGEXP_REPLACE_3, args);
++          },
++          wrapSqlOperandTypeChecker(
++              SqlLibraryOperators.REGEXP_REPLACE_3.getOperandTypeChecker(), REPLACE.name(), false));
+       registerOperator(UPPER, SqlStdOperatorTable.UPPER);
+       registerOperator(ABS, SqlStdOperatorTable.ABS);
+       registerOperator(ACOS, SqlStdOperatorTable.ACOS);
+diff --git a/docs/user/ppl/functions/string.rst b/docs/user/ppl/functions/string.rst
+index d0d38d8c7..24efa1434 100644
+--- a/docs/user/ppl/functions/string.rst
++++ b/docs/user/ppl/functions/string.rst
+@@ -207,9 +207,15 @@ REPLACE
+ Description
+ >>>>>>>>>>>
+ 
+-Usage: replace(str, substr, newstr) returns a string with all occurrences of substr replaced by newstr in str. If any argument is NULL, the function returns NULL.
++Usage: replace(str, pattern, replacement) returns a string with all occurrences of the pattern replaced by the replacement string in str. If any argument is NULL, the function returns NULL.
+ 
+-Example::
++**Regular Expression Support**: The pattern argument supports Java regex syntax, including:
++
++Argument type: STRING, STRING (regex pattern), STRING (replacement)
++
++Return type: STRING
++
++Literal String Replacement Examples::
+ 
+     os> source=people | eval `REPLACE('helloworld', 'world', 'universe')` = REPLACE('helloworld', 'world', 'universe'), `REPLACE('helloworld', 'invalid', 'universe')` = REPLACE('helloworld', 'invalid', 'universe') | fields `REPLACE('helloworld', 'world', 'universe')`, `REPLACE('helloworld', 'invalid', 'universe')`
+     fetched rows / total rows = 1/1
+@@ -219,6 +225,41 @@ Example::
+     | hellouniverse                              | helloworld                                   |
+     +--------------------------------------------+----------------------------------------------+
+ 
++Regex Pattern Examples::
++
++    os> source=people | eval `Remove digits` = REPLACE('test123', '\\d+', ''), `Collapse spaces` = REPLACE('hello  world', ' +', ' '), `Remove special` = REPLACE('hello@world!', '[^a-zA-Z]', '') | fields `Remove digits`, `Collapse spaces`, `Remove special`
++    fetched rows / total rows = 1/1
++    +---------------+-----------------+----------------+
++    | Remove digits | Collapse spaces | Remove special |
++    |---------------+-----------------+----------------|
++    | test          | hello world     | helloworld     |
++    +---------------+-----------------+----------------+
++
++Capture Group and Backreference Examples::
++
++    os> source=people | eval `Swap date` = REPLACE('1/14/2023', '^(\\d{1,2})/(\\d{1,2})/', '$2/$1/'), `Reverse words` = REPLACE('Hello World', '(\\w+) (\\w+)', '$2 $1'), `Extract domain` = REPLACE('user@example.com', '.*@(.+)', '$1') | fields `Swap date`, `Reverse words`, `Extract domain`
++    fetched rows / total rows = 1/1
++    +-----------+---------------+----------------+
++    | Swap date | Reverse words | Extract domain |
++    |-----------+---------------+----------------|
++    | 14/1/2023 | World Hello   | example.com    |
++    +-----------+---------------+----------------+
++
++Advanced Regex Examples::
++
++    os> source=people | eval `Clean phone` = REPLACE('(555) 123-4567', '[^0-9]', ''), `Remove vowels` = REPLACE('hello world', '[aeiou]', ''), `Add prefix` = REPLACE('test', '^', 'pre_') | fields `Clean phone`, `Remove vowels`, `Add prefix`
++    fetched rows / total rows = 1/1
++    +-------------+---------------+------------+
++    | Clean phone | Remove vowels | Add prefix |
++    |-------------+---------------+------------|
++    | 5551234567  | hll wrld      | pre_test   |
++    +-------------+---------------+------------+
++
++**Note**: When using regex patterns in PPL queries:
++
++* Backslashes must be escaped (use ``\\`` instead of ``\``) - e.g., ``\\d`` for digit pattern, ``\\w+`` for word characters
++* Backreferences support both PCRE-style (``\1``, ``\2``, etc.) and Java-style (``$1``, ``$2``, etc.) syntax. PCRE-style backreferences are automatically converted to Java-style internally.
++
+ 
+ REVERSE
+ -------
+diff --git a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalcitePPLStringBuiltinFunctionIT.java b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalcitePPLStringBuiltinFunctionIT.java
+index 33befc23a..3e0b6cb07 100644
+--- a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalcitePPLStringBuiltinFunctionIT.java
++++ b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalcitePPLStringBuiltinFunctionIT.java
+@@ -5,6 +5,7 @@
+ 
+ package org.opensearch.sql.calcite.remote;
+ 
++import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_ACCOUNT;
+ import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_STATE_COUNTRY;
+ import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_STATE_COUNTRY_WITH_NULL;
+ import static org.opensearch.sql.util.MatcherUtils.*;
+@@ -24,6 +25,7 @@ public class CalcitePPLStringBuiltinFunctionIT extends PPLIntegTestCase {
+ 
+     loadIndex(Index.STATE_COUNTRY);
+     loadIndex(Index.STATE_COUNTRY_WITH_NULL);
++    loadIndex(Index.ACCOUNT);
+   }
+ 
+   @Test
+@@ -300,6 +302,77 @@ public class CalcitePPLStringBuiltinFunctionIT extends PPLIntegTestCase {
+     verifyDataRows(actual, rows("Jane", 20, "heLLo"));
+   }
+ 
++  @Test
++  public void testReplaceWithRegexPattern() throws IOException {
++    JSONObject actual =
++        executeQuery(
++            String.format(
++                "source=%s | where account_number = 1 | eval street_only = replace(address,"
++                    + " '\\\\d+ ', '') | fields address, street_only",
++                TEST_INDEX_ACCOUNT));
++
++    verifySchema(actual, schema("address", "string"), schema("street_only", "string"));
++
++    verifyDataRows(actual, rows("880 Holmes Lane", "Holmes Lane"));
++  }
++
++  @Test
++  public void testReplaceWithCaptureGroups() throws IOException {
++    JSONObject actual =
++        executeQuery(
++            String.format(
++                "source=%s | where account_number = 1 | eval swapped = replace(firstname,"
++                    + " '^(.)(.)', '\\\\2\\\\1') | fields firstname, swapped",
++                TEST_INDEX_ACCOUNT));
++
++    verifySchema(actual, schema("firstname", "string"), schema("swapped", "string"));
++
++    verifyDataRows(actual, rows("Amber", "mAber"));
++  }
++
++  @Test
++  public void testReplaceWithEmailDomainReplacement() throws IOException {
++    JSONObject actual =
++        executeQuery(
++            String.format(
++                "source=%s | where account_number = 1 | eval new_email ="
++                    + " replace(email, '([^@]+)@(.+)', '\\\\1@newdomain.com') | fields email,"
++                    + " new_email",
++                TEST_INDEX_ACCOUNT));
++
++    verifySchema(actual, schema("email", "string"), schema("new_email", "string"));
++
++    verifyDataRows(actual, rows("amberduke@pyrami.com", "amberduke@newdomain.com"));
++  }
++
++  @Test
++  public void testReplaceWithCharacterClasses() throws IOException {
++    JSONObject actual =
++        executeQuery(
++            String.format(
++                "source=%s | where account_number = 1 | eval masked = replace(address, '[a-zA-Z]',"
++                    + " 'X') | fields address, masked",
++                TEST_INDEX_ACCOUNT));
++
++    verifySchema(actual, schema("address", "string"), schema("masked", "string"));
++
++    verifyDataRows(actual, rows("880 Holmes Lane", "880 XXXXXX XXXX"));
++  }
++
++  @Test
++  public void testReplaceWithAnchors() throws IOException {
++    JSONObject actual =
++        executeQuery(
++            String.format(
++                "source=%s | where account_number = 1 | eval street_name = replace(address,"
++                    + " '^\\\\d+\\\\s+', '') | fields address, street_name",
++                TEST_INDEX_ACCOUNT));
++
++    verifySchema(actual, schema("address", "string"), schema("street_name", "string"));
++
++    verifyDataRows(actual, rows("880 Holmes Lane", "Holmes Lane"));
++  }
++
+   @Test
+   public void testLeft() throws IOException {
+     JSONObject actual =
+@@ -326,6 +399,51 @@ public class CalcitePPLStringBuiltinFunctionIT extends PPLIntegTestCase {
+     verifyDataRows(actual, rows("Jane", 20));
+   }
+ 
++  @Test
++  public void testReplaceWithInvalidRegexPattern() {
++    // Test invalid regex pattern - unclosed character class
++    Throwable e1 =
++        assertThrowsWithReplace(
++            Exception.class,
++            () ->
++                executeQuery(
++                    String.format(
++                        "source=%s | eval result = replace(firstname, '[unclosed', 'X') | fields"
++                            + " firstname, result",
++                        TEST_INDEX_ACCOUNT)));
++    verifyErrorMessageContains(e1, "Invalid regex pattern");
++    verifyErrorMessageContains(e1, "Unclosed character class");
++    verifyErrorMessageContains(e1, "400 Bad Request");
++
++    // Test invalid regex pattern - unclosed group
++    Throwable e2 =
++        assertThrowsWithReplace(
++            Exception.class,
++            () ->
++                executeQuery(
++                    String.format(
++                        "source=%s | eval result = replace(firstname, '(invalid', 'X') | fields"
++                            + " firstname, result",
++                        TEST_INDEX_ACCOUNT)));
++    verifyErrorMessageContains(e2, "Invalid regex pattern");
++    verifyErrorMessageContains(e2, "Unclosed group");
++    verifyErrorMessageContains(e2, "400 Bad Request");
++
++    // Test invalid regex pattern - dangling metacharacter
++    Throwable e3 =
++        assertThrowsWithReplace(
++            Exception.class,
++            () ->
++                executeQuery(
++                    String.format(
++                        "source=%s | eval result = replace(firstname, '?invalid', 'X') | fields"
++                            + " firstname, result",
++                        TEST_INDEX_ACCOUNT)));
++    verifyErrorMessageContains(e3, "Invalid regex pattern");
++    verifyErrorMessageContains(e3, "Dangling meta character");
++    verifyErrorMessageContains(e3, "400 Bad Request");
++  }
++
+   private void prepareTrim() throws IOException {
+     Request request1 =
+         new Request("PUT", "/opensearch-sql_test_index_state_country/_doc/5?refresh=true");
+diff --git a/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLStringFunctionTest.java b/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLStringFunctionTest.java
+index d52d915d5..1e97052de 100644
+--- a/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLStringFunctionTest.java
++++ b/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLStringFunctionTest.java
+@@ -263,4 +263,53 @@ public class CalcitePPLStringFunctionTest extends CalcitePPLAbstractTest {
+             + "WHERE REGEXP_CONTAINS(`JOB`, 'MAN')";
+     verifyPPLToSparkSQL(root, expectedSparkSql);
+   }
++
++  @Test
++  public void testReplaceLiteralString() {
++    // Test basic literal string replacement - replaces all 'A' with 'X'
++    String ppl = "source=EMP | eval new_name = replace(ENAME, 'A', 'X') | fields ENAME, new_name";
++    RelNode root = getRelNode(ppl);
++    String expectedLogical =
++        "LogicalProject(ENAME=[$1], new_name=[REGEXP_REPLACE($1, 'A', 'X')])\n"
++            + "  LogicalTableScan(table=[[scott, EMP]])\n";
++    verifyLogical(root, expectedLogical);
++
++    String expectedSparkSql =
++        "SELECT `ENAME`, REGEXP_REPLACE(`ENAME`, 'A', 'X') `new_name`\n" + "FROM `scott`.`EMP`";
++    verifyPPLToSparkSQL(root, expectedSparkSql);
++  }
++
++  @Test
++  public void testReplaceWithRegexPattern() {
++    // Test regex pattern - remove all digits
++    String ppl = "source=EMP | eval no_digits = replace(JOB, '\\\\d+', '') | fields JOB, no_digits";
++    RelNode root = getRelNode(ppl);
++    String expectedLogical =
++        "LogicalProject(JOB=[$2], no_digits=[REGEXP_REPLACE($2, '\\d+':VARCHAR, '':VARCHAR)])\n"
++            + "  LogicalTableScan(table=[[scott, EMP]])\n";
++    verifyLogical(root, expectedLogical);
++
++    String expectedSparkSql =
++        "SELECT `JOB`, REGEXP_REPLACE(`JOB`, '\\d+', '') `no_digits`\n" + "FROM `scott`.`EMP`";
++    verifyPPLToSparkSQL(root, expectedSparkSql);
++  }
++
++  @Test
++  public void testReplaceWithRegexCaptureGroups() {
++    // Test regex with capture groups - swap first two characters using \1 and \2 backreferences
++    String ppl =
++        "source=EMP | eval swapped = replace(ENAME, '^(.)(.)', '\\\\2\\\\1') | fields ENAME,"
++            + " swapped";
++    RelNode root = getRelNode(ppl);
++    String expectedLogical =
++        "LogicalProject(ENAME=[$1], swapped=[REGEXP_REPLACE($1, '^(.)(.)':VARCHAR,"
++            + " '$2$1')])\n"
++            + "  LogicalTableScan(table=[[scott, EMP]])\n";
++    verifyLogical(root, expectedLogical);
++
++    String expectedSparkSql =
++        "SELECT `ENAME`, REGEXP_REPLACE(`ENAME`, '^(.)(.)', '$2$1') `swapped`\n"
++            + "FROM `scott`.`EMP`";
++    verifyPPLToSparkSQL(root, expectedSparkSql);
++  }
+ }

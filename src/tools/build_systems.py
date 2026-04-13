@@ -211,6 +211,27 @@ def _is_test_file(file_path: str) -> bool:
     )
 
 
+def _extract_class_name_from_target(t: str) -> str:
+    """Extract bare class name from a test target string.
+
+    Handles three formats:
+      ":module:task --tests org.pkg.FooTest"  → "org.pkg.FooTest"
+      "module:org.pkg.FooTest"                → "org.pkg.FooTest"
+      ":module:task"  (module-level, no filter) → ""  (collect all)
+    """
+    if "--tests " in t:
+        return t.split("--tests ", 1)[1].strip()
+    if ":" in t:
+        # Check if the part after the last colon looks like a class name
+        # (contains dots and starts with uppercase) vs a task name (lowercase)
+        last_part = t.rsplit(":", 1)[1]
+        if last_part and last_part[0].isupper() and "." in last_part:
+            return last_part
+        # It's a task name (e.g. "test", "integTest") — module-level run
+        return ""
+    return t
+
+
 def _find_module_for_path(repo_path: str, rel_path: str) -> str:
     """Walk up looking for a build file; return module path relative to repo root."""
     head = (rel_path or "").replace("\\", "/")
@@ -589,12 +610,12 @@ def detect_test_targets(
 
     if os.path.exists(helper_script):
         if file_entries is not None:
-            # Filter to test files only — production Java and non-Java files
-            # are not relevant for test target detection.
-            test_entries = [(s, p) for s, p in file_entries if _is_test_file(p)]
-            files_json = json.dumps(test_entries)
+            # Pass ALL file entries to the helper — it needs production Java files
+            # to populate source_modules, which is used as a fallback when no
+            # runnable test targets are found (e.g. all touched tests are ITs).
+            files_json = json.dumps(file_entries)
             print(f"  [build_systems] Using helper script with --files-json "
-                  f"({len(test_entries)} test file entries of {len(file_entries)} total): {helper_script}")
+                  f"({len(file_entries)} entries): {helper_script}")
             res = _run_cmd(
                 ["python3", helper_script, "--repo", os.path.abspath(repo_path),
                  "--files-json", files_json],
@@ -772,16 +793,6 @@ def run_tests(
             if image_tag:
                 abs_repo_path = os.path.realpath(repo_path)
 
-                # Extract bare class names for result collection.
-                # Logstash targets look like ":logstash-core:test --tests org.logstash.Foo"
-                # Other projects look like "module:org.pkg.FooTest"
-                def _extract_class_name_from_target(t: str) -> str:
-                    if "--tests " in t:
-                        return t.split("--tests ", 1)[1].strip()
-                    if ":" in t:
-                        return t.split(":", 1)[1]
-                    return t
-
                 env = os.environ.copy()
                 env.update({
                     "PROJECT_NAME": normalized,
@@ -800,9 +811,11 @@ def run_tests(
                 output = res["output"]
                 is_compile_error = (not res["success"]) and "compilation error" in output.lower()
 
-                # Collect results — use bare class names so XML matching works
+                # Collect results — use bare class names so XML matching works.
+                # Module-level targets (no --tests filter) return "" — filter them
+                # out so collect_test_results uses an empty set (= collect all).
                 target_classes_for_collection = [
-                    _extract_class_name_from_target(t) for t in test_targets
+                    c for c in (_extract_class_name_from_target(t) for t in test_targets) if c
                 ]
                 print(f"  [build_systems] Collecting results for {len(target_classes_for_collection)} classes")
                 test_state = collect_test_results(
@@ -830,10 +843,27 @@ def run_tests(
 
     if _is_gradle_repo(repo_path):
         print("  [build_systems] Using Gradle test runner")
-        cmd = ["./gradlew", "test", "--no-daemon"]
+        # Targets may be in two formats:
+        #   ":module:task --tests ClassName"  (logstash/sql style)
+        #   "module:ClassName"                (elasticsearch/hibernate style)
+        # Build the correct gradlew command for each.
+        cmd = ["./gradlew", "--no-daemon"]
+        has_explicit_tasks = False
         for t in test_targets:
-            cls = t.split(":", 1)[1] if ":" in t else t
-            cmd += ["--tests", cls]
+            if "--tests " in t:
+                # Already a full Gradle task+filter string — append as-is tokens
+                cmd += t.split()
+                has_explicit_tasks = True
+            elif ":" in t:
+                mod, cls = t.split(":", 1)
+                gradle_mod = ":" + mod.replace("/", ":") if mod else ""
+                cmd += [f"{gradle_mod}:test", "--tests", cls]
+                has_explicit_tasks = True
+            else:
+                cmd += ["test", "--tests", t]
+                has_explicit_tasks = True
+        if not has_explicit_tasks:
+            cmd += ["test"]
         mode = "gradle-targeted" if test_targets else "gradle-module"
     else:
         print("  [build_systems] Using Maven test runner")
@@ -872,7 +902,7 @@ def run_tests(
     is_compile_error = (not res["success"]) and "compilation error" in output.lower()
 
     target_classes_for_collection = [
-        t.split(":", 1)[1] if ":" in t else t for t in test_targets
+        c for c in (_extract_class_name_from_target(t) for t in test_targets) if c
     ]
     print(f"  [build_systems] Collecting results for {len(target_classes_for_collection)} classes")
     test_state = collect_test_results(

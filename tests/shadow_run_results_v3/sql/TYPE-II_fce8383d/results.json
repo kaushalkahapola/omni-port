@@ -1,0 +1,242 @@
+{
+  "run_timestamp": "2026-04-13T17:11:56.448860",
+  "repo": "sql",
+  "patch_type": "TYPE-II",
+  "original_commit": "fce8383d56444092eed01b01b889fc6e4be4e810",
+  "backport_commit": "f10ffd50a08f0b167b4d684798456bf7d0b419d9",
+  "description": "main \u2192 2.19-dev",
+  "skip_validation": false,
+  "skip_test": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.14,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 9,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "opensearch/src/main/java/org/opensearch/sql/opensearch/request/PredicateAnalyzer.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 691,
+          "end_line": 703,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.21,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch adds new test cases and expected output files, and modifies a method in PredicateAnalyzer.java to detect a specific pattern in OR expressions involving IS_NULL and IS_EMPTY functions. The change in PredicateAnalyzer.java is a small structural addition (a helper method) and a conditional check update, which is not a trivial string replacement but also not a deep structural refactoring. The patch was found via 'git_exact' with high confidence, indicating the code context is very similar, but the addition of new tests and JSON files and the helper method suggest a complexity beyond TYPE_I. Therefore, TYPE_II (whitespace/formatting drift, fuzzy matching) is appropriate. The token budget estimate is moderate due to the multiple new test files and the code change.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "opensearch/src/main/java/org/opensearch/sql/opensearch/request/PredicateAnalyzer.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (sql-helper): BUILD FAILED in 10s\n--- Build FAILED for d2caa6f ---",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": false,
+      "build_mode": "sql-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "failed",
+      "fallback_attempts": 1,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "opensearch/src/main/java/org/opensearch/sql/opensearch/request/PredicateAnalyzer.java",
+          "what_changed": "Extracted the logic that detects an OR expression containing both IS_NULL and IS_EMPTY functions into a new helper method named containIsEmptyFunction, and updated the andOr method to use this helper for the null check before throwing an exception.",
+          "where_in_code": "PredicateAnalyzer class, methods containIsEmptyFunction and andOr",
+          "intent": "To improve code clarity and modularity by isolating the detection of problematic OR expressions involving IS_NULL and IS_EMPTY, ensuring that the exception is thrown to prevent DSL evaluation that could cause NullPointerException.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "containIsEmptyFunction",
+            "andOr"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (sql-helper): BUILD FAILED in 10s\n--- Build FAILED for d2caa6f ---",
+      "validation_attempts": 2,
+      "retry_files": [],
+      "build_success": false,
+      "build_mode": "sql-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "opensearch/src/main/java/org/opensearch/sql/opensearch/request/PredicateAnalyzer.java",
+          "what_changed": "Replaced an inline conditional check inside the andOr method with a new helper method containIsEmptyFunction that detects if an OR expression contains both IS_NULL and IS_EMPTY functions; updated andOr to use this helper method for the null-check logic and throw an exception accordingly.",
+          "where_in_code": "PredicateAnalyzer class, methods containIsEmptyFunction (added) and andOr (modified)",
+          "intent": "To improve code clarity and maintainability by extracting complex condition logic into a dedicated method that identifies problematic OR expressions involving IS_NULL and IS_EMPTY, preventing potential null pointer exceptions during DSL evaluation.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "containIsEmptyFunction",
+            "andOr"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry2": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (sql-helper): BUILD FAILED in 10s\n--- Build FAILED for d2caa6f ---",
+      "validation_attempts": 3,
+      "retry_files": [],
+      "build_success": false,
+      "build_mode": "sql-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 10,
+    "developer_aux_hunks_from_target": 9,
+    "phase0_baseline": {
+      "mode": "baseline-sql-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 5442
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 9,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 17398,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 12672,
+        "output": 4726
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 2,
+    "retry_contexts": [
+      {
+        "error_type": "unknown",
+        "error_message": "BUILD FAILED in 10s\n--- Build FAILED for d2caa6f ---",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "BUILD FAILED in 10s\n--- Build FAILED for d2caa6f ---",
+        "attempt_count": 2,
+        "suggested_action": "inspect_and_retry"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "BUILD FAILED in 10s\n--- Build FAILED for d2caa6f ---",
+        "attempt_count": 3,
+        "suggested_action": "inspect_and_retry"
+      }
+    ],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1594,
+    "target_patch_bytes": 29239,
+    "patch_exact_match": true,
+    "validation_passed": false,
+    "validation_failure_category": "unknown",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

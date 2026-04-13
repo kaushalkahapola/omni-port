@@ -1,0 +1,256 @@
+commit ec5d429b881b3de8722bc0cb793d03cef1d4bbd6
+Author: Yuanchun Shen <yuanchu@amazon.com>
+Date:   Wed Oct 29 17:11:19 2025 +0800
+
+    Support ISO8601-formatted string in PPL (#4246) (#4685)
+    
+    * Support parsing ISO 8601 datetime format for timestamp value
+    
+    
+    
+    * Modify tests for ISO 8601 timestamp input
+    
+    
+    
+    * Add support of iso 8601 date string to date and time
+    
+    - add an IT for date time comparison with iso 8601 formatted literal
+    
+    
+    
+    ---------
+    
+    
+    (cherry picked from commit 42c13b40f2d3e8d7938e1ca95d9cc4fc74fbba5d)
+    
+    Signed-off-by: Yuanchun Shen <yuanchu@amazon.com>
+
+diff --git a/core/src/main/java/org/opensearch/sql/data/model/ExprDateValue.java b/core/src/main/java/org/opensearch/sql/data/model/ExprDateValue.java
+index 83450a3e5..761226c13 100644
+--- a/core/src/main/java/org/opensearch/sql/data/model/ExprDateValue.java
++++ b/core/src/main/java/org/opensearch/sql/data/model/ExprDateValue.java
+@@ -12,6 +12,7 @@ import java.time.Instant;
+ import java.time.LocalDate;
+ import java.time.LocalDateTime;
+ import java.time.LocalTime;
++import java.time.ZoneOffset;
+ import java.time.ZonedDateTime;
+ import java.time.format.DateTimeFormatter;
+ import java.time.format.DateTimeParseException;
+@@ -34,7 +35,14 @@ public class ExprDateValue extends AbstractExprValue {
+    */
+   public ExprDateValue(String date) {
+     try {
+-      this.date = LocalDate.parse(date, DateTimeFormatters.DATE_TIMESTAMP_FORMATTER);
++      LocalDateTime ldt;
++      try {
++        ldt = LocalDateTime.parse(date, DateTimeFormatters.DATE_TIMESTAMP_FORMATTER);
++      } catch (DateTimeParseException ignored) {
++        ZonedDateTime zdt = ZonedDateTime.parse(date, DateTimeFormatter.ISO_DATE_TIME);
++        ldt = zdt.withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
++      }
++      this.date = ldt.toLocalDate();
+     } catch (DateTimeParseException e) {
+       throw new ExpressionEvaluationException(
+           String.format("date:%s in unsupported format, please use 'yyyy-MM-dd'", date));
+diff --git a/core/src/main/java/org/opensearch/sql/data/model/ExprTimeValue.java b/core/src/main/java/org/opensearch/sql/data/model/ExprTimeValue.java
+index 0fe4a9ccb..a2ff8bd64 100644
+--- a/core/src/main/java/org/opensearch/sql/data/model/ExprTimeValue.java
++++ b/core/src/main/java/org/opensearch/sql/data/model/ExprTimeValue.java
+@@ -12,7 +12,10 @@ import java.time.Instant;
+ import java.time.LocalDate;
+ import java.time.LocalDateTime;
+ import java.time.LocalTime;
++import java.time.OffsetTime;
++import java.time.ZoneOffset;
+ import java.time.ZonedDateTime;
++import java.time.format.DateTimeFormatter;
+ import java.time.format.DateTimeParseException;
+ import java.util.Objects;
+ import lombok.RequiredArgsConstructor;
+@@ -35,7 +38,23 @@ public class ExprTimeValue extends AbstractExprValue {
+    */
+   public ExprTimeValue(String time) {
+     try {
+-      this.time = LocalTime.parse(time, DateTimeFormatters.TIME_TIMESTAMP_FORMATTER);
++      LocalTime lt;
++      try {
++        lt = LocalTime.parse(time, DateTimeFormatters.TIME_TIMESTAMP_FORMATTER);
++      } catch (DateTimeParseException ignore) {
++        try {
++          lt =
++              ZonedDateTime.parse(time, DateTimeFormatter.ISO_DATE_TIME)
++                  .withZoneSameInstant(ZoneOffset.UTC)
++                  .toLocalTime();
++        } catch (DateTimeParseException ignore2) {
++          lt =
++              OffsetTime.parse(time, DateTimeFormatter.ISO_TIME)
++                  .withOffsetSameInstant(ZoneOffset.UTC)
++                  .toLocalTime();
++        }
++      }
++      this.time = lt;
+     } catch (DateTimeParseException e) {
+       throw new ExpressionEvaluationException(
+           String.format("time:%s in unsupported format, please use 'HH:mm:ss[.SSSSSSSSS]'", time));
+diff --git a/core/src/main/java/org/opensearch/sql/data/model/ExprTimestampValue.java b/core/src/main/java/org/opensearch/sql/data/model/ExprTimestampValue.java
+index e083b43e3..bed3c66b3 100644
+--- a/core/src/main/java/org/opensearch/sql/data/model/ExprTimestampValue.java
++++ b/core/src/main/java/org/opensearch/sql/data/model/ExprTimestampValue.java
+@@ -14,6 +14,8 @@ import java.time.LocalDate;
+ import java.time.LocalDateTime;
+ import java.time.LocalTime;
+ import java.time.ZoneOffset;
++import java.time.ZonedDateTime;
++import java.time.format.DateTimeFormatter;
+ import java.time.format.DateTimeParseException;
+ import java.time.temporal.ChronoUnit;
+ import java.util.Objects;
+@@ -32,17 +34,24 @@ public class ExprTimestampValue extends AbstractExprValue {
+   /**
+    * Constructor with timestamp string.
+    *
+-   * @param timestamp a date or timestamp string (does not accept time string)
++   * @param timestamp a date or timestamp string (does not accept time string). It accepts both ISO
++   *     8601 format and {@code yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]} format
+    */
+   public ExprTimestampValue(String timestamp) {
+     try {
+-      this.timestamp =
+-          LocalDateTime.parse(timestamp, DateTimeFormatters.DATE_TIMESTAMP_FORMATTER)
+-              .toInstant(ZoneOffset.UTC);
++      LocalDateTime ldt;
++      try {
++        ldt = LocalDateTime.parse(timestamp, DateTimeFormatters.DATE_TIMESTAMP_FORMATTER);
++      } catch (DateTimeParseException ignored) {
++        ZonedDateTime zdt = ZonedDateTime.parse(timestamp, DateTimeFormatter.ISO_DATE_TIME);
++        ldt = zdt.withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
++      }
++      this.timestamp = ldt.toInstant(ZoneOffset.UTC);
+     } catch (DateTimeParseException e) {
+       throw new ExpressionEvaluationException(
+           String.format(
+-              "timestamp:%s in unsupported format, please use 'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]'",
++              "timestamp:%s in unsupported format, please use 'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]' or"
++                  + " ISO 8601 format",
+               timestamp));
+     }
+   }
+diff --git a/core/src/test/java/org/opensearch/sql/data/model/DateTimeValueTest.java b/core/src/test/java/org/opensearch/sql/data/model/DateTimeValueTest.java
+index 4a154b9e4..47b124713 100644
+--- a/core/src/test/java/org/opensearch/sql/data/model/DateTimeValueTest.java
++++ b/core/src/test/java/org/opensearch/sql/data/model/DateTimeValueTest.java
+@@ -15,7 +15,9 @@ import static org.opensearch.sql.utils.DateTimeUtils.UTC_ZONE_ID;
+ import java.time.LocalDate;
+ import java.time.LocalDateTime;
+ import java.time.LocalTime;
++import java.time.ZoneOffset;
+ import java.time.ZonedDateTime;
++import java.time.format.DateTimeFormatter;
+ import org.junit.jupiter.api.Test;
+ import org.opensearch.sql.exception.ExpressionEvaluationException;
+ import org.opensearch.sql.exception.SemanticCheckException;
+@@ -126,15 +128,21 @@ public class DateTimeValueTest {
+   }
+ 
+   @Test
+-  public void timestampInUnsupportedFormat() {
+-    Throwable exception =
+-        assertThrows(
+-            ExpressionEvaluationException.class,
+-            () -> new ExprTimestampValue("2020-07-07T01:01:01Z"));
++  public void timestampInISO8601Format() {
++    ExprTimestampValue timestampValue = new ExprTimestampValue("2020-07-07T01:01:01Z");
+     assertEquals(
+-        "timestamp:2020-07-07T01:01:01Z in unsupported format, "
+-            + "please use 'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]'",
+-        exception.getMessage());
++        LocalDateTime.parse("2020-07-07T01:01:01Z", DateTimeFormatter.ISO_DATE_TIME)
++            .toInstant(ZoneOffset.UTC),
++        timestampValue.timestampValue());
++  }
++
++  @Test
++  public void timestampInISO8601FormatWithTimeZone() {
++    ExprTimestampValue timestampValue = new ExprTimestampValue("2020-07-07T01:01:01-01:00");
++    assertEquals(
++        LocalDateTime.parse("2020-07-07T02:01:01Z", DateTimeFormatter.ISO_DATE_TIME)
++            .toInstant(ZoneOffset.UTC),
++        timestampValue.timestampValue());
+   }
+ 
+   @Test
+@@ -157,14 +165,11 @@ public class DateTimeValueTest {
+     assertEquals(LocalTime.parse("19:44:00"), stringValue.timeValue());
+     assertEquals("\"2020-08-17 19:44:00\"", stringValue.toString());
+ 
+-    Throwable exception =
+-        assertThrows(
+-                ExpressionEvaluationException.class,
+-            () -> new ExprStringValue("2020-07-07T01:01:01Z").datetimeValue());
++    ExprValue stringValueWithIsoTimestamp = new ExprStringValue("2020-07-07T01:01:01Z");
+     assertEquals(
+-        "datetime:2020-07-07T01:01:01Z in unsupported format, "
+-            + "please use 'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]'",
+-        exception.getMessage());
++        LocalDateTime.parse("2020-07-07T01:01:01Z", DateTimeFormatter.ISO_DATE_TIME)
++            .toInstant(ZoneOffset.UTC),
++        stringValueWithIsoTimestamp.timestampValue());
+   }
+ 
+   @Test
+@@ -263,7 +268,7 @@ public class DateTimeValueTest {
+             () -> new ExprTimestampValue("2020-07-07 01:01:01.1234567890"));
+     assertEquals(
+         "timestamp:2020-07-07 01:01:01.1234567890 in unsupported format, please use "
+-            + "'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]'",
++            + "'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]' or ISO 8601 format",
+         exception.getMessage());
+   }
+ 
+diff --git a/core/src/test/java/org/opensearch/sql/expression/datetime/TimestampTest.java b/core/src/test/java/org/opensearch/sql/expression/datetime/TimestampTest.java
+index 94f51a9fa..0ff68c007 100644
+--- a/core/src/test/java/org/opensearch/sql/expression/datetime/TimestampTest.java
++++ b/core/src/test/java/org/opensearch/sql/expression/datetime/TimestampTest.java
+@@ -62,7 +62,8 @@ public class TimestampTest extends ExpressionTestBase {
+             () -> DSL.timestamp(functionProperties, DSL.literal(value)).valueOf());
+     assertEquals(
+         String.format(
+-            "timestamp:%s in unsupported format, please " + "use 'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]'",
++            "timestamp:%s in unsupported format, please "
++                + "use 'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]' or ISO 8601 format",
+             value),
+         exception.getMessage());
+   }
+diff --git a/integ-test/src/test/java/org/opensearch/sql/calcite/standalone/CalcitePPLDateTimeBuiltinFunctionIT.java b/integ-test/src/test/java/org/opensearch/sql/calcite/standalone/CalcitePPLDateTimeBuiltinFunctionIT.java
+index 33dbfa22d..6f66cb5a3 100644
+--- a/integ-test/src/test/java/org/opensearch/sql/calcite/standalone/CalcitePPLDateTimeBuiltinFunctionIT.java
++++ b/integ-test/src/test/java/org/opensearch/sql/calcite/standalone/CalcitePPLDateTimeBuiltinFunctionIT.java
+@@ -708,6 +708,27 @@ public class CalcitePPLDateTimeBuiltinFunctionIT extends CalcitePPLIntegTestCase
+     verifyDataRows(actual, rows(2));
+   }
+ 
++  @Test
++  public void testComparisonWithIso8601DateLiteral() {
++    Object[][] tests = {
++      {"date_optional_time = '1984-04-12T09:07:42.000Z'", 2},
++      {"date_time = '1984-04-12T07:07:42-02:00'", 2},
++      {"date = '1984-04-12'", 2},
++      {"date = '1984-04-12T09:07:42.000Z'", 2},
++      {"basic_t_time = '1984-04-12T09:07:42.000Z'", 2},
++      {"basic_t_time = '10:07:42.000+01:00'", 2}
++    };
++    for (Object[] pair : tests) {
++      String query = (String) pair[0];
++      int result = (int) pair[1];
++      JSONObject actual =
++          executeQuery(
++              String.format(
++                  "source=%s | where %s | stats COUNT() AS cnt", TEST_INDEX_DATE_FORMATS, query));
++      verifyDataRows(actual, rows(result));
++    }
++  }
++
+   @Test
+   public void testAddSubTime() throws IOException {
+     JSONObject actual =

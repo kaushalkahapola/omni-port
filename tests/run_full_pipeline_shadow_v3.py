@@ -82,6 +82,7 @@ REPO_PATH_MAP: dict[str, str] = {
     "druid": "repos/druid",
     "hibernate-orm": "repos/hibernate-orm",
     "logstash": "repos/logstash",
+    "sql": "repos/sql",
 }
 
 
