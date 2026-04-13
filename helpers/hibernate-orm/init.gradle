@@ -1,0 +1,22 @@
+// Retrofit pipeline init script.
+//
+// Disables Test.filter.failOnNoMatchingTests so that wildcard --tests patterns
+// (e.g. "org.hibernate.dialect.*") which match zero classes do NOT abort the
+// whole test invocation. This is critical when production packages don't mirror
+// the test package layout — without this flag, one missed wildcard fails the
+// entire :module:test task and prevents any XML reports from being written.
+//
+// Tests that DO match still run normally; genuine test failures still propagate
+// (we do NOT set ignoreFailures = true, so test_success accurately reflects
+// whether matching tests passed).
+
+allprojects {
+    tasks.withType(Test).configureEach {
+        filter {
+            failOnNoMatchingTests = false
+        }
+        reports {
+            junitXml.required = true
+        }
+    }
+}

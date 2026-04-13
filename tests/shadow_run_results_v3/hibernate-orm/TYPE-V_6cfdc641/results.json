@@ -1,5 +1,5 @@
 {
-  "run_timestamp": "2026-04-13T07:57:24.218241",
+  "run_timestamp": "2026-04-13T10:43:30.163627",
   "repo": "hibernate-orm",
   "patch_type": "TYPE-V",
   "original_commit": "6cfdc641535daf0b43f7b75c66b6998164f53f88",
@@ -8,7 +8,7 @@
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.54,
+      "elapsed_s": 1.52,
       "error": null,
       "java_hunks": 2,
       "aux_hunks": 1,
@@ -34,12 +34,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.35,
+      "elapsed_s": 3.84,
       "error": null,
       "classification": {
         "patch_type": "PatchType.MIXED",
         "confidence": 0.95,
-        "reasoning": "The patch consists of two main hunks. The first hunk modifies the method isBidirectionalAttributeName with a relatively straightforward logic change and addition of a helper method areEqual. This hunk was found via 'git_exact' with confidence 1.00, indicating a close match to the target branch, suggesting a TYPE_I or TYPE_II complexity. However, the second hunk is a new test class addition, which is a new file and was found via 'fuzzy' matching with confidence 0.96, indicating some structural differences and requiring more adaptation. The presence of both exact and fuzzy matches, along with structural additions (new method and new test class), suggests a MIXED complexity classification. The patch is not auto-generated. The token budget estimate is moderate due to the need to carefully integrate the new helper method and test class, and to verify the logic changes in the existing method.",
+        "reasoning": "The patch consists of two main hunks. The first hunk modifies the method isBidirectionalAttributeName with a relatively straightforward logic change and addition of a helper method areEqual. This hunk was found via 'git_exact' with confidence 1.0, indicating a close match to the target branch, suggesting a TYPE_I or TYPE_II complexity. The second hunk adds a new test class, which is a new file addition and does not modify existing code structure. The localization for the second hunk was found via 'fuzzy' with confidence 0.96, indicating some formatting or minor structural differences, suggesting TYPE_II complexity. Since the patch includes both an exact match modification and a fuzzy matched addition, the overall classification is MIXED. The patch involves some structural understanding but no deep refactoring or redesign, so token budget is moderate at 850 tokens. The target file is not auto-generated as it is a core Hibernate source file.",
         "is_auto_generated": false
       }
     },
@@ -61,7 +61,7 @@
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 117.84,
+      "elapsed_s": 58.04,
       "error": null,
       "refactored_count": 1
     },
@@ -75,7 +75,7 @@
         {
           "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
           "old_string": "\tpublic boolean isBidirectionalAttributeName(NavigablePath fetchablePath, ToOneAttributeMapping modelPart) {\n\t\tif ( bidirectionalAttributeName == null ) {\n\t\t\t// If the FK-target of the to-one mapping is the same as the FK-target of this plural mapping,\n\t\t\t// then we say this is bidirectional, given that this is only invoked for model parts of the collection elements\n\t\t\treturn fkDescriptor.getTargetPart() == modelPart.getForeignKeyDescriptor().getTargetPart();\n\t\t}\n\t\treturn fetchablePath.getLocalName().endsWith( bidirectionalAttributeName );\n\t}\n\n\t@SuppressWarnings(\"unused\")\n\tpublic void finishInitialization(",
-          "new_string": "\tpublic boolean isBidirectionalAttributeName(NavigablePath fetchablePath, ToOneAttributeMapping modelPart) {\n\t\treturn bidirectionalAttributeName == null\n\t\t\t\t// If the FK-target of the to-one mapping is the same as the FK-target of this one-to-many mapping,\n\t\t\t\t// and the FK-key refer to the same column then we say this is bidirectional,\n\t\t\t\t// given that this is only invoked for model parts of the collection elements\n\t\t\t\t? modelPart.getSideNature() == ForeignKeyDescriptor.Nature.KEY\n\t\t\t\t&& collectionDescriptor.isOneToMany()\n\t\t\t\t&& fkDescriptor.getTargetPart() == modelPart.getForeignKeyDescriptor().getTargetPart()\n\t\t\t\t&& areEqual( fkDescriptor.getKeyPart(), modelPart.getForeignKeyDescriptor().getKeyPart() )\n\t\t\t\t: fetchablePath.getLocalName().equals( bidirectionalAttributeName );\n\t}\n\n\tprivate boolean areEqual(ValuedModelPart part1, ValuedModelPart part2) {\n\t\tfinal int typeCount = part1.getJdbcTypeCount();\n\t\tif ( part2.getJdbcTypeCount() != typeCount ) {\n\t\t\treturn false;\n\t\t}\n\t\tfor ( int i = 0; i < typeCount; i++ ) {\n\t\t\tfinal SelectableMapping selectable1 = part1.getSelectable( i );\n\t\t\tfinal SelectableMapping selectable2 = part2.getSelectable( i );\n\t\t\tif ( selectable1.getJdbcMapping() != selectable2.getJdbcMapping()\n\t\t\t\t|| !selectable1.getContainingTableExpression().equals( selectable2.getContainingTableExpression() )\n\t\t\t\t|| !selectable1.getSelectionExpression().equals( selectable2.getSelectionExpression() ) ) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t}\n\t\treturn true;\n\t}\n\n\t@SuppressWarnings(\"unused\")\n\tpublic void finishInitialization( ",
+          "new_string": "\t@Override\n\tpublic boolean isBidirectionalAttributeName(NavigablePath fetchablePath, ToOneAttributeMapping modelPart) {\n\t\treturn bidirectionalAttributeName == null\n\t\t\t\t// If the FK-target of the to-one mapping is the same as the FK-target of this one-to-many mapping,\n\t\t\t\t// and the FK-key refer to the same column then we say this is bidirectional,\n\t\t\t\t// given that this is only invoked for model parts of the collection elements\n\t\t\t\t? modelPart.getSideNature() == ForeignKeyDescriptor.Nature.KEY\n\t\t\t\t&& collectionDescriptor.isOneToMany()\n\t\t\t\t&& fkDescriptor.getTargetPart() == modelPart.getForeignKeyDescriptor().getTargetPart()\n\t\t\t\t&& areEqual( fkDescriptor.getKeyPart(), modelPart.getForeignKeyDescriptor().getKeyPart() )\n\t\t\t\t: fetchablePath.getLocalName().equals( bidirectionalAttributeName );\n\t}\n\n\tprivate boolean areEqual(ValuedModelPart part1, ValuedModelPart part2) {\n\t\tfinal int typeCount = part1.getJdbcTypeCount();\n\t\tif ( part2.getJdbcTypeCount() != typeCount ) {\n\t\t\treturn false;\n\t\t}\n\t\tfor ( int i = 0; i < typeCount; i++ ) {\n\t\t\tfinal SelectableMapping selectable1 = part1.getSelectable( i );\n\t\t\tfinal SelectableMapping selectable2 = part2.getSelectable( i );\n\t\t\tif ( selectable1.getJdbcMapping() != selectable2.getJdbcMapping()\n\t\t\t\t|| !selectable1.getContainingTableExpression().equals( selectable2.getContainingTableExpression() )\n\t\t\t\t|| !selectable1.getSelectionExpression().equals( selectable2.getSelectionExpression() ) ) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t}\n\t\treturn true;\n\t}\n\n\t@SuppressWarnings(\"unused\")\n\tpublic void finishInitialization(",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -96,56 +96,171 @@
       "synthesized_count_after_repair": 1
     },
     "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (hibernate-orm-helper) \u2014 compile errors:\nhibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:254: error: Override is not a repeatable annotation interface",
+      "validation_attempts": 1,
+      "retry_files": [
+        "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java"
+      ],
+      "build_success": false,
+      "build_mode": "hibernate-orm-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "line": 254,
+          "message": "error: Override is not a repeatable annotation interface"
+        }
+      ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "applied",
+      "fallback_attempts": 1,
+      "synthesized_count": 1,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "what_changed": "Replaced import of TableDetails with import of ValuedModelPart in the import statements.",
+          "where_in_code": "import statements at the top of PluralAttributeMappingImpl.java",
+          "intent": "To update dependencies by replacing TableDetails import with ValuedModelPart, likely reflecting a change in the model part usage or API.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "TableDetails",
+            "ValuedModelPart"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "what_changed": "Modified the logic of isBidirectionalAttributeName method to add more precise checks for bidirectionality by verifying the foreign key nature, one-to-many collection type, and detailed equality of foreign key parts; also added a helper method areEqual to compare ValuedModelPart instances in detail.",
+          "where_in_code": "class PluralAttributeMappingImpl, method isBidirectionalAttributeName and new private method areEqual",
+          "intent": "To improve the accuracy of detecting bidirectional attribute names by ensuring the foreign key parts match exactly and the relationship is one-to-many, preventing false positives in bidirectionality detection.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "isBidirectionalAttributeName",
+            "areEqual",
+            "ValuedModelPart"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (hibernate-orm-helper) \u2014 compile errors:\nhibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:351: error: cannot find symbol\nhibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:796: error: cannot find symbol\nhibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:807: error: cannot find symbol",
+      "validation_attempts": 2,
+      "retry_files": [
+        "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java"
+      ],
+      "build_success": false,
+      "build_mode": "hibernate-orm-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "line": 351,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "line": 796,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "line": 807,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "what_changed": "Replaced import of TableDetails with import of ValuedModelPart in the imports section.",
+          "where_in_code": "imports in PluralAttributeMappingImpl.java",
+          "intent": "To update the imported classes to include ValuedModelPart, likely to support new logic involving model parts, and remove an unused or replaced import.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "ValuedModelPart",
+            "TableDetails"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "what_changed": "Modified the isBidirectionalAttributeName method to add more precise checks for bidirectionality by verifying that the foreign key side nature is KEY, the collection is one-to-many, and that both the target and key parts of the foreign key descriptors are equal. Added a new private helper method areEqual to compare two ValuedModelPart instances in detail. Also changed the string comparison from endsWith to equals for the bidirectional attribute name check.",
+          "where_in_code": "class PluralAttributeMappingImpl, method isBidirectionalAttributeName, added method areEqual",
+          "intent": "To improve the accuracy of detecting bidirectional attribute names by ensuring the foreign key relationships and their components match exactly, preventing false positives and strengthening the semantic correctness of bidirectional association detection.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "isBidirectionalAttributeName",
+            "areEqual",
+            "ValuedModelPart"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry2": {
       "validation_passed": true,
       "validation_failure_category": "",
       "validation_error_context": "",
-      "validation_attempts": 1,
+      "validation_attempts": 3,
       "retry_files": [],
       "build_success": true,
       "build_mode": "hibernate-orm-helper",
       "test_success": true,
       "test_mode": "hibernate-orm-helper",
       "test_state": {
-        "xml_reports": [
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-core/target/test-results/test/TEST-org.hibernate.orm.test.mapping.collections.BidirectionalOneToManyTest.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.BasicEntityManagerFactoryScopeTests.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.BasicSessionFactoryScopeTests.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.DomainModelTesting.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.EntityManagerFactoryScopeTesting.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.MoreEntityManagerFactoryScopeTesting.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.ServiceRegistryTesting.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.SessionFactoryTesting.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.logger.LogDelegationTest.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.logger.LoggingRuleTest.xml",
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.util.uuid.SafeRandomUUIDGeneratorTest.xml"
-        ],
+        "xml_reports": [],
         "target_classes": [
           "org.hibernate.metamodel.mapping.internal.*",
-          "org.hibernate.orm.test.mapping.collections.BidirectionalOneToManyTest"
+          "org.hibernate.orm.test.mapping.collections.BidirectionalOneToManyTest",
+          "org.hibernate.orm.test.metamodel.mapping.internal.*",
+          "org.hibernate.test.metamodel.mapping.internal.*"
         ],
-        "test_cases": {
-          "org.hibernate.orm.test.mapping.collections.BidirectionalOneToManyTest#testParentNotTreatedAsBidirectional(EntityManagerFactoryScope)": "passed"
-        },
-        "classes": {
-          "org.hibernate.orm.test.mapping.collections.BidirectionalOneToManyTest": "passed"
-        },
+        "test_cases": {},
+        "classes": {},
         "summary": {
-          "passed": 1,
+          "passed": 0,
           "failed": 0,
           "skipped": 0,
-          "total": 1
+          "total": 0
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": true,
-        "fail_to_pass": [
-          "org.hibernate.orm.test.mapping.collections.BidirectionalOneToManyTest#testParentNotTreatedAsBidirectional(EntityManagerFactoryScope)"
-        ],
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
         "pass_to_fail": [],
         "newly_passing": [],
-        "baseline_total": 1,
-        "patched_total": 1,
-        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
       },
       "compile_errors": []
     }
@@ -157,7 +272,7 @@
       "mode": "baseline-hibernate-orm-helper",
       "skipped": false,
       "cached": false,
-      "test_cases_total": 1
+      "test_cases_total": 0
     },
     "java_production_hunks": 2,
     "developer_aux_hunks": 1,
@@ -165,7 +280,7 @@
       0,
       1
     ],
-    "tokens_used": 0,
+    "tokens_used": 55759,
     "llm_token_usage": {
       "agent2_classifier": {
         "input": 0,
@@ -173,11 +288,11 @@
       },
       "agent4_namespace": {
         "input": 3492,
-        "output": 614
+        "output": 638
       },
       "agent5_structural": {
         "input": 1453,
-        "output": 3427
+        "output": 2062
       },
       "agent6_synthesizer": {
         "input": 0,
@@ -186,18 +301,35 @@
       "agent8_syntax_repair": {
         "input": 0,
         "output": 0
+      },
+      "agent9_fallback": {
+        "input": 52002,
+        "output": 3757
       }
     },
     "synthesis_status": "success",
     "applied_on_disk_ag3": 1,
-    "synthesized_count": 1,
+    "synthesized_count": 0,
     "failed_hunks_total": 0,
-    "syntax_repair_status": "clean",
-    "fallback_status": "not_run",
-    "fallback_attempts": 0,
-    "retry_contexts": [],
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 2,
+    "retry_contexts": [
+      {
+        "error_type": "unknown",
+        "error_message": "/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:254: error: Override is not a repeatable annotation interface\n> Task :hibernate-core:compileJava FAILED\nBUILD FAILED in 1m 50s",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:351: error: cannot find symbol\n  symbol:   class TableDetails\n/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:796: error: cannot find symbol\n  symbol:   class TableDetails\n/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:807: error: cannot find symbol\n  symbol:   class TableDetails\n> Task :hibernate-core:compileJava FAILED\nBUILD FAILED in 2m 10s",
+        "attempt_count": 2,
+        "suggested_action": "route_to_namespace_or_structural"
+      }
+    ],
     "failed_hunks": [],
-    "generated_patch_bytes": 3640,
+    "generated_patch_bytes": 3479,
     "target_patch_bytes": 7301,
     "patch_exact_match": false,
     "validation_passed": true,
@@ -206,19 +338,15 @@
     "test_success": true,
     "test_mode": "hibernate-orm-helper",
     "test_transition": {
-      "valid_backport_signal": true,
-      "fail_to_pass": [
-        "org.hibernate.orm.test.mapping.collections.BidirectionalOneToManyTest#testParentNotTreatedAsBidirectional(EntityManagerFactoryScope)"
-      ],
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
       "pass_to_fail": [],
       "newly_passing": [],
-      "baseline_total": 1,
-      "patched_total": 1,
-      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
     },
-    "fail_to_pass_count": 1,
+    "fail_to_pass_count": 0,
     "newly_passing_count": 0,
     "pass_to_fail_count": 0,
-    "backport_success": true
+    "backport_success": false
   }
 }

@@ -1,5 +1,5 @@
 diff --git a/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java b/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java
-index 9a4ebf81d0..174f5be413 100644
+index 9a4ebf81d0..148de2f518 100644
 --- a/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java
 +++ b/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java
 @@ -39,6 +39,7 @@ import org.hibernate.metamodel.mapping.PluralAttributeMapping;
@@ -18,8 +18,11 @@ index 9a4ebf81d0..174f5be413 100644
  	/**
  	 * For Hibernate Reactive
  	 */
-@@ -252,16 +252,36 @@ public class PluralAttributeMappingImpl
+@@ -250,14 +250,35 @@ public class PluralAttributeMappingImpl
+ 		}
+ 	}
  
++	@Override
  	@Override
  	public boolean isBidirectionalAttributeName(NavigablePath fetchablePath, ToOneAttributeMapping modelPart) {
 -		if ( bidirectionalAttributeName == null ) {
@@ -41,7 +44,8 @@ index 9a4ebf81d0..174f5be413 100644
 +		final int typeCount = part1.getJdbcTypeCount();
 +		if ( part2.getJdbcTypeCount() != typeCount ) {
 +			return false;
-+		}
+ 		}
+-		return fetchablePath.getLocalName().endsWith( bidirectionalAttributeName );
 +		for ( int i = 0; i < typeCount; i++ ) {
 +			final SelectableMapping selectable1 = part1.getSelectable( i );
 +			final SelectableMapping selectable2 = part2.getSelectable( i );
@@ -50,18 +54,12 @@ index 9a4ebf81d0..174f5be413 100644
 +				|| !selectable1.getSelectionExpression().equals( selectable2.getSelectionExpression() ) ) {
 +				return false;
 +			}
- 		}
--		return fetchablePath.getLocalName().endsWith( bidirectionalAttributeName );
++		}
 +		return true;
  	}
  
  	@SuppressWarnings("unused")
--	public void finishInitialization(
-+	public void finishInitialization( 
- 			Property bootProperty,
- 			Collection bootDescriptor,
- 			MappingModelCreationProcess creationProcess) {
-@@ -903,7 +923,6 @@ public class PluralAttributeMappingImpl
+@@ -903,7 +924,6 @@ public class PluralAttributeMappingImpl
  		return tableGroup;
  	}
  

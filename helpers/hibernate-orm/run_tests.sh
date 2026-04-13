@@ -68,7 +68,13 @@ fi
 docker volume create gradle-cache-hibernate 2>/dev/null || true
 docker volume create gradle-wrapper-hibernate 2>/dev/null || true
 
-GRADLE_CMD="./gradlew ${GRADLE_ARGS} --max-workers=${MAX_CPU} --project-cache-dir /tmp/gradle-project-cache"
+# init.gradle (mounted into the container) disables failOnNoMatchingTests so
+# wildcard --tests patterns matching zero classes don't abort the whole task.
+# --continue lets Gradle keep going past test failures, ensuring XMLs are
+# written for every module that did run before the build is finalized.
+HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INIT_GRADLE_HOST="${HELPER_DIR}/init.gradle"
+GRADLE_CMD="./gradlew ${GRADLE_ARGS} --init-script /tmp/retrofit-init.gradle --continue --max-workers=${MAX_CPU} --project-cache-dir /tmp/gradle-project-cache"
 echo "--- Executing: ${GRADLE_CMD} ---"
 
 run_gradle_cmd() {
@@ -85,6 +91,7 @@ run_gradle_cmd() {
         -v "gradle-cache-hibernate:/home/gradle/.gradle/caches" \
         -v "gradle-wrapper-hibernate:/home/gradle/.gradle/wrapper" \
         -v "${PROJECT_DIR}:/repo" \
+        -v "${INIT_GRADLE_HOST}:/tmp/retrofit-init.gradle:ro" \
         -w /repo \
         "${IMAGE_TAG}" \
         bash -c "git config --global --add safe.directory /repo || true; \

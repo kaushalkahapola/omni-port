@@ -198,6 +198,41 @@ def _filter_elasticsearch_test_targets(
     return kept, skipped
 
 
+def _expand_test_package_wildcards(
+    project: str,
+    module: str,
+    prod_pkg: str,
+) -> set[str]:
+    """
+    Map a production-code package wildcard to candidate test-package wildcards
+    based on per-project naming conventions.
+
+    For most projects, tests live alongside production code (same package), so
+    the prod wildcard alone is fine. For Hibernate ORM, tests have been moved
+    to dedicated test packages (`org.hibernate.orm.test.*`, legacy
+    `org.hibernate.test.*`) so a wildcard derived from a production package
+    will frequently match nothing — we must add the mirrored test packages too.
+
+    Returns a set of `module:pattern.*` strings (always module-prefixed).
+    """
+    out: set[str] = {f"{module}:{prod_pkg}.*"}
+
+    normalized = (project or "").strip().lower()
+    if normalized == "hibernate-orm":
+        # Hibernate has reorganised tests under `org.hibernate.orm.test.*`
+        # (and historically `org.hibernate.test.*`). Mirror the production
+        # sub-package under both roots so wildcard-based discovery picks up
+        # any tests exercising the changed code.
+        prefix = "org.hibernate."
+        if prod_pkg == "org.hibernate" or prod_pkg.startswith(prefix):
+            tail = "" if prod_pkg == "org.hibernate" else prod_pkg[len(prefix):]
+            for root in ("org.hibernate.orm.test", "org.hibernate.test"):
+                mirrored = f"{root}.{tail}" if tail else root
+                out.add(f"{module}:{mirrored}.*")
+
+    return out
+
+
 def _is_test_file(file_path: str) -> bool:
     p = (file_path or "").replace("\\", "/").lower()
     if any(d.lower() in p for d in _TEST_SOURCE_DIRS):
@@ -459,6 +494,7 @@ def collect_test_results(
         os.path.join(repo_path, "**", "surefire-reports", "TEST-*.xml"),
         os.path.join(repo_path, "**", "build", "test-results", "**", "TEST-*.xml"),
         os.path.join(repo_path, "**", "target", "test-results", "**", "TEST-*.xml"),
+        os.path.join(repo_path, "**", "target", "reports", "tests", "**", "TEST-*.xml"),
         os.path.join(repo_path, "build", "all-test-results", "TEST-*.xml"),
         os.path.join(repo_path, "**/target/surefire-reports/*.xml"),
         os.path.join(repo_path, "**/JTwork/**/*.xml"),
@@ -567,15 +603,20 @@ def detect_test_targets(
                 all_modules.add(module)
             if p.endswith(".java") and "/src/main/java/" in p and module:
                 source_modules.add(module)
-                # Derive a package wildcard from the source file path so that
+                # Derive package wildcards from the source file path so that
                 # tests exercising this production code are also run, even if
-                # they aren't listed in target.patch.
+                # they aren't listed in target.patch. For projects whose tests
+                # don't sit in the same package as the production code (e.g.
+                # Hibernate ORM under org.hibernate.orm.test.*), expand to the
+                # mirrored test package(s) so wildcard discovery succeeds.
                 src_marker = "/src/main/java/"
                 if src_marker in p:
                     pkg_path = p.split(src_marker, 1)[1]  # e.g. org/foo/bar/Baz.java
                     pkg = ".".join(pkg_path.replace(".java", "").split("/")[:-1])  # org.foo.bar
                     if pkg:
-                        source_package_wildcards.add(f"{module}:{pkg}.*")
+                        source_package_wildcards.update(
+                            _expand_test_package_wildcards(normalized, module, pkg)
+                        )
             if not _is_test_file(p):
                 continue
             matched = next((d for d in _TEST_SOURCE_DIRS if d in p), None)
