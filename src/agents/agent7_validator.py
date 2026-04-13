@@ -1080,17 +1080,36 @@ def run_validation(state: BackportState) -> BackportState:
     }
 
     # ── Step 6: Run tests ─────────────────────────────────────────────────────
-    print(
-        f"  agent7: running tests for {project} "
-        f"({len(test_targets.test_targets)} target(s))..."
-    )
-    test_res: TestResult = run_tests(
-        repo_path, project, target_info=test_targets, changed_files=files_for_detection
-    )
+    skip_test = state.get("skip_test", False)
+    if skip_test:
+        print(f"  agent7: skip_test is True — skipping test execution for {project}")
+        test_res = TestResult(
+            success=True,
+            compile_error=False,
+            output="Skipped tests by user request (--skip-test)",
+            mode="skip",
+            targets={"test_targets": test_targets.test_targets},
+            test_state={},
+        )
+        transition_eval = {
+            "valid_backport_signal": True,
+            "reason": "Tests skipped (--skip-test)",
+            "fail_to_pass": [],
+            "newly_passing": [],
+            "pass_to_fail": [],
+        }
+    else:
+        print(
+            f"  agent7: running tests for {project} "
+            f"({len(test_targets.test_targets)} target(s))..."
+        )
+        test_res: TestResult = run_tests(
+            repo_path, project, target_info=test_targets, changed_files=files_for_detection
+        )
 
-    # ── Step 7: Evaluate test state transition vs baseline ────────────────────
-    phase_0_baseline = state.get("validation_results", {}).get("phase_0_baseline_test_result")
-    transition_eval = evaluate_test_transition(phase_0_baseline, {"test_state": test_res.test_state})
+        # ── Step 7: Evaluate test state transition vs baseline ────────────────────
+        phase_0_baseline = state.get("validation_results", {}).get("phase_0_baseline_test_result")
+        transition_eval = evaluate_test_transition(phase_0_baseline, {"test_state": test_res.test_state})
 
     validation_results["tests"] = {
         "success": test_res.success,

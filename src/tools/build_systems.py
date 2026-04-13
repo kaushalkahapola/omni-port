@@ -198,39 +198,6 @@ def _filter_elasticsearch_test_targets(
     return kept, skipped
 
 
-def _expand_test_package_wildcards(
-    project: str,
-    module: str,
-    prod_pkg: str,
-) -> set[str]:
-    """
-    Map a production-code package wildcard to candidate test-package wildcards
-    based on per-project naming conventions.
-
-    For most projects, tests live alongside production code (same package), so
-    the prod wildcard alone is fine. For Hibernate ORM, tests have been moved
-    to dedicated test packages (`org.hibernate.orm.test.*`, legacy
-    `org.hibernate.test.*`) so a wildcard derived from a production package
-    will frequently match nothing — we must add the mirrored test packages too.
-
-    Returns a set of `module:pattern.*` strings (always module-prefixed).
-    """
-    out: set[str] = {f"{module}:{prod_pkg}.*"}
-
-    normalized = (project or "").strip().lower()
-    if normalized == "hibernate-orm":
-        # Hibernate has reorganised tests under `org.hibernate.orm.test.*`
-        # (and historically `org.hibernate.test.*`). Mirror the production
-        # sub-package under both roots so wildcard-based discovery picks up
-        # any tests exercising the changed code.
-        prefix = "org.hibernate."
-        if prod_pkg == "org.hibernate" or prod_pkg.startswith(prefix):
-            tail = "" if prod_pkg == "org.hibernate" else prod_pkg[len(prefix):]
-            for root in ("org.hibernate.orm.test", "org.hibernate.test"):
-                mirrored = f"{root}.{tail}" if tail else root
-                out.add(f"{module}:{mirrored}.*")
-
-    return out
 
 
 def _is_test_file(file_path: str) -> bool:
@@ -561,6 +528,38 @@ def collect_test_results(
     }
 
 
+def _detect_targets_from_paths(repo_path: str, paths: list[str]) -> tuple[set[str], set[str], set[str]]:
+    """Helper to derive test targets, source modules, and all modules from a list of file paths."""
+    test_targets: set[str] = set()
+    source_modules: set[str] = set()
+    all_modules: set[str] = set()
+    ignored = {"web-console", "distribution", "docs", "examples", "benchmarks", "qa"}
+
+    for rel_path in paths:
+        p = (rel_path or "").replace("\\", "/")
+        if not p:
+            continue
+        module = _find_module_for_path(repo_path, p)
+        top_level = module.split("/")[0] if module else ""
+        if top_level in ignored:
+            continue
+        if module:
+            all_modules.add(module)
+        if p.endswith(".java") and "/src/main/java/" in p and module:
+            source_modules.add(module)
+
+        if not _is_test_file(p):
+            continue
+
+        matched = next((d for d in _TEST_SOURCE_DIRS if d in p), None)
+        if matched:
+            class_part = p.split(matched, 1)[1].replace("/", ".").replace(".java", "")
+            target = f"{module}:{class_part}" if module else class_part
+            test_targets.add(target)
+            
+    return test_targets, source_modules, all_modules
+
+
 def detect_test_targets(
     repo_path: str,
     project: str,
@@ -584,60 +583,13 @@ def detect_test_targets(
     # (only test hunks applied) and validation (all hunks applied).
     if changed_files:
         print(f"  [build_systems] Using {len(changed_files)} explicit changed_files for target detection")
-        test_targets: set[str] = set()
-        source_modules: set[str] = set()
-        all_modules: set[str] = set()
-        ignored = {"web-console", "distribution", "docs", "examples", "benchmarks", "qa"}
-
-        source_package_wildcards: set[str] = set()
-
-        for rel_path in changed_files:
-            p = (rel_path or "").replace("\\", "/")
-            if not p:
-                continue
-            module = _find_module_for_path(repo_path, p)
-            top_level = module.split("/")[0] if module else ""
-            if top_level in ignored:
-                continue
-            if module:
-                all_modules.add(module)
-            if p.endswith(".java") and "/src/main/java/" in p and module:
-                source_modules.add(module)
-                # Derive package wildcards from the source file path so that
-                # tests exercising this production code are also run, even if
-                # they aren't listed in target.patch. For projects whose tests
-                # don't sit in the same package as the production code (e.g.
-                # Hibernate ORM under org.hibernate.orm.test.*), expand to the
-                # mirrored test package(s) so wildcard discovery succeeds.
-                src_marker = "/src/main/java/"
-                if src_marker in p:
-                    pkg_path = p.split(src_marker, 1)[1]  # e.g. org/foo/bar/Baz.java
-                    pkg = ".".join(pkg_path.replace(".java", "").split("/")[:-1])  # org.foo.bar
-                    if pkg:
-                        source_package_wildcards.update(
-                            _expand_test_package_wildcards(normalized, module, pkg)
-                        )
-            if not _is_test_file(p):
-                continue
-            matched = next((d for d in _TEST_SOURCE_DIRS if d in p), None)
-            if matched:
-                class_part = p.split(matched, 1)[1].replace("/", ".").replace(".java", "")
-                target = f"{module}:{class_part}" if module else class_part
-                test_targets.add(target)
-
-        # Add package-level wildcards for changed production files so that any
-        # test in the same package (or a mirrored test package) is also run.
-        # These complement the explicit test-file targets from target.patch.
-        for wildcard in source_package_wildcards:
-            test_targets.add(wildcard)
-
+        test_targets, source_modules, all_modules = _detect_targets_from_paths(repo_path, changed_files)
+        
         targets_list = sorted(test_targets)
         if normalized == "elasticsearch" and targets_list:
             targets_list, _ = _filter_elasticsearch_test_targets(targets_list)
 
-        explicit_count = len([t for t in targets_list if not t.endswith(".*")])
-        wildcard_count = len([t for t in targets_list if t.endswith(".*")])
-        print(f"  [build_systems] Explicit files detection found {explicit_count} targets + {wildcard_count} package wildcard(s)")
+        print(f"  [build_systems] Explicit files detection found {len(targets_list)} targets")
         return TestTargetInfo(
             test_targets=targets_list,
             source_modules=sorted(source_modules),
@@ -684,32 +636,7 @@ def detect_test_targets(
 
     # Path-based fallback
     print("  [build_systems] Using path-based fallback for test target detection")
-    test_targets: set[str] = set()
-    source_modules: set[str] = set()
-    all_modules: set[str] = set()
-    ignored = {"web-console", "distribution", "docs", "examples", "benchmarks", "qa"}
-
-    for rel_path in changed_files or []:
-        p = (rel_path or "").replace("\\", "/")
-        if not p:
-            continue
-        module = _find_module_for_path(repo_path, p)
-        top_level = module.split("/")[0] if module else ""
-        if top_level in ignored:
-            continue
-        if module:
-            all_modules.add(module)
-        if p.endswith(".java") and "/src/main/java/" in p and module:
-            source_modules.add(module)
-
-        if not _is_test_file(p):
-            continue
-
-        matched = next((d for d in _TEST_SOURCE_DIRS if d in p), None)
-        if matched:
-            class_part = p.split(matched, 1)[1].replace("/", ".").replace(".java", "")
-            target = f"{module}:{class_part}" if module else class_part
-            test_targets.add(target)
+    test_targets, source_modules, all_modules = _detect_targets_from_paths(repo_path, changed_files or [])
 
     targets_list = sorted(test_targets)
     if normalized == "elasticsearch" and targets_list:

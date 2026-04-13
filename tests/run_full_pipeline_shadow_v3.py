@@ -81,6 +81,7 @@ REPO_PATH_MAP: dict[str, str] = {
     "crate": "repos/crate",
     "druid": "repos/druid",
     "hibernate-orm": "repos/hibernate-orm",
+    "logstash": "repos/logstash",
 }
 
 
@@ -673,6 +674,7 @@ def process_patch(
     run_ts: str,
     skip_validation: bool = False,
     force: bool = False,
+    skip_test: bool = False,
 ) -> None:
     patch_type = item["type"]
     original_commit = item["original_commit"]
@@ -707,6 +709,7 @@ def process_patch(
         "backport_commit": backport_commit,
         "description": description,
         "skip_validation": skip_validation,
+        "skip_test": skip_test,
         "agents": {},
         "summary": {},
     }
@@ -797,6 +800,7 @@ def process_patch(
         # All files changed in the developer's target.patch — ensures phase 0 and
         # validation detect identical test targets regardless of worktree state.
         "target_patch_changed_files": target_patch_files,
+        "skip_test": skip_test,
     }
 
     # ── 5. Phase 0: Baseline test run ────────────────────────────────────────
@@ -804,7 +808,7 @@ def process_patch(
     # tests fail here because the Java code changes are not yet applied.
     # After the agent pipeline, fail→pass = agents correctly backported the code.
 
-    if not skip_validation and developer_aux_hunks:
+    if not skip_validation and not skip_test and developer_aux_hunks:
         print("\n  [pipeline] Phase 0 (baseline):")
         project = os.path.basename(repo_path).strip().lower()
 
@@ -1185,6 +1189,8 @@ Examples:
                         help="Limit to N patches")
     parser.add_argument("--skip-validation", action="store_true",
                         help="Run agents 1-6 only (no build/test)")
+    parser.add_argument("--skip-test", action="store_true",
+                        help="Build only in validation agent (skip tests)")
     parser.add_argument("--force", action="store_true",
                         help="Force re-run even if results.json exists")
     parser.add_argument("--no-notifications", action="store_true",
@@ -1240,7 +1246,12 @@ Examples:
             continue
         print(f"\n[{i}/{len(patches)}]", end="")
         try:
-            process_patch(item, run_ts, skip_validation=args.skip_validation, force=args.force)
+            process_patch(
+                item, run_ts,
+                skip_validation=args.skip_validation,
+                force=args.force,
+                skip_test=args.skip_test
+            )
         except Exception:
             print(f"\n  FATAL ERROR for {item['type']}:")
             traceback.print_exc()

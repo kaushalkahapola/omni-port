@@ -110,6 +110,7 @@ class BackportState(TypedDict):
     validation_failure_category: str  # "context_mismatch" | "api_mismatch" | "test_failure" | "infrastructure" | ""
     validation_retry_files: List[str]  # files to re-localize on retry
     validation_results: Dict[str, Any]  # detailed per-step results
+    skip_test: Optional[bool]         # skip test execution in validator
 
     # Set to True by the pipeline harness after it pre-applies synthesized_hunks to disk
     # and captures generated.patch. The validator skips CLAW re-application on attempt 0
