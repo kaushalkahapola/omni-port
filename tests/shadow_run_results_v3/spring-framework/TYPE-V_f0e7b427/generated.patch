@@ -1,0 +1,64 @@
+diff --git a/spring-web/src/main/java/org/springframework/http/ContentDisposition.java b/spring-web/src/main/java/org/springframework/http/ContentDisposition.java
+index 7697538739..e5dc895201 100644
+--- a/spring-web/src/main/java/org/springframework/http/ContentDisposition.java
++++ b/spring-web/src/main/java/org/springframework/http/ContentDisposition.java
+@@ -61,18 +61,17 @@ public final class ContentDisposition {
+ 
+ 	private static final BitSet PRINTABLE = new BitSet(256);
+ 
+-
+ 	static {
+ 		// RFC 2045, Section 6.7, and RFC 2047, Section 4.2
+ 		for (int i=33; i<= 126; i++) {
+ 			PRINTABLE.set(i);
+ 		}
++		PRINTABLE.set(34, false); // "
+ 		PRINTABLE.set(61, false); // =
+ 		PRINTABLE.set(63, false); // ?
+ 		PRINTABLE.set(95, false); // _
+ 	}
+ 
+-
+ 	@Nullable
+ 	private final String type;
+ 
+@@ -97,7 +96,6 @@ public final class ContentDisposition {
+ 	@Nullable
+ 	private final ZonedDateTime readDate;
+ 
+-
+ 	/**
+ 	 * Private constructor. See static factory methods in this class.
+ 	 */
+@@ -115,7 +113,6 @@ public final class ContentDisposition {
+ 		this.readDate = readDate;
+ 	}
+ 
+-
+ 	/**
+ 	 * Return whether the {@link #getType() type} is {@literal "attachment"}.
+ 	 * @since 5.3
+@@ -292,7 +289,6 @@ public final class ContentDisposition {
+ 		return sb.toString();
+ 	}
+ 
+-
+ 	/**
+ 	 * Return a builder for a {@code ContentDisposition} of type {@literal "attachment"}.
+ 	 * @since 5.3
+@@ -683,7 +679,6 @@ public final class ContentDisposition {
+ 		return Character.toUpperCase(Character.forDigit(b & 0xF, 16));
+ 	}
+ 
+-
+ 	/**
+ 	 * A mutable builder for {@code ContentDisposition}.
+ 	 */
+@@ -756,7 +751,6 @@ public final class ContentDisposition {
+ 		ContentDisposition build();
+ 	}
+ 
+-
+ 	private static class BuilderImpl implements Builder {
+ 
+ 		private final String type;

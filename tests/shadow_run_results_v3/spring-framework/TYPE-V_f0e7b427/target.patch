@@ -1,0 +1,57 @@
+commit fd68ea6fcbf94fc1d38bfefd3692fe094652ab3d
+Author: Brian Clozel <brian.clozel@broadcom.com>
+Date:   Thu Jun 12 08:39:41 2025 +0200
+
+    Encode non-printable character in Content-Disposition parameter
+    
+    Prior to this commit, the "filename" parameter value for the
+    "Content-Disposition" header would contain non-printable characters,
+    causing parsing issues for HTTP clients.
+    This commit ensures that all non-printable characters are encoded.
+    
+    Fixes gh-35035
+
+diff --git a/spring-web/src/main/java/org/springframework/http/ContentDisposition.java b/spring-web/src/main/java/org/springframework/http/ContentDisposition.java
+index 7697538739..54b6235dff 100644
+--- a/spring-web/src/main/java/org/springframework/http/ContentDisposition.java
++++ b/spring-web/src/main/java/org/springframework/http/ContentDisposition.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2023 the original author or authors.
++ * Copyright 2002-2025 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -67,6 +67,7 @@ public final class ContentDisposition {
+ 		for (int i=33; i<= 126; i++) {
+ 			PRINTABLE.set(i);
+ 		}
++		PRINTABLE.set(34, false); // "
+ 		PRINTABLE.set(61, false); // =
+ 		PRINTABLE.set(63, false); // ?
+ 		PRINTABLE.set(95, false); // _
+diff --git a/spring-web/src/test/java/org/springframework/http/ContentDispositionTests.java b/spring-web/src/test/java/org/springframework/http/ContentDispositionTests.java
+index 50612a84d4..eb8f598568 100644
+--- a/spring-web/src/test/java/org/springframework/http/ContentDispositionTests.java
++++ b/spring-web/src/test/java/org/springframework/http/ContentDispositionTests.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2024 the original author or authors.
++ * Copyright 2002-2025 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -305,6 +305,13 @@ class ContentDispositionTests {
+ 		tester.accept("foo.txt\\\\\\", "foo.txt\\\\\\\\\\\\");
+ 	}
+ 
++	@Test
++	void formatWithUtf8FilenameWithQuotes() {
++		String filename = "\"中文.txt";
++		assertThat(ContentDisposition.formData().filename(filename, StandardCharsets.UTF_8).build().toString())
++				.isEqualTo("form-data; filename=\"=?UTF-8?Q?=22=E4=B8=AD=E6=96=87.txt?=\"; filename*=UTF-8''%22%E4%B8%AD%E6%96%87.txt");
++	}
++
+ 	@Test
+ 	void formatWithEncodedFilenameUsingInvalidCharset() {
+ 		assertThatIllegalArgumentException().isThrownBy(() ->

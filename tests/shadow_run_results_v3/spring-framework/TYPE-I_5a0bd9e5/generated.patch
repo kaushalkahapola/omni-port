@@ -1,0 +1,51 @@
+diff --git a/spring-web/src/main/java/org/springframework/web/util/ContentCachingResponseWrapper.java b/spring-web/src/main/java/org/springframework/web/util/ContentCachingResponseWrapper.java
+index 41fc196d67..b7ba1f3d54 100644
+--- a/spring-web/src/main/java/org/springframework/web/util/ContentCachingResponseWrapper.java
++++ b/spring-web/src/main/java/org/springframework/web/util/ContentCachingResponseWrapper.java
+@@ -60,7 +60,6 @@ public class ContentCachingResponseWrapper extends HttpServletResponseWrapper {
+ 	@Nullable
+ 	private Integer contentLength;
+ 
+-
+ 	/**
+ 	 * Create a new ContentCachingResponseWrapper for the given servlet response.
+ 	 * @param response the original servlet response
+@@ -69,7 +68,6 @@ public class ContentCachingResponseWrapper extends HttpServletResponseWrapper {
+ 		super(response);
+ 	}
+ 
+-
+ 	@Override
+ 	public void sendError(int sc) throws IOException {
+ 		copyBodyToResponse(false);
+@@ -164,7 +162,13 @@ public class ContentCachingResponseWrapper extends HttpServletResponseWrapper {
+ 	@Override
+ 	public void setHeader(String name, String value) {
+ 		if (HttpHeaders.CONTENT_LENGTH.equalsIgnoreCase(name)) {
+-			this.contentLength = toContentLengthInt(Long.parseLong(value));
++			if (value != null) {
++				this.contentLength = toContentLengthInt(Long.parseLong(value));
++			}
++			else {
++				this.contentLength = null;
++				super.setHeader(name, null);
++			}
+ 		}
+ 		else {
+ 			super.setHeader(name, value);
+@@ -309,7 +313,6 @@ public class ContentCachingResponseWrapper extends HttpServletResponseWrapper {
+ 		}
+ 	}
+ 
+-
+ 	private class ResponseServletOutputStream extends ServletOutputStream {
+ 
+ 		private final ServletOutputStream os;
+@@ -339,7 +342,6 @@ public class ContentCachingResponseWrapper extends HttpServletResponseWrapper {
+ 		}
+ 	}
+ 
+-
+ 	private class ResponsePrintWriter extends PrintWriter {
+ 
+ 		public ResponsePrintWriter(String characterEncoding) throws UnsupportedEncodingException {

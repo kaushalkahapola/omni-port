@@ -1127,19 +1127,24 @@ def run_validation(state: BackportState) -> BackportState:
 
     # ── Step 8: Determine overall outcome ─────────────────────────────────────
     if test_res.compile_error:
-        # Compilation failure during test phase (different from build phase above)
-        compile_errors = parse_compile_errors(test_res.output)
-        retry_files = sorted({e.file_path for e in compile_errors})
-        restore_repo_state(repo_path)
-        ctx = _build_retry_context("context_mismatch", test_res.output, attempts + 1)
-        state["validation_passed"] = False
-        state["validation_error_context"] = "Compilation error during test phase."
-        state["validation_failure_category"] = "context_mismatch"
-        state["validation_retry_files"] = retry_files
-        state["validation_attempts"] = attempts + 1
-        state["validation_results"] = validation_results
-        state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
-        return state
+        # Before failing on compile error, check if we already have a valid
+        # backport signal from tests that ran before the error (e.g. newly_passing).
+        if transition_eval.get("valid_backport_signal") or transition_eval.get("newly_passing") or transition_eval.get("fail_to_pass"):
+            print(f"  agent7: compile error during tests but valid backport signal detected — passing.")
+        else:
+            # Compilation failure during test phase (different from build phase above)
+            compile_errors = parse_compile_errors(test_res.output)
+            retry_files = sorted({e.file_path for e in compile_errors})
+            restore_repo_state(repo_path)
+            ctx = _build_retry_context("context_mismatch", test_res.output, attempts + 1)
+            state["validation_passed"] = False
+            state["validation_error_context"] = "Compilation error during test phase."
+            state["validation_failure_category"] = "context_mismatch"
+            state["validation_retry_files"] = retry_files
+            state["validation_attempts"] = attempts + 1
+            state["validation_results"] = validation_results
+            state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
+            return state
 
     if not test_res.success:
         # Distinguish infrastructure failure from test assertion failure

@@ -83,6 +83,7 @@ REPO_PATH_MAP: dict[str, str] = {
     "hibernate-orm": "repos/hibernate-orm",
     "logstash": "repos/logstash",
     "sql": "repos/sql",
+    "spring-framework": "repos/spring-framework",
 }
 
 

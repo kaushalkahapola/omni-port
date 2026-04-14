@@ -1,0 +1,56 @@
+commit ccf4b028d2900b19690220ff7e4724ef61d823c0
+Author: Brian Clozel <brian.clozel@broadcom.com>
+Date:   Fri Feb 21 14:33:03 2025 +0100
+
+    Fix null value support in ContentCachingResponseWrapper
+    
+    Prior to this commit, calling `setHeader` on the response wrapper would
+    have a separate code path for the "Content-Length" header. This did not
+    support calls with `null` values and would result in an exception.
+    
+    This commit ensures that the cached content length value is reset in
+    this case and that the call is forwarded properly to the superclass.
+    
+    Fixes gh-34465
+
+diff --git a/spring-web/src/main/java/org/springframework/web/util/ContentCachingResponseWrapper.java b/spring-web/src/main/java/org/springframework/web/util/ContentCachingResponseWrapper.java
+index 41fc196d67..f3596993da 100644
+--- a/spring-web/src/main/java/org/springframework/web/util/ContentCachingResponseWrapper.java
++++ b/spring-web/src/main/java/org/springframework/web/util/ContentCachingResponseWrapper.java
+@@ -164,7 +164,13 @@ public class ContentCachingResponseWrapper extends HttpServletResponseWrapper {
+ 	@Override
+ 	public void setHeader(String name, String value) {
+ 		if (HttpHeaders.CONTENT_LENGTH.equalsIgnoreCase(name)) {
+-			this.contentLength = toContentLengthInt(Long.parseLong(value));
++			if (value != null) {
++				this.contentLength = toContentLengthInt(Long.parseLong(value));
++			}
++			else {
++				this.contentLength = null;
++				super.setHeader(name, null);
++			}
+ 		}
+ 		else {
+ 			super.setHeader(name, value);
+diff --git a/spring-web/src/test/java/org/springframework/web/filter/ContentCachingResponseWrapperTests.java b/spring-web/src/test/java/org/springframework/web/filter/ContentCachingResponseWrapperTests.java
+index 25ddffbc3b..5fd7a300c9 100644
+--- a/spring-web/src/test/java/org/springframework/web/filter/ContentCachingResponseWrapperTests.java
++++ b/spring-web/src/test/java/org/springframework/web/filter/ContentCachingResponseWrapperTests.java
+@@ -270,6 +270,17 @@ class ContentCachingResponseWrapperTests {
+ 				.withMessageContaining(overflow);
+ 	}
+ 
++	@Test
++	void setContentLengthNull() {
++		MockHttpServletResponse response = new MockHttpServletResponse();
++		ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
++		responseWrapper.setContentLength(1024);
++		responseWrapper.setHeader(CONTENT_LENGTH, null);
++
++		assertThat(response.getHeaderNames()).doesNotContain(CONTENT_LENGTH);
++		assertThat(responseWrapper.getHeader(CONTENT_LENGTH)).isNull();
++	}
++
+ 
+ 	private void assertHeader(HttpServletResponse response, String header, int value) {
+ 		assertHeader(response, header, Integer.toString(value));
