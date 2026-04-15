@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-12T05:06:45.578385",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-I",
   "original_commit": "4cc5538f2c6e31e1b95083922f87451fb8617dba",
   "backport_commit": "1f1f54de07bc2edff3b22619e4235739f3811d7d",
   "description": "master \u2192 5.10",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.05,
+      "elapsed_s": 0.03,
       "error": null,
       "java_hunks": 4,
       "aux_hunks": 2,
@@ -52,12 +53,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.75,
+      "elapsed_s": 2.75,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_I",
+        "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch modifies serialization and deserialization logic to reuse FileInfo instances, reverting to a previous approach before version 5.10. The changes are localized to a few methods and involve adding a static factory method and conditional logic based on version checks. The patch also adds a test class to verify backward compatibility and instance reuse. All modified files and hunks were found via exact matching with high confidence, indicating minimal structural divergence. The patch does not involve structural or API redesign, but rather a precise fix to serialization behavior, making it a trivial backport with exact string replacements and additions.",
+        "reasoning": "The patch introduces a new static factory method 'fromStream' to replace the constructor for deserialization, changes the serialization format conditionally based on version, and modifies internal data structures and method signatures. It also adds new testing code to verify backward compatibility and instance reuse. These changes involve structural modifications to class internals and serialization logic, indicating a structural change rather than a simple string or whitespace fix. The localization evidence shows exact matches, but the patch complexity is beyond trivial replacements, fitting TYPE_III classification.",
         "is_auto_generated": false
       }
     },
@@ -123,27 +124,37 @@
       "build_success": true,
       "build_mode": "crate-helper",
       "test_success": true,
-      "test_mode": "skip",
+      "test_mode": "crate-helper",
       "test_state": {
-        "xml_reports": [],
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshotsTest.xml"
+        ],
         "target_classes": [],
-        "test_cases": {},
-        "classes": {},
+        "test_cases": {
+          "org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshotsTest#test_bwc_streaming": "passed",
+          "org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshotsTest#test_number_of_unique_files_across_snapshots_equal_to_number_of_files": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshotsTest": "passed"
+        },
         "summary": {
-          "passed": 0,
+          "passed": 2,
           "failed": 0,
           "skipped": 0,
-          "total": 0
+          "total": 2
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
+        "newly_passing": [
+          "org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshotsTest#test_bwc_streaming",
+          "org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshotsTest#test_number_of_unique_files_across_snapshots_equal_to_number_of_files"
+        ],
         "baseline_total": 0,
-        "patched_total": 0,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "patched_total": 2,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -154,7 +165,7 @@
     "phase0_baseline": {
       "mode": "baseline-skip",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 4,
@@ -191,23 +202,27 @@
     "failed_hunks": [],
     "generated_patch_bytes": 7905,
     "target_patch_bytes": 15799,
+    "patch_exact_match": false,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
     "test_success": true,
-    "test_mode": "skip",
+    "test_mode": "crate-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
+      "newly_passing": [
+        "org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshotsTest#test_bwc_streaming",
+        "org.elasticsearch.index.snapshots.blobstore.BlobStoreIndexShardSnapshotsTest#test_number_of_unique_files_across_snapshots_equal_to_number_of_files"
+      ],
       "baseline_total": 0,
-      "patched_total": 0,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "patched_total": 2,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 2,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

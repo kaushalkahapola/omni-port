@@ -128,7 +128,7 @@ index 1caf276125..acc92fe116 100644
  
      private static <T> T valueForInsert(DataType<T> valueType, Object value) {
 diff --git a/server/src/main/java/io/crate/execution/dml/TranslogIndexer.java b/server/src/main/java/io/crate/execution/dml/TranslogIndexer.java
-index 60dd8a9342..f63f474fac 100644
+index 60dd8a9342..2c7549e3fb 100644
 --- a/server/src/main/java/io/crate/execution/dml/TranslogIndexer.java
 +++ b/server/src/main/java/io/crate/execution/dml/TranslogIndexer.java
 @@ -21,20 +21,26 @@
@@ -160,17 +160,15 @@ index 60dd8a9342..f63f474fac 100644
  import io.crate.metadata.DocReferences;
  import io.crate.metadata.RowGranularity;
  import io.crate.metadata.doc.DocTableInfo;
-@@ -50,7 +56,8 @@ public class TranslogIndexer {
+@@ -50,7 +56,6 @@ public class TranslogIndexer {
      }
  
      private final Map<String, ColumnIndexer<?>> indexers = new HashMap<>();
 -    private final Map<String, List<String>> tableIndexSources = new HashMap<>();
-+    private Map<String, Object> sourceMap;
-+    private List<Indexer.IndexColumn> indexColumns;
      private final boolean ignoreUnknownColumns;
      private final SourceParser sourceParser;
      private final Version tableVersionCreated;
-@@ -73,13 +80,23 @@ public class TranslogIndexer {
+@@ -73,13 +78,23 @@ public class TranslogIndexer {
                  sourceParser.register(DocReferences.toDocLookup(ref).column(), ref.valueType());
              }
          }
@@ -187,6 +185,7 @@ index 60dd8a9342..f63f474fac 100644
          ignoreUnknownColumns = table.columnPolicy() != ColumnPolicy.STRICT;
          tableVersionCreated = table.versionCreated();
 +
++
 +    private record IndexInput(ColumnIdent columnIdent,
 +                              Supplier<Map<String, Object>> sourceSupplier) implements Input<Object> {
 +
@@ -195,11 +194,10 @@ index 60dd8a9342..f63f474fac 100644
 +            return Maps.getByPath(sourceSupplier.get(), Lists.concat(columnIdent.name(), columnIdent.path()));
 +        }
 +    }
-+
      }
  
      /**
-@@ -90,17 +107,16 @@ public class TranslogIndexer {
+@@ -90,17 +105,16 @@ public class TranslogIndexer {
       */
      public ParsedDocument index(String id, BytesReference source) {
          try {
@@ -219,7 +217,7 @@ index 60dd8a9342..f63f474fac 100644
              var column = entry.getKey();
              var indexer = indexers.get(column);
              if (indexer == null) {
-@@ -113,11 +129,15 @@ public class TranslogIndexer {
+@@ -113,11 +127,15 @@ public class TranslogIndexer {
              Object castValue = valueForInsert(indexer.dataType, entry.getValue());
              if (castValue != null) {
                  indexer.valueIndexer.indexValue(castValue, docBuilder);
@@ -238,7 +236,7 @@ index 60dd8a9342..f63f474fac 100644
          return docBuilder;
      }
  
-@@ -196,24 +216,4 @@ public class TranslogIndexer {
+@@ -196,24 +214,4 @@ public class TranslogIndexer {
          return valueType.valueForInsert(valueType.sanitizeValueLenient(value));
      }
  

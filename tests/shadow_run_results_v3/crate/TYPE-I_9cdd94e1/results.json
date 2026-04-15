@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-12T05:06:45.578385",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-I",
   "original_commit": "9cdd94e1c1bd2b594bb9546aa86188c61cdd695a",
   "backport_commit": "8de35b2287cf3e7fe63a33c26f06168f4353ebfe",
   "description": "master \u2192 5.10",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.1,
+      "elapsed_s": 0.08,
       "error": null,
       "java_hunks": 2,
       "aux_hunks": 2,
@@ -34,12 +35,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.4,
+      "elapsed_s": 3.57,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch consists of small, precise changes such as adding assertions, fixing a logging call parameter, and adding a test case. The localization evidence shows that the main code changes were found via 'git_exact' with high confidence, indicating that the patch applies as an exact match string replacement. There are no structural or API changes, refactorings, or redesigns. Therefore, this patch is classified as TYPE_I, a trivial backport with exact match changes.",
+        "reasoning": "The patch consists of small, precise changes such as adding assertions, fixing a logging call parameter, and adding a test case. The localization evidence shows that the main code changes were found via 'git_exact' with high confidence, indicating that the patch applies as an exact match string replacement. There are no structural or API changes, so the complexity is low and fits TYPE_I classification. The token budget estimate is moderate due to multiple small changes and a test addition.",
         "is_auto_generated": false
       }
     },
@@ -66,7 +67,7 @@
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.03,
       "error": null,
       "refactored_count": 0
     },
@@ -100,25 +101,23 @@
         "xml_reports": [
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.session.SessionTest.xml"
         ],
-        "target_classes": [
-          "SessionTest"
-        ],
+        "target_classes": [],
         "test_cases": {
-          "io.crate.session.SessionTest#test_bulk_operations_result_in_jobslog_entries": "passed",
           "io.crate.session.SessionTest#test_can_describe_cursor_created_using_declare": "passed",
-          "io.crate.session.SessionTest#test_discard_all_discards_all_portals_and_prepared_statements": "passed",
-          "io.crate.session.SessionTest#test_closing_a_statement_closes_related_portals": "passed",
-          "io.crate.session.SessionTest#test_getParamType_returns_types_infered_from_statement": "passed",
-          "io.crate.session.SessionTest#testDeallocatePreparedStatementClearsPreparedStatement": "passed",
-          "io.crate.session.SessionTest#test_statement_timeout_previous_statement_time_is_not_accounted_for": "passed",
-          "io.crate.session.SessionTest#test_out_of_bounds_getParamType_fails": "passed",
-          "io.crate.session.SessionTest#test_kills_query_if_not_completed_within_statement_timeout": "passed",
-          "io.crate.session.SessionTest#test_flush_triggers_deferred_executions_and_sets_active_execution": "passed",
           "io.crate.session.SessionTest#test_select_query_executed_on_session_execute_method": "passed",
-          "io.crate.session.SessionTest#test_binding_with_removed_prepared_statement_throws": "passed",
-          "io.crate.session.SessionTest#test_parsing_throws_an_error_on_exceeding_statement_timeout": "passed",
           "io.crate.session.SessionTest#testProperCleanupOnSessionClose": "passed",
-          "io.crate.session.SessionTest#testDeallocateAllClearsAllPortalsAndPreparedStatements": "passed"
+          "io.crate.session.SessionTest#testDeallocateAllClearsAllPortalsAndPreparedStatements": "passed",
+          "io.crate.session.SessionTest#test_flush_triggers_deferred_executions_and_sets_active_execution": "passed",
+          "io.crate.session.SessionTest#test_kills_query_if_not_completed_within_statement_timeout": "passed",
+          "io.crate.session.SessionTest#test_parsing_throws_an_error_on_exceeding_statement_timeout": "passed",
+          "io.crate.session.SessionTest#test_discard_all_discards_all_portals_and_prepared_statements": "passed",
+          "io.crate.session.SessionTest#test_statement_timeout_previous_statement_time_is_not_accounted_for": "passed",
+          "io.crate.session.SessionTest#test_getParamType_returns_types_infered_from_statement": "passed",
+          "io.crate.session.SessionTest#test_binding_with_removed_prepared_statement_throws": "passed",
+          "io.crate.session.SessionTest#test_out_of_bounds_getParamType_fails": "passed",
+          "io.crate.session.SessionTest#test_closing_a_statement_closes_related_portals": "passed",
+          "io.crate.session.SessionTest#testDeallocatePreparedStatementClearsPreparedStatement": "passed",
+          "io.crate.session.SessionTest#test_bulk_operations_result_in_jobslog_entries": "passed"
         },
         "classes": {
           "io.crate.session.SessionTest": "passed"
@@ -148,7 +147,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 15
     },
     "java_production_hunks": 2,
@@ -181,8 +180,9 @@
     "fallback_attempts": 0,
     "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 2500,
+    "generated_patch_bytes": 4433,
     "target_patch_bytes": 3322,
+    "patch_exact_match": false,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,

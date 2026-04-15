@@ -714,12 +714,29 @@ def run_agent(
 
 # ── Main processing ───────────────────────────────────────────────────────────
 
+def _patch_previously_failed(out_dir: Path) -> bool:
+    """Return True if the patch's last run exists but did NOT succeed."""
+    results_file = out_dir / "results.json"
+    if not results_file.exists():
+        return False
+    try:
+        with open(results_file, "r", encoding="utf-8") as f:
+            r = json.load(f)
+        success = r.get("summary", {}).get("backport_success")
+        # None means validation was skipped — treat as not-failed
+        return success is False
+    except Exception:
+        return False
+
+
 def process_patch(
     item: dict[str, Any],
     run_ts: str,
     skip_validation: bool = False,
     force: bool = False,
     skip_test: bool = False,
+    failed_only: bool = False,
+    run_phase0: bool = False,
 ) -> None:
     patch_type = item["type"]
     original_commit = item["original_commit"]
@@ -734,6 +751,11 @@ def process_patch(
     results_file = out_dir / "results.json"
     if results_file.exists() and not force:
         print(f"\n  [pipeline] Skipping {patch_type} | repo={repo_name} | commit={original_commit[:12]} (already processed)")
+        return
+
+    # --failed: only re-run patches whose last result was a failure
+    if failed_only and results_file.exists() and not _patch_previously_failed(out_dir):
+        print(f"\n  [pipeline] Skipping {patch_type} | repo={repo_name} | commit={original_commit[:12]} (not a failed patch)")
         return
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -855,7 +877,7 @@ def process_patch(
     # tests fail here because the Java code changes are not yet applied.
     # After the agent pipeline, fail→pass = agents correctly backported the code.
 
-    if not skip_validation and not skip_test and developer_aux_hunks:
+    if not skip_validation and not skip_test and (developer_aux_hunks or run_phase0):
         print("\n  [pipeline] Phase 0 (baseline):")
         project = os.path.basename(repo_path).strip().lower()
 
@@ -882,7 +904,7 @@ def process_patch(
         }
         state["validation_results"] = {"phase_0_baseline_test_result": baseline_result}
     else:
-        print("\n  [pipeline] Phase 0: skipped (no aux hunks or --skip-validation)")
+        print("\n  [pipeline] Phase 0: skipped (no aux hunks or --skip-validation or --skip-test)")
 
     # ── 6. Run agents 1–6 ────────────────────────────────────────────────────
 
@@ -1216,6 +1238,8 @@ Examples:
   python run_full_pipeline_shadow_v3.py --project elasticsearch --commit abc123def456
   python run_full_pipeline_shadow_v3.py --skip-validation
   python run_full_pipeline_shadow_v3.py --force
+  python run_full_pipeline_shadow_v3.py --failed
+  python run_full_pipeline_shadow_v3.py --phase0
         """,
     )
     parser.add_argument("--mode", choices=["yaml", "dataset"], default="yaml",
@@ -1241,10 +1265,18 @@ Examples:
                         help="Build only in validation agent (skip tests)")
     parser.add_argument("--force", action="store_true",
                         help="Force re-run even if results.json exists")
+    parser.add_argument("--failed", action="store_true",
+                        help="Only re-run patches whose last result was a failure (implies --force for those patches)")
+    parser.add_argument("--phase0", action="store_true",
+                        help="Force phase 0 baseline run even when there are no aux hunks")
     parser.add_argument("--no-notifications", action="store_true",
                         help="Disable Telegram notifications")
 
     args = parser.parse_args()
+
+    # When --failed is set, count must be applied AFTER filtering to failed patches,
+    # so we load everything first and trim later.
+    load_count = None if args.failed else args.count
 
     if args.mode == "dataset":
         if not args.dataset.exists():
@@ -1256,7 +1288,7 @@ Examples:
             project_filter=args.project,
             type_filter=args.type,
             commit_filter=args.commit,
-            count_limit=args.count,
+            count_limit=load_count,
         )
     else:
         try:
@@ -1273,8 +1305,17 @@ Examples:
             project_filter=args.project,
             type_filter=args.type,
             commit_filter=args.commit,
-            count_limit=args.count,
+            count_limit=load_count,
         )
+
+    # Apply count after failed-patch filtering
+    if args.failed and args.count:
+        patches = [
+            p for p in patches
+            if _patch_previously_failed(
+                OUTPUT_DIR / p["repo"] / f"{p['type']}_{p['original_commit'][:8]}"
+            )
+        ][:args.count]
 
     if not patches:
         print(f"No patches found (mode={args.mode}, repo={args.repo}, type={args.type}, count={args.count})")
@@ -1297,8 +1338,10 @@ Examples:
             process_patch(
                 item, run_ts,
                 skip_validation=args.skip_validation,
-                force=args.force,
-                skip_test=args.skip_test
+                force=args.force or args.failed,
+                skip_test=args.skip_test,
+                failed_only=args.failed,
+                run_phase0=args.phase0,
             )
         except Exception:
             print(f"\n  FATAL ERROR for {item['type']}:")

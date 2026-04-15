@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-11T19:21:43.607774",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-III",
   "original_commit": "adf9854bdb9cbf08dde206c0a1e005a5ea3379c9",
   "backport_commit": "b92b08dc1f9d9ffd4c84a68d21ccb08dfe85a1c8",
   "description": "master \u2192 5.8",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 22.55,
+      "elapsed_s": 27.53,
       "error": null,
       "java_hunks": 7,
       "aux_hunks": 3,
@@ -79,17 +80,17 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.28,
+      "elapsed_s": 3.84,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch consists primarily of exact string replacements and minor API adjustments, such as changing method signatures and wrapping privileges in a new RolePrivileges object. Most hunks were found via 'git_exact' with high confidence, indicating the patch applies cleanly and directly to the target branch. One hunk was found with lower confidence via 'git_pickaxe', but overall the changes are straightforward and do not involve structural or deep refactoring. Therefore, the patch is classified as TYPE_I with high confidence.",
+        "reasoning": "The patch consists primarily of exact string replacements and minor method signature changes that align closely with the target branch code, as evidenced by the localization data showing most hunks found via 'git_exact' with high confidence (1.00). There is a minor hunk found with lower confidence (0.61) via 'git_pickaxe', indicating a small formatting or minor code adjustment, but overall the patch does not involve structural or API changes. The changes are straightforward and involve wrapping privileges in a new RolePrivileges object and adjusting method signatures accordingly, which is a simple refactor without deep structural changes. Therefore, the patch is classified as TYPE_I with high confidence and a moderate token budget estimate to cover the changes and testing.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.01,
       "error": null,
       "applied_count": 5,
       "applied_hunks": [
@@ -121,17 +122,17 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 3.01,
+      "elapsed_s": 3.55,
       "error": null,
       "adapted_count": 1
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.04,
       "error": null,
       "refactored_count": 0
     },
     "agent6_synthesizer": {
-      "elapsed_s": 77.01,
+      "elapsed_s": 183.96,
       "error": null,
       "synthesized_count": 1,
       "failed_count": 1,
@@ -139,8 +140,8 @@
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
-          "old_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));\n        }",
-          "new_string": "        if (affectedCount > 0) {\n            roles.put(role.name(), role.with(grantedRoles));\n        }",
+          "old_string": "            roles.put(role.name(), new Role(role.name(), role.isUser(), Set.of(), grantedRoles, role.password(), role.jwtProperties()));",
+          "new_string": "            roles.put(role.name(), role.with(grantedRoles));",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -148,7 +149,7 @@
       ]
     },
     "agent8_syntax_repair": {
-      "elapsed_s": 0.05,
+      "elapsed_s": 0.02,
       "error": null,
       "syntax_repair_status": "clean",
       "syntax_repair_attempts": 0,
@@ -206,17 +207,17 @@
     "agent9_fallback_1": {
       "fallback_status": "applied",
       "fallback_attempts": 1,
-      "synthesized_count": 4,
+      "synthesized_count": 5,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "what_changed": "Replaced direct use of a Set of privileges with a new RolePrivileges object when updating roles map.",
-          "where_in_code": "PrivilegesModifier class, within a method updating roles",
-          "intent": "To encapsulate the privileges within a RolePrivileges instance, likely for better abstraction or type safety.",
+          "what_changed": "Replaced passing a raw Set of privileges with wrapping it inside a RolePrivileges object when updating roles map.",
+          "where_in_code": "PrivilegesModifier (method context updating roles map)",
+          "intent": "Ensure that privileges are encapsulated within the RolePrivileges abstraction for consistent privilege handling.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "roles",
+            "roles.put",
             "role.with",
             "RolePrivileges"
           ]
@@ -224,12 +225,12 @@
         {
           "hunk_index": 1,
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "what_changed": "Changed the argument passed to role.with from a Set of privileges to a new RolePrivileges object.",
-          "where_in_code": "PrivilegesModifier class, in code constructing newRoles map",
-          "intent": "To standardize privilege representation by wrapping the privileges set into a RolePrivileges object.",
+          "what_changed": "Changed the argument to role.with from a Set of privileges to a new RolePrivileges instance wrapping that Set when populating newRoles map.",
+          "where_in_code": "PrivilegesModifier (loop updating newRoles map)",
+          "intent": "Standardize privilege representation by using RolePrivileges wrapper instead of raw Set to improve type safety and encapsulation.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "newRoles",
+            "newRoles.put",
             "role.with",
             "RolePrivileges"
           ]
@@ -237,26 +238,25 @@
         {
           "hunk_index": 2,
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "what_changed": "Updated role.with call to use a RolePrivileges instance wrapping the updatedPrivileges set instead of passing the set directly.",
-          "where_in_code": "PrivilegesModifier class, inside method updating newRoles map and metadata builder",
-          "intent": "To ensure privileges are consistently encapsulated in RolePrivileges objects for roles metadata updates.",
+          "what_changed": "Updated role.with calls to accept a RolePrivileges object wrapping the updatedPrivileges Set instead of the raw Set.",
+          "where_in_code": "PrivilegesModifier (method updating newRoles and RolesMetadata)",
+          "intent": "Enforce use of RolePrivileges abstraction for privilege sets to maintain consistent privilege handling.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "newRoles",
+            "newRoles.put",
             "role.with",
-            "RolePrivileges",
-            "mdBuilder"
+            "RolePrivileges"
           ]
         },
         {
           "hunk_index": 3,
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "what_changed": "Modified role.with invocation to accept a RolePrivileges object instead of a Set of privileges when updating newRoles map.",
-          "where_in_code": "PrivilegesModifier class, method returning new RolesMetadata",
-          "intent": "To unify privilege handling by using RolePrivileges wrapper consistently when creating updated roles.",
+          "what_changed": "Modified role.with invocation to pass a RolePrivileges instance wrapping updatedPrivileges instead of the raw Set.",
+          "where_in_code": "PrivilegesModifier (method returning new RolesMetadata)",
+          "intent": "Maintain consistent privilege encapsulation by using RolePrivileges wrapper when updating roles.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "newRoles",
+            "newRoles.put",
             "role.with",
             "RolePrivileges"
           ]
@@ -264,38 +264,36 @@
         {
           "hunk_index": 4,
           "file_path": "server/src/main/java/io/crate/role/Role.java",
-          "what_changed": "Replaced the method with(Set<Privilege>) with overloaded methods accepting RolePrivileges and Set<GrantedRole> respectively, returning new Role instances accordingly.",
-          "where_in_code": "Role class, methods named with",
-          "intent": "To provide more flexible and type-safe ways to create modified Role instances by accepting RolePrivileges directly and supporting granted roles updates.",
+          "what_changed": "Replaced the existing Role.with method that accepted a Set of Privilege with overloaded methods that accept a RolePrivileges object and another that accepts a Set of GrantedRole.",
+          "where_in_code": "Role class, with methods named 'with'",
+          "intent": "Provide more precise and flexible Role modification methods that accept encapsulated RolePrivileges and granted roles, improving type safety and clarity.",
           "change_type": "modify_signature",
           "key_symbols": [
-            "Role",
-            "with",
-            "RolePrivileges",
-            "Set<GrantedRole>"
+            "Role.with(RolePrivileges)",
+            "Role.with(Set<GrantedRole>)"
           ]
         },
         {
           "hunk_index": 5,
           "file_path": "server/src/main/java/io/crate/role/Role.java",
-          "what_changed": "Changed the boolean flag passed to the Role constructor from false to the isSuperUser field value.",
-          "where_in_code": "Role class, constructor invocation inside with method",
-          "intent": "To preserve the isSuperUser status when creating new Role instances instead of resetting it to false.",
+          "what_changed": "Changed the constructor call to pass the isSuperUser field instead of a hardcoded false value.",
+          "where_in_code": "Role class constructor or factory method (context of password, jwtProperties, sessionSettings)",
+          "intent": "Preserve the superuser status of the Role object when creating a new instance instead of resetting it to false.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "Role",
-            "isSuperUser"
+            "isSuperUser",
+            "Role constructor"
           ]
         },
         {
           "hunk_index": 6,
           "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
-          "what_changed": "Simplified role update logic by replacing explicit Role constructor call with a call to role.with(grantedRoles).",
-          "where_in_code": "RolesMetadata class, method updating roles map",
-          "intent": "To leverage Role's with method for cleaner and more maintainable role updates involving granted roles.",
+          "what_changed": "Simplified role update logic by replacing explicit Role constructor call with a call to role.with(grantedRoles) method.",
+          "where_in_code": "RolesMetadata class, method updating roles map after affectedCount check",
+          "intent": "Use Role's with method to update granted roles for better encapsulation and code reuse.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "roles",
+            "roles.put",
             "role.with",
             "grantedRoles"
           ]
@@ -309,6 +307,10 @@
         {
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
           "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "outcome": "clean"
         }
       ]
     },
@@ -318,7 +320,8 @@
       "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:99: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:142: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:174: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/io",
       "validation_attempts": 2,
       "retry_files": [
-        "server/src/main/java/io/crate/role/PrivilegesModifier.java"
+        "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
       ],
       "build_success": false,
       "build_mode": "crate-helper",
@@ -346,20 +349,25 @@
           "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
           "line": 204,
           "message": "error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>"
+        },
+        {
+          "file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "line": 242,
+          "message": "error: incompatible types: Set<GrantedRole> cannot be converted to Set<Privilege>"
         }
       ]
     },
     "agent9_fallback_2": {
       "fallback_status": "applied",
       "fallback_attempts": 2,
-      "synthesized_count": 4,
+      "synthesized_count": 6,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "what_changed": "Replaced passing a raw Set of privileges with wrapping it inside a RolePrivileges object when updating roles map.",
-          "where_in_code": "PrivilegesModifier class, method updating roles map with privileges",
-          "intent": "Ensure that privileges are encapsulated within the RolePrivileges abstraction for consistency and type safety.",
+          "what_changed": "Replaced direct use of a Set of privileges with a new RolePrivileges object when updating roles map.",
+          "where_in_code": "PrivilegesModifier (method context updating roles map)",
+          "intent": "To encapsulate privileges within a RolePrivileges object, likely for better abstraction or type safety.",
           "change_type": "modify_logic",
           "key_symbols": [
             "roles.put",
@@ -370,9 +378,9 @@
         {
           "hunk_index": 1,
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "what_changed": "Changed the argument to role.with from a Set of privileges to a new RolePrivileges instance wrapping that Set.",
-          "where_in_code": "PrivilegesModifier class, code block updating newRoles map",
-          "intent": "Standardize privilege representation by using RolePrivileges wrapper instead of raw Set.",
+          "what_changed": "Changed the argument passed to role.with from a Set of privileges to a new RolePrivileges instance wrapping that set.",
+          "where_in_code": "PrivilegesModifier (code constructing newRoles map)",
+          "intent": "To unify privilege representation by using RolePrivileges instead of raw Sets, improving encapsulation.",
           "change_type": "modify_logic",
           "key_symbols": [
             "newRoles.put",
@@ -383,9 +391,9 @@
         {
           "hunk_index": 2,
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "what_changed": "Updated role.with call to receive a RolePrivileges object wrapping updatedPrivileges instead of the raw Set.",
-          "where_in_code": "PrivilegesModifier class, method updating newRoles map and metadata builder",
-          "intent": "Maintain consistent privilege encapsulation by using RolePrivileges abstraction.",
+          "what_changed": "Updated role.with calls to pass a RolePrivileges object instead of a raw Set of updatedPrivileges.",
+          "where_in_code": "PrivilegesModifier (method updating newRoles map and metadata builder)",
+          "intent": "To standardize privilege handling by wrapping privilege sets in RolePrivileges objects.",
           "change_type": "modify_logic",
           "key_symbols": [
             "newRoles.put",
@@ -396,9 +404,9 @@
         {
           "hunk_index": 3,
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "what_changed": "Modified role.with invocation to pass a RolePrivileges instance wrapping updatedPrivileges rather than the raw Set.",
-          "where_in_code": "PrivilegesModifier class, method returning new RolesMetadata",
-          "intent": "Enforce use of RolePrivileges wrapper for privilege sets to improve type safety and clarity.",
+          "what_changed": "Modified role.with invocation to accept a RolePrivileges instance instead of a Set of updatedPrivileges.",
+          "where_in_code": "PrivilegesModifier (method returning new RolesMetadata)",
+          "intent": "To maintain consistent privilege encapsulation by using RolePrivileges objects.",
           "change_type": "modify_logic",
           "key_symbols": [
             "newRoles.put",
@@ -409,9 +417,9 @@
         {
           "hunk_index": 4,
           "file_path": "server/src/main/java/io/crate/role/Role.java",
-          "what_changed": "Replaced the existing role.with method that accepted a Set of Privilege with overloaded methods accepting RolePrivileges and grantedRoles separately.",
-          "where_in_code": "Role class, overloaded with methods",
-          "intent": "Provide more precise and flexible ways to create new Role instances by accepting RolePrivileges directly and separately handling granted roles.",
+          "what_changed": "Replaced the existing Role.with method that accepted a Set of Privilege with overloaded Role.with methods accepting RolePrivileges and Set of GrantedRole respectively.",
+          "where_in_code": "Role class (Role.with methods)",
+          "intent": "To provide more precise and flexible methods for creating new Role instances with encapsulated privileges or granted roles, improving type safety and clarity.",
           "change_type": "modify_signature",
           "key_symbols": [
             "Role.with(RolePrivileges)",
@@ -422,8 +430,8 @@
           "hunk_index": 5,
           "file_path": "server/src/main/java/io/crate/role/Role.java",
           "what_changed": "Changed the constructor call to pass the isSuperUser field instead of a hardcoded false value.",
-          "where_in_code": "Role class, constructor invocation inside with method",
-          "intent": "Preserve the superuser status when creating new Role instances to maintain correct role privileges.",
+          "where_in_code": "Role class (constructor or factory method creating Role instances with password and session settings)",
+          "intent": "To preserve the superuser status of the Role when creating new instances, ensuring correct role properties are maintained.",
           "change_type": "modify_logic",
           "key_symbols": [
             "isSuperUser",
@@ -433,9 +441,9 @@
         {
           "hunk_index": 6,
           "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
-          "what_changed": "Simplified role update logic by replacing explicit Role constructor call with role.with(grantedRoles) method call.",
-          "where_in_code": "RolesMetadata class, method updating roles map after affectedCount check",
-          "intent": "Use Role class's with method to update granted roles, improving code clarity and reuse.",
+          "what_changed": "Simplified role update logic by replacing explicit Role constructor calls with role.with(grantedRoles) method calls.",
+          "where_in_code": "RolesMetadata class (method updating roles map after affectedCount check)",
+          "intent": "To leverage Role's with method for cleaner and more maintainable code when updating granted roles.",
           "change_type": "modify_logic",
           "key_symbols": [
             "roles.put",
@@ -452,16 +460,21 @@
         {
           "file_path": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
           "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "outcome": "clean"
         }
       ]
     },
     "agent7_validator_retry2": {
       "validation_passed": false,
       "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:99: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:142: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:174: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/io",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:100: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:143: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/io/crate/role/PrivilegesModifier.java:175: error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\nserver/src/main/java/i",
       "validation_attempts": 3,
       "retry_files": [
-        "server/src/main/java/io/crate/role/PrivilegesModifier.java"
+        "server/src/main/java/io/crate/role/PrivilegesModifier.java",
+        "server/src/main/java/io/crate/role/metadata/RolesMetadata.java"
       ],
       "build_success": false,
       "build_mode": "crate-helper",
@@ -472,23 +485,28 @@
       "compile_errors": [
         {
           "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "line": 99,
+          "line": 100,
           "message": "error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>"
         },
         {
           "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "line": 142,
+          "line": 143,
           "message": "error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>"
         },
         {
           "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "line": 174,
+          "line": 175,
           "message": "error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>"
         },
         {
           "file": "server/src/main/java/io/crate/role/PrivilegesModifier.java",
-          "line": 204,
+          "line": 205,
           "message": "error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>"
+        },
+        {
+          "file": "server/src/main/java/io/crate/role/metadata/RolesMetadata.java",
+          "line": 242,
+          "message": "error: incompatible types: Set<GrantedRole> cannot be converted to Set<Privilege>"
         }
       ]
     }
@@ -512,10 +530,36 @@
       4,
       6
     ],
-    "tokens_used": 3927,
+    "tokens_used": 31688,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 2440,
+        "output": 151
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 26798,
+        "output": 4890
+      }
+    },
     "synthesis_status": "partial",
     "applied_on_disk_ag3": 5,
-    "synthesized_count": 4,
+    "synthesized_count": 6,
     "failed_hunks_total": 1,
     "syntax_repair_status": "clean",
     "fallback_status": "applied",
@@ -541,13 +585,13 @@
       },
       {
         "error_type": "unknown",
-        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[99,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[142,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[174,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[204,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[99,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[142,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[174,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[204,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[99,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[142,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[174,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[204,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/metadata/RolesMetadata.java:[242,45] error: incompatible types: Set<GrantedRole> cannot be converted to Set<Privilege>\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[99,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[142,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[174,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[204,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/metadata/RolesMetadata.java:[242,45] error: incompatible types: Set<GrantedRole> cannot be converted to Set<Privilege>\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 2,
         "suggested_action": "inspect_and_retry"
       },
       {
         "error_type": "unknown",
-        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[99,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[142,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[174,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[204,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[99,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[142,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[174,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[204,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "ture release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[100,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[143,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[175,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[205,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/metadata/RolesMetadata.java:[242,45] error: incompatible types: Set<GrantedRole> cannot be converted to Set<Privilege>\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[100,46] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[143,51] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[175,48] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/PrivilegesModifier.java:[205,41] error: incompatible types: RolePrivileges cannot be converted to Set<Privilege>\n[ERROR] /repo/server/src/main/java/io/crate/role/metadata/RolesMetadata.java:[242,45] error: incompatible types: Set<GrantedRole> cannot be converted to Set<Privilege>\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 3,
         "suggested_action": "inspect_and_retry"
       }
@@ -555,15 +599,18 @@
     "failed_hunks": [
       {
         "file_path": "server/src/main/java/io/crate/role/Role.java",
+        "old_file_path": null,
         "old_content": "                password,\n                jwtProperties,\n                sessionSettings),\n            false\n        );\n    }\n\n",
         "new_content": "                password,\n                jwtProperties,\n                sessionSettings),\n            isSuperUser\n        );\n    }\n\n",
         "is_new_file": false,
         "is_del_file": false,
+        "is_rename": false,
         "file_operation": "MODIFIED"
       }
     ],
-    "generated_patch_bytes": 2627,
+    "generated_patch_bytes": 5357,
     "target_patch_bytes": 8988,
+    "patch_exact_match": false,
     "validation_passed": false,
     "validation_failure_category": "unknown",
     "build_success": false,

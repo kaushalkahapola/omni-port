@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-II",
   "original_commit": "52821a160a1a720097671cc0233b729f8d0c3355",
   "backport_commit": "5226b6913ce7de2ea303454100eb253291bf3c8f",
   "description": "master \u2192 5.9",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.04,
+      "elapsed_s": 0.02,
       "error": null,
       "java_hunks": 6,
       "aux_hunks": 3,
@@ -70,12 +71,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.02,
+      "elapsed_s": 3.86,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 1.0,
-        "reasoning": "All hunks in the patch were found in the target branch via 'git_exact' with confidence 1.00, indicating exact matches. The changes are straightforward additions of validation logic and minor error handling improvements without structural or API redesign. Therefore, the patch complexity is TYPE_I, representing trivial backport with exact string replacements.",
+        "reasoning": "All hunks in the patch are found via 'git_exact' with confidence 1.00, indicating exact matches in the target branch. The changes are straightforward additions of validation logic and minor error handling improvements without structural or API changes. There is no evidence of whitespace drift, structural refactoring, or redesign. Therefore, the patch is classified as TYPE_I (exact match string replacement, trivial backport). The token budget estimate is moderate due to multiple files and some new test code, but complexity remains low.",
         "is_auto_generated": false
       }
     },
@@ -122,7 +123,7 @@
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.03,
       "error": null,
       "refactored_count": 0
     },
@@ -154,49 +155,52 @@
       "test_mode": "crate-helper",
       "test_state": {
         "xml_reports": [
-          "/home/kaushal/backport-claw/repos/crate/plugins/es-repository-azure/target/surefire-reports/TEST-org.elasticsearch.repositories.azure.AzureStorageServiceTests.xml"
+          "/home/kaushal/backport-claw/repos/crate/plugins/es-repository-azure/target/surefire-reports/TEST-org.elasticsearch.repositories.azure.AzureStorageServiceTests.xml",
+          "/home/kaushal/backport-claw/repos/crate/plugins/es-repository-azure/target/surefire-reports/TEST-org.elasticsearch.repositories.azure.AzureStorageSettingsTest.xml"
         ],
-        "target_classes": [
-          "AzureStorageServiceTests"
-        ],
+        "target_classes": [],
         "test_cases": {
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testCreateClientWithSecondaryEndpoint": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testGetSelectedClientBackoffPolicyNbRetries": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testGetSelectedClientBackoffPolicy": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testCreateClientWithEndpointSuffix": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testGetSelectedClientDefaultTimeout": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#test_cannot_set_secondary_endpoint_without_endpoint": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyHttp": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testGetSelectedClientNoTimeout": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyNoType": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyWrongHost": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyNoHost": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testNoProxy": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testMultipleProxies": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testCreateClientWithEndpoint": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testBlobNameFromUri": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#test_cannot_set_endpoint_and_endpoint_suffix": "passed",
           "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxySocks": "passed",
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyNoPort": "passed"
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testMultipleProxies": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyNoType": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testGetSelectedClientBackoffPolicy": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#test_cannot_set_endpoint_and_endpoint_suffix": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#test_cannot_set_secondary_endpoint_without_endpoint": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testNoProxy": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyWrongHost": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testGetSelectedClientDefaultTimeout": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testCreateClientWithEndpoint": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testGetSelectedClientBackoffPolicyNbRetries": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testCreateClientWithEndpointSuffix": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testGetSelectedClientNoTimeout": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyHttp": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyNoHost": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testBlobNameFromUri": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testCreateClientWithSecondaryEndpoint": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests#testProxyNoPort": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageSettingsTest#test_raise_exception_on_endpoint_uri_without_valid_host": "passed"
         },
         "classes": {
-          "org.elasticsearch.repositories.azure.AzureStorageServiceTests": "passed"
+          "org.elasticsearch.repositories.azure.AzureStorageServiceTests": "passed",
+          "org.elasticsearch.repositories.azure.AzureStorageSettingsTest": "passed"
         },
         "summary": {
-          "passed": 18,
+          "passed": 19,
           "failed": 0,
           "skipped": 0,
-          "total": 18
+          "total": 19
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
+        "newly_passing": [
+          "org.elasticsearch.repositories.azure.AzureStorageSettingsTest#test_raise_exception_on_endpoint_uri_without_valid_host"
+        ],
         "baseline_total": 18,
-        "patched_total": 18,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "patched_total": 19,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -207,7 +211,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 18
     },
     "java_production_hunks": 6,
@@ -221,6 +225,20 @@
       5
     ],
     "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
     "synthesis_status": "success",
     "applied_on_disk_ag3": 6,
     "synthesized_count": 0,
@@ -232,23 +250,26 @@
     "failed_hunks": [],
     "generated_patch_bytes": 6492,
     "target_patch_bytes": 10425,
+    "patch_exact_match": false,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
     "test_success": true,
     "test_mode": "crate-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
+      "newly_passing": [
+        "org.elasticsearch.repositories.azure.AzureStorageSettingsTest#test_raise_exception_on_endpoint_uri_without_valid_host"
+      ],
       "baseline_total": 18,
-      "patched_total": 18,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "patched_total": 19,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 1,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

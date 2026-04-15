@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-12T05:06:45.578385",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-I",
   "original_commit": "06f4a8491123c8c38af1a63e39d2120fa3879528",
   "backport_commit": "ebb73c5d5984e5aaa23908ec77837510db5eb734",
   "description": "master \u2192 5.10",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.03,
+      "elapsed_s": 0.06,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 2,
@@ -25,12 +26,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.11,
+      "elapsed_s": 2.15,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch modifies a single method by wrapping an existing call in a try-catch block to handle exceptions and complete a future exceptionally. The change is localized and straightforward, with an exact match found in the target branch. Additionally, a new test file is added, but this does not affect the classification of the patch complexity. Overall, this is a trivial backport involving exact string replacement with minor additions, fitting the TYPE_I classification.",
+        "reasoning": "The patch modifies a single method by wrapping an existing call in a try-catch block to handle exceptions and complete a future exceptionally. The change is localized and applies cleanly to the target branch as indicated by 'git_exact' with high confidence. The addition of a new test file is straightforward and does not introduce structural changes. Overall, the patch is a simple, exact match string replacement with minor additions, fitting the TYPE_I classification.",
         "is_auto_generated": false
       }
     },
@@ -81,27 +82,35 @@
       "build_success": true,
       "build_mode": "crate-helper",
       "test_success": true,
-      "test_mode": "skip",
+      "test_mode": "crate-helper",
       "test_state": {
-        "xml_reports": [],
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.execution.IncrementalPageBucketReceiverTest.xml"
+        ],
         "target_classes": [],
-        "test_cases": {},
-        "classes": {},
+        "test_cases": {
+          "io.crate.execution.IncrementalPageBucketReceiverTest#test_processing_future_completed_when_finisher_throws": "passed"
+        },
+        "classes": {
+          "io.crate.execution.IncrementalPageBucketReceiverTest": "passed"
+        },
         "summary": {
-          "passed": 0,
+          "passed": 1,
           "failed": 0,
           "skipped": 0,
-          "total": 0
+          "total": 1
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
+        "newly_passing": [
+          "io.crate.execution.IncrementalPageBucketReceiverTest#test_processing_future_completed_when_finisher_throws"
+        ],
         "baseline_total": 0,
-        "patched_total": 0,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "patched_total": 1,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -112,7 +121,7 @@
     "phase0_baseline": {
       "mode": "baseline-skip",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 1,
@@ -146,23 +155,26 @@
     "failed_hunks": [],
     "generated_patch_bytes": 773,
     "target_patch_bytes": 4182,
+    "patch_exact_match": true,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
     "test_success": true,
-    "test_mode": "skip",
+    "test_mode": "crate-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
+      "newly_passing": [
+        "io.crate.execution.IncrementalPageBucketReceiverTest#test_processing_future_completed_when_finisher_throws"
+      ],
       "baseline_total": 0,
-      "patched_total": 0,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "patched_total": 1,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 1,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

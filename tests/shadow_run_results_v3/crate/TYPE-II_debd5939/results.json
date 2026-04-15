@@ -1,11 +1,12 @@
 {
-  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-II",
   "original_commit": "debd59396b0678fdcdbfecc3a63166a049f22863",
   "backport_commit": "a86ef36c5cb449b9d4cb58daf41472067ad816e6",
   "description": "master \u2192 5.7",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
       "elapsed_s": 0.0,
@@ -25,12 +26,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.97,
+      "elapsed_s": 4.44,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch involves a straightforward fix to the parsing of 'char' columns in the ResultSetParser class, changing the return type from Byte.valueOf(strValue) to returning the String directly. It also adds a new test class to verify this behavior and a minor adjustment in the SQLTransportExecutor test fixture. The main code change is a simple string replacement and addition of a test, with no structural or API changes. The localization evidence shows the last hunk was found via 'git_exact' with high confidence, indicating the patch applies cleanly. Therefore, this patch is classified as TYPE_I (exact match string replacement, trivial backport). The confidence is high but not absolute due to the addition of new test code and minor logic in test fixtures. The token budget estimate is moderate to cover the small code changes and test additions.",
+        "reasoning": "The patch primarily involves a straightforward fix to the parsing logic for 'char' columns in the ResultSetParser.java file, changing how the value is retrieved and returned. The change is a direct string replacement and addition of comments clarifying the behavior. Additionally, a new test file is added to verify the fix, and a minor adjustment is made in SQLTransportExecutor.java, which was found via exact match with high confidence. There are no structural or API changes, renames, or deep refactorings. The patch is simple and localized, fitting the TYPE_I classification with high confidence. The token budget estimate is moderate due to the addition of a new test and minor code adjustments.",
         "is_auto_generated": false
       }
     },
@@ -83,25 +84,33 @@
       "test_success": true,
       "test_mode": "crate-helper",
       "test_state": {
-        "xml_reports": [],
-        "target_classes": [
-          "SQLTransportExecutor"
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.types.ResultSetParserTest.xml"
         ],
-        "test_cases": {},
-        "classes": {},
+        "target_classes": [],
+        "test_cases": {
+          "io.crate.types.ResultSetParserTest#test_can_query_char_column_via_jdbc_from_foreign_table": "passed"
+        },
+        "classes": {
+          "io.crate.types.ResultSetParserTest": "passed"
+        },
         "summary": {
-          "passed": 0,
+          "passed": 1,
           "failed": 0,
           "skipped": 0,
-          "total": 0
+          "total": 1
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
-        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
+        "newly_passing": [
+          "io.crate.types.ResultSetParserTest#test_can_query_char_column_via_jdbc_from_foreign_table"
+        ],
+        "baseline_total": 0,
+        "patched_total": 1,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -112,7 +121,7 @@
     "phase0_baseline": {
       "mode": "baseline-skip",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 1,
@@ -121,6 +130,20 @@
       0
     ],
     "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
     "synthesis_status": "success",
     "applied_on_disk_ag3": 1,
     "synthesized_count": 0,
@@ -132,21 +155,26 @@
     "failed_hunks": [],
     "generated_patch_bytes": 1666,
     "target_patch_bytes": 5309,
+    "patch_exact_match": false,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
     "test_success": true,
     "test_mode": "crate-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
-      "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
+      "newly_passing": [
+        "io.crate.types.ResultSetParserTest#test_can_query_char_column_via_jdbc_from_foreign_table"
+      ],
+      "baseline_total": 0,
+      "patched_total": 1,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 1,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }
