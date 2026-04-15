@@ -34,6 +34,40 @@ ${DOCKER_CMD} run --rm -u root \
 chown -R root:root /root/.m2 /repo 2>/dev/null || true
 find /root/.m2/repository -name '*.lastUpdated' -delete 2>/dev/null || true
 find /root/.m2/repository -name '_remote.repositories' -delete 2>/dev/null || true
+
+# Create dummy test-jars for all known Hadoop artifacts across all SNAPSHOT versions.
+# These test-jars are never published to Maven Central but are declared as test-scoped
+# dependencies — Maven tries to resolve them and fails without this workaround.
+for version in 3.3.9-SNAPSHOT 3.4.1-SNAPSHOT 3.4.2-SNAPSHOT 3.3.6-SNAPSHOT 3.3.8-SNAPSHOT; do
+  for artifact in \
+    hadoop-auth hadoop-common hadoop-hdfs hadoop-hdfs-nfs hadoop-hdfs-httpfs \
+    hadoop-yarn hadoop-yarn-common hadoop-yarn-client hadoop-yarn-registry \
+    hadoop-yarn-server hadoop-yarn-server-common hadoop-yarn-server-tests \
+    hadoop-yarn-server-nodemanager hadoop-yarn-server-resourcemanager \
+    hadoop-yarn-server-router hadoop-yarn-server-globalpolicygenerator \
+    hadoop-yarn-server-timelineservice hadoop-yarn-server-timelineservice-hbase \
+    hadoop-yarn-server-timelineservice-hbase-server \
+    hadoop-yarn-server-timelineservice-hbase-server-2 \
+    hadoop-yarn-applications hadoop-yarn-applications-distributedshell \
+    hadoop-yarn-applications-unmanaged-am-launcher \
+    hadoop-yarn-csi hadoop-yarn-services hadoop-yarn-ui \
+    hadoop-mapreduce-client hadoop-mapreduce-client-common \
+    hadoop-mapreduce-client-shuffle hadoop-mapreduce-client-hs \
+    hadoop-mapreduce-client-app \
+    hadoop-kms hadoop-nfs hadoop-minicluster hadoop-minikdc \
+    hadoop-annotations hadoop-build-tools hadoop-maven-plugins \
+    hadoop-auth-examples hadoop-assemblies hadoop-main \
+    hadoop-project hadoop-project-dist hadoop-common-project \
+    hadoop-hdfs-project hadoop-tools; do
+    dir=\"/root/.m2/repository/org/apache/hadoop/\${artifact}/\${version}\"
+    jar=\"\${dir}/\${artifact}-\${version}-tests.jar\"
+    mkdir -p \"\${dir}\"
+    if [ ! -f \"\${jar}\" ]; then
+      printf 'PK\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' > \"\${jar}\"
+    fi
+  done
+done
+# Also cover any other SNAPSHOT dirs already in the cache
 find /root/.m2/repository/org/apache/hadoop -type d -name '*-SNAPSHOT' | while read dir; do
   artifact=\$(basename \$(dirname \$dir))
   version=\$(basename \$dir)

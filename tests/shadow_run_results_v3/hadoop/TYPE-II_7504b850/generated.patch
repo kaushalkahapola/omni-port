@@ -146,7 +146,7 @@ index 9ed6594244b..91ab7057a2d 100644
     * Is the higher performance copy from local file to S3 enabled?
     * This switch allows for it to be disabled if there are problems.
 diff --git a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/S3AUtils.java b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/S3AUtils.java
-index cceaea6159d..23ff04caa6a 100644
+index cceaea6159d..2cbe8e764c9 100644
 --- a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/S3AUtils.java
 +++ b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/S3AUtils.java
 @@ -66,6 +66,7 @@
@@ -173,35 +173,6 @@ index cceaea6159d..23ff04caa6a 100644
    /**
     * Delete a path quietly: failures are logged at DEBUG.
     * @param fs filesystem
-@@ -1670,6 +1669,28 @@ public static String formatRange(long rangeStart, long rangeEnd) {
-     return String.format("bytes=%d-%d", rangeStart, rangeEnd);
-   }
- 
-+  /**
-+   * Get the equal op (=) delimited key-value pairs of the <code>name</code> property as
-+   * a collection of pair of <code>String</code>s, trimmed of the leading and trailing whitespace
-+   * after delimiting the <code>name</code> by comma and new line separator.
-+   * If no such property is specified then empty <code>Map</code> is returned.
-+   *
-+   * @param configuration the configuration object.
-+   * @param name property name.
-+   * @return property value as a <code>Map</code> of <code>String</code>s, or empty
-+   * <code>Map</code>.
-+   */
-+  public static java.util.Map<String, String> getTrimmedStringCollectionSplitByEquals(
-+      final Configuration configuration,
-+      final String name) {
-+    String valueString = configuration.get(name);
-+    if (null == valueString) {
-+      return new java.util.HashMap<>();
-+    }
-+    return org.apache.hadoop.util.StringUtils
-+        .getTrimmedStringCollectionSplitByEquals(valueString);
-+  }
-+
-   /**
-    * If classloader isolation is {@code true}
-    * (through {@link Constants#AWS_S3_CLASSLOADER_ISOLATION}) or not
 diff --git a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/auth/CredentialProviderListFactory.java b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/auth/CredentialProviderListFactory.java
 index b106777dd29..8bb0381e97f 100644
 --- a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/auth/CredentialProviderListFactory.java
