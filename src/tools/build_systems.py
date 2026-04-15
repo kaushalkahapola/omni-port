@@ -308,8 +308,17 @@ def restore_repo_state(repo_path: str) -> bool:
     """git reset --hard + git clean -fd on the given worktree."""
     print(f"  [build_systems] Restoring repo state in {repo_path}")
     try:
+        # Remove any git lock files that may block reset
+        for lock in ["index.lock", "HEAD.lock", "MERGE_HEAD"]:
+            lock_path = os.path.join(repo_path, ".git", lock)
+            if os.path.exists(lock_path):
+                try:
+                    os.remove(lock_path)
+                except Exception:
+                    pass
+
         subprocess.run(
-            ["git", "reset", "--hard"],
+            ["git", "reset", "--hard", "HEAD"],
             cwd=repo_path,
             capture_output=True,
             check=True,
@@ -695,6 +704,21 @@ def run_build(repo_path: str, project: str = "", changed_files: list[str] | None
             image_tag, err = _ensure_docker_image(normalized, repo_path)
             if image_tag:
                 abs_repo_path = os.path.realpath(repo_path)
+                # Detect source modules to scope the build to only affected modules.
+                # This avoids pulling in unrelated modules with broken SNAPSHOT deps.
+                source_modules_str = ""
+                if changed_files:
+                    try:
+                        # Build file_entries from changed_files (all treated as modified)
+                        file_entries_for_build = [("M", f) for f in changed_files if f]
+                        ti = detect_test_targets(abs_repo_path, normalized,
+                                                 file_entries=file_entries_for_build)
+                        if ti.source_modules:
+                            source_modules_str = ",".join(ti.source_modules)
+                        elif ti.all_modules:
+                            source_modules_str = ",".join(ti.all_modules)
+                    except Exception:
+                        pass
                 env = os.environ.copy()
                 env.update({
                     "PROJECT_NAME": normalized,
@@ -704,6 +728,7 @@ def run_build(repo_path: str, project: str = "", changed_files: list[str] | None
                     "IMAGE_TAG": image_tag,
                     "COMMIT_SHA": _get_current_head(repo_path),
                     "WORKTREE_MODE": "1",
+                    "SOURCE_MODULES": source_modules_str,
                 })
                 res = _run_cmd(["bash", build_sh], cwd=abs_repo_path, env=env, timeout=3600)
                 print(f"  [build_systems] Build {'succeeded' if res['success'] else 'failed'} using {normalized}-helper")

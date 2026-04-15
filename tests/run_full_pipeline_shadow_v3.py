@@ -84,6 +84,7 @@ REPO_PATH_MAP: dict[str, str] = {
     "logstash": "repos/logstash",
     "sql": "repos/sql",
     "spring-framework": "repos/spring-framework",
+    "hadoop": "repos/hadoop",
 }
 
 

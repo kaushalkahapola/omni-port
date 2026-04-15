@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 
 PROJECT_CONFIG = {
     "elasticsearch": {"report_pattern": "**/build/test-results/**/*.xml"},
-    "hadoop": {"report_pattern": "**/target/surefire-reports/*.xml"},
+    "hadoop": {"report_pattern": "build/all-test-results/*.xml"},
     "druid": {"report_pattern": "**/target/surefire-reports/*.xml"},
     "graylog2-server": {"report_pattern": "**/target/surefire-reports/*.xml"},
     "hbase": {"report_pattern": "**/target/surefire-reports/*.xml"},

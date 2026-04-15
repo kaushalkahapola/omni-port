@@ -938,6 +938,11 @@ def run_validation(state: BackportState) -> BackportState:
         print(f"  agent7: synthesized hunks already on disk (pre-applied), skipping apply step")
         synth_result = {"success": True, "output": "pre-applied by pipeline", "applied_files": []}
     else:
+        # On retry, re-apply agent3's fast-applied hunks first (they were wiped by restore).
+        if attempts > 0 and applied_hunks:
+            print(f"  agent7: re-applying {len(applied_hunks)} agent3 hunk(s) after restore...")
+            _apply_synthesized_hunks(repo_path, applied_hunks)
+
         print(f"  agent7: applying {len(synthesized_hunks)} synthesized hunk(s)...")
         synth_result = _apply_synthesized_hunks(repo_path, synthesized_hunks)
     validation_results["hunk_application"] = {
