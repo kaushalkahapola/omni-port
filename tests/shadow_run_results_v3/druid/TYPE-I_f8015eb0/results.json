@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-12T12:10:05.685977",
+  "run_timestamp": "2026-04-15T17:36:34.072887",
   "repo": "druid",
   "patch_type": "TYPE-I",
   "original_commit": "f8015eb02a95925036b4ce5ad0c1384ff634b30a",
   "backport_commit": "d6858771d1acb63c5fb39a3a6bcd62b03461dc15",
   "description": "master \u2192 30.0.0",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.12,
+      "elapsed_s": 0.19,
       "error": null,
       "java_hunks": 13,
       "aux_hunks": 2,
@@ -133,17 +134,17 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.22,
+      "elapsed_s": 2.88,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch consists of adding a new configuration field 'lagAggregate' to an existing autoscaler config class and related classes, adding a new enum AggregateFunction, modifying LagStats to support this new aggregate function, and updating the autoscaler logic to use this new configuration. The patch also removes a deprecated method and updates documentation accordingly. All changes are additive and localized, with no structural or API redesign. The localization evidence shows all hunks were found via exact matches or new file additions, indicating the patch applies cleanly without structural conflicts. Therefore, this patch is a straightforward extension and configuration addition, fitting the TYPE_I classification for trivial backporting.",
+        "reasoning": "The patch consists of adding a new configuration field 'lagAggregate' to an existing autoscaler config and related classes, modifying usage to support this new field, and removing a deprecated method. All changes are additive or straightforward modifications without structural or API redesign. The localization evidence shows all hunks were found via 'git_exact' with high confidence, indicating the patch applies cleanly and directly to the target branch. There are no structural or deep refactoring changes, so the patch complexity is TYPE_I (trivial backport).",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
-      "elapsed_s": 0.01,
+      "elapsed_s": 0.02,
       "error": null,
       "applied_count": 12,
       "applied_hunks": [
@@ -215,7 +216,7 @@
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.03,
       "error": null,
       "refactored_count": 0
     },
@@ -258,27 +259,36 @@
       "build_success": true,
       "build_mode": "druid-helper",
       "test_success": true,
-      "test_mode": "skip",
+      "test_mode": "druid-helper",
       "test_state": {
-        "xml_reports": [],
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/druid/build/all-test-results/TEST-org.apache.druid.indexing.overlord.supervisor.LagStatsTest.xml",
+          "/home/kaushal/backport-claw/repos/druid/server/target/surefire-reports/TEST-org.apache.druid.indexing.overlord.supervisor.LagStatsTest.xml"
+        ],
         "target_classes": [],
-        "test_cases": {},
-        "classes": {},
+        "test_cases": {
+          "org.apache.druid.indexing.overlord.supervisor.LagStatsTest#testAutoScalerLagComputation": "passed"
+        },
+        "classes": {
+          "org.apache.druid.indexing.overlord.supervisor.LagStatsTest": "passed"
+        },
         "summary": {
-          "passed": 0,
+          "passed": 1,
           "failed": 0,
           "skipped": 0,
-          "total": 0
+          "total": 1
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
+        "newly_passing": [
+          "org.apache.druid.indexing.overlord.supervisor.LagStatsTest#testAutoScalerLagComputation"
+        ],
         "baseline_total": 0,
-        "patched_total": 0,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "patched_total": 1,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -289,7 +299,7 @@
     "phase0_baseline": {
       "mode": "baseline-skip",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 13,
@@ -336,25 +346,28 @@
     "fallback_attempts": 0,
     "retry_contexts": [],
     "failed_hunks": [],
-    "generated_patch_bytes": 10892,
+    "generated_patch_bytes": 15227,
     "target_patch_bytes": 13672,
+    "patch_exact_match": false,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
     "test_success": true,
-    "test_mode": "skip",
+    "test_mode": "druid-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
+      "newly_passing": [
+        "org.apache.druid.indexing.overlord.supervisor.LagStatsTest#testAutoScalerLagComputation"
+      ],
       "baseline_total": 0,
-      "patched_total": 0,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "patched_total": 1,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 1,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

@@ -1,11 +1,12 @@
 {
-  "run_timestamp": "2026-04-12T12:10:05.685977",
+  "run_timestamp": "2026-04-15T18:12:48.392605",
   "repo": "druid",
   "patch_type": "TYPE-V",
   "original_commit": "074944e02c7fb29b9f4160626ff8dc6fd225b0a9",
   "backport_commit": "06c1a6a31eaa2339a8507658ea1baf378da48e4a",
   "description": "master \u2192 31.0.0",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
       "elapsed_s": 0.0,
@@ -34,12 +35,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 1.99,
+      "elapsed_s": 3.08,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch consists of a small, exact code change in DartControllerContext.java, adding a conditional to filter servers by ServerType.HISTORICAL when building the worker list. The change is localized and straightforward, found via 'git_exact' with high confidence. Additionally, a new test file is added to verify this behavior, which is a standard addition and does not increase complexity significantly. There are no structural or API changes, refactorings, or redesigns. Therefore, this patch is classified as TYPE_I (exact match string replacement, trivial backport).",
+        "reasoning": "The patch consists of a small conditional addition to an existing loop filtering servers by type, which is an exact match string replacement in the target branch. The new test file is a straightforward addition and does not modify existing structures. Both hunks were found via 'git_exact' with high confidence, indicating minimal divergence. Therefore, this patch is a trivial backport with no structural or API changes.",
         "is_auto_generated": false
       }
     },
@@ -98,9 +99,7 @@
       "test_mode": "druid-helper",
       "test_state": {
         "xml_reports": [],
-        "target_classes": [
-          "org.apache.druid.msq.input.InputSpecsTest"
-        ],
+        "target_classes": [],
         "test_cases": {},
         "classes": {},
         "summary": {
@@ -120,83 +119,9 @@
       "compile_errors": []
     },
     "agent9_fallback_1": {
-      "fallback_status": "applied",
+      "fallback_status": "failed",
       "fallback_attempts": 1,
-      "synthesized_count": 1,
-      "hunk_descriptions": [
-        {
-          "hunk_index": 0,
-          "file_path": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-          "what_changed": "Added an import for ServerType from the coordination package.",
-          "where_in_code": "DartControllerContext (imports section)",
-          "intent": "To enable usage of ServerType enum for server type checks within the class.",
-          "change_type": "modify_import",
-          "key_symbols": [
-            "ServerType"
-          ]
-        },
-        {
-          "hunk_index": 1,
-          "file_path": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-          "what_changed": "Modified the logic that builds the list of worker IDs to include only servers of type HISTORICAL.",
-          "where_in_code": "DartControllerContext (method constructing workerIds from servers)",
-          "intent": "To restrict worker IDs to historical servers only, likely to ensure tasks are assigned to appropriate server types.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "workerIds",
-            "ServerType.HISTORICAL",
-            "fromDruidServerMetadata"
-          ]
-        }
-      ]
-    },
-    "agent8_syntax_repair_fallback_1": {
-      "syntax_repair_status": "clean",
-      "syntax_repair_attempts": 0,
-      "syntax_repair_log": [
-        {
-          "file_path": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
-          "outcome": "clean"
-        }
-      ]
-    },
-    "agent7_validator_retry1": {
-      "validation_passed": false,
-      "validation_failure_category": "context_mismatch",
-      "validation_error_context": "Compilation error during test phase.",
-      "validation_attempts": 2,
-      "retry_files": [],
-      "build_success": true,
-      "build_mode": "druid-helper",
-      "test_success": false,
-      "test_mode": "druid-helper",
-      "test_state": {
-        "xml_reports": [],
-        "target_classes": [
-          "org.apache.druid.msq.input.InputSpecsTest"
-        ],
-        "test_cases": {},
-        "classes": {},
-        "summary": {
-          "passed": 0,
-          "failed": 0,
-          "skipped": 0,
-          "total": 0
-        }
-      },
-      "test_state_transition": {
-        "valid_backport_signal": false,
-        "fail_to_pass": [],
-        "pass_to_fail": [],
-        "newly_passing": [],
-        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
-      },
-      "compile_errors": []
-    },
-    "agent9_fallback_2": {
-      "fallback_status": "applied",
-      "fallback_attempts": 2,
-      "synthesized_count": 1,
+      "synthesized_count": 0,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
@@ -224,6 +149,75 @@
         }
       ]
     },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Compilation error during test phase.",
+      "validation_attempts": 2,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "druid-helper",
+      "test_success": false,
+      "test_mode": "druid-helper",
+      "test_state": {
+        "xml_reports": [],
+        "target_classes": [],
+        "test_cases": {},
+        "classes": {},
+        "summary": {
+          "passed": 0,
+          "failed": 0,
+          "skipped": 0,
+          "total": 0
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 0,
+        "patched_total": 0,
+        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      },
+      "compile_errors": []
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "applied",
+      "fallback_attempts": 2,
+      "synthesized_count": 1,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+          "what_changed": "Added an import for ServerType from the coordination package.",
+          "where_in_code": "DartControllerContext (imports section)",
+          "intent": "To enable usage of ServerType enum in the class, likely for filtering or type checking of servers.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "ServerType"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "extensions-core/multi-stage-query/src/main/java/org/apache/druid/msq/dart/controller/DartControllerContext.java",
+          "what_changed": "Modified the loop that builds the list of worker IDs to include only servers of type HISTORICAL.",
+          "where_in_code": "DartControllerContext (method constructing workerIds list)",
+          "intent": "To restrict worker IDs to only those corresponding to HISTORICAL servers, likely to ensure that tasks are assigned only to appropriate server types.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "workerIds",
+            "ServerType.HISTORICAL",
+            "fromDruidServerMetadata"
+          ]
+        }
+      ]
+    },
     "agent8_syntax_repair_fallback_2": {
       "syntax_repair_status": "clean",
       "syntax_repair_attempts": 0,
@@ -246,9 +240,7 @@
       "test_mode": "druid-helper",
       "test_state": {
         "xml_reports": [],
-        "target_classes": [
-          "org.apache.druid.msq.input.InputSpecsTest"
-        ],
+        "target_classes": [],
         "test_cases": {},
         "classes": {},
         "summary": {
@@ -263,7 +255,9 @@
         "fail_to_pass": [],
         "pass_to_fail": [],
         "newly_passing": [],
-        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
+        "baseline_total": 0,
+        "patched_total": 0,
+        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
       },
       "compile_errors": []
     }
@@ -274,7 +268,7 @@
     "phase0_baseline": {
       "mode": "baseline-druid-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 2,
@@ -283,7 +277,7 @@
       0,
       1
     ],
-    "tokens_used": 19891,
+    "tokens_used": 50203,
     "llm_token_usage": {
       "agent2_classifier": {
         "input": 0,
@@ -298,8 +292,8 @@
         "output": 0
       },
       "agent9_fallback": {
-        "input": 17604,
-        "output": 2287
+        "input": 48563,
+        "output": 1640
       },
       "agent8_syntax_repair": {
         "input": 0,
@@ -336,6 +330,7 @@
     "failed_hunks": [],
     "generated_patch_bytes": 1498,
     "target_patch_bytes": 21521,
+    "patch_exact_match": false,
     "validation_passed": false,
     "validation_failure_category": "context_mismatch",
     "build_success": true,
@@ -346,7 +341,9 @@
       "fail_to_pass": [],
       "pass_to_fail": [],
       "newly_passing": [],
-      "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
+      "baseline_total": 0,
+      "patched_total": 0,
+      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
     },
     "fail_to_pass_count": 0,
     "newly_passing_count": 0,
