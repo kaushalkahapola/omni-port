@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-13T07:31:50.744016",
+  "run_timestamp": "2026-04-16T05:17:09.434122",
   "repo": "hibernate-orm",
   "patch_type": "TYPE-I",
   "original_commit": "6da1282e7030eb4539a31783172c75c9d04ca568",
   "backport_commit": "eafaf38201a0fcaa5e20c448b1ec21531be697a4",
   "description": "main \u2192 7.1",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.13,
+      "elapsed_s": 0.03,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 1,
@@ -25,12 +26,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.27,
+      "elapsed_s": 3.65,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch modifies a boundary check condition in the subSequence method, changing 'start >= length' to 'start > length' and adds an additional validation for 'end < start'. The changes are straightforward and involve exact string replacements and additions that align with the CharSequence contract. The localization evidence indicates the hunk was found via 'git_exact' with high confidence, suggesting the patch applies cleanly and directly to the target branch without structural changes. The addition of a new test file is a simple addition and does not affect complexity classification. Overall, this is a trivial backport with minor code adjustments and test additions, fitting the TYPE_I classification.",
+        "reasoning": "The patch modifies a single method with a small change in boundary condition checks, relaxing the start bound check and adding an additional validation for end < start. The change is localized and straightforward, matching exactly in the target branch as indicated by 'git_exact' with confidence 1.00. Additionally, a new test file is added, which does not affect the complexity of the backporting process. Overall, this is a trivial backport with exact string replacement and minimal complexity.",
         "is_auto_generated": false
       }
     },
@@ -52,7 +53,7 @@
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.05,
       "error": null,
       "refactored_count": 0
     },
@@ -85,6 +86,7 @@
       "test_state": {
         "xml_reports": [
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-core/target/test-results/test/TEST-org.hibernate.internal.util.SubSequenceTest.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-envers/target/test-results/test/TEST-org.hibernate.orm.test.envers.integration.lob.LargeObjectMappingTest.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.BasicEntityManagerFactoryScopeTests.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.BasicSessionFactoryScopeTests.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.DomainModelTesting.xml",
@@ -97,7 +99,6 @@
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.util.uuid.SafeRandomUUIDGeneratorTest.xml"
         ],
         "target_classes": [
-          "org.hibernate.internal.util.*",
           "org.hibernate.internal.util.SubSequenceTest"
         ],
         "test_cases": {

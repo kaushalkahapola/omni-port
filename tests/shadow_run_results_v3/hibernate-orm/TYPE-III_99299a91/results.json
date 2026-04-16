@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-13T06:52:35.180600",
+  "run_timestamp": "2026-04-16T05:17:09.434122",
   "repo": "hibernate-orm",
   "patch_type": "TYPE-III",
   "original_commit": "99299a916d8a135e3d75126ac97fd6568db6096d",
   "backport_commit": "b0aa5cbf88deefdbfcda059eb053030a2c556ba0",
   "description": "main \u2192 7.2",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.19,
+      "elapsed_s": 1.21,
       "error": null,
       "java_hunks": 1,
       "aux_hunks": 1,
@@ -25,12 +26,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 2.84,
+      "elapsed_s": 3.39,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_II",
         "confidence": 0.9,
-        "reasoning": "The patch involves a minor code formatting change in EnhancerImpl.java (chaining method calls instead of separate statements) and the addition of a new parameterized test class with some imports and inner classes. The main code change is a whitespace/formatting adjustment, which is a typical TYPE_II patch. The test additions increase the patch size but do not introduce structural or API changes. The localization evidence indicates the main hunk was found via fuzzy matching with high confidence, supporting a TYPE_II classification. The patch does not involve structural or API changes, so TYPE_III or higher are not appropriate. The token budget estimate accounts for the test additions and the code formatting change.",
+        "reasoning": "The patch modifies a single statement by chaining a method call instead of two separate statements, which is a minor formatting and structural change. The test additions introduce new test methods and classes to verify behavior, but these are additive and do not change existing complex logic. The main code change was found via fuzzy matching with high confidence, indicating some whitespace or formatting drift rather than deep structural changes. Therefore, the patch complexity aligns with TYPE_II, involving minor formatting and fuzzy matching adjustments rather than structural or API changes.",
         "is_auto_generated": false
       }
     },
@@ -41,7 +42,7 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 4.43,
+      "elapsed_s": 4.44,
       "error": null,
       "adapted_count": 1
     },
@@ -59,8 +60,8 @@
       "synthesized_hunks": [
         {
           "file_path": "hibernate-core/src/main/java/org/hibernate/bytecode/enhance/internal/bytebuddy/EnhancerImpl.java",
-          "old_string": "\t\t\t\tDynamicType.Builder<?> builder = builderSupplier.get();\n\t\t\t\tbuilder.implement( constants.INTERFACES_for_ManagedMappedSuperclass );\n\t\t\t\treturn createTransformer( managedCtClass ).applyTo( builder );",
-          "new_string": "\t\t\t\tDynamicType.Builder<?> builder = builderSupplier.get()\n\t\t\t\t\t\t.implement( constants.INTERFACES_for_ManagedMappedSuperclass );\n\t\t\t\treturn createTransformer( managedCtClass ).applyTo( builder );",
+          "old_string": "\t\t\t\tDynamicType.Builder<?> builder = builderSupplier.get();\n\t\t\t\tbuilder.implement( constants.INTERFACES_for_ManagedMappedSuperclass );",
+          "new_string": "\t\t\t\tDynamicType.Builder<?> builder = builderSupplier.get()\n\t\t\t\t\t\t.implement( constants.INTERFACES_for_ManagedMappedSuperclass );",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -68,7 +69,7 @@
       ]
     },
     "agent8_syntax_repair": {
-      "elapsed_s": 0.23,
+      "elapsed_s": 0.05,
       "error": null,
       "syntax_repair_status": "clean",
       "syntax_repair_attempts": 0,
@@ -92,7 +93,8 @@
       "test_mode": "hibernate-orm-helper",
       "test_state": {
         "xml_reports": [
-          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-core/target/test-results/test/TEST-org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-core/target/test-results/test/TEST-org.hibernate.orm.test.annotations.beanvalidation.CollectionActionsValidationStatelessTest.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-envers/target/test-results/test/TEST-org.hibernate.orm.test.envers.integration.lob.LargeObjectMappingTest.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.BasicEntityManagerFactoryScopeTests.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.BasicSessionFactoryScopeTests.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.DomainModelTesting.xml",
@@ -100,26 +102,20 @@
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.MoreEntityManagerFactoryScopeTesting.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.ServiceRegistryTesting.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.SessionFactoryTesting.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.logger.LogDelegationTest.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.logger.LoggingRuleTest.xml",
           "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.util.uuid.SafeRandomUUIDGeneratorTest.xml"
         ],
         "target_classes": [
           "org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests"
         ],
-        "test_cases": {
-          "org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests#testAssociationManagementSettingMismatch()": "passed",
-          "org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests#testVersionMismatch()": "passed",
-          "org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests#[1] class org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests$MappedSuper": "failed",
-          "org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests#[2] class org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests$EntityClass": "passed",
-          "org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests#testDirtyCheckingSettingMismatch()": "passed"
-        },
-        "classes": {
-          "org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests": "failed"
-        },
+        "test_cases": {},
+        "classes": {},
         "summary": {
-          "passed": 4,
-          "failed": 1,
+          "passed": 0,
+          "failed": 0,
           "skipped": 0,
-          "total": 5
+          "total": 0
         }
       },
       "test_state_transition": {
@@ -127,9 +123,7 @@
         "fail_to_pass": [],
         "pass_to_fail": [],
         "newly_passing": [],
-        "baseline_total": 5,
-        "patched_total": 5,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
       },
       "compile_errors": []
     }
@@ -141,7 +135,7 @@
       "mode": "baseline-hibernate-orm-helper",
       "skipped": false,
       "cached": false,
-      "test_cases_total": 5
+      "test_cases_total": 0
     },
     "java_production_hunks": 1,
     "developer_aux_hunks": 1,
@@ -156,7 +150,7 @@
       },
       "agent4_namespace": {
         "input": 2544,
-        "output": 197
+        "output": 163
       },
       "agent5_structural": {
         "input": 0,
@@ -193,9 +187,7 @@
       "fail_to_pass": [],
       "pass_to_fail": [],
       "newly_passing": [],
-      "baseline_total": 5,
-      "patched_total": 5,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
     },
     "fail_to_pass_count": 0,
     "newly_passing_count": 0,

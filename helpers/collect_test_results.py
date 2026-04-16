@@ -25,7 +25,7 @@ PROJECT_CONFIG = {
     "spring-framework": {"report_pattern": "**/build/test-results/**/*.xml"},
     "logstash": {"report_pattern": "**/build/test-results/**/*.xml"},
     "sql": {"report_pattern": "**/build/test-results/**/*.xml"},
-    "hibernate-orm": {"report_pattern": "**/build/test-results/**/*.xml"},
+    "hibernate-orm": {"report_pattern": "**/target/test-results/**/*.xml"},
     "grpc-java": {"report_pattern": "**/*.xml"},
     "crate": {"report_pattern": "**/target/surefire-reports/*.xml"},
     "jdk11u-dev": {"report_pattern": "**/JTwork/**/*.xml"},

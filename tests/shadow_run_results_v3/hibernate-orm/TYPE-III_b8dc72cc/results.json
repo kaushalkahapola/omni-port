@@ -1,0 +1,210 @@
+{
+  "run_timestamp": "2026-04-16T05:17:09.434122",
+  "repo": "hibernate-orm",
+  "patch_type": "TYPE-III",
+  "original_commit": "b8dc72ccb2a0a5ee1a1e28c9cf7bda245a43db68",
+  "backport_commit": "b8304a93dbe9cdd4fb1f436df2a452490dd0e0a6",
+  "description": "main \u2192 6.6",
+  "skip_validation": false,
+  "skip_test": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 1.51,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "hibernate-core/src/main/java/org/hibernate/sql/results/graph/collection/internal/ListInitializer.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.867,
+          "start_line": 123,
+          "end_line": 132,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.72,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.87,
+        "reasoning": "The patch modifies a small code section by adding a conditional subtraction of 'listIndexBase' from 'index'. The change is localized and does not involve structural or API changes, but requires fuzzy matching due to slight code context differences. The localization evidence indicates it was found via 'git_pickaxe' with 0.87 confidence, supporting a TYPE_II classification. The token budget estimate accounts for the small code change and context needed to apply it correctly.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 7.44,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "hibernate-core/src/main/java/org/hibernate/sql/results/graph/collection/internal/ListInitializer.java",
+          "old_string": "\t\tfinal Initializer<?> initializer = elementAssembler.getInitializer();\n\t\tif ( initializer != null ) {\n\t\t\tfinal RowProcessingState rowProcessingState = data.getRowProcessingState();\n\t\t\tInteger index = listIndexAssembler.assemble( rowProcessingState );\n\t\t\tif ( index != null ) {\n\t\t\t\tfinal PersistentList<?> list = getCollectionInstance( data );\n\t\t\t\tassert list != null;\n\t\t\t\tif ( listIndexBase != 0 ) {\n\t\t\t\t\tindex -= listIndexBase;\n\t\t\t\t}\n\t\t\t\tinitializer.resolveInstance( list.get( index ), rowProcessingState );\n\t\t\t}\n\t\t}",
+          "new_string": "\t\tfinal Initializer<?> initializer = elementAssembler.getInitializer();\n\t\tif ( initializer != null ) {\n\t\t\tfinal RowProcessingState rowProcessingState = data.getRowProcessingState();\n\t\t\tInteger index = listIndexAssembler.assemble( rowProcessingState );\n\t\t\tif ( index != null ) {\n\t\t\t\tfinal PersistentList<?> list = getCollectionInstance( data );\n\t\t\t\tassert list != null;\n\t\t\t\tif ( listIndexBase != 0 ) {\n\t\t\t\t\tindex -= listIndexBase;\n\t\t\t\t}\n\t\t\t\tinitializer.resolveInstance( list.get( index ), rowProcessingState );\n\t\t\t}\n\t\t}",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "hibernate-core/src/main/java/org/hibernate/sql/results/graph/collection/internal/ListInitializer.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "hibernate-orm-helper",
+      "test_success": true,
+      "test_mode": "hibernate-orm-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-core/target/test-results/test/TEST-org.hibernate.orm.test.mapping.collections.OrderColumnListIndexHHH18771ListInitializerTest.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-envers/target/test-results/test/TEST-org.hibernate.orm.test.envers.integration.lob.LargeObjectMappingTest.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.BasicEntityManagerFactoryScopeTests.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.BasicSessionFactoryScopeTests.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.DomainModelTesting.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.EntityManagerFactoryScopeTesting.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.MoreEntityManagerFactoryScopeTesting.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.ServiceRegistryTesting.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.annotations.methods.SessionFactoryTesting.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.logger.LogDelegationTest.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.logger.LoggingRuleTest.xml",
+          "/home/kaushal/backport-claw/repos/hibernate-orm/hibernate-testing/target/test-results/test/TEST-org.hibernate.testing.util.uuid.SafeRandomUUIDGeneratorTest.xml"
+        ],
+        "target_classes": [
+          "org.hibernate.orm.test.mapping.collections.OrderColumnListIndexArrayInitializerTest",
+          "org.hibernate.orm.test.mapping.collections.OrderColumnListIndexHHH18771ListInitializerTest"
+        ],
+        "test_cases": {
+          "org.hibernate.orm.test.mapping.collections.OrderColumnListIndexHHH18771ListInitializerTest#testLifecycle": "passed"
+        },
+        "classes": {
+          "org.hibernate.orm.test.mapping.collections.OrderColumnListIndexHHH18771ListInitializerTest": "passed"
+        },
+        "summary": {
+          "passed": 1,
+          "failed": 0,
+          "skipped": 0,
+          "total": 1
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "org.hibernate.orm.test.mapping.collections.OrderColumnListIndexHHH18771ListInitializerTest#testLifecycle"
+        ],
+        "baseline_total": 0,
+        "patched_total": 1,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 1,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-hibernate-orm-helper",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 2398,
+        "output": 363
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 0,
+    "target_patch_bytes": 6253,
+    "patch_exact_match": false,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "hibernate-orm-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "org.hibernate.orm.test.mapping.collections.OrderColumnListIndexHHH18771ListInitializerTest#testLifecycle"
+      ],
+      "baseline_total": 0,
+      "patched_total": 1,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 1,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

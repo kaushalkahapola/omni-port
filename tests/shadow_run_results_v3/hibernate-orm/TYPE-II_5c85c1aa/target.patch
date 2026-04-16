@@ -1,0 +1,159 @@
+commit fc84bf7ad64cd0b6c0cf4e7ea842c1f7e88ef16d
+Author: Peter Bambazek <peter.bambazek@gmail.com>
+Date:   Wed Jun 11 17:40:38 2025 +0200
+
+    HHH-18837 Oracle epoch extraction doesn't work with dates
+
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/OracleDialect.java b/hibernate-core/src/main/java/org/hibernate/dialect/OracleDialect.java
+index 1b9b313b71..3b2348761c 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/OracleDialect.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/OracleDialect.java
+@@ -25,6 +25,7 @@
+ import org.hibernate.dialect.aggregate.OracleAggregateSupport;
+ import org.hibernate.dialect.function.CommonFunctionFactory;
+ import org.hibernate.dialect.function.ModeStatsModeEmulation;
++import org.hibernate.dialect.function.OracleExtractFunction;
+ import org.hibernate.dialect.function.OracleTruncFunction;
+ import org.hibernate.dialect.identity.IdentityColumnSupport;
+ import org.hibernate.dialect.identity.Oracle12cIdentityColumnSupport;
+@@ -386,6 +387,11 @@ public void initializeFunctionRegistry(FunctionContributions functionContributio
+ 		functionFactory.arrayTrim_oracle();
+ 		functionFactory.arrayFill_oracle();
+ 		functionFactory.arrayToString_oracle();
++
++		functionContributions.getFunctionRegistry().register(
++				"extract",
++				new OracleExtractFunction( this, typeConfiguration )
++		);
+ 	}
+ 
+ 	@Override
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/function/ExtractFunction.java b/hibernate-core/src/main/java/org/hibernate/dialect/function/ExtractFunction.java
+index dd4cae71df..827e0d52a0 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/function/ExtractFunction.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/function/ExtractFunction.java
+@@ -50,7 +50,7 @@
+  */
+ public class ExtractFunction extends AbstractSqmFunctionDescriptor implements FunctionRenderer {
+ 
+-	private final Dialect dialect;
++	final Dialect dialect;
+ 
+ 	public ExtractFunction(Dialect dialect, TypeConfiguration typeConfiguration) {
+ 		super(
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/function/OracleExtractFunction.java b/hibernate-core/src/main/java/org/hibernate/dialect/function/OracleExtractFunction.java
+new file mode 100644
+index 0000000000..d89e0ca509
+--- /dev/null
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/function/OracleExtractFunction.java
+@@ -0,0 +1,55 @@
++/*
++ * Hibernate, Relational Persistence for Idiomatic Java
++ *
++ * License: GNU Lesser General Public License (LGPL), version 2.1 or later.
++ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
++ */
++package org.hibernate.dialect.function;
++
++import jakarta.persistence.TemporalType;
++import org.hibernate.dialect.Dialect;
++import org.hibernate.metamodel.mapping.JdbcMappingContainer;
++import org.hibernate.query.ReturnableType;
++import org.hibernate.query.sqm.TemporalUnit;
++import org.hibernate.query.sqm.produce.function.internal.PatternRenderer;
++import org.hibernate.sql.ast.SqlAstTranslator;
++import org.hibernate.sql.ast.spi.SqlAppender;
++import org.hibernate.sql.ast.tree.SqlAstNode;
++import org.hibernate.sql.ast.tree.expression.Expression;
++import org.hibernate.sql.ast.tree.expression.ExtractUnit;
++import org.hibernate.type.spi.TypeConfiguration;
++
++import java.util.List;
++
++import static org.hibernate.query.sqm.TemporalUnit.EPOCH;
++import static org.hibernate.type.spi.TypeConfiguration.getSqlTemporalType;
++
++public class OracleExtractFunction extends ExtractFunction {
++	public OracleExtractFunction(Dialect dialect, TypeConfiguration typeConfiguration) {
++		super( dialect, typeConfiguration );
++	}
++
++	@Override
++	public void render(
++			SqlAppender sqlAppender,
++			List<? extends SqlAstNode> sqlAstArguments,
++			ReturnableType<?> returnType,
++			SqlAstTranslator<?> walker) {
++		new PatternRenderer( extractPattern( sqlAstArguments ) ).render( sqlAppender, sqlAstArguments, walker );
++	}
++
++	@SuppressWarnings("deprecation")
++	private String extractPattern(List<? extends SqlAstNode> sqlAstArguments) {
++		final ExtractUnit field = (ExtractUnit) sqlAstArguments.get( 0 );
++		final TemporalUnit unit = field.getUnit();
++		if ( unit == EPOCH ) {
++			final Expression expression = (Expression) sqlAstArguments.get( 1 );
++			final JdbcMappingContainer type = expression.getExpressionType();
++			final TemporalType temporalType = type != null ? getSqlTemporalType( type ) : null;
++			if ( temporalType == TemporalType.DATE ) {
++				return "trunc((cast(from_tz(cast(?2 as timestamp),'UTC') as date) - date '1970-1-1')*86400)";
++			}
++		}
++		return dialect.extractPattern( unit );
++	}
++}
+diff --git a/hibernate-core/src/test/java/org/hibernate/orm/test/query/hql/FunctionTests.java b/hibernate-core/src/test/java/org/hibernate/orm/test/query/hql/FunctionTests.java
+index 92b4355d84..f8e3f9dfc7 100644
+--- a/hibernate-core/src/test/java/org/hibernate/orm/test/query/hql/FunctionTests.java
++++ b/hibernate-core/src/test/java/org/hibernate/orm/test/query/hql/FunctionTests.java
+@@ -57,7 +57,9 @@
+ import java.time.LocalDateTime;
+ import java.time.LocalTime;
+ import java.time.OffsetDateTime;
++import java.time.ZoneId;
+ import java.time.ZoneOffset;
++import java.time.ZonedDateTime;
+ import java.time.temporal.ChronoUnit;
+ import java.util.Date;
+ import java.util.List;
+@@ -2572,4 +2574,40 @@ public void testCtidColumnFunction(SessionFactoryScope scope) {
+ 					.getSingleResultOrNull();
+ 		});
+ 	}
++
++	@Test
++	@JiraKey("HHH-18837")
++	public void testEpochFunction(SessionFactoryScope scope) {
++
++		LocalDate someLocalDate = LocalDate.of( 2013, 7, 5 );
++		LocalDateTime someLocalDateTime = someLocalDate.atStartOfDay();
++		Date someDate = Date.from( someLocalDateTime.toInstant( ZoneOffset.UTC ) );
++		ZonedDateTime someZonedDateTime = ZonedDateTime.of( someLocalDate, LocalTime.MIN,
++															ZoneId.of( "Europe/Vienna" ) );
++
++		scope.inTransaction( session -> {
++			EntityOfBasics entityOfBasics = new EntityOfBasics();
++			entityOfBasics.setId( 124 );
++			entityOfBasics.setTheDate( someDate );
++			entityOfBasics.setTheLocalDate( someLocalDate );
++			entityOfBasics.setTheLocalDateTime( someLocalDateTime );
++			entityOfBasics.setTheZonedDateTime( someZonedDateTime );
++			session.persist( entityOfBasics );
++
++			assertEquals( someDate.toInstant().toEpochMilli() / 1000,
++						  session.createSelectionQuery( "select epoch(a.theDate) from EntityOfBasics a where id=124",
++														Long.class ).getSingleResult() );
++			assertEquals( someLocalDate.atStartOfDay( ZoneOffset.UTC ).toInstant().toEpochMilli() / 1000,
++						  session.createSelectionQuery( "select epoch(a.theLocalDate) from EntityOfBasics a where id=124",
++														Long.class ).getSingleResult() );
++			assertEquals( someLocalDateTime.toEpochSecond( ZoneOffset.UTC ), session.createSelectionQuery(
++					"select epoch(a.theLocalDateTime) from EntityOfBasics a where id=124",
++					Long.class ).getSingleResult() );
++			assertEquals( someZonedDateTime.toEpochSecond(), session.createSelectionQuery(
++					"select epoch(a.theZonedDateTime) from EntityOfBasics a where id=124",
++					Long.class ).getSingleResult() );
++
++			session.remove( entityOfBasics );
++		} );
++	}
+ }

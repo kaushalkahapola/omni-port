@@ -1,0 +1,89 @@
+diff --git a/hibernate-core/src/main/java/org/hibernate/boot/model/source/internal/hbm/ModelBinder.java b/hibernate-core/src/main/java/org/hibernate/boot/model/source/internal/hbm/ModelBinder.java
+index 544c38379a..3a27c76e82 100644
+--- a/hibernate-core/src/main/java/org/hibernate/boot/model/source/internal/hbm/ModelBinder.java
++++ b/hibernate-core/src/main/java/org/hibernate/boot/model/source/internal/hbm/ModelBinder.java
+@@ -155,6 +155,7 @@ import org.hibernate.type.BasicType;
+ import org.hibernate.type.CustomType;
+ import org.hibernate.type.ForeignKeyDirection;
+ import org.hibernate.type.StandardBasicTypes;
++import org.hibernate.type.internal.BasicTypeImpl;
+ import org.hibernate.type.spi.TypeConfiguration;
+ import org.hibernate.usertype.CompositeUserType;
+ import org.hibernate.usertype.ParameterizedType;
+@@ -1829,7 +1830,6 @@ public class ModelBinder {
+ 				context -> implicitNamingStrategy.determineBasicColumnName( attributeSource )
+ 		);
+ 
+-
+ 		prepareValueTypeViaReflection(
+ 				sourceDocument,
+ 				value,
+@@ -1877,11 +1877,14 @@ public class ModelBinder {
+ 		// Resolves whether the property is LOB based on the type attribute on the attribute property source.
+ 		// Essentially this expects the type to map to a CLOB/NCLOB/BLOB sql type internally and compares.
+ 		if ( !value.isLob() && value.getTypeName() != null ) {
+-			final BasicType<?> basicType = attributeSource.getBuildingContext()
+-					.getMetadataCollector()
+-					.getTypeConfiguration()
+-					.getBasicTypeRegistry()
+-					.getRegisteredType( value.getTypeName() );
++			final String typeName = value.getTypeName();
++			final MetadataBuildingContext context = attributeSource.getBuildingContext();
++			final BasicType<?> basicType =
++					typeName.startsWith( BasicTypeImpl.EXTERNALIZED_PREFIX )
++							? context.getBootstrapContext().resolveAdHocBasicType( typeName )
++							: context.getMetadataCollector().getTypeConfiguration()
++									.getBasicTypeRegistry().getRegisteredType( typeName );
++
+ 			if ( basicType instanceof AbstractSingleColumnStandardBasicType ) {
+ 				if ( isLob( basicType.getJdbcType().getDdlTypeCode(), null ) ) {
+ 					value.makeLob();
+@@ -2034,7 +2037,6 @@ public class ModelBinder {
+ 				oneToOneBinding
+ 		);
+ 
+-
+ 		if ( oneToOneSource.isConstrained() ) {
+ 			if ( oneToOneSource.getCascadeStyleName() != null
+ 					&& oneToOneSource.getCascadeStyleName().contains( "delete-orphan" ) ) {
+@@ -2062,7 +2064,6 @@ public class ModelBinder {
+ 		);
+ 		oneToOneBinding.setUnwrapProxy( oneToOneSource.getFetchCharacteristics().isUnwrapProxies() );
+ 
+-
+ 		if ( isNotEmpty( oneToOneSource.getReferencedEntityAttributeName() ) ) {
+ 			oneToOneBinding.setReferencedPropertyName( oneToOneSource.getReferencedEntityAttributeName() );
+ 			oneToOneBinding.setReferenceToPrimaryKey( false );
+@@ -3024,8 +3025,6 @@ public class ModelBinder {
+ 		context.getMetadataCollector().addSecondPass( secondPass );
+ 	}
+ 
+-
+-
+ 	public static final class DelayedPropertyReferenceHandlerImpl implements InFlightMetadataCollector.DelayedPropertyReferenceHandler {
+ 		public final String referencedEntityName;
+ 		public final String referencedPropertyName;
+@@ -3087,7 +3086,6 @@ public class ModelBinder {
+ 		}
+ 	}
+ 
+-
+ 	private abstract class AbstractPluralAttributeSecondPass implements SecondPass {
+ 		private final MappingDocument mappingDocument;
+ 		private final PluralAttributeSource pluralAttributeSource;
+@@ -3236,7 +3234,6 @@ public class ModelBinder {
+ 				collectionBinding.setCollectionTable( collectionTable );
+ 			}
+ 
+-
+ 			if ( log.isDebugEnabled() ) {
+ 				log.debugf( "Mapping collection: %s -> %s", collectionBinding.getRole(), collectionBinding.getCollectionTable().getName() );
+ 			}
+@@ -4091,7 +4088,6 @@ public class ModelBinder {
+ 		private final String referencedEntityName;
+ 		private final String referencedEntityAttributeName;
+ 
+-
+ 		public ManyToOneFkSecondPass(
+ 				MappingDocument mappingDocument,
+ 				SingularAttributeSourceManyToOne manyToOneSource,

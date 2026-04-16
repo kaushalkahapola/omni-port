@@ -222,10 +222,11 @@ def _extract_class_name_from_target(t: str) -> str:
     if "--tests " in t:
         return t.split("--tests ", 1)[1].strip()
     if ":" in t:
-        # Check if the part after the last colon looks like a class name
-        # (contains dots and starts with uppercase) vs a task name (lowercase)
+        # Check if the part after the last colon looks like a fully-qualified class name
+        # (contains dots, indicating package.ClassName) vs a task name (no dots)
         last_part = t.rsplit(":", 1)[1]
-        if last_part and last_part[0].isupper() and "." in last_part:
+        if last_part and "." in last_part:
+            # Looks like a fully-qualified class name (e.g. "org.pkg.FooTest")
             return last_part
         # It's a task name (e.g. "test", "integTest") — module-level run
         return ""

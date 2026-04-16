@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-13T10:43:30.163627",
+  "run_timestamp": "2026-04-16T05:17:09.434122",
   "repo": "hibernate-orm",
   "patch_type": "TYPE-V",
   "original_commit": "6cfdc641535daf0b43f7b75c66b6998164f53f88",
   "backport_commit": "5dd29f8a006df9bf7accc848a208e6256b7790bf",
   "description": "main \u2192 6.6",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.52,
+      "elapsed_s": 1.44,
       "error": null,
       "java_hunks": 2,
       "aux_hunks": 1,
@@ -34,12 +35,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.84,
+      "elapsed_s": 3.14,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.MIXED",
+        "patch_type": "PatchType.TYPE_II",
         "confidence": 0.95,
-        "reasoning": "The patch consists of two main hunks. The first hunk modifies the method isBidirectionalAttributeName with a relatively straightforward logic change and addition of a helper method areEqual. This hunk was found via 'git_exact' with confidence 1.0, indicating a close match to the target branch, suggesting a TYPE_I or TYPE_II complexity. The second hunk adds a new test class, which is a new file addition and does not modify existing code structure. The localization for the second hunk was found via 'fuzzy' with confidence 0.96, indicating some formatting or minor structural differences, suggesting TYPE_II complexity. Since the patch includes both an exact match modification and a fuzzy matched addition, the overall classification is MIXED. The patch involves some structural understanding but no deep refactoring or redesign, so token budget is moderate at 850 tokens. The target file is not auto-generated as it is a core Hibernate source file.",
+        "reasoning": "The patch modifies a method by adding additional conditions and a new helper method to compare foreign key parts. The first hunk is an exact match with high confidence, but the second hunk was found via fuzzy matching with slightly lower confidence, indicating some formatting or minor structural drift. The changes involve adding logic and a new method, but no deep structural refactoring or API redesign. Therefore, the patch complexity aligns with TYPE_II, involving whitespace/formatting drift and minor structural additions requiring fuzzy matching. The token budget estimate accounts for the code changes and the new test class addition, which is moderate in size but not overly complex.",
         "is_auto_generated": false
       }
     },
@@ -56,12 +57,12 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 10.44,
+      "elapsed_s": 11.81,
       "error": null,
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 58.04,
+      "elapsed_s": 47.09,
       "error": null,
       "refactored_count": 1
     },
@@ -125,21 +126,21 @@
         {
           "hunk_index": 0,
           "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
-          "what_changed": "Replaced import of TableDetails with import of ValuedModelPart in the import statements.",
+          "what_changed": "Replaced the import of TableDetails with an import of ValuedModelPart, adjusting the imported classes related to model parts.",
           "where_in_code": "import statements at the top of PluralAttributeMappingImpl.java",
-          "intent": "To update dependencies by replacing TableDetails import with ValuedModelPart, likely reflecting a change in the model part usage or API.",
+          "intent": "To update the dependencies to use ValuedModelPart instead of TableDetails, likely reflecting a refactor or API change in the model part hierarchy.",
           "change_type": "modify_import",
           "key_symbols": [
-            "TableDetails",
-            "ValuedModelPart"
+            "ValuedModelPart",
+            "TableDetails"
           ]
         },
         {
           "hunk_index": 1,
           "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
-          "what_changed": "Modified the logic of isBidirectionalAttributeName method to add more precise checks for bidirectionality by verifying the foreign key nature, one-to-many collection type, and detailed equality of foreign key parts; also added a helper method areEqual to compare ValuedModelPart instances in detail.",
-          "where_in_code": "class PluralAttributeMappingImpl, method isBidirectionalAttributeName and new private method areEqual",
-          "intent": "To improve the accuracy of detecting bidirectional attribute names by ensuring the foreign key parts match exactly and the relationship is one-to-many, preventing false positives in bidirectionality detection.",
+          "what_changed": "Modified the logic of the method isBidirectionalAttributeName to include additional checks verifying that the foreign key sides and key parts match exactly for one-to-many collections. Added a new private helper method areEqual to compare ValuedModelPart instances in detail. Also changed the string comparison from endsWith to equals for the bidirectional attribute name check.",
+          "where_in_code": "class PluralAttributeMappingImpl, method isBidirectionalAttributeName and added method areEqual",
+          "intent": "To improve the accuracy of detecting bidirectional attribute names by ensuring the foreign key sides and key parts correspond precisely, preventing false positives in bidirectional relationship detection.",
           "change_type": "modify_logic",
           "key_symbols": [
             "isBidirectionalAttributeName",
@@ -192,16 +193,16 @@
       ]
     },
     "agent9_fallback_2": {
-      "fallback_status": "failed",
+      "fallback_status": "applied",
       "fallback_attempts": 2,
-      "synthesized_count": 0,
+      "synthesized_count": 1,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
           "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
-          "what_changed": "Replaced import of TableDetails with import of ValuedModelPart in the imports section.",
-          "where_in_code": "imports in PluralAttributeMappingImpl.java",
-          "intent": "To update the imported classes to include ValuedModelPart, likely to support new logic involving model parts, and remove an unused or replaced import.",
+          "what_changed": "Replaced import of TableDetails with import of ValuedModelPart among other imports.",
+          "where_in_code": "import statements in PluralAttributeMappingImpl.java",
+          "intent": "To update the imported classes to reflect changes in the codebase dependencies, likely to support new logic involving ValuedModelPart.",
           "change_type": "modify_import",
           "key_symbols": [
             "ValuedModelPart",
@@ -211,9 +212,9 @@
         {
           "hunk_index": 1,
           "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
-          "what_changed": "Modified the isBidirectionalAttributeName method to add more precise checks for bidirectionality by verifying that the foreign key side nature is KEY, the collection is one-to-many, and that both the target and key parts of the foreign key descriptors are equal. Added a new private helper method areEqual to compare two ValuedModelPart instances in detail. Also changed the string comparison from endsWith to equals for the bidirectional attribute name check.",
-          "where_in_code": "class PluralAttributeMappingImpl, method isBidirectionalAttributeName, added method areEqual",
-          "intent": "To improve the accuracy of detecting bidirectional attribute names by ensuring the foreign key relationships and their components match exactly, preventing false positives and strengthening the semantic correctness of bidirectional association detection.",
+          "what_changed": "Modified the logic of isBidirectionalAttributeName method to add more precise conditions checking the nature of the foreign key, collection type, and detailed equality of key parts; added a new helper method areEqual to compare ValuedModelPart instances in detail.",
+          "where_in_code": "PluralAttributeMappingImpl class, isBidirectionalAttributeName method, and added areEqual method",
+          "intent": "To improve the accuracy of determining whether an attribute name is bidirectional by ensuring the foreign key sides and key parts match exactly, especially for one-to-many collections, thus preventing incorrect bidirectional assumptions.",
           "change_type": "modify_logic",
           "key_symbols": [
             "isBidirectionalAttributeName",
@@ -224,45 +225,46 @@
       ]
     },
     "agent8_syntax_repair_fallback_2": {
-      "syntax_repair_status": "skipped",
+      "syntax_repair_status": "clean",
       "syntax_repair_attempts": 0,
-      "syntax_repair_log": []
+      "syntax_repair_log": [
+        {
+          "file_path": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "outcome": "clean"
+        }
+      ]
     },
     "agent7_validator_retry2": {
-      "validation_passed": true,
-      "validation_failure_category": "",
-      "validation_error_context": "",
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (hibernate-orm-helper) \u2014 compile errors:\nhibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:351: error: cannot find symbol\nhibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:796: error: cannot find symbol\nhibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:807: error: cannot find symbol",
       "validation_attempts": 3,
-      "retry_files": [],
-      "build_success": true,
+      "retry_files": [
+        "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java"
+      ],
+      "build_success": false,
       "build_mode": "hibernate-orm-helper",
-      "test_success": true,
-      "test_mode": "hibernate-orm-helper",
-      "test_state": {
-        "xml_reports": [],
-        "target_classes": [
-          "org.hibernate.metamodel.mapping.internal.*",
-          "org.hibernate.orm.test.mapping.collections.BidirectionalOneToManyTest",
-          "org.hibernate.orm.test.metamodel.mapping.internal.*",
-          "org.hibernate.test.metamodel.mapping.internal.*"
-        ],
-        "test_cases": {},
-        "classes": {},
-        "summary": {
-          "passed": 0,
-          "failed": 0,
-          "skipped": 0,
-          "total": 0
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "line": 351,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "line": 796,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java",
+          "line": 807,
+          "message": "error: cannot find symbol"
         }
-      },
-      "test_state_transition": {
-        "valid_backport_signal": false,
-        "fail_to_pass": [],
-        "pass_to_fail": [],
-        "newly_passing": [],
-        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
-      },
-      "compile_errors": []
+      ]
     }
   },
   "summary": {
@@ -271,7 +273,7 @@
     "phase0_baseline": {
       "mode": "baseline-hibernate-orm-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 2,
@@ -280,7 +282,7 @@
       0,
       1
     ],
-    "tokens_used": 55759,
+    "tokens_used": 50978,
     "llm_token_usage": {
       "agent2_classifier": {
         "input": 0,
@@ -288,11 +290,11 @@
       },
       "agent4_namespace": {
         "input": 3492,
-        "output": 638
+        "output": 615
       },
       "agent5_structural": {
         "input": 1453,
-        "output": 2062
+        "output": 1814
       },
       "agent6_synthesizer": {
         "input": 0,
@@ -303,28 +305,34 @@
         "output": 0
       },
       "agent9_fallback": {
-        "input": 52002,
-        "output": 3757
+        "input": 46184,
+        "output": 4794
       }
     },
     "synthesis_status": "success",
     "applied_on_disk_ag3": 1,
-    "synthesized_count": 0,
+    "synthesized_count": 1,
     "failed_hunks_total": 0,
-    "syntax_repair_status": "skipped",
-    "fallback_status": "failed",
+    "syntax_repair_status": "clean",
+    "fallback_status": "applied",
     "fallback_attempts": 2,
     "retry_contexts": [
       {
         "error_type": "unknown",
-        "error_message": "/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:254: error: Override is not a repeatable annotation interface\n> Task :hibernate-core:compileJava FAILED\nBUILD FAILED in 1m 50s",
+        "error_message": "/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:254: error: Override is not a repeatable annotation interface\n> Task :hibernate-core:compileJava FAILED\nBUILD FAILED in 2m 13s",
         "attempt_count": 1,
         "suggested_action": "inspect_and_retry"
       },
       {
         "error_type": "api_mismatch",
-        "error_message": "/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:351: error: cannot find symbol\n  symbol:   class TableDetails\n/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:796: error: cannot find symbol\n  symbol:   class TableDetails\n/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:807: error: cannot find symbol\n  symbol:   class TableDetails\n> Task :hibernate-core:compileJava FAILED\nBUILD FAILED in 2m 10s",
+        "error_message": "/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:351: error: cannot find symbol\n  symbol:   class TableDetails\n/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:796: error: cannot find symbol\n  symbol:   class TableDetails\n/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:807: error: cannot find symbol\n  symbol:   class TableDetails\n> Task :hibernate-core:compileJava FAILED\nBUILD FAILED in 1m 55s",
         "attempt_count": 2,
+        "suggested_action": "route_to_namespace_or_structural"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:351: error: cannot find symbol\n  symbol:   class TableDetails\n/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:796: error: cannot find symbol\n  symbol:   class TableDetails\n/repo/hibernate-core/src/main/java/org/hibernate/metamodel/mapping/internal/PluralAttributeMappingImpl.java:807: error: cannot find symbol\n  symbol:   class TableDetails\n> Task :hibernate-core:compileJava FAILED\nBUILD FAILED in 1m 54s",
+        "attempt_count": 3,
         "suggested_action": "route_to_namespace_or_structural"
       }
     ],
@@ -332,18 +340,12 @@
     "generated_patch_bytes": 3479,
     "target_patch_bytes": 7301,
     "patch_exact_match": false,
-    "validation_passed": true,
-    "validation_failure_category": "",
-    "build_success": true,
-    "test_success": true,
-    "test_mode": "hibernate-orm-helper",
-    "test_transition": {
-      "valid_backport_signal": false,
-      "fail_to_pass": [],
-      "pass_to_fail": [],
-      "newly_passing": [],
-      "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
-    },
+    "validation_passed": false,
+    "validation_failure_category": "api_mismatch",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
     "fail_to_pass_count": 0,
     "newly_passing_count": 0,
     "pass_to_fail_count": 0,
