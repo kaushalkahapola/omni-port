@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-11T16:04:33.302350",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "dcbd23f6208c99f85aa82d287d75a8eb5955000f",
   "backport_commit": "20840290fefcb20a549fe8240dfe3ffc1b4c7b82",
   "description": "master \u2192 5.8",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 1.74,
+      "elapsed_s": 2.8,
       "error": null,
       "java_hunks": 2,
       "aux_hunks": 3,
@@ -34,12 +35,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.73,
+      "elapsed_s": 3.72,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.85,
-        "reasoning": "The patch modifies the ObjectIndexer class by changing when and how it updates its internal children references, moving from immediate updates during collectSchemaUpdates to deferred updates during updateTargets. This involves structural changes to the class's behavior and method implementations, including adding new logic to handle dynamic nested object columns and updating references accordingly. The patch also includes additions to the test suite to verify the new behavior. The localization evidence shows that the main code changes were found via 'gumtree_ast' and 'fuzzy' matching with moderate to high confidence, indicating structural changes rather than trivial string replacements or formatting fixes. Therefore, the patch complexity aligns with TYPE_III, involving structural changes but not deep refactoring or complete redesign. The confidence is high but not absolute due to some fuzzy matching and the complexity of the changes. The token budget estimate reflects the moderate complexity and the need to understand and adapt structural code changes in the backport.",
+        "reasoning": "The patch modifies the ObjectIndexer class by changing when and how it updates its internal children references, moving from immediate updates during collectSchemaUpdates to deferred updates during updateTargets. This involves structural changes to the class's behavior and method logic, including adding new loops and conditional logic to handle dynamic nested objects correctly. The patch also includes additions to test classes to verify the new behavior, indicating a non-trivial structural change rather than a simple string or whitespace fix. The localization evidence shows the main code changes were found via 'gumtree_ast' and 'fuzzy' matching, supporting a structural change classification (TYPE_III). The confidence is high but not absolute due to some fuzzy matching and the complexity of the changes. The token budget estimate is moderate to high due to the complexity and size of the patch and the need to understand the structural implications for backporting.",
         "is_auto_generated": false
       }
     },
@@ -50,7 +51,7 @@
       "applied_hunks": []
     },
     "agent4_namespace": {
-      "elapsed_s": 29.41,
+      "elapsed_s": 24.55,
       "error": null,
       "adapted_count": 2
     },
@@ -69,7 +70,7 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
           "old_string": "\n    @Override\n    public void updateTargets(Function<ColumnIdent, Reference> getRef) {\n        for (Map.Entry<String, Reference> entry : childColumns.entrySet()) {\n            var innerName = entry.getKey();\n            var oldChildRef = entry.getValue();\n            var newChildRef = getRef.apply(oldChildRef.column());\n            if (oldChildRef.equals(newChildRef) == false) {\n                entry.setValue(newChildRef);\n                if (newChildRef.granularity() != RowGranularity.PARTITION) {\n                    //noinspection unchecked\n                    ValueIndexer<Object> newIndexer = (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(\n                            newChildRef.ident().tableIdent(),\n                            newChildRef,\n                            getRef\n                    );\n                    innerIndexers.put(innerName, newIndexer);\n                }\n            }\n        }\n        for (var indexer : innerIndexers.values()) {\n            indexer.updateTargets(getRef);\n        }\n    }",
-          "new_string": "\n    @Override\n    public void updateTargets(Function<ColumnIdent, Reference> getRef) {\n        ColumnIdent objectColumn = ref.column();\n        Reference updatedSelf = getRef.apply(objectColumn);\n        ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());\n        for (Map.Entry<String, Reference> entry : childColumns.entrySet()) {\n            var innerName = entry.getKey();\n            var oldChildRef = entry.getValue();\n            var newChildRef = getRef.apply(oldChildRef.column());\n            if (oldChildRef.equals(newChildRef) == false) {\n                entry.setValue(newChildRef);\n                if (newChildRef.granularity() != RowGranularity.PARTITION) {\n                    //noinspection unchecked\n                    ValueIndexer<Object> newIndexer = (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(\n                        table,\n                        newChildRef,\n                        getRef\n                    );\n                    innerIndexers.put(innerName, newIndexer);\n                }\n            }\n        }\n        for (var indexer : innerIndexers.values()) {\n            indexer.updateTargets(getRef);\n        }\n        for (String innerColumn : objectType.innerTypes().keySet()) {\n            if (!childColumns.containsKey(innerColumn)) {\n                Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));\n                //noinspection unchecked\n                ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(\n                    table,\n                    childRef,\n                    getRef\n                );\n                childColumns.put(innerColumn, childRef);\n                innerIndexers.put(innerColumn, childIndexer);\n            }\n        }\n    }",
+          "new_string": "\n    @Override\n    public void updateTargets(Function<ColumnIdent, Reference> getRef) {\n        ColumnIdent objectColumn = column;\n        Reference updatedSelf = getRef.apply(objectColumn);\n        ObjectType objectType = (ObjectType) ArrayType.unnest(updatedSelf.valueType());\n        for (var entry : childColumns.entrySet()) {\n            String innerName = entry.getKey();\n            Reference oldChildRef = entry.getValue();\n            Reference newChildRef = getRef.apply(oldChildRef.column());\n            if (oldChildRef.equals(newChildRef) == false) {\n                entry.setValue(newChildRef);\n                if (newChildRef.granularity() != RowGranularity.PARTITION) {\n                    //noinspection unchecked\n                    ValueIndexer<Object> newIndexer = (ValueIndexer<Object>) newChildRef.valueType().valueIndexer(\n                        table,\n                        newChildRef,\n                        getRef\n                    );\n                    innerIndexers.put(innerName, newIndexer);\n                }\n            }\n        }\n        for (var indexer : innerIndexers.values()) {\n            indexer.updateTargets(getRef);\n        }\n        for (String innerColumn : objectType.innerTypes().keySet()) {\n            if (!childColumns.containsKey(innerColumn)) {\n                Reference childRef = getRef.apply(objectColumn.getChild(innerColumn));\n                //noinspection unchecked\n                ValueIndexer<Object> childIndexer = (ValueIndexer<Object>) childRef.valueType().valueIndexer(\n                    table,\n                    childRef,\n                    getRef\n                );\n                childColumns.put(innerColumn, childRef);\n                innerIndexers.put(innerColumn, childIndexer);\n            }\n        }\n    }",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -77,7 +78,7 @@
         {
           "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
           "old_string": "            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(\n                table,\n                newColumn,\n                getRef\n            );\n            innerIndexers.put(innerName, valueIndexer);\n            childColumns.put(innerName, newColumn);\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n                synthetics\n            );\n        }\n",
-          "new_string": "            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(\n                table,\n                newColumn,\n                getRef\n            );\n            innerIndexers.put(innerName, valueIndexer);\n                newColumn,\n                getRef\n            );\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n            valueIndexer.collectSchemaUpdates(\n                innerValue,\n                onDynamicColumn,\n                synthetics\n            );\n        }\n",
+          "new_string": "            var valueIndexer = (ValueIndexer<Object>) type.valueIndexer(\n                table,\n                newColumn,\n\n                synthetics\n            );\n        }\n",
           "confidence": 1.0,
           "context_lines_included": 3,
           "verified": true
@@ -85,25 +86,85 @@
       ]
     },
     "agent8_syntax_repair": {
-      "elapsed_s": 3.99,
+      "elapsed_s": 0.02,
       "error": null,
-      "syntax_repair_status": "repaired",
-      "syntax_repair_attempts": 1,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
       "syntax_repair_log": [
         {
           "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
-          "outcome": "repaired",
-          "attempts": 1,
-          "diagnosis": "Synthesized hunk #1 contains duplicated and incomplete lines causing a parse error and missing closing braces."
+          "outcome": "clean"
         }
       ],
       "synthesized_count_after_repair": 2
     },
     "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/execution/dml/ObjectIndexer.java:279: error: incompatible types: Synthetics cannot be converted to Function<ColumnIdent,Reference>",
+      "validation_attempts": 1,
+      "retry_files": [
+        "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
+          "line": 279,
+          "message": "error: incompatible types: Synthetics cannot be converted to Function<ColumnIdent,Reference>"
+        }
+      ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "failed",
+      "fallback_attempts": 1,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
+          "what_changed": "The updateTargets method was modified to first refresh the reference of the current object column and its type, then update existing children as before, and finally add any missing child columns based on the inner types of the object's type.",
+          "where_in_code": "class ObjectIndexer, method updateTargets",
+          "intent": "To ensure that the ObjectIndexer keeps its children in sync with the current schema by not only updating existing child references but also adding new child columns dynamically when they appear in the object's type, improving schema consistency during updates.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "updateTargets",
+            "children",
+            "ObjectType",
+            "getRef"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/execution/dml/ObjectIndexer.java",
+          "what_changed": "Removed the insertion of new child entries into the 'children' map after creating a new Child instance; the code now only updates innerIndexers and childColumns without modifying 'children' at this point.",
+          "where_in_code": "class ObjectIndexer, within a method handling schema updates (exact method not shown)",
+          "intent": "To avoid prematurely adding new child references to the 'children' map during schema update collection, likely to defer or control when children are added, preventing inconsistent state or duplication.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "children",
+            "innerIndexers",
+            "childColumns",
+            "collectSchemaUpdates"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
       "validation_passed": true,
       "validation_failure_category": "",
       "validation_error_context": "",
-      "validation_attempts": 1,
+      "validation_attempts": 2,
       "retry_files": [],
       "build_success": true,
       "build_mode": "crate-helper",
@@ -114,67 +175,64 @@
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.execution.dml.IndexerTest.xml",
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.integrationtests.DynamicMappingUpdateITest.xml"
         ],
-        "target_classes": [
-          "DynamicMappingUpdateITest",
-          "IndexerTest"
-        ],
+        "target_classes": [],
         "test_cases": {
-          "io.crate.execution.dml.IndexerTest#test_can_index_fulltext_column": "passed",
-          "io.crate.execution.dml.IndexerTest#test_index_fails_if_not_null_column_has_null_value": "passed",
-          "io.crate.execution.dml.IndexerTest#test_empty_arrays_together_with_another_field_added_as_new_cols_with_dynamic_policy": "passed",
-          "io.crate.execution.dml.IndexerTest#test_translog_indexer_can_read_source_with_oids": "passed",
-          "io.crate.execution.dml.IndexerTest#test_can_add_dynamic_ref_as_new_top_level_column": "passed",
-          "io.crate.execution.dml.IndexerTest#test_empty_arrays_are_not_prefixed_as_unknown_on_tables_created_less_5_5": "passed",
-          "io.crate.execution.dml.IndexerTest#test_generated_partitioned_column_is_not_indexed_or_included_in_source": "passed",
-          "io.crate.execution.dml.IndexerTest#test_cannot_add_dynamic_column_on_strict_table": "passed",
-          "io.crate.execution.dml.IndexerTest#test_can_have_ft_index_for_array": "passed",
-          "io.crate.execution.dml.IndexerTest#test_does_not_allow_new_columns_in_strict_object": "passed",
-          "io.crate.execution.dml.IndexerTest#test_validates_user_provided_value_for_generated_columns": "passed",
-          "io.crate.execution.dml.IndexerTest#test_adds_generated_column": "passed",
-          "io.crate.execution.dml.IndexerTest#test_ignored_object_child_columns_are_prefixed": "passed",
-          "io.crate.execution.dml.IndexerTest#test_source_includes_null_values_in_arrays": "passed",
-          "io.crate.execution.dml.IndexerTest#test_empty_arrays_are_prefixed_as_unknown": "passed",
-          "io.crate.execution.dml.IndexerTest#test_check_constraint_on_object_sub_column_is_verified": "passed",
-          "io.crate.execution.dml.IndexerTest#test_can_generate_return_values": "passed",
-          "io.crate.execution.dml.IndexerTest#test_indexing_number_results_in_same_fields_as_document_mapper_if_not_indexed": "passed",
-          "io.crate.execution.dml.IndexerTest#test_indexing_geo_shape_results_in_same_fields_as_document_mapper": "passed",
-          "io.crate.execution.dml.IndexerTest#test_ignored_object_values_are_ignored_and_added_to_source": "passed",
-          "io.crate.execution.dml.IndexerTest#test_default_and_generated_column_within_object": "passed",
-          "io.crate.execution.dml.IndexerTest#test_fields_order_in_source_is_deterministic": "passed",
-          "io.crate.execution.dml.IndexerTest#test_default_for_full_object": "skipped",
-          "io.crate.execution.dml.IndexerTest#test_empty_array_and_array_with_nulls_does_not_result_in_new_column": "passed",
-          "io.crate.execution.dml.IndexerTest#test_index_fails_if_check_constraint_returns_false": "passed",
-          "io.crate.execution.dml.IndexerTest#test_indexing_boolean_results_in_same_fields_as_document_mapper_if_not_indexed": "passed",
-          "io.crate.execution.dml.IndexerTest#test_adds_non_deterministic_sub_columns_when_root_is_not_in_targets": "passed",
-          "io.crate.execution.dml.IndexerTest#test_can_index_all_storable_types": "passed",
-          "io.crate.execution.dml.IndexerTest#test_handles_type_conflicts_in_dynamic_nested_objects": "error",
-          "io.crate.execution.dml.IndexerTest#test_adds_non_deterministic_defaults_and_generated_columns": "passed",
-          "io.crate.execution.dml.IndexerTest#test_index_nested_array": "skipped",
-          "io.crate.execution.dml.IndexerTest#test_indexing_bitstring_results_in_same_fields_as_document_mapper_if_not_indexed": "passed",
-          "io.crate.execution.dml.IndexerTest#test_generated_column_can_refer_to_a_non_string_partitioned_by_column": "passed",
-          "io.crate.execution.dml.IndexerTest#test_dynamic_int_value_results_in_long_column": "passed",
-          "io.crate.execution.dml.IndexerTest#test_fields_are_omitted_in_source_for_null_values": "passed",
-          "io.crate.execution.dml.IndexerTest#test_indexing_ip_results_in_same_fields_as_document_mapper_if_not_indexed": "passed",
-          "io.crate.execution.dml.IndexerTest#test_adds_default_values": "passed",
-          "io.crate.execution.dml.IndexerTest#test_can_index_generated_geo_shape": "passed",
-          "io.crate.execution.dml.IndexerTest#test_leaves_out_generated_column_if_dependency_is_null": "passed",
-          "io.crate.execution.dml.IndexerTest#test_index_object_with_dynamic_column_creation": "passed",
-          "io.crate.execution.dml.IndexerTest#test_indexing_float_results_in_float_field": "passed",
           "io.crate.execution.dml.IndexerTest#test_create_dynamic_object_with_nested_columns": "passed",
-          "io.crate.execution.dml.IndexerTest#test_create_dynamic_array": "passed",
+          "io.crate.execution.dml.IndexerTest#test_adds_default_values": "passed",
+          "io.crate.execution.dml.IndexerTest#test_empty_arrays_are_prefixed_as_unknown": "passed",
+          "io.crate.execution.dml.IndexerTest#test_source_includes_null_values_in_arrays": "passed",
+          "io.crate.execution.dml.IndexerTest#test_index_fails_if_check_constraint_returns_false": "passed",
+          "io.crate.execution.dml.IndexerTest#test_empty_arrays_are_not_prefixed_as_unknown_on_tables_created_less_5_5": "passed",
+          "io.crate.execution.dml.IndexerTest#test_can_have_ft_index_for_array": "passed",
+          "io.crate.execution.dml.IndexerTest#test_index_nested_array": "skipped",
           "io.crate.execution.dml.IndexerTest#test_ignored_object_child_columns_are_not_prefixed_on_tables_created_less_5_5": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_alter_table_add_column_results_in_dynamic_mapping_updates": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_update_results_in_dynamic_mapping_updates": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_update_partitioned_table_results_in_dynamic_mapping_updates": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_copy_deep_nested_object_to_partitioned_table_results_in_dynamic_mapping_updates": "passed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_ip_results_in_same_fields_as_document_mapper_if_not_indexed": "passed",
+          "io.crate.execution.dml.IndexerTest#test_dynamic_int_value_results_in_long_column": "passed",
+          "io.crate.execution.dml.IndexerTest#test_index_object_with_dynamic_column_creation": "passed",
+          "io.crate.execution.dml.IndexerTest#test_translog_indexer_can_read_source_with_oids": "passed",
+          "io.crate.execution.dml.IndexerTest#test_index_fails_if_not_null_column_has_null_value": "passed",
+          "io.crate.execution.dml.IndexerTest#test_adds_non_deterministic_defaults_and_generated_columns": "passed",
+          "io.crate.execution.dml.IndexerTest#test_default_and_generated_column_within_object": "passed",
+          "io.crate.execution.dml.IndexerTest#test_can_index_all_storable_types": "passed",
+          "io.crate.execution.dml.IndexerTest#test_adds_generated_column": "passed",
+          "io.crate.execution.dml.IndexerTest#test_handles_type_conflicts_in_dynamic_nested_objects": "error",
+          "io.crate.execution.dml.IndexerTest#test_adds_non_deterministic_sub_columns_when_root_is_not_in_targets": "passed",
+          "io.crate.execution.dml.IndexerTest#test_default_for_full_object": "skipped",
+          "io.crate.execution.dml.IndexerTest#test_ignored_object_child_columns_are_prefixed": "passed",
+          "io.crate.execution.dml.IndexerTest#test_fields_are_omitted_in_source_for_null_values": "passed",
+          "io.crate.execution.dml.IndexerTest#test_does_not_allow_new_columns_in_strict_object": "passed",
+          "io.crate.execution.dml.IndexerTest#test_leaves_out_generated_column_if_dependency_is_null": "passed",
+          "io.crate.execution.dml.IndexerTest#test_generated_partitioned_column_is_not_indexed_or_included_in_source": "passed",
+          "io.crate.execution.dml.IndexerTest#test_can_generate_return_values": "passed",
+          "io.crate.execution.dml.IndexerTest#test_ignored_object_values_are_ignored_and_added_to_source": "passed",
+          "io.crate.execution.dml.IndexerTest#test_empty_array_and_array_with_nulls_does_not_result_in_new_column": "passed",
+          "io.crate.execution.dml.IndexerTest#test_cannot_add_dynamic_column_on_strict_table": "passed",
+          "io.crate.execution.dml.IndexerTest#test_validates_user_provided_value_for_generated_columns": "passed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_bitstring_results_in_same_fields_as_document_mapper_if_not_indexed": "passed",
+          "io.crate.execution.dml.IndexerTest#test_can_add_dynamic_ref_as_new_top_level_column": "passed",
+          "io.crate.execution.dml.IndexerTest#test_can_index_generated_geo_shape": "passed",
+          "io.crate.execution.dml.IndexerTest#test_empty_arrays_together_with_another_field_added_as_new_cols_with_dynamic_policy": "passed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_boolean_results_in_same_fields_as_document_mapper_if_not_indexed": "passed",
+          "io.crate.execution.dml.IndexerTest#test_fields_order_in_source_is_deterministic": "passed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_number_results_in_same_fields_as_document_mapper_if_not_indexed": "passed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_float_results_in_float_field": "passed",
+          "io.crate.execution.dml.IndexerTest#test_generated_column_can_refer_to_a_non_string_partitioned_by_column": "passed",
+          "io.crate.execution.dml.IndexerTest#test_can_index_fulltext_column": "passed",
+          "io.crate.execution.dml.IndexerTest#test_create_dynamic_array": "passed",
+          "io.crate.execution.dml.IndexerTest#test_check_constraint_on_object_sub_column_is_verified": "passed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_geo_shape_results_in_same_fields_as_document_mapper": "passed",
           "io.crate.integrationtests.DynamicMappingUpdateITest#test_concurrent_statements_that_add_columns_to_partitioned_table_result_in_dynamic_mapping_updates": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_alter_table_add_column_on_partitioned_table_results_in_dynamic_mapping_updates": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_copy_deep_nested_object_results_in_dynamic_mapping_updates": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_concurrent_statements_that_add_columns_result_in_dynamic_mapping_updates": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_nested_arrays_throw_exception": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_insert_deep_nested_object_into_partitioned_table_results_in_dynamic_mapping_updates": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_update_partitioned_table_results_in_dynamic_mapping_updates": "passed",
           "io.crate.integrationtests.DynamicMappingUpdateITest#test_conflicting_object_updates_do_not_allow_inserting_incompatible_values": "passed",
-          "io.crate.integrationtests.DynamicMappingUpdateITest#test_insert_deep_nested_object_results_in_dynamic_mapping_updates": "passed"
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_insert_deep_nested_object_results_in_dynamic_mapping_updates": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_copy_deep_nested_object_results_in_dynamic_mapping_updates": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_alter_table_add_column_results_in_dynamic_mapping_updates": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_insert_deep_nested_object_into_partitioned_table_results_in_dynamic_mapping_updates": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_concurrent_statements_that_add_columns_result_in_dynamic_mapping_updates": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_copy_deep_nested_object_to_partitioned_table_results_in_dynamic_mapping_updates": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_nested_arrays_throw_exception": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_update_results_in_dynamic_mapping_updates": "passed",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_alter_table_add_column_on_partitioned_table_results_in_dynamic_mapping_updates": "passed"
         },
         "classes": {
           "io.crate.execution.dml.IndexerTest": "failed",
@@ -188,13 +246,67 @@
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
-        "baseline_total": 56,
+        "newly_passing": [
+          "io.crate.execution.dml.IndexerTest#test_adds_default_values",
+          "io.crate.execution.dml.IndexerTest#test_adds_generated_column",
+          "io.crate.execution.dml.IndexerTest#test_adds_non_deterministic_defaults_and_generated_columns",
+          "io.crate.execution.dml.IndexerTest#test_adds_non_deterministic_sub_columns_when_root_is_not_in_targets",
+          "io.crate.execution.dml.IndexerTest#test_can_add_dynamic_ref_as_new_top_level_column",
+          "io.crate.execution.dml.IndexerTest#test_can_generate_return_values",
+          "io.crate.execution.dml.IndexerTest#test_can_have_ft_index_for_array",
+          "io.crate.execution.dml.IndexerTest#test_can_index_all_storable_types",
+          "io.crate.execution.dml.IndexerTest#test_can_index_fulltext_column",
+          "io.crate.execution.dml.IndexerTest#test_can_index_generated_geo_shape",
+          "io.crate.execution.dml.IndexerTest#test_cannot_add_dynamic_column_on_strict_table",
+          "io.crate.execution.dml.IndexerTest#test_check_constraint_on_object_sub_column_is_verified",
+          "io.crate.execution.dml.IndexerTest#test_create_dynamic_array",
+          "io.crate.execution.dml.IndexerTest#test_create_dynamic_object_with_nested_columns",
+          "io.crate.execution.dml.IndexerTest#test_default_and_generated_column_within_object",
+          "io.crate.execution.dml.IndexerTest#test_does_not_allow_new_columns_in_strict_object",
+          "io.crate.execution.dml.IndexerTest#test_dynamic_int_value_results_in_long_column",
+          "io.crate.execution.dml.IndexerTest#test_empty_array_and_array_with_nulls_does_not_result_in_new_column",
+          "io.crate.execution.dml.IndexerTest#test_empty_arrays_are_not_prefixed_as_unknown_on_tables_created_less_5_5",
+          "io.crate.execution.dml.IndexerTest#test_empty_arrays_are_prefixed_as_unknown",
+          "io.crate.execution.dml.IndexerTest#test_empty_arrays_together_with_another_field_added_as_new_cols_with_dynamic_policy",
+          "io.crate.execution.dml.IndexerTest#test_fields_are_omitted_in_source_for_null_values",
+          "io.crate.execution.dml.IndexerTest#test_fields_order_in_source_is_deterministic",
+          "io.crate.execution.dml.IndexerTest#test_generated_column_can_refer_to_a_non_string_partitioned_by_column",
+          "io.crate.execution.dml.IndexerTest#test_generated_partitioned_column_is_not_indexed_or_included_in_source",
+          "io.crate.execution.dml.IndexerTest#test_ignored_object_child_columns_are_not_prefixed_on_tables_created_less_5_5",
+          "io.crate.execution.dml.IndexerTest#test_ignored_object_child_columns_are_prefixed",
+          "io.crate.execution.dml.IndexerTest#test_ignored_object_values_are_ignored_and_added_to_source",
+          "io.crate.execution.dml.IndexerTest#test_index_fails_if_check_constraint_returns_false",
+          "io.crate.execution.dml.IndexerTest#test_index_fails_if_not_null_column_has_null_value",
+          "io.crate.execution.dml.IndexerTest#test_index_object_with_dynamic_column_creation",
+          "io.crate.execution.dml.IndexerTest#test_indexing_bitstring_results_in_same_fields_as_document_mapper_if_not_indexed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_boolean_results_in_same_fields_as_document_mapper_if_not_indexed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_float_results_in_float_field",
+          "io.crate.execution.dml.IndexerTest#test_indexing_geo_shape_results_in_same_fields_as_document_mapper",
+          "io.crate.execution.dml.IndexerTest#test_indexing_ip_results_in_same_fields_as_document_mapper_if_not_indexed",
+          "io.crate.execution.dml.IndexerTest#test_indexing_number_results_in_same_fields_as_document_mapper_if_not_indexed",
+          "io.crate.execution.dml.IndexerTest#test_leaves_out_generated_column_if_dependency_is_null",
+          "io.crate.execution.dml.IndexerTest#test_source_includes_null_values_in_arrays",
+          "io.crate.execution.dml.IndexerTest#test_translog_indexer_can_read_source_with_oids",
+          "io.crate.execution.dml.IndexerTest#test_validates_user_provided_value_for_generated_columns",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_alter_table_add_column_on_partitioned_table_results_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_alter_table_add_column_results_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_concurrent_statements_that_add_columns_result_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_concurrent_statements_that_add_columns_to_partitioned_table_result_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_conflicting_object_updates_do_not_allow_inserting_incompatible_values",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_copy_deep_nested_object_results_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_copy_deep_nested_object_to_partitioned_table_results_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_insert_deep_nested_object_into_partitioned_table_results_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_insert_deep_nested_object_results_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_nested_arrays_throw_exception",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_update_partitioned_table_results_in_dynamic_mapping_updates",
+          "io.crate.integrationtests.DynamicMappingUpdateITest#test_update_results_in_dynamic_mapping_updates"
+        ],
+        "baseline_total": 0,
         "patched_total": 56,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -214,35 +326,123 @@
       0,
       1
     ],
-    "tokens_used": 902,
+    "tokens_used": 13157,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 10506,
+        "output": 1160
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 8153,
+        "output": 5004
+      }
+    },
     "synthesis_status": "success",
     "applied_on_disk_ag3": 0,
-    "synthesized_count": 2,
+    "synthesized_count": 0,
     "failed_hunks_total": 0,
-    "syntax_repair_status": "repaired",
-    "fallback_status": "not_run",
-    "fallback_attempts": 0,
-    "retry_contexts": [],
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 1,
+    "retry_contexts": [
+      {
+        "error_type": "unknown",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java:[279,16] error: incompatible types: Synthetics cannot be converted to Function<ColumnIdent,Reference>\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure\n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/execution/dml/ObjectIndexer.java:[279,16] error: incompatible types: Synthetics cannot be converted to Function<ColumnIdent,Reference>\n[ERROR] \n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
+      }
+    ],
     "failed_hunks": [],
-    "generated_patch_bytes": 2429,
+    "generated_patch_bytes": 19697,
     "target_patch_bytes": 8918,
+    "patch_exact_match": false,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
     "test_success": false,
     "test_mode": "crate-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
-      "baseline_total": 56,
+      "newly_passing": [
+        "io.crate.execution.dml.IndexerTest#test_adds_default_values",
+        "io.crate.execution.dml.IndexerTest#test_adds_generated_column",
+        "io.crate.execution.dml.IndexerTest#test_adds_non_deterministic_defaults_and_generated_columns",
+        "io.crate.execution.dml.IndexerTest#test_adds_non_deterministic_sub_columns_when_root_is_not_in_targets",
+        "io.crate.execution.dml.IndexerTest#test_can_add_dynamic_ref_as_new_top_level_column",
+        "io.crate.execution.dml.IndexerTest#test_can_generate_return_values",
+        "io.crate.execution.dml.IndexerTest#test_can_have_ft_index_for_array",
+        "io.crate.execution.dml.IndexerTest#test_can_index_all_storable_types",
+        "io.crate.execution.dml.IndexerTest#test_can_index_fulltext_column",
+        "io.crate.execution.dml.IndexerTest#test_can_index_generated_geo_shape",
+        "io.crate.execution.dml.IndexerTest#test_cannot_add_dynamic_column_on_strict_table",
+        "io.crate.execution.dml.IndexerTest#test_check_constraint_on_object_sub_column_is_verified",
+        "io.crate.execution.dml.IndexerTest#test_create_dynamic_array",
+        "io.crate.execution.dml.IndexerTest#test_create_dynamic_object_with_nested_columns",
+        "io.crate.execution.dml.IndexerTest#test_default_and_generated_column_within_object",
+        "io.crate.execution.dml.IndexerTest#test_does_not_allow_new_columns_in_strict_object",
+        "io.crate.execution.dml.IndexerTest#test_dynamic_int_value_results_in_long_column",
+        "io.crate.execution.dml.IndexerTest#test_empty_array_and_array_with_nulls_does_not_result_in_new_column",
+        "io.crate.execution.dml.IndexerTest#test_empty_arrays_are_not_prefixed_as_unknown_on_tables_created_less_5_5",
+        "io.crate.execution.dml.IndexerTest#test_empty_arrays_are_prefixed_as_unknown",
+        "io.crate.execution.dml.IndexerTest#test_empty_arrays_together_with_another_field_added_as_new_cols_with_dynamic_policy",
+        "io.crate.execution.dml.IndexerTest#test_fields_are_omitted_in_source_for_null_values",
+        "io.crate.execution.dml.IndexerTest#test_fields_order_in_source_is_deterministic",
+        "io.crate.execution.dml.IndexerTest#test_generated_column_can_refer_to_a_non_string_partitioned_by_column",
+        "io.crate.execution.dml.IndexerTest#test_generated_partitioned_column_is_not_indexed_or_included_in_source",
+        "io.crate.execution.dml.IndexerTest#test_ignored_object_child_columns_are_not_prefixed_on_tables_created_less_5_5",
+        "io.crate.execution.dml.IndexerTest#test_ignored_object_child_columns_are_prefixed",
+        "io.crate.execution.dml.IndexerTest#test_ignored_object_values_are_ignored_and_added_to_source",
+        "io.crate.execution.dml.IndexerTest#test_index_fails_if_check_constraint_returns_false",
+        "io.crate.execution.dml.IndexerTest#test_index_fails_if_not_null_column_has_null_value",
+        "io.crate.execution.dml.IndexerTest#test_index_object_with_dynamic_column_creation",
+        "io.crate.execution.dml.IndexerTest#test_indexing_bitstring_results_in_same_fields_as_document_mapper_if_not_indexed",
+        "io.crate.execution.dml.IndexerTest#test_indexing_boolean_results_in_same_fields_as_document_mapper_if_not_indexed",
+        "io.crate.execution.dml.IndexerTest#test_indexing_float_results_in_float_field",
+        "io.crate.execution.dml.IndexerTest#test_indexing_geo_shape_results_in_same_fields_as_document_mapper",
+        "io.crate.execution.dml.IndexerTest#test_indexing_ip_results_in_same_fields_as_document_mapper_if_not_indexed",
+        "io.crate.execution.dml.IndexerTest#test_indexing_number_results_in_same_fields_as_document_mapper_if_not_indexed",
+        "io.crate.execution.dml.IndexerTest#test_leaves_out_generated_column_if_dependency_is_null",
+        "io.crate.execution.dml.IndexerTest#test_source_includes_null_values_in_arrays",
+        "io.crate.execution.dml.IndexerTest#test_translog_indexer_can_read_source_with_oids",
+        "io.crate.execution.dml.IndexerTest#test_validates_user_provided_value_for_generated_columns",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_alter_table_add_column_on_partitioned_table_results_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_alter_table_add_column_results_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_concurrent_statements_that_add_columns_result_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_concurrent_statements_that_add_columns_to_partitioned_table_result_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_conflicting_object_updates_do_not_allow_inserting_incompatible_values",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_copy_deep_nested_object_results_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_copy_deep_nested_object_to_partitioned_table_results_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_insert_deep_nested_object_into_partitioned_table_results_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_insert_deep_nested_object_results_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_nested_arrays_throw_exception",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_update_partitioned_table_results_in_dynamic_mapping_updates",
+        "io.crate.integrationtests.DynamicMappingUpdateITest#test_update_results_in_dynamic_mapping_updates"
+      ],
+      "baseline_total": 0,
       "patched_total": 56,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 53,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

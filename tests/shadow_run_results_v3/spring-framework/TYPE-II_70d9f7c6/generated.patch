@@ -1,0 +1,150 @@
+diff --git a/spring-web/src/main/java/org/springframework/web/client/RestTemplate.java b/spring-web/src/main/java/org/springframework/web/client/RestTemplate.java
+index 19e42a3039..5dc78aa124 100644
+--- a/spring-web/src/main/java/org/springframework/web/client/RestTemplate.java
++++ b/spring-web/src/main/java/org/springframework/web/client/RestTemplate.java
+@@ -148,7 +148,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		kotlinSerializationProtobufPresent = ClassUtils.isPresent("kotlinx.serialization.protobuf.ProtoBuf", classLoader);
+ 	}
+ 
+-
+ 	private final List<HttpMessageConverter<?>> messageConverters = new ArrayList<>();
+ 
+ 	private ResponseErrorHandler errorHandler = new DefaultResponseErrorHandler();
+@@ -162,7 +161,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 	@Nullable
+ 	private ClientRequestObservationConvention observationConvention;
+ 
+-
+ 	/**
+ 	 * Create a new instance of the {@link RestTemplate} using default settings.
+ 	 * Default {@link HttpMessageConverter HttpMessageConverters} are initialized.
+@@ -242,7 +240,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		updateErrorHandlerConverters();
+ 	}
+ 
+-
+ 	private void updateErrorHandlerConverters() {
+ 		if (this.errorHandler instanceof DefaultResponseErrorHandler handler) {
+ 			handler.setMessageConverters(this.messageConverters);
+@@ -255,7 +252,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		return uriFactory;
+ 	}
+ 
+-
+ 	/**
+ 	 * Set the message body converters to use.
+ 	 * <p>These converters are used to convert from and to HTTP requests and responses.
+@@ -421,7 +417,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		return nonNull(execute(url, HttpMethod.GET, requestCallback, responseExtractor));
+ 	}
+ 
+-
+ 	// HEAD
+ 
+ 	@Override
+@@ -439,7 +434,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		return nonNull(execute(url, HttpMethod.HEAD, null, headersExtractor()));
+ 	}
+ 
+-
+ 	// POST
+ 
+ 	@Override
+@@ -530,7 +524,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		return nonNull(execute(url, HttpMethod.POST, requestCallback, responseExtractor));
+ 	}
+ 
+-
+ 	// PUT
+ 
+ 	@Override
+@@ -555,7 +548,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		execute(url, HttpMethod.PUT, requestCallback, null);
+ 	}
+ 
+-
+ 	// PATCH
+ 
+ 	@Override
+@@ -591,7 +583,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		return execute(url, HttpMethod.PATCH, requestCallback, responseExtractor);
+ 	}
+ 
+-
+ 	// DELETE
+ 
+ 	@Override
+@@ -609,7 +600,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		execute(url, HttpMethod.DELETE, null, null);
+ 	}
+ 
+-
+ 	// OPTIONS
+ 
+ 	@Override
+@@ -633,7 +623,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		return (headers != null ? headers.getAllow() : Collections.emptySet());
+ 	}
+ 
+-
+ 	// exchange
+ 
+ 	@Override
+@@ -741,7 +730,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		}
+ 	}
+ 
+-
+ 	// General execution
+ 
+ 	/**
+@@ -855,7 +843,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		Observation observation = ClientHttpObservationDocumentation.HTTP_CLIENT_EXCHANGES.observation(this.observationConvention,
+ 				DEFAULT_OBSERVATION_CONVENTION, () -> observationContext, this.observationRegistry).start();
+ 		ClientHttpResponse response = null;
+-		try {
++		try (Observation.Scope scope = observation.openScope()){
+ 			if (requestCallback != null) {
+ 				requestCallback.doWithRequest(request);
+ 			}
+@@ -869,7 +857,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 			observation.error(exception);
+ 			throw exception;
+ 		}
+-		catch (RestClientException exc) {
++		catch (Throwable exc) {
+ 			observation.error(exc);
+ 			throw exc;
+ 		}
+@@ -964,7 +952,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		return result;
+ 	}
+ 
+-
+ 	/**
+ 	 * Request callback implementation that prepares the request's accept headers.
+ 	 */
+@@ -1018,7 +1005,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Request callback implementation that writes the given object to the request stream.
+ 	 */
+@@ -1108,7 +1094,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Response extractor for {@link HttpEntity}.
+ 	 */
+@@ -1138,7 +1123,6 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Response extractor that extracts the response {@link HttpHeaders}.
+ 	 */

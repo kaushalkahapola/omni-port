@@ -1,0 +1,424 @@
+commit 69b9e82b35a8d2b856ec7c6ae7dd2487a8c16a3a
+Author: Lantao Jin <ltjin@amazon.com>
+Date:   Thu Apr 24 23:24:49 2025 +0800
+
+    New added commands should throw exception when calcite disabled (#3571)
+    
+    * New added commands should throw exception when calcite disabled
+    
+    Signed-off-by: Lantao Jin <ltjin@amazon.com>
+    
+    * remove useless code
+    
+    Signed-off-by: Lantao Jin <ltjin@amazon.com>
+    
+    * address comments
+    
+    Signed-off-by: Lantao Jin <ltjin@amazon.com>
+    
+    * fix UT
+    
+    Signed-off-by: Lantao Jin <ltjin@amazon.com>
+    
+    * Add a new IT case
+    
+    Signed-off-by: Lantao Jin <ltjin@amazon.com>
+    
+    ---------
+    
+    Signed-off-by: Lantao Jin <ltjin@amazon.com>
+
+diff --git a/core/src/main/java/org/opensearch/sql/analysis/Analyzer.java b/core/src/main/java/org/opensearch/sql/analysis/Analyzer.java
+index c9b5cabf1..ffa62140d 100644
+--- a/core/src/main/java/org/opensearch/sql/analysis/Analyzer.java
++++ b/core/src/main/java/org/opensearch/sql/analysis/Analyzer.java
+@@ -10,6 +10,7 @@ import static org.opensearch.sql.ast.tree.Sort.NullOrder.NULL_FIRST;
+ import static org.opensearch.sql.ast.tree.Sort.NullOrder.NULL_LAST;
+ import static org.opensearch.sql.ast.tree.Sort.SortOrder.ASC;
+ import static org.opensearch.sql.ast.tree.Sort.SortOrder.DESC;
++import static org.opensearch.sql.common.setting.Settings.Key.CALCITE_ENGINE_ENABLED;
+ import static org.opensearch.sql.data.type.ExprCoreType.DATE;
+ import static org.opensearch.sql.data.type.ExprCoreType.STRUCT;
+ import static org.opensearch.sql.data.type.ExprCoreType.TIME;
+@@ -53,8 +54,10 @@ import org.opensearch.sql.ast.tree.FetchCursor;
+ import org.opensearch.sql.ast.tree.FillNull;
+ import org.opensearch.sql.ast.tree.Filter;
+ import org.opensearch.sql.ast.tree.Head;
++import org.opensearch.sql.ast.tree.Join;
+ import org.opensearch.sql.ast.tree.Kmeans;
+ import org.opensearch.sql.ast.tree.Limit;
++import org.opensearch.sql.ast.tree.Lookup;
+ import org.opensearch.sql.ast.tree.ML;
+ import org.opensearch.sql.ast.tree.Paginate;
+ import org.opensearch.sql.ast.tree.Parse;
+@@ -162,8 +165,8 @@ public class Analyzer extends AbstractNodeVisitor<LogicalPlan, AnalysisContext>
+           STRUCT);
+       return child;
+     } else {
+-      // TODO
+-      throw new UnsupportedOperationException("SubqueryAlias is only supported in table alias");
++      throw new UnsupportedOperationException(
++          "Subsearch is supported only when " + CALCITE_ENGINE_ENABLED.getKeyValue() + "=true");
+     }
+   }
+ 
+@@ -685,6 +688,18 @@ public class Analyzer extends AbstractNodeVisitor<LogicalPlan, AnalysisContext>
+     return new LogicalCloseCursor(closeCursor.getChild().get(0).accept(this, context));
+   }
+ 
++  @Override
++  public LogicalPlan visitJoin(Join node, AnalysisContext context) {
++    throw new UnsupportedOperationException(
++        "Join is supported only when " + CALCITE_ENGINE_ENABLED.getKeyValue() + "=true");
++  }
++
++  @Override
++  public LogicalPlan visitLookup(Lookup node, AnalysisContext context) {
++    throw new UnsupportedOperationException(
++        "Lookup is supported only when " + CALCITE_ENGINE_ENABLED.getKeyValue() + "=true");
++  }
++
+   private LogicalSort buildSort(
+       LogicalPlan child, AnalysisContext context, List<Field> sortFields) {
+     ExpressionReferenceOptimizer optimizer =
+diff --git a/core/src/main/java/org/opensearch/sql/analysis/ExpressionAnalyzer.java b/core/src/main/java/org/opensearch/sql/analysis/ExpressionAnalyzer.java
+index fa2478d53..a7f60dd65 100644
+--- a/core/src/main/java/org/opensearch/sql/analysis/ExpressionAnalyzer.java
++++ b/core/src/main/java/org/opensearch/sql/analysis/ExpressionAnalyzer.java
+@@ -7,6 +7,7 @@ package org.opensearch.sql.analysis;
+ 
+ import static org.opensearch.sql.ast.dsl.AstDSL.and;
+ import static org.opensearch.sql.ast.dsl.AstDSL.compare;
++import static org.opensearch.sql.common.setting.Settings.Key.CALCITE_ENGINE_ENABLED;
+ 
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableMap;
+@@ -49,6 +50,9 @@ import org.opensearch.sql.ast.expression.UnresolvedExpression;
+ import org.opensearch.sql.ast.expression.When;
+ import org.opensearch.sql.ast.expression.WindowFunction;
+ import org.opensearch.sql.ast.expression.Xor;
++import org.opensearch.sql.ast.expression.subquery.ExistsSubquery;
++import org.opensearch.sql.ast.expression.subquery.InSubquery;
++import org.opensearch.sql.ast.expression.subquery.ScalarSubquery;
+ import org.opensearch.sql.data.model.ExprValueUtils;
+ import org.opensearch.sql.data.type.ExprCoreType;
+ import org.opensearch.sql.data.type.ExprType;
+@@ -406,6 +410,24 @@ public class ExpressionAnalyzer extends AbstractNodeVisitor<Expression, Analysis
+     return new NamedArgumentExpression(node.getArgName(), node.getValue().accept(this, context));
+   }
+ 
++  @Override
++  public Expression visitScalarSubquery(ScalarSubquery node, AnalysisContext context) {
++    throw new UnsupportedOperationException(
++        "Subsearch is supported only when " + CALCITE_ENGINE_ENABLED.getKeyValue() + "=true");
++  }
++
++  @Override
++  public Expression visitExistsSubquery(ExistsSubquery node, AnalysisContext context) {
++    throw new UnsupportedOperationException(
++        "Subsearch is supported only when " + CALCITE_ENGINE_ENABLED.getKeyValue() + "=true");
++  }
++
++  @Override
++  public Expression visitInSubquery(InSubquery node, AnalysisContext context) {
++    throw new UnsupportedOperationException(
++        "Subsearch is supported only when " + CALCITE_ENGINE_ENABLED.getKeyValue() + "=true");
++  }
++
+   /**
+    * If QualifiedName is actually a reserved metadata field, return the expr type associated with
+    * the metadata field.
+diff --git a/core/src/main/java/org/opensearch/sql/executor/QueryService.java b/core/src/main/java/org/opensearch/sql/executor/QueryService.java
+index f709f3afb..0fa26f639 100644
+--- a/core/src/main/java/org/opensearch/sql/executor/QueryService.java
++++ b/core/src/main/java/org/opensearch/sql/executor/QueryService.java
+@@ -11,6 +11,7 @@ package org.opensearch.sql.executor;
+ import java.security.AccessController;
+ import java.security.PrivilegedAction;
+ import java.util.List;
++import java.util.Optional;
+ import lombok.AllArgsConstructor;
+ import lombok.Getter;
+ import lombok.RequiredArgsConstructor;
+@@ -67,7 +68,7 @@ public class QueryService {
+     if (shouldUseCalcite(queryType)) {
+       executeWithCalcite(plan, queryType, listener);
+     } else {
+-      executeWithLegacy(plan, queryType, listener);
++      executeWithLegacy(plan, queryType, listener, Optional.empty());
+     }
+   }
+ 
+@@ -80,7 +81,7 @@ public class QueryService {
+     if (shouldUseCalcite(queryType)) {
+       explainWithCalcite(plan, queryType, listener, format);
+     } else {
+-      explainWithLegacy(plan, queryType, listener, format);
++      explainWithLegacy(plan, queryType, listener, format, Optional.empty());
+     }
+   }
+ 
+@@ -103,7 +104,7 @@ public class QueryService {
+     } catch (Throwable t) {
+       if (isCalciteFallbackAllowed()) {
+         log.warn("Fallback to V2 query engine since got exception", t);
+-        executeWithLegacy(plan, queryType, listener);
++        executeWithLegacy(plan, queryType, listener, Optional.of(t));
+       } else {
+         if (t instanceof Error) {
+           // Calcite may throw AssertError during query execution.
+@@ -135,7 +136,7 @@ public class QueryService {
+     } catch (Throwable t) {
+       if (isCalciteFallbackAllowed()) {
+         log.warn("Fallback to V2 query engine since got exception", t);
+-        explainWithLegacy(plan, queryType, listener, format);
++        explainWithLegacy(plan, queryType, listener, format, Optional.of(t));
+       } else {
+         if (t instanceof Error) {
+           // Calcite may throw AssertError during query execution.
+@@ -150,11 +151,19 @@ public class QueryService {
+   public void executeWithLegacy(
+       UnresolvedPlan plan,
+       QueryType queryType,
+-      ResponseListener<ExecutionEngine.QueryResponse> listener) {
++      ResponseListener<ExecutionEngine.QueryResponse> listener,
++      Optional<Throwable> calciteFailure) {
+     try {
+       executePlan(analyze(plan, queryType), PlanContext.emptyPlanContext(), listener);
+     } catch (Exception e) {
+-      listener.onFailure(e);
++      if (shouldUseCalcite(queryType) && isCalciteFallbackAllowed()) {
++        // if there is a failure thrown from Calcite and execution after fallback V2
++        // keeps failure, we should throw the failure from Calcite.
++        calciteFailure.ifPresentOrElse(
++            t -> listener.onFailure(new RuntimeException(t)), () -> listener.onFailure(e));
++      } else {
++        listener.onFailure(e);
++      }
+     }
+   }
+ 
+@@ -163,13 +172,16 @@ public class QueryService {
+    * explain response.
+    *
+    * @param plan {@link UnresolvedPlan}
++   * @param queryType {@link QueryType}
+    * @param listener {@link ResponseListener} for explain response
++   * @param calciteFailure Optional failure thrown from calcite
+    */
+   public void explainWithLegacy(
+       UnresolvedPlan plan,
+       QueryType queryType,
+       ResponseListener<ExecutionEngine.ExplainResponse> listener,
+-      Explain.ExplainFormat format) {
++      Explain.ExplainFormat format,
++      Optional<Throwable> calciteFailure) {
+     try {
+       if (format != null && format != Explain.ExplainFormat.STANDARD) {
+         throw new UnsupportedOperationException(
+@@ -177,7 +189,14 @@ public class QueryService {
+       }
+       executionEngine.explain(plan(analyze(plan, queryType)), listener);
+     } catch (Exception e) {
+-      listener.onFailure(e);
++      if (shouldUseCalcite(queryType) && isCalciteFallbackAllowed()) {
++        // if there is a failure thrown from Calcite and execution after fallback V2
++        // keeps failure, we should throw the failure from Calcite.
++        calciteFailure.ifPresentOrElse(
++            t -> listener.onFailure(new RuntimeException(t)), () -> listener.onFailure(e));
++      } else {
++        listener.onFailure(e);
++      }
+     }
+   }
+ 
+diff --git a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteNewAddedCommandsIT.java b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteNewAddedCommandsIT.java
+new file mode 100644
+index 000000000..c8a8a2c83
+--- /dev/null
++++ b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteNewAddedCommandsIT.java
+@@ -0,0 +1,17 @@
++/*
++ * Copyright OpenSearch Contributors
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package org.opensearch.sql.calcite.remote;
++
++import org.opensearch.sql.ppl.NewAddedCommandsIT;
++
++public class CalciteNewAddedCommandsIT extends NewAddedCommandsIT {
++  @Override
++  public void init() throws Exception {
++    super.init();
++    enableCalcite();
++    disallowCalciteFallback();
++  }
++}
+diff --git a/integ-test/src/test/java/org/opensearch/sql/calcite/standalone/CalcitePPLBasicIT.java b/integ-test/src/test/java/org/opensearch/sql/calcite/standalone/CalcitePPLBasicIT.java
+index 4329b1dbd..b65613a27 100644
+--- a/integ-test/src/test/java/org/opensearch/sql/calcite/standalone/CalcitePPLBasicIT.java
++++ b/integ-test/src/test/java/org/opensearch/sql/calcite/standalone/CalcitePPLBasicIT.java
+@@ -524,6 +524,25 @@ public class CalcitePPLBasicIT extends CalcitePPLIntegTestCase {
+     verifyDataRows(result, rows("Elinor", 36));
+   }
+ 
++  @Test
++  public void testKeepThrowCalciteException() throws IOException {
++    withFallbackEnabled(
++        () -> {
++          IllegalArgumentException e =
++              assertThrows(
++                  IllegalArgumentException.class,
++                  () ->
++                      executeQuery(
++                          String.format("source=%s | fields firstname1, age", TEST_INDEX_BANK)));
++          verifyErrorMessageContains(
++              e,
++              "field [firstname1] not found; input fields are: [account_number, firstname, address,"
++                  + " birthdate, gender, city, lastname, balance, employer, state, age, email,"
++                  + " male, _id, _index, _score, _maxscore, _sort, _routing]");
++        },
++        "");
++  }
++
+   @Test
+   public void testAliasDataType() {
+     JSONObject result =
+diff --git a/integ-test/src/test/java/org/opensearch/sql/ppl/NewAddedCommandsIT.java b/integ-test/src/test/java/org/opensearch/sql/ppl/NewAddedCommandsIT.java
+new file mode 100644
+index 000000000..72585477d
+--- /dev/null
++++ b/integ-test/src/test/java/org/opensearch/sql/ppl/NewAddedCommandsIT.java
+@@ -0,0 +1,118 @@
++/*
++ * Copyright OpenSearch Contributors
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package org.opensearch.sql.ppl;
++
++import static org.hamcrest.Matchers.containsString;
++import static org.hamcrest.Matchers.equalTo;
++import static org.opensearch.sql.common.setting.Settings.Key.CALCITE_ENGINE_ENABLED;
++import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_BANK;
++import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_DOG;
++
++import java.io.IOException;
++import org.json.JSONObject;
++import org.junit.jupiter.api.Test;
++import org.opensearch.client.ResponseException;
++import org.opensearch.sql.util.TestUtils;
++
++public class NewAddedCommandsIT extends PPLIntegTestCase {
++  @Override
++  public void init() throws Exception {
++    super.init();
++    loadIndex(Index.BANK);
++    loadIndex(Index.DOG);
++  }
++
++  @Test
++  public void testJoin() throws IOException {
++    JSONObject result;
++    try {
++      result =
++          executeQuery(
++              String.format(
++                  "search source=%s | join on firstname=holdersName %s",
++                  TEST_INDEX_BANK, TEST_INDEX_DOG));
++    } catch (ResponseException e) {
++      result = new JSONObject(TestUtils.getResponseBody(e.getResponse()));
++      verifyQuery(result);
++    }
++  }
++
++  @Test
++  public void testLookup() throws IOException {
++    JSONObject result;
++    try {
++      result =
++          executeQuery(
++              String.format(
++                  "search source=%s | lookup %s holdersName as firstname",
++                  TEST_INDEX_BANK, TEST_INDEX_DOG));
++    } catch (ResponseException e) {
++      result = new JSONObject(TestUtils.getResponseBody(e.getResponse()));
++    }
++    verifyQuery(result);
++  }
++
++  @Test
++  public void testSubsearch() throws IOException {
++    JSONObject result;
++    try {
++      result =
++          executeQuery(
++              String.format(
++                  "search source=[source=%s | where age>35 | fields age] as t", TEST_INDEX_BANK));
++    } catch (ResponseException e) {
++      result = new JSONObject(TestUtils.getResponseBody(e.getResponse()));
++    }
++    verifyQuery(result);
++
++    try {
++      result =
++          executeQuery(
++              String.format(
++                  "search source=%s | where exists [ source=%s | where firstname=holdersName]",
++                  TEST_INDEX_BANK, TEST_INDEX_DOG));
++    } catch (ResponseException e) {
++      result = new JSONObject(TestUtils.getResponseBody(e.getResponse()));
++    }
++    verifyQuery(result);
++
++    try {
++      result =
++          executeQuery(
++              String.format(
++                  "search source=%s | where firstname in [ source=%s | fields holdersName]",
++                  TEST_INDEX_BANK, TEST_INDEX_DOG));
++    } catch (ResponseException e) {
++      result = new JSONObject(TestUtils.getResponseBody(e.getResponse()));
++    }
++    verifyQuery(result);
++
++    try {
++      result =
++          executeQuery(
++              String.format(
++                  "search source=%s | where firstname = [ source=%s | where holdersName='Hattie'"
++                      + " | fields holdersName | head 1]",
++                  TEST_INDEX_BANK, TEST_INDEX_DOG));
++    } catch (ResponseException e) {
++      result = new JSONObject(TestUtils.getResponseBody(e.getResponse()));
++    }
++    verifyQuery(result);
++  }
++
++  private void verifyQuery(JSONObject result) throws IOException {
++    if (isCalciteEnabled()) {
++      assertFalse(result.getJSONArray("datarows").isEmpty());
++    } else {
++      JSONObject error = result.getJSONObject("error");
++      assertThat(
++          error.getString("details"),
++          containsString(
++              "is supported only when " + CALCITE_ENGINE_ENABLED.getKeyValue() + "=true"));
++      assertThat(error.getString("type"), equalTo("UnsupportedOperationException"));
++    }
++  }
++}
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/executor/OpenSearchExecutionEngine.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/executor/OpenSearchExecutionEngine.java
+index 1d00174d0..177eaf88e 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/executor/OpenSearchExecutionEngine.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/executor/OpenSearchExecutionEngine.java
+@@ -182,7 +182,7 @@ public class OpenSearchExecutionEngine implements ExecutionEngine {
+                         ResultSet result = statement.executeQuery();
+                         buildResultSet(result, rel.getRowType(), listener);
+                       } catch (SQLException e) {
+-                        listener.onFailure(e);
++                        throw new RuntimeException(e);
+                       }
+                       return null;
+                     }));

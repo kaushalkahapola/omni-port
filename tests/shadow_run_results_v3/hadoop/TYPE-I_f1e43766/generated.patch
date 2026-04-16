@@ -1,0 +1,909 @@
+diff --git a/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/impl/prefetch/BlockManagerParameters.java b/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/impl/prefetch/BlockManagerParameters.java
+new file mode 100644
+index 00000000000..1bc27936921
+--- /dev/null
++++ b/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/impl/prefetch/BlockManagerParameters.java
+@@ -0,0 +1,230 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one
++ * or more contributor license agreements. See the NOTICE file
++ * distributed with this work for additional information
++ * regarding copyright ownership. The ASF licenses this file
++ * to you under the Apache License, Version 2.0 (the
++ * "License"); you may not use this file except in compliance
++ * with the License. You may obtain a copy of the License at
++ *
++ *   http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied. See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.apache.hadoop.fs.impl.prefetch;
++
++import org.apache.hadoop.classification.InterfaceAudience;
++import org.apache.hadoop.conf.Configuration;
++import org.apache.hadoop.fs.LocalDirAllocator;
++import org.apache.hadoop.fs.statistics.DurationTrackerFactory;
++// TODO: verify import for ExecutorServiceFuturePool
++// TODO: verify import for BlockData
++// TODO: verify import for PrefetchingStatistics
++
++/**
++ * This class is used to provide parameters to {@link BlockManager}.
++ */
++@InterfaceAudience.Private
++public final class BlockManagerParameters {
++
++  /**
++   * Asynchronous tasks are performed in this pool.
++   */
++  private ExecutorServiceFuturePool futurePool;
++
++  /**
++   * Information about each block of the underlying file.
++   */
++  private BlockData blockData;
++
++  /**
++   * Size of the in-memory cache in terms of number of blocks.
++   */
++  private int bufferPoolSize;
++
++  /**
++   * Statistics for the stream.
++   */
++  private PrefetchingStatistics prefetchingStatistics;
++
++  /**
++   * The configuration object.
++   */
++  private Configuration conf;
++
++  /**
++   * The local dir allocator instance.
++   */
++  private LocalDirAllocator localDirAllocator;
++
++  /**
++   * Max blocks count to be kept in cache at any time.
++   */
++  private int maxBlocksCount;
++
++  /**
++   * Tracker with statistics to update.
++   */
++  private DurationTrackerFactory trackerFactory;
++
++  /**
++   * @return The Executor future pool to perform async prefetch tasks.
++   */
++  public ExecutorServiceFuturePool getFuturePool() {
++    return futurePool;
++  }
++
++  /**
++   * @return The object holding blocks data info for the underlying file.
++   */
++  public BlockData getBlockData() {
++    return blockData;
++  }
++
++  /**
++   * @return The size of the in-memory cache.
++   */
++  public int getBufferPoolSize() {
++    return bufferPoolSize;
++  }
++
++  /**
++   * @return The prefetching statistics for the stream.
++   */
++  public PrefetchingStatistics getPrefetchingStatistics() {
++    return prefetchingStatistics;
++  }
++
++  /**
++   * @return The configuration object.
++   */
++  public Configuration getConf() {
++    return conf;
++  }
++
++  /**
++   * @return The local dir allocator instance.
++   */
++  public LocalDirAllocator getLocalDirAllocator() {
++    return localDirAllocator;
++  }
++
++  /**
++   * @return The max blocks count to be kept in cache at any time.
++   */
++  public int getMaxBlocksCount() {
++    return maxBlocksCount;
++  }
++
++  /**
++   * @return The duration tracker with statistics to update.
++   */
++  public DurationTrackerFactory getTrackerFactory() {
++    return trackerFactory;
++  }
++
++  /**
++   * Sets the executor service future pool that is later used to perform
++   * async prefetch tasks.
++   *
++   * @param pool The future pool.
++   * @return The builder.
++   */
++  public BlockManagerParameters withFuturePool(
++      final ExecutorServiceFuturePool pool) {
++    this.futurePool = pool;
++    return this;
++  }
++
++  /**
++   * Sets the object holding blocks data info for the underlying file.
++   *
++   * @param data The block data object.
++   * @return The builder.
++   */
++  public BlockManagerParameters withBlockData(
++      final BlockData data) {
++    this.blockData = data;
++    return this;
++  }
++
++  /**
++   * Sets the in-memory cache size as number of blocks.
++   *
++   * @param poolSize The buffer pool size as number of blocks.
++   * @return The builder.
++   */
++  public BlockManagerParameters withBufferPoolSize(
++      final int poolSize) {
++    this.bufferPoolSize = poolSize;
++    return this;
++  }
++
++  /**
++   * Sets the prefetching statistics for the stream.
++   *
++   * @param statistics The prefetching statistics.
++   * @return The builder.
++   */
++  public BlockManagerParameters withPrefetchingStatistics(
++      final PrefetchingStatistics statistics) {
++    this.prefetchingStatistics = statistics;
++    return this;
++  }
++
++  /**
++   * Sets the configuration object.
++   *
++   * @param configuration The configuration object.
++   * @return The builder.
++   */
++  public BlockManagerParameters withConf(
++      final Configuration configuration) {
++    this.conf = configuration;
++    return this;
++  }
++
++  /**
++   * Sets the local dir allocator for round-robin disk allocation
++   * while creating files.
++   *
++   * @param dirAllocator The local dir allocator object.
++   * @return The builder.
++   */
++  public BlockManagerParameters withLocalDirAllocator(
++      final LocalDirAllocator dirAllocator) {
++    this.localDirAllocator = dirAllocator;
++    return this;
++  }
++
++  /**
++   * Sets the max blocks count to be kept in cache at any time.
++   *
++   * @param blocksCount The max blocks count.
++   * @return The builder.
++   */
++  public BlockManagerParameters withMaxBlocksCount(
++      final int blocksCount) {
++    this.maxBlocksCount = blocksCount;
++    return this;
++  }
++
++  /**
++   * Sets the duration tracker with statistics to update.
++   *
++   * @param factory The tracker factory object.
++   * @return The builder.
++   */
++  public BlockManagerParameters withTrackerFactory(
++      final DurationTrackerFactory factory) {
++    this.trackerFactory = factory;
++    return this;
++  }
++
++}
+\ No newline at end of file
+diff --git a/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/impl/prefetch/CachingBlockManager.java b/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/impl/prefetch/CachingBlockManager.java
+index 407cd630048..86612a6d2c8 100644
+--- a/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/impl/prefetch/CachingBlockManager.java
++++ b/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/fs/impl/prefetch/CachingBlockManager.java
+@@ -30,6 +30,8 @@
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.function.Supplier;
+ 
++import javax.annotation.Nonnull;
++
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+@@ -105,47 +107,33 @@ public abstract class CachingBlockManager extends BlockManager {
+   /**
+    * Constructs an instance of a {@code CachingBlockManager}.
+    *
+-   * @param futurePool asynchronous tasks are performed in this pool.
+-   * @param blockData information about each block of the underlying file.
+-   * @param bufferPoolSize size of the in-memory cache in terms of number of blocks.
+-   * @param prefetchingStatistics statistics for this stream.
+-   * @param conf the configuration.
+-   * @param localDirAllocator the local dir allocator instance.
+-   * @param maxBlocksCount max blocks count to be kept in cache at any time.
+-   * @param trackerFactory tracker with statistics to update.
++   * @param blockManagerParameters params for block manager.
+    * @throws IllegalArgumentException if bufferPoolSize is zero or negative.
+    */
+-  @SuppressWarnings("checkstyle:parameternumber")
+-  public CachingBlockManager(
+-      ExecutorServiceFuturePool futurePool,
+-      BlockData blockData,
+-      int bufferPoolSize,
+-      PrefetchingStatistics prefetchingStatistics,
+-      Configuration conf,
+-      LocalDirAllocator localDirAllocator,
+-      int maxBlocksCount,
+-      DurationTrackerFactory trackerFactory) {
+-    super(blockData);
+-
+-    Validate.checkPositiveInteger(bufferPoolSize, "bufferPoolSize");
+-
+-    this.futurePool = requireNonNull(futurePool);
+-    this.bufferPoolSize = bufferPoolSize;
++  public CachingBlockManager(@Nonnull final BlockManagerParameters blockManagerParameters) {
++    super(blockManagerParameters.getBlockData());
++
++    Validate.checkPositiveInteger(blockManagerParameters.getBufferPoolSize(), "bufferPoolSize");
++
++    this.futurePool = requireNonNull(blockManagerParameters.getFuturePool());
++    this.bufferPoolSize = blockManagerParameters.getBufferPoolSize();
+     this.numCachingErrors = new AtomicInteger();
+     this.numReadErrors = new AtomicInteger();
+     this.cachingDisabled = new AtomicBoolean();
+-    this.prefetchingStatistics = requireNonNull(prefetchingStatistics);
+-    this.conf = requireNonNull(conf);
++    this.prefetchingStatistics = requireNonNull(
++        blockManagerParameters.getPrefetchingStatistics());
++    this.conf = requireNonNull(blockManagerParameters.getConf());
+ 
+     if (this.getBlockData().getFileSize() > 0) {
+       this.bufferPool = new BufferPool(bufferPoolSize, this.getBlockData().getBlockSize(),
+           this.prefetchingStatistics);
+-      this.cache = this.createCache(maxBlocksCount, trackerFactory);
++      this.cache = this.createCache(blockManagerParameters.getMaxBlocksCount(),
++          blockManagerParameters.getTrackerFactory());
+     }
+ 
+     this.ops = new BlockOperations();
+     this.ops.setDebug(false);
+-    this.localDirAllocator = localDirAllocator;
++    this.localDirAllocator = blockManagerParameters.getLocalDirAllocator();
+   }
+ 
+   /**
+diff --git a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/prefetch/S3ACachingBlockManager.java b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/prefetch/S3ACachingBlockManager.java
+index e008de3a79d..35ce7dd7a16 100644
+--- a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/prefetch/S3ACachingBlockManager.java
++++ b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/prefetch/S3ACachingBlockManager.java
+@@ -22,28 +22,17 @@
+ import java.io.IOException;
+ import java.nio.ByteBuffer;
+ 
+-import org.slf4j.Logger;
+-import org.slf4j.LoggerFactory;
++import javax.annotation.Nonnull;
+ 
+-import org.apache.hadoop.conf.Configuration;
+-import org.apache.hadoop.fs.LocalDirAllocator;
+-import org.apache.hadoop.fs.impl.prefetch.BlockData;
++import org.apache.hadoop.fs.impl.prefetch.BlockManagerParameters;
+ import org.apache.hadoop.fs.impl.prefetch.CachingBlockManager;
+-import org.apache.hadoop.fs.impl.prefetch.ExecutorServiceFuturePool;
+ import org.apache.hadoop.fs.impl.prefetch.Validate;
+-import org.apache.hadoop.fs.s3a.statistics.S3AInputStreamStatistics;
+-
+-import static org.apache.hadoop.fs.s3a.Constants.DEFAULT_PREFETCH_MAX_BLOCKS_COUNT;
+-import static org.apache.hadoop.fs.s3a.Constants.PREFETCH_MAX_BLOCKS_COUNT;
+ 
+ /**
+  * Provides access to S3 file one block at a time.
+  */
+ public class S3ACachingBlockManager extends CachingBlockManager {
+ 
+-  private static final Logger LOG = LoggerFactory.getLogger(
+-      S3ACachingBlockManager.class);
+-
+   /**
+    * Reader that reads from S3 file.
+    */
+@@ -52,32 +41,15 @@ public class S3ACachingBlockManager extends CachingBlockManager {
+   /**
+    * Constructs an instance of a {@code S3ACachingBlockManager}.
+    *
+-   * @param futurePool asynchronous tasks are performed in this pool.
++   * @param blockManagerParameters params for block manager.
+    * @param reader reader that reads from S3 file.
+-   * @param blockData information about each block of the S3 file.
+-   * @param bufferPoolSize size of the in-memory cache in terms of number of blocks.
+-   * @param streamStatistics statistics for this stream.
+-   * @param conf the configuration.
+-   * @param localDirAllocator the local dir allocator instance.
+    * @throws IllegalArgumentException if reader is null.
+    */
+   public S3ACachingBlockManager(
+-      ExecutorServiceFuturePool futurePool,
+-      S3ARemoteObjectReader reader,
+-      BlockData blockData,
+-      int bufferPoolSize,
+-      S3AInputStreamStatistics streamStatistics,
+-      Configuration conf,
+-      LocalDirAllocator localDirAllocator) {
++      @Nonnull final BlockManagerParameters blockManagerParameters,
++      final S3ARemoteObjectReader reader) {
+ 
+-    super(futurePool,
+-        blockData,
+-        bufferPoolSize,
+-        streamStatistics,
+-        conf,
+-        localDirAllocator,
+-        conf.getInt(PREFETCH_MAX_BLOCKS_COUNT, DEFAULT_PREFETCH_MAX_BLOCKS_COUNT),
+-        streamStatistics);
++    super(blockManagerParameters);
+ 
+     Validate.checkNotNull(reader, "reader");
+ 
+diff --git a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/prefetch/S3ACachingInputStream.java b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/prefetch/S3ACachingInputStream.java
+index fe950486480..e05ad7e38b5 100644
+--- a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/prefetch/S3ACachingInputStream.java
++++ b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/prefetch/S3ACachingInputStream.java
+@@ -21,21 +21,24 @@
+ 
+ import java.io.IOException;
+ 
++import javax.annotation.Nonnull;
++
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+ import org.apache.hadoop.conf.Configuration;
+ import org.apache.hadoop.fs.LocalDirAllocator;
+-import org.apache.hadoop.fs.impl.prefetch.BlockData;
+ import org.apache.hadoop.fs.impl.prefetch.BlockManager;
++import org.apache.hadoop.fs.impl.prefetch.BlockManagerParameters;
+ import org.apache.hadoop.fs.impl.prefetch.BufferData;
+-import org.apache.hadoop.fs.impl.prefetch.ExecutorServiceFuturePool;
+ import org.apache.hadoop.fs.impl.prefetch.FilePosition;
+ import org.apache.hadoop.fs.s3a.S3AInputStream;
+ import org.apache.hadoop.fs.s3a.S3AReadOpContext;
+ import org.apache.hadoop.fs.s3a.S3ObjectAttributes;
+ import org.apache.hadoop.fs.s3a.statistics.S3AInputStreamStatistics;
+ 
++import static org.apache.hadoop.fs.s3a.Constants.DEFAULT_PREFETCH_MAX_BLOCKS_COUNT;
++import static org.apache.hadoop.fs.s3a.Constants.PREFETCH_MAX_BLOCKS_COUNT;
+ import static org.apache.hadoop.fs.statistics.StreamStatisticNames.STREAM_READ_BLOCK_ACQUIRE_AND_READ;
+ import static org.apache.hadoop.fs.statistics.impl.IOStatisticsBinding.invokeTrackingDuration;
+ 
+@@ -80,13 +83,19 @@ public S3ACachingInputStream(
+ 
+     this.numBlocksToPrefetch = this.getContext().getPrefetchBlockCount();
+     int bufferPoolSize = this.numBlocksToPrefetch + 1;
+-    this.blockManager = this.createBlockManager(
+-        this.getContext().getFuturePool(),
+-        this.getReader(),
+-        this.getBlockData(),
+-        bufferPoolSize,
+-        conf,
+-        localDirAllocator);
++    BlockManagerParameters blockManagerParamsBuilder =
++        new BlockManagerParameters()
++            .withFuturePool(this.getContext().getFuturePool())
++            .withBlockData(this.getBlockData())
++            .withBufferPoolSize(bufferPoolSize)
++            .withConf(conf)
++            .withLocalDirAllocator(localDirAllocator)
++            .withMaxBlocksCount(
++                conf.getInt(PREFETCH_MAX_BLOCKS_COUNT, DEFAULT_PREFETCH_MAX_BLOCKS_COUNT))
++            .withPrefetchingStatistics(getS3AStreamStatistics())
++            .withTrackerFactory(getS3AStreamStatistics());
++    this.blockManager = this.createBlockManager(blockManagerParamsBuilder,
++        this.getReader());
+     int fileSize = (int) s3Attributes.getLen();
+     LOG.debug("Created caching input stream for {} (size = {})", this.getName(),
+         fileSize);
+@@ -180,18 +189,8 @@ public String toString() {
+   }
+ 
+   protected BlockManager createBlockManager(
+-      ExecutorServiceFuturePool futurePool,
+-      S3ARemoteObjectReader reader,
+-      BlockData blockData,
+-      int bufferPoolSize,
+-      Configuration conf,
+-      LocalDirAllocator localDirAllocator) {
+-    return new S3ACachingBlockManager(futurePool,
+-        reader,
+-        blockData,
+-        bufferPoolSize,
+-        getS3AStreamStatistics(),
+-        conf,
+-        localDirAllocator);
++      @Nonnull final BlockManagerParameters blockManagerParameters,
++      final S3ARemoteObjectReader reader) {
++    return new S3ACachingBlockManager(blockManagerParameters, reader);
+   }
+ }
+diff --git a/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java
+new file mode 100644
+index 00000000000..ef7201f5864
+--- /dev/null
++++ b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java
+@@ -0,0 +1,88 @@
++
++package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.placement.schema;
++
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++import javax.annotation.processing.Generated;
++import com.fasterxml.jackson.annotation.JsonAnyGetter;
++import com.fasterxml.jackson.annotation.JsonAnySetter;
++import com.fasterxml.jackson.annotation.JsonIgnore;
++import com.fasterxml.jackson.annotation.JsonInclude;
++import com.fasterxml.jackson.annotation.JsonProperty;
++import com.fasterxml.jackson.annotation.JsonPropertyOrder;
++
++@JsonInclude(JsonInclude.Include.NON_NULL)
++@JsonPropertyOrder({
++    "rules"
++})
++@Generated("jsonschema2pojo")
++public class MappingRulesDescription {
++
++    @JsonProperty("rules")
++    private List<Rule> rules = new ArrayList<Rule>();
++    @JsonIgnore
++    private Map<String, Object> additionalProperties = new HashMap<String, Object>();
++
++    @JsonProperty("rules")
++    public List<Rule> getRules() {
++        return rules;
++    }
++
++    @JsonProperty("rules")
++    public void setRules(List<Rule> rules) {
++        this.rules = rules;
++    }
++
++    @JsonAnyGetter
++    public Map<String, Object> getAdditionalProperties() {
++        return this.additionalProperties;
++    }
++
++    @JsonAnySetter
++    public void setAdditionalProperty(String name, Object value) {
++        this.additionalProperties.put(name, value);
++    }
++
++    @Override
++    public String toString() {
++        StringBuilder sb = new StringBuilder();
++        sb.append(MappingRulesDescription.class.getName()).append('@').append(Integer.toHexString(System.identityHashCode(this))).append('[');
++        sb.append("rules");
++        sb.append('=');
++        sb.append(((this.rules == null)?"<null>":this.rules));
++        sb.append(',');
++        sb.append("additionalProperties");
++        sb.append('=');
++        sb.append(((this.additionalProperties == null)?"<null>":this.additionalProperties));
++        sb.append(',');
++        if (sb.charAt((sb.length()- 1)) == ',') {
++            sb.setCharAt((sb.length()- 1), ']');
++        } else {
++            sb.append(']');
++        }
++        return sb.toString();
++    }
++
++    @Override
++    public int hashCode() {
++        int result = 1;
++        result = ((result* 31)+((this.rules == null)? 0 :this.rules.hashCode()));
++        result = ((result* 31)+((this.additionalProperties == null)? 0 :this.additionalProperties.hashCode()));
++        return result;
++    }
++
++    @Override
++    public boolean equals(Object other) {
++        if (other == this) {
++            return true;
++        }
++        if ((other instanceof MappingRulesDescription) == false) {
++            return false;
++        }
++        MappingRulesDescription rhs = ((MappingRulesDescription) other);
++        return (((this.rules == rhs.rules)||((this.rules!= null)&&this.rules.equals(rhs.rules)))&&((this.additionalProperties == rhs.additionalProperties)||((this.additionalProperties!= null)&&this.additionalProperties.equals(rhs.additionalProperties))));
++    }
++
++}
+diff --git a/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java
+new file mode 100644
+index 00000000000..eb0d753abd4
+--- /dev/null
++++ b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java
+@@ -0,0 +1,345 @@
++
++package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.placement.schema;
++
++import java.util.HashMap;
++import java.util.Map;
++import javax.annotation.processing.Generated;
++import com.fasterxml.jackson.annotation.JsonAnyGetter;
++import com.fasterxml.jackson.annotation.JsonAnySetter;
++import com.fasterxml.jackson.annotation.JsonCreator;
++import com.fasterxml.jackson.annotation.JsonIgnore;
++import com.fasterxml.jackson.annotation.JsonInclude;
++import com.fasterxml.jackson.annotation.JsonProperty;
++import com.fasterxml.jackson.annotation.JsonPropertyOrder;
++import com.fasterxml.jackson.annotation.JsonValue;
++
++@JsonInclude(JsonInclude.Include.NON_NULL)
++@JsonPropertyOrder({
++    "type",
++    "matches",
++    "policy",
++    "parentQueue",
++    "fallbackResult",
++    "create",
++    "value",
++    "customPlacement"
++})
++@Generated("jsonschema2pojo")
++public class Rule {
++
++    @JsonProperty("type")
++    private Rule.Type type;
++    @JsonProperty("matches")
++    private String matches;
++    @JsonProperty("policy")
++    private Rule.Policy policy;
++    @JsonProperty("parentQueue")
++    private String parentQueue;
++    @JsonProperty("fallbackResult")
++    private Rule.FallbackResult fallbackResult;
++    @JsonProperty("create")
++    private Boolean create;
++    @JsonProperty("value")
++    private String value;
++    @JsonProperty("customPlacement")
++    private String customPlacement;
++    @JsonIgnore
++    private Map<String, Object> additionalProperties = new HashMap<String, Object>();
++
++    @JsonProperty("type")
++    public Rule.Type getType() {
++        return type;
++    }
++
++    @JsonProperty("type")
++    public void setType(Rule.Type type) {
++        this.type = type;
++    }
++
++    @JsonProperty("matches")
++    public String getMatches() {
++        return matches;
++    }
++
++    @JsonProperty("matches")
++    public void setMatches(String matches) {
++        this.matches = matches;
++    }
++
++    @JsonProperty("policy")
++    public Rule.Policy getPolicy() {
++        return policy;
++    }
++
++    @JsonProperty("policy")
++    public void setPolicy(Rule.Policy policy) {
++        this.policy = policy;
++    }
++
++    @JsonProperty("parentQueue")
++    public String getParentQueue() {
++        return parentQueue;
++    }
++
++    @JsonProperty("parentQueue")
++    public void setParentQueue(String parentQueue) {
++        this.parentQueue = parentQueue;
++    }
++
++    @JsonProperty("fallbackResult")
++    public Rule.FallbackResult getFallbackResult() {
++        return fallbackResult;
++    }
++
++    @JsonProperty("fallbackResult")
++    public void setFallbackResult(Rule.FallbackResult fallbackResult) {
++        this.fallbackResult = fallbackResult;
++    }
++
++    @JsonProperty("create")
++    public Boolean getCreate() {
++        return create;
++    }
++
++    @JsonProperty("create")
++    public void setCreate(Boolean create) {
++        this.create = create;
++    }
++
++    @JsonProperty("value")
++    public String getValue() {
++        return value;
++    }
++
++    @JsonProperty("value")
++    public void setValue(String value) {
++        this.value = value;
++    }
++
++    @JsonProperty("customPlacement")
++    public String getCustomPlacement() {
++        return customPlacement;
++    }
++
++    @JsonProperty("customPlacement")
++    public void setCustomPlacement(String customPlacement) {
++        this.customPlacement = customPlacement;
++    }
++
++    @JsonAnyGetter
++    public Map<String, Object> getAdditionalProperties() {
++        return this.additionalProperties;
++    }
++
++    @JsonAnySetter
++    public void setAdditionalProperty(String name, Object value) {
++        this.additionalProperties.put(name, value);
++    }
++
++    @Override
++    public String toString() {
++        StringBuilder sb = new StringBuilder();
++        sb.append(Rule.class.getName()).append('@').append(Integer.toHexString(System.identityHashCode(this))).append('[');
++        sb.append("type");
++        sb.append('=');
++        sb.append(((this.type == null)?"<null>":this.type));
++        sb.append(',');
++        sb.append("matches");
++        sb.append('=');
++        sb.append(((this.matches == null)?"<null>":this.matches));
++        sb.append(',');
++        sb.append("policy");
++        sb.append('=');
++        sb.append(((this.policy == null)?"<null>":this.policy));
++        sb.append(',');
++        sb.append("parentQueue");
++        sb.append('=');
++        sb.append(((this.parentQueue == null)?"<null>":this.parentQueue));
++        sb.append(',');
++        sb.append("fallbackResult");
++        sb.append('=');
++        sb.append(((this.fallbackResult == null)?"<null>":this.fallbackResult));
++        sb.append(',');
++        sb.append("create");
++        sb.append('=');
++        sb.append(((this.create == null)?"<null>":this.create));
++        sb.append(',');
++        sb.append("value");
++        sb.append('=');
++        sb.append(((this.value == null)?"<null>":this.value));
++        sb.append(',');
++        sb.append("customPlacement");
++        sb.append('=');
++        sb.append(((this.customPlacement == null)?"<null>":this.customPlacement));
++        sb.append(',');
++        sb.append("additionalProperties");
++        sb.append('=');
++        sb.append(((this.additionalProperties == null)?"<null>":this.additionalProperties));
++        sb.append(',');
++        if (sb.charAt((sb.length()- 1)) == ',') {
++            sb.setCharAt((sb.length()- 1), ']');
++        } else {
++            sb.append(']');
++        }
++        return sb.toString();
++    }
++
++    @Override
++    public int hashCode() {
++        int result = 1;
++        result = ((result* 31)+((this.fallbackResult == null)? 0 :this.fallbackResult.hashCode()));
++        result = ((result* 31)+((this.customPlacement == null)? 0 :this.customPlacement.hashCode()));
++        result = ((result* 31)+((this.create == null)? 0 :this.create.hashCode()));
++        result = ((result* 31)+((this.parentQueue == null)? 0 :this.parentQueue.hashCode()));
++        result = ((result* 31)+((this.additionalProperties == null)? 0 :this.additionalProperties.hashCode()));
++        result = ((result* 31)+((this.type == null)? 0 :this.type.hashCode()));
++        result = ((result* 31)+((this.matches == null)? 0 :this.matches.hashCode()));
++        result = ((result* 31)+((this.value == null)? 0 :this.value.hashCode()));
++        result = ((result* 31)+((this.policy == null)? 0 :this.policy.hashCode()));
++        return result;
++    }
++
++    @Override
++    public boolean equals(Object other) {
++        if (other == this) {
++            return true;
++        }
++        if ((other instanceof Rule) == false) {
++            return false;
++        }
++        Rule rhs = ((Rule) other);
++        return ((((((((((this.fallbackResult == rhs.fallbackResult)||((this.fallbackResult!= null)&&this.fallbackResult.equals(rhs.fallbackResult)))&&((this.customPlacement == rhs.customPlacement)||((this.customPlacement!= null)&&this.customPlacement.equals(rhs.customPlacement))))&&((this.create == rhs.create)||((this.create!= null)&&this.create.equals(rhs.create))))&&((this.parentQueue == rhs.parentQueue)||((this.parentQueue!= null)&&this.parentQueue.equals(rhs.parentQueue))))&&((this.additionalProperties == rhs.additionalProperties)||((this.additionalProperties!= null)&&this.additionalProperties.equals(rhs.additionalProperties))))&&((this.type == rhs.type)||((this.type!= null)&&this.type.equals(rhs.type))))&&((this.matches == rhs.matches)||((this.matches!= null)&&this.matches.equals(rhs.matches))))&&((this.value == rhs.value)||((this.value!= null)&&this.value.equals(rhs.value))))&&((this.policy == rhs.policy)||((this.policy!= null)&&this.policy.equals(rhs.policy))));
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum FallbackResult {
++
++        SKIP("skip"),
++        REJECT("reject"),
++        PLACE_DEFAULT("placeDefault");
++        private final String value;
++        private final static Map<String, Rule.FallbackResult> CONSTANTS = new HashMap<String, Rule.FallbackResult>();
++
++        static {
++            for (Rule.FallbackResult c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        FallbackResult(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.FallbackResult fromValue(String value) {
++            Rule.FallbackResult constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum Policy {
++
++        SPECIFIED("specified"),
++        REJECT("reject"),
++        DEFAULT_QUEUE("defaultQueue"),
++        USER("user"),
++        PRIMARY_GROUP("primaryGroup"),
++        SECONDARY_GROUP("secondaryGroup"),
++        PRIMARY_GROUP_USER("primaryGroupUser"),
++        SECONDARY_GROUP_USER("secondaryGroupUser"),
++        APPLICATION_NAME("applicationName"),
++        SET_DEFAULT_QUEUE("setDefaultQueue"),
++        CUSTOM("custom");
++        private final String value;
++        private final static Map<String, Rule.Policy> CONSTANTS = new HashMap<String, Rule.Policy>();
++
++        static {
++            for (Rule.Policy c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        Policy(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.Policy fromValue(String value) {
++            Rule.Policy constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum Type {
++
++        USER("user"),
++        GROUP("group"),
++        APPLICATION("application");
++        private final String value;
++        private final static Map<String, Rule.Type> CONSTANTS = new HashMap<String, Rule.Type>();
++
++        static {
++            for (Rule.Type c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        Type(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.Type fromValue(String value) {
++            Rule.Type constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++}

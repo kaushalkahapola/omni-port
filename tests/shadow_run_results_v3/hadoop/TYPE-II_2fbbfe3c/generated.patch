@@ -1,0 +1,561 @@
+diff --git a/hadoop-hdfs-project/hadoop-hdfs-client/src/main/java/org/apache/hadoop/hdfs/util/CombinedHostsFileReader.java b/hadoop-hdfs-project/hadoop-hdfs-client/src/main/java/org/apache/hadoop/hdfs/util/CombinedHostsFileReader.java
+index 91ab48fa9d4..4d4446035d8 100644
+--- a/hadoop-hdfs-project/hadoop-hdfs-client/src/main/java/org/apache/hadoop/hdfs/util/CombinedHostsFileReader.java
++++ b/hadoop-hdfs-project/hadoop-hdfs-client/src/main/java/org/apache/hadoop/hdfs/util/CombinedHostsFileReader.java
+@@ -32,6 +32,11 @@
+ import java.util.ArrayList;
+ import java.util.Iterator;
+ import java.util.List;
++import java.util.concurrent.ExecutionException;
++import java.util.concurrent.FutureTask;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.Callable;
++import java.util.concurrent.TimeoutException;
+ 
+ import org.apache.hadoop.classification.InterfaceAudience;
+ import org.apache.hadoop.classification.InterfaceStability;
+@@ -119,4 +124,37 @@ private CombinedHostsFileReader() {
+     }
+     return allDNs;
+   }
++
++  /**
++   * Wrapper to call readFile with timeout via Future Tasks.
++   * If timeout is reached, it will throw IOException
++   * @param hostsFile the input json file to read from
++   * @param readTimeout timeout for FutureTask execution in milliseconds
++   * @return the set of DatanodeAdminProperties
++   * @throws IOException
++   */
++  public static DatanodeAdminProperties[]
++      readFileWithTimeout(final String hostsFile, final int readTimeout) throws IOException {
++    FutureTask<DatanodeAdminProperties[]> futureTask = new FutureTask<>(
++        new Callable<DatanodeAdminProperties[]>() {
++          @Override
++          public DatanodeAdminProperties[] call() throws Exception {
++            return readFile(hostsFile);
++        }
++      });
++
++    Thread thread = new Thread(futureTask);
++    thread.start();
++
++    try {
++      return futureTask.get(readTimeout, TimeUnit.MILLISECONDS);
++    } catch (TimeoutException e) {
++      futureTask.cancel(true);
++      LOG.error("refresh File read operation timed out");
++      throw new IOException("host file read operation timed out");
++    } catch (InterruptedException | ExecutionException e) {
++      LOG.error("File read operation interrupted : " + e.getMessage());
++      throw new IOException("host file read operation timed out");
++    }
++  }
+ }
+diff --git a/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/DFSConfigKeys.java b/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/DFSConfigKeys.java
+index e3f4bfcde84..edd15cb12de 100755
+--- a/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/DFSConfigKeys.java
++++ b/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/DFSConfigKeys.java
+@@ -696,6 +696,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+       "dfs.namenode.hosts.provider.classname";
+   public static final String  DFS_HOSTS = "dfs.hosts";
+   public static final String  DFS_HOSTS_EXCLUDE = "dfs.hosts.exclude";
++  public static final String  DFS_HOSTS_TIMEOUT = "dfs.hosts.timeout";
++  public static final int     DFS_HOSTS_TIMEOUT_DEFAULT = 0;
+   public static final String  DFS_NAMENODE_AUDIT_LOGGERS_KEY = "dfs.namenode.audit.loggers";
+   public static final String  DFS_NAMENODE_DEFAULT_AUDIT_LOGGER_NAME = "default";
+   public static final String  DFS_NAMENODE_AUDIT_LOG_TOKEN_TRACKING_ID_KEY = "dfs.namenode.audit.log.token.tracking.id";
+@@ -1345,7 +1347,6 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String  DFS_JOURNALNODE_HTTPS_BIND_HOST_KEY = "dfs.journalnode.https-bind-host";
+   public static final String  DFS_JOURNALNODE_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:" + DFS_JOURNALNODE_HTTPS_PORT_DEFAULT;
+ 
+-
+   public static final String  DFS_JOURNALNODE_KEYTAB_FILE_KEY = "dfs.journalnode.keytab.file";
+   public static final String  DFS_JOURNALNODE_KERBEROS_PRINCIPAL_KEY = "dfs.journalnode.kerberos.principal";
+   public static final String  DFS_JOURNALNODE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.journalnode.kerberos.internal.spnego.principal";
+@@ -1531,7 +1532,6 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
+   public static final String DFS_DISK_BALANCER_PLAN_VALID_INTERVAL_DEFAULT =
+       "1d";
+ 
+-
+   public static final String DFS_DISK_BALANCER_BLOCK_TOLERANCE =
+       "dfs.disk.balancer.block.tolerance.percent";
+   public static final int DFS_DISK_BALANCER_BLOCK_TOLERANCE_DEFAULT = 10;
+diff --git a/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/CombinedHostFileManager.java b/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/CombinedHostFileManager.java
+index 662e2e471df..c190e822a82 100644
+--- a/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/CombinedHostFileManager.java
++++ b/hadoop-hdfs-project/hadoop-hdfs/src/main/java/org/apache/hadoop/hdfs/server/blockmanagement/CombinedHostFileManager.java
+@@ -39,8 +39,6 @@
+ import java.util.Iterator;
+ import java.util.Map;
+ 
+-
+-
+ import org.apache.hadoop.hdfs.util.CombinedHostsFileReader;
+ 
+ /**
+@@ -179,12 +177,15 @@ public Configuration getConf() {
+ 
+   @Override
+   public void refresh() throws IOException {
+-    refresh(conf.get(DFSConfigKeys.DFS_HOSTS, ""));
++    refresh(conf.get(DFSConfigKeys.DFS_HOSTS, ""),
++        conf.getInt(DFSConfigKeys.DFS_HOSTS_TIMEOUT, DFSConfigKeys.DFS_HOSTS_TIMEOUT_DEFAULT)
++    );
+   }
+-  private void refresh(final String hostsFile) throws IOException {
++  private void refresh(final String hostsFile, final int readTimeout) throws IOException {
+     HostProperties hostProps = new HostProperties();
+-    DatanodeAdminProperties[] all =
+-        CombinedHostsFileReader.readFile(hostsFile);
++    DatanodeAdminProperties[] all = readTimeout != DFSConfigKeys.DFS_HOSTS_TIMEOUT_DEFAULT
++        ? CombinedHostsFileReader.readFileWithTimeout(hostsFile, readTimeout)
++        : CombinedHostsFileReader.readFile(hostsFile);
+     for(DatanodeAdminProperties properties : all) {
+       InetSocketAddress addr = parseEntry(hostsFile,
+           properties.getHostName(), properties.getPort());
+diff --git a/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java
+new file mode 100644
+index 00000000000..ef7201f5864
+--- /dev/null
++++ b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java
+@@ -0,0 +1,88 @@
++
++package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.placement.schema;
++
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++import javax.annotation.processing.Generated;
++import com.fasterxml.jackson.annotation.JsonAnyGetter;
++import com.fasterxml.jackson.annotation.JsonAnySetter;
++import com.fasterxml.jackson.annotation.JsonIgnore;
++import com.fasterxml.jackson.annotation.JsonInclude;
++import com.fasterxml.jackson.annotation.JsonProperty;
++import com.fasterxml.jackson.annotation.JsonPropertyOrder;
++
++@JsonInclude(JsonInclude.Include.NON_NULL)
++@JsonPropertyOrder({
++    "rules"
++})
++@Generated("jsonschema2pojo")
++public class MappingRulesDescription {
++
++    @JsonProperty("rules")
++    private List<Rule> rules = new ArrayList<Rule>();
++    @JsonIgnore
++    private Map<String, Object> additionalProperties = new HashMap<String, Object>();
++
++    @JsonProperty("rules")
++    public List<Rule> getRules() {
++        return rules;
++    }
++
++    @JsonProperty("rules")
++    public void setRules(List<Rule> rules) {
++        this.rules = rules;
++    }
++
++    @JsonAnyGetter
++    public Map<String, Object> getAdditionalProperties() {
++        return this.additionalProperties;
++    }
++
++    @JsonAnySetter
++    public void setAdditionalProperty(String name, Object value) {
++        this.additionalProperties.put(name, value);
++    }
++
++    @Override
++    public String toString() {
++        StringBuilder sb = new StringBuilder();
++        sb.append(MappingRulesDescription.class.getName()).append('@').append(Integer.toHexString(System.identityHashCode(this))).append('[');
++        sb.append("rules");
++        sb.append('=');
++        sb.append(((this.rules == null)?"<null>":this.rules));
++        sb.append(',');
++        sb.append("additionalProperties");
++        sb.append('=');
++        sb.append(((this.additionalProperties == null)?"<null>":this.additionalProperties));
++        sb.append(',');
++        if (sb.charAt((sb.length()- 1)) == ',') {
++            sb.setCharAt((sb.length()- 1), ']');
++        } else {
++            sb.append(']');
++        }
++        return sb.toString();
++    }
++
++    @Override
++    public int hashCode() {
++        int result = 1;
++        result = ((result* 31)+((this.rules == null)? 0 :this.rules.hashCode()));
++        result = ((result* 31)+((this.additionalProperties == null)? 0 :this.additionalProperties.hashCode()));
++        return result;
++    }
++
++    @Override
++    public boolean equals(Object other) {
++        if (other == this) {
++            return true;
++        }
++        if ((other instanceof MappingRulesDescription) == false) {
++            return false;
++        }
++        MappingRulesDescription rhs = ((MappingRulesDescription) other);
++        return (((this.rules == rhs.rules)||((this.rules!= null)&&this.rules.equals(rhs.rules)))&&((this.additionalProperties == rhs.additionalProperties)||((this.additionalProperties!= null)&&this.additionalProperties.equals(rhs.additionalProperties))));
++    }
++
++}
+diff --git a/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java
+new file mode 100644
+index 00000000000..eb0d753abd4
+--- /dev/null
++++ b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java
+@@ -0,0 +1,345 @@
++
++package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.placement.schema;
++
++import java.util.HashMap;
++import java.util.Map;
++import javax.annotation.processing.Generated;
++import com.fasterxml.jackson.annotation.JsonAnyGetter;
++import com.fasterxml.jackson.annotation.JsonAnySetter;
++import com.fasterxml.jackson.annotation.JsonCreator;
++import com.fasterxml.jackson.annotation.JsonIgnore;
++import com.fasterxml.jackson.annotation.JsonInclude;
++import com.fasterxml.jackson.annotation.JsonProperty;
++import com.fasterxml.jackson.annotation.JsonPropertyOrder;
++import com.fasterxml.jackson.annotation.JsonValue;
++
++@JsonInclude(JsonInclude.Include.NON_NULL)
++@JsonPropertyOrder({
++    "type",
++    "matches",
++    "policy",
++    "parentQueue",
++    "fallbackResult",
++    "create",
++    "value",
++    "customPlacement"
++})
++@Generated("jsonschema2pojo")
++public class Rule {
++
++    @JsonProperty("type")
++    private Rule.Type type;
++    @JsonProperty("matches")
++    private String matches;
++    @JsonProperty("policy")
++    private Rule.Policy policy;
++    @JsonProperty("parentQueue")
++    private String parentQueue;
++    @JsonProperty("fallbackResult")
++    private Rule.FallbackResult fallbackResult;
++    @JsonProperty("create")
++    private Boolean create;
++    @JsonProperty("value")
++    private String value;
++    @JsonProperty("customPlacement")
++    private String customPlacement;
++    @JsonIgnore
++    private Map<String, Object> additionalProperties = new HashMap<String, Object>();
++
++    @JsonProperty("type")
++    public Rule.Type getType() {
++        return type;
++    }
++
++    @JsonProperty("type")
++    public void setType(Rule.Type type) {
++        this.type = type;
++    }
++
++    @JsonProperty("matches")
++    public String getMatches() {
++        return matches;
++    }
++
++    @JsonProperty("matches")
++    public void setMatches(String matches) {
++        this.matches = matches;
++    }
++
++    @JsonProperty("policy")
++    public Rule.Policy getPolicy() {
++        return policy;
++    }
++
++    @JsonProperty("policy")
++    public void setPolicy(Rule.Policy policy) {
++        this.policy = policy;
++    }
++
++    @JsonProperty("parentQueue")
++    public String getParentQueue() {
++        return parentQueue;
++    }
++
++    @JsonProperty("parentQueue")
++    public void setParentQueue(String parentQueue) {
++        this.parentQueue = parentQueue;
++    }
++
++    @JsonProperty("fallbackResult")
++    public Rule.FallbackResult getFallbackResult() {
++        return fallbackResult;
++    }
++
++    @JsonProperty("fallbackResult")
++    public void setFallbackResult(Rule.FallbackResult fallbackResult) {
++        this.fallbackResult = fallbackResult;
++    }
++
++    @JsonProperty("create")
++    public Boolean getCreate() {
++        return create;
++    }
++
++    @JsonProperty("create")
++    public void setCreate(Boolean create) {
++        this.create = create;
++    }
++
++    @JsonProperty("value")
++    public String getValue() {
++        return value;
++    }
++
++    @JsonProperty("value")
++    public void setValue(String value) {
++        this.value = value;
++    }
++
++    @JsonProperty("customPlacement")
++    public String getCustomPlacement() {
++        return customPlacement;
++    }
++
++    @JsonProperty("customPlacement")
++    public void setCustomPlacement(String customPlacement) {
++        this.customPlacement = customPlacement;
++    }
++
++    @JsonAnyGetter
++    public Map<String, Object> getAdditionalProperties() {
++        return this.additionalProperties;
++    }
++
++    @JsonAnySetter
++    public void setAdditionalProperty(String name, Object value) {
++        this.additionalProperties.put(name, value);
++    }
++
++    @Override
++    public String toString() {
++        StringBuilder sb = new StringBuilder();
++        sb.append(Rule.class.getName()).append('@').append(Integer.toHexString(System.identityHashCode(this))).append('[');
++        sb.append("type");
++        sb.append('=');
++        sb.append(((this.type == null)?"<null>":this.type));
++        sb.append(',');
++        sb.append("matches");
++        sb.append('=');
++        sb.append(((this.matches == null)?"<null>":this.matches));
++        sb.append(',');
++        sb.append("policy");
++        sb.append('=');
++        sb.append(((this.policy == null)?"<null>":this.policy));
++        sb.append(',');
++        sb.append("parentQueue");
++        sb.append('=');
++        sb.append(((this.parentQueue == null)?"<null>":this.parentQueue));
++        sb.append(',');
++        sb.append("fallbackResult");
++        sb.append('=');
++        sb.append(((this.fallbackResult == null)?"<null>":this.fallbackResult));
++        sb.append(',');
++        sb.append("create");
++        sb.append('=');
++        sb.append(((this.create == null)?"<null>":this.create));
++        sb.append(',');
++        sb.append("value");
++        sb.append('=');
++        sb.append(((this.value == null)?"<null>":this.value));
++        sb.append(',');
++        sb.append("customPlacement");
++        sb.append('=');
++        sb.append(((this.customPlacement == null)?"<null>":this.customPlacement));
++        sb.append(',');
++        sb.append("additionalProperties");
++        sb.append('=');
++        sb.append(((this.additionalProperties == null)?"<null>":this.additionalProperties));
++        sb.append(',');
++        if (sb.charAt((sb.length()- 1)) == ',') {
++            sb.setCharAt((sb.length()- 1), ']');
++        } else {
++            sb.append(']');
++        }
++        return sb.toString();
++    }
++
++    @Override
++    public int hashCode() {
++        int result = 1;
++        result = ((result* 31)+((this.fallbackResult == null)? 0 :this.fallbackResult.hashCode()));
++        result = ((result* 31)+((this.customPlacement == null)? 0 :this.customPlacement.hashCode()));
++        result = ((result* 31)+((this.create == null)? 0 :this.create.hashCode()));
++        result = ((result* 31)+((this.parentQueue == null)? 0 :this.parentQueue.hashCode()));
++        result = ((result* 31)+((this.additionalProperties == null)? 0 :this.additionalProperties.hashCode()));
++        result = ((result* 31)+((this.type == null)? 0 :this.type.hashCode()));
++        result = ((result* 31)+((this.matches == null)? 0 :this.matches.hashCode()));
++        result = ((result* 31)+((this.value == null)? 0 :this.value.hashCode()));
++        result = ((result* 31)+((this.policy == null)? 0 :this.policy.hashCode()));
++        return result;
++    }
++
++    @Override
++    public boolean equals(Object other) {
++        if (other == this) {
++            return true;
++        }
++        if ((other instanceof Rule) == false) {
++            return false;
++        }
++        Rule rhs = ((Rule) other);
++        return ((((((((((this.fallbackResult == rhs.fallbackResult)||((this.fallbackResult!= null)&&this.fallbackResult.equals(rhs.fallbackResult)))&&((this.customPlacement == rhs.customPlacement)||((this.customPlacement!= null)&&this.customPlacement.equals(rhs.customPlacement))))&&((this.create == rhs.create)||((this.create!= null)&&this.create.equals(rhs.create))))&&((this.parentQueue == rhs.parentQueue)||((this.parentQueue!= null)&&this.parentQueue.equals(rhs.parentQueue))))&&((this.additionalProperties == rhs.additionalProperties)||((this.additionalProperties!= null)&&this.additionalProperties.equals(rhs.additionalProperties))))&&((this.type == rhs.type)||((this.type!= null)&&this.type.equals(rhs.type))))&&((this.matches == rhs.matches)||((this.matches!= null)&&this.matches.equals(rhs.matches))))&&((this.value == rhs.value)||((this.value!= null)&&this.value.equals(rhs.value))))&&((this.policy == rhs.policy)||((this.policy!= null)&&this.policy.equals(rhs.policy))));
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum FallbackResult {
++
++        SKIP("skip"),
++        REJECT("reject"),
++        PLACE_DEFAULT("placeDefault");
++        private final String value;
++        private final static Map<String, Rule.FallbackResult> CONSTANTS = new HashMap<String, Rule.FallbackResult>();
++
++        static {
++            for (Rule.FallbackResult c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        FallbackResult(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.FallbackResult fromValue(String value) {
++            Rule.FallbackResult constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum Policy {
++
++        SPECIFIED("specified"),
++        REJECT("reject"),
++        DEFAULT_QUEUE("defaultQueue"),
++        USER("user"),
++        PRIMARY_GROUP("primaryGroup"),
++        SECONDARY_GROUP("secondaryGroup"),
++        PRIMARY_GROUP_USER("primaryGroupUser"),
++        SECONDARY_GROUP_USER("secondaryGroupUser"),
++        APPLICATION_NAME("applicationName"),
++        SET_DEFAULT_QUEUE("setDefaultQueue"),
++        CUSTOM("custom");
++        private final String value;
++        private final static Map<String, Rule.Policy> CONSTANTS = new HashMap<String, Rule.Policy>();
++
++        static {
++            for (Rule.Policy c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        Policy(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.Policy fromValue(String value) {
++            Rule.Policy constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum Type {
++
++        USER("user"),
++        GROUP("group"),
++        APPLICATION("application");
++        private final String value;
++        private final static Map<String, Rule.Type> CONSTANTS = new HashMap<String, Rule.Type>();
++
++        static {
++            for (Rule.Type c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        Type(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.Type fromValue(String value) {
++            Rule.Type constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++}

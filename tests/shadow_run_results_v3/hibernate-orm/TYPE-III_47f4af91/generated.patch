@@ -1,0 +1,64 @@
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/ArrayAndElementArgumentValidator.java b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/ArrayAndElementArgumentValidator.java
+index 398bdf5feb..e98118b2d2 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/ArrayAndElementArgumentValidator.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/ArrayAndElementArgumentValidator.java
+@@ -8,6 +8,7 @@ package org.hibernate.dialect.function.array;
+ 
+ import java.util.List;
+ 
++import org.hibernate.query.sqm.SqmBindableType;
+ import org.hibernate.query.sqm.SqmExpressible;
+ import org.hibernate.query.sqm.produce.function.ArgumentsValidator;
+ import org.hibernate.query.sqm.produce.function.FunctionArgumentException;
+@@ -38,7 +39,8 @@ public class ArrayAndElementArgumentValidator extends ArrayArgumentValidator {
+ 		for ( int elementIndex : elementIndexes ) {
+ 			if ( elementIndex < arguments.size() ) {
+ 				final SqmTypedNode<?> elementArgument = arguments.get( elementIndex );
+-				final SqmExpressible<?> elementType = elementArgument.getExpressible().getSqmType();
++				final SqmBindableType<?> expressible = elementArgument.getExpressible();
++				final SqmExpressible<?> elementType = expressible != null ? expressible.getSqmType() : null;
+ 				if ( expectedElementType != null && elementType != null && expectedElementType != elementType ) {
+ 					throw new FunctionArgumentException(
+ 							String.format(
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionFunction.java b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionFunction.java
+index e936a19ac0..1034a95c2f 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionFunction.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionFunction.java
+@@ -9,6 +9,7 @@ package org.hibernate.dialect.function.array;
+ import java.util.List;
+ 
+ import org.hibernate.query.ReturnableType;
++import org.hibernate.sql.ast.SqlAstNodeRenderingMode;
+ import org.hibernate.sql.ast.SqlAstTranslator;
+ import org.hibernate.sql.ast.spi.SqlAppender;
+ import org.hibernate.sql.ast.tree.SqlAstNode;
+@@ -37,7 +38,7 @@ public class HSQLArrayPositionFunction extends AbstractArrayPositionFunction {
+ 		sqlAppender.append( " is not null then coalesce((select t.idx from unnest(");
+ 		arrayExpression.accept( walker );
+ 		sqlAppender.append(") with ordinality t(val,idx) where t.val is not distinct from " );
+-		elementExpression.accept( walker );
++		walker.render( elementExpression, SqlAstNodeRenderingMode.NO_PLAIN_PARAMETER );
+ 		if ( sqlAstArguments.size() > 2 ) {
+ 			sqlAppender.append( " and t.idx>=" );
+ 			sqlAstArguments.get( 2 ).accept( walker );
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionsFunction.java b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionsFunction.java
+index 85149b6378..35acf858b9 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionsFunction.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionsFunction.java
+@@ -9,6 +9,7 @@ package org.hibernate.dialect.function.array;
+ import java.util.List;
+ 
+ import org.hibernate.query.ReturnableType;
++import org.hibernate.sql.ast.SqlAstNodeRenderingMode;
+ import org.hibernate.sql.ast.SqlAstTranslator;
+ import org.hibernate.sql.ast.spi.SqlAppender;
+ import org.hibernate.sql.ast.tree.SqlAstNode;
+@@ -37,7 +38,7 @@ public class HSQLArrayPositionsFunction extends AbstractArrayPositionsFunction {
+ 		sqlAppender.append( " is not null then coalesce((select array_agg(t.idx) from unnest(");
+ 		arrayExpression.accept( walker );
+ 		sqlAppender.append(") with ordinality t(val,idx) where t.val is not distinct from " );
+-		elementExpression.accept( walker );
++		walker.render( elementExpression, SqlAstNodeRenderingMode.NO_PLAIN_PARAMETER );
+ 		sqlAppender.append( "),cast(array[] as integer array)) end" );
+ 	}
+ }

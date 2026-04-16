@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-11T16:04:33.302350",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "1bdffa597776b5b71f290448017985319e670a91",
   "backport_commit": "5c54ff4e50944b035a2f387e406ca11f7dd20e87",
   "description": "master \u2192 5.10",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 18.78,
+      "elapsed_s": 18.96,
       "error": null,
       "java_hunks": 18,
       "aux_hunks": 5,
@@ -178,12 +179,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.03,
+      "elapsed_s": 3.58,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch introduces a new internal index setting to mark indices as active or inactive based on shard status, modifies multiple classes to handle this new setting, and changes the logic for restoring and tracking indices in logical replication. It involves structural changes such as adding new methods, changing method signatures, and altering data flow to incorporate the new setting. The patch also includes updates to tests to cover the new behavior. The localization evidence shows a mix of exact matches and fuzzy matches, indicating some structural changes but not a complete redesign. Therefore, the patch complexity is best classified as TYPE_III (structural changes).",
+        "reasoning": "The patch introduces structural changes involving new index settings, changes to metadata handling, and modifications to how indices with non-active primary shards are treated during logical replication. It modifies multiple Java classes, including LogicalReplicationService, MetadataTracker, Publication, RelationMetadata, and LogicalReplicationRepository, adding new logic to mark indices as active or inactive and to skip restoration of indices with non-active shards. The patch also includes new tests verifying this behavior. The changes are not simple string replacements or whitespace fixes, but involve structural additions and API changes, though not a complete redesign. The localization evidence shows a mix of exact and fuzzy matches, indicating some complexity in applying the patch. Therefore, the patch is classified as TYPE_III with high confidence and a moderate token budget estimate.",
         "is_auto_generated": false
       }
     },
@@ -260,26 +261,26 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 27.67,
+      "elapsed_s": 36.58,
       "error": null,
       "adapted_count": 5
     },
     "agent5_structural": {
-      "elapsed_s": 0.05,
+      "elapsed_s": 0.02,
       "error": null,
       "refactored_count": 0
     },
     "agent6_synthesizer": {
-      "elapsed_s": 80.59,
+      "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 3,
-      "failed_count": 2,
-      "synthesis_status": "partial",
+      "synthesized_count": 5,
+      "failed_count": 0,
+      "synthesis_status": "success",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-          "old_string": "\nimport static io.crate.replication.logical.LogicalReplicationSettings.NON_REPLICATED_SETTINGS;\nimport static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;",
-          "new_string": "import static io.crate.replication.logical.LogicalReplicationSettings.NON_REPLICATED_SETTINGS;\nimport static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;\nimport static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;",
+          "old_string": "\nimport static io.crate.replication.logical.LogicalReplicationSettings.NON_REPLICATED_SETTINGS;\nimport static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;\n\nimport java.io.Closeable;\nimport java.util.ArrayList;",
+          "new_string": "import static io.crate.replication.logical.LogicalReplicationSettings.NON_REPLICATED_SETTINGS;\nimport static io.crate.replication.logical.LogicalReplicationSettings.PUBLISHER_INDEX_UUID;\nimport static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\n\nimport java.io.Closeable;\nimport java.util.ArrayList;",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -295,7 +296,23 @@
         {
           "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
           "old_string": "        for (var indexName : stateResponse.concreteIndices()) {\n            var relationName = RelationName.fromIndexName(indexName);\n            if (subscriberState.metadata().hasIndex(indexName) == false) {\n                toRestoreIndices.add(indexName);\n                relationNamesForStateUpdate.add(relationName);\n            } else if (subscribedRelations.get(relationName) == null) {\n                relationNamesForStateUpdate.add(relationName);\n            }\n        }",
-          "new_string": "        for (IndexMetadata indexMetadata : stateResponse.concreteIndices()) {\n            String indexName = indexMetadata.getIndex().getName();\n            var relationName = RelationName.fromIndexName(indexName);\n            if (subscribedRelations.get(relationName) == null) {\n                relationNamesForStateUpdate.add(relationName);\n            }\n            if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {\n                // If the index is not active, we cannot restore it\n                if (LOGGER.isDebugEnabled()) {\n                    LOGGER.debug(\"Skipping index {} for subscription {} as it is not active\", indexName, subscription);\n                }\n                continue;\n            }\n            if (subscriberState.metadata().hasIndex(indexName) == false) {\n                toRestoreIndices.add(indexName);\n                relationNamesForStateUpdate.add(relationName);\n            }\n        }",
+          "new_string": "        for (var indexName : stateResponse.concreteIndices()) {\n            var relationName = RelationName.fromIndexName(indexName);\n            if (subscribedRelations.get(relationName) == null) {\n                relationNamesForStateUpdate.add(relationName);\n            }\n            var indexMetadata = subscriberState.metadata().index(indexName);\n            if (REPLICATION_INDEX_ROUTING_ACTIVE.get(indexMetadata.getSettings()) == false) {\n                if (LOGGER.isDebugEnabled()) {\n                    LOGGER.debug(\"Skipping index {} for subscription {} as it is not active\", indexName, subscription);\n                }\n                continue;\n            }\n            if (subscriberState.metadata().hasIndex(indexName) == false) {\n                toRestoreIndices.add(indexName);\n                relationNamesForStateUpdate.add(relationName);\n            }\n        }",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "old_string": "\npackage io.crate.replication.logical.metadata;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Predicate;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\nimport org.elasticsearch.index.IndexSettings;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;",
+          "new_string": "\npackage io.crate.replication.logical.metadata;\n\nimport static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Function;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\nimport org.elasticsearch.common.settings.Settings;\nimport org.jetbrains.annotations.VisibleForTesting;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "old_string": "        // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n        Predicate<String> indexFilter = indexName -> {\n            var indexMetadata = state.metadata().index(indexName);\n            if (indexMetadata != null) {\n                boolean softDeletes = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());\n                if (softDeletes == false) {\n                    LOGGER.warn(\n                        \"Table '{}' won't be replicated as the required table setting \" +\n                            \"'soft_deletes.enabled' is set to: {}\",\n                        RelationName.fromIndexName(indexName),\n                        softDeletes\n                    );\n                    return false;\n                }\n                var routingTable = state.routingTable().index(indexName);\n                assert routingTable != null : \"routingTable must not be null\";\n                return routingTable.allPrimaryShardsActive();\n\n            }\n            // Partitioned table case (template, no index).\n            return true;\n        };\n\n        var relations = new HashSet<RelationName>();",
+          "new_string": "        var relations = new HashSet<RelationName>();",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -311,9 +328,13 @@
         {
           "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
           "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "outcome": "clean"
         }
       ],
-      "synthesized_count_after_repair": 3
+      "synthesized_count_after_repair": 5
     },
     "agent7_validator": {
       "validation_passed": false,
@@ -338,16 +359,16 @@
       ]
     },
     "agent9_fallback_1": {
-      "fallback_status": "failed",
+      "fallback_status": "applied",
       "fallback_attempts": 1,
-      "synthesized_count": 0,
+      "synthesized_count": 3,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
           "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java",
-          "what_changed": "Added import of IndexMetadata to the imports list.",
-          "where_in_code": "imports section",
-          "intent": "To enable usage of IndexMetadata type in the class for more precise metadata handling.",
+          "what_changed": "Added import of IndexMetadata class.",
+          "where_in_code": "imports",
+          "intent": "To enable usage of IndexMetadata type in the class.",
           "change_type": "modify_import",
           "key_symbols": [
             "IndexMetadata"
@@ -356,9 +377,9 @@
         {
           "hunk_index": 1,
           "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java",
-          "what_changed": "Changed iteration over concrete indices from strings to IndexMetadata objects, extracting index names explicitly before checking existence and invoking callback.",
-          "where_in_code": "method containing index existence check (likely in LogicalReplicationService)",
-          "intent": "To use richer metadata objects for more accurate and robust index handling instead of relying on string names alone.",
+          "what_changed": "Changed iteration over concrete indices from strings to IndexMetadata objects and extracted index names accordingly.",
+          "where_in_code": "method containing iteration over stateResponse.concreteIndices()",
+          "intent": "To work directly with IndexMetadata objects for more accurate metadata handling instead of just index names as strings.",
           "change_type": "modify_logic",
           "key_symbols": [
             "stateResponse.concreteIndices",
@@ -368,9 +389,9 @@
         {
           "hunk_index": 2,
           "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java",
-          "what_changed": "Added a new internal boolean index setting REPLICATION_INDEX_ROUTING_ACTIVE to mark an index as active (all primary shards active) for restoration purposes.",
-          "where_in_code": "LogicalReplicationSettings class, near other index settings declarations",
-          "intent": "To track and mark indices that are fully active and thus safe to restore or track during replication, filtering them appropriately on subscriber clusters.",
+          "what_changed": "Added a new internal boolean index setting REPLICATION_INDEX_ROUTING_ACTIVE to mark an index as active (all primary shards active).",
+          "where_in_code": "LogicalReplicationSettings class, field declarations",
+          "intent": "To track whether an index is active and can be restored or tracked, and to filter this setting out on subscriber clusters.",
           "change_type": "add_field",
           "key_symbols": [
             "REPLICATION_INDEX_ROUTING_ACTIVE"
@@ -379,9 +400,9 @@
         {
           "hunk_index": 3,
           "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java",
-          "what_changed": "Included the newly added REPLICATION_INDEX_ROUTING_ACTIVE setting in the list of non-replicated settings.",
+          "what_changed": "Added the REPLICATION_INDEX_ROUTING_ACTIVE setting to the set of non-replicated settings.",
           "where_in_code": "LogicalReplicationSettings class, NON_REPLICATED_SETTINGS declaration",
-          "intent": "To ensure the new internal setting is excluded from replication to subscriber indices as it is only relevant locally.",
+          "intent": "To exclude the new active routing setting from replication between subscribed/replicated indices.",
           "change_type": "modify_logic",
           "key_symbols": [
             "REPLICATION_INDEX_ROUTING_ACTIVE",
@@ -391,9 +412,9 @@
         {
           "hunk_index": 4,
           "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-          "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE setting to the imports.",
-          "where_in_code": "imports section",
-          "intent": "To enable usage of the new internal index setting in MetadataTracker for filtering or logic decisions.",
+          "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE setting.",
+          "where_in_code": "imports",
+          "intent": "To use the new active routing setting in MetadataTracker logic.",
           "change_type": "modify_import",
           "key_symbols": [
             "REPLICATION_INDEX_ROUTING_ACTIVE"
@@ -402,9 +423,9 @@
         {
           "hunk_index": 5,
           "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-          "what_changed": "Changed stream processing of concrete indices from strings to IndexMetadata objects, extracting index names explicitly for filtering and mapping to RelationName.",
-          "where_in_code": "method processing existingRelations in MetadataTracker",
-          "intent": "To improve accuracy and robustness by working with full IndexMetadata objects rather than just index name strings.",
+          "what_changed": "Changed stream processing of concreteIndices from strings to IndexMetadata objects and extracted index names accordingly.",
+          "where_in_code": "method processing publisherStateResponse.concreteIndices()",
+          "intent": "To work with IndexMetadata objects for accurate metadata checks instead of just index name strings.",
           "change_type": "modify_logic",
           "key_symbols": [
             "publisherStateResponse.concreteIndices",
@@ -414,9 +435,9 @@
         {
           "hunk_index": 6,
           "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-          "what_changed": "Refactored loop over concrete indices to use IndexMetadata objects; added logic to skip indices marked as inactive by REPLICATION_INDEX_ROUTING_ACTIVE setting; reordered checks to add relation names for state update before skipping inactive indices; added debug logging when skipping inactive indices.",
-          "where_in_code": "method handling indices restoration and state update in MetadataTracker",
-          "intent": "To prevent restoration attempts of indices that are not fully active (i.e., not all primary shards assigned), avoiding restore failures and improving replication stability.",
+          "what_changed": "Refactored iteration over concreteIndices to use IndexMetadata objects; added logic to skip indices that are not marked as active via REPLICATION_INDEX_ROUTING_ACTIVE setting; reordered checks to add relation names for state update before skipping inactive indices.",
+          "where_in_code": "method processing stateResponse.concreteIndices()",
+          "intent": "To avoid restoring indices that are not active (all primary shards assigned) and thus cannot be restored, improving robustness of restoration logic.",
           "change_type": "modify_logic",
           "key_symbols": [
             "REPLICATION_INDEX_ROUTING_ACTIVE",
@@ -427,9 +448,9 @@
         {
           "hunk_index": 7,
           "file_path": "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java",
-          "what_changed": "Added import of IndexMetadata to the imports list.",
-          "where_in_code": "imports section",
-          "intent": "To support returning or processing IndexMetadata objects in this class.",
+          "what_changed": "Added import of IndexMetadata class.",
+          "where_in_code": "imports",
+          "intent": "To enable usage of IndexMetadata type in PublicationsStateAction.",
           "change_type": "modify_import",
           "key_symbols": [
             "IndexMetadata"
@@ -440,7 +461,7 @@
           "file_path": "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java",
           "what_changed": "Changed method concreteIndices() to return a list of IndexMetadata objects instead of just index name strings.",
           "where_in_code": "Response class, concreteIndices() method",
-          "intent": "To provide richer metadata information about concrete indices for downstream processing.",
+          "intent": "To provide richer metadata information about concrete indices in publications state responses.",
           "change_type": "modify_method",
           "key_symbols": [
             "concreteIndices",
@@ -450,24 +471,23 @@
         {
           "hunk_index": 9,
           "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "what_changed": "Added static import of REPLICATION_INDEX_ROUTING_ACTIVE and imports of additional classes including Function, IndexMetadata, Settings, and VisibleForTesting annotation.",
-          "where_in_code": "imports section",
-          "intent": "To support new logic involving index settings and functional transformations on IndexMetadata within Publication class.",
+          "what_changed": "Added static import of REPLICATION_INDEX_ROUTING_ACTIVE and imports of additional classes including Function, IndexMetadata, Settings, and annotations.",
+          "where_in_code": "imports",
+          "intent": "To support new logic involving index settings and functional transformations related to replication index routing active state.",
           "change_type": "modify_import",
           "key_symbols": [
             "REPLICATION_INDEX_ROUTING_ACTIVE",
             "Function",
             "IndexMetadata",
-            "Settings",
-            "VisibleForTesting"
+            "Settings"
           ]
         },
         {
           "hunk_index": 10,
           "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "what_changed": "Removed the previous indexFilter predicate that checked if all primary shards are active by inspecting routing tables.",
-          "where_in_code": "method constructing filtered relations in Publication",
-          "intent": "To replace the previous shard activity check with a new approach embedded elsewhere, simplifying this method.",
+          "what_changed": "Removed the indexFilter predicate that checked if all primary shards are active for an index.",
+          "where_in_code": "method constructing Publication relations",
+          "intent": "To remove shard activity filtering from this location, likely moving that logic elsewhere for better control.",
           "change_type": "modify_logic",
           "key_symbols": [
             "indexFilter"
@@ -476,10 +496,10 @@
         {
           "hunk_index": 11,
           "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "what_changed": "Refactored filtering of relations to remove indexFilter predicate and instead apply a new function applyCustomIndexSettings that marks indices with a custom setting indicating shard activity; added applyCustomIndexSettings method that annotates IndexMetadata with REPLICATION_INDEX_ROUTING_ACTIVE flag based on routing table shard activity.",
-          "where_in_code": "method returning filtered relations map; added applyCustomIndexSettings method",
-          "intent": "To centralize and formalize the marking of index activity status within IndexMetadata, enabling downstream components to rely on this flag rather than external predicates.",
-          "change_type": "modify_logic|add_method",
+          "what_changed": "Refactored filtering of relations to remove indexFilter predicate and instead apply a function that marks indices with a custom setting indicating if all primary shards are active; added a new static method applyCustomIndexSettings that annotates IndexMetadata with the active routing setting based on shard activity.",
+          "where_in_code": "method returning relations map; added applyCustomIndexSettings method",
+          "intent": "To centralize and explicitly mark indices with their active shard status in their metadata, improving clarity and control over which indices are considered active for replication.",
+          "change_type": "add_method|modify_logic",
           "key_symbols": [
             "applyCustomIndexSettings",
             "REPLICATION_INDEX_ROUTING_ACTIVE"
@@ -488,9 +508,9 @@
         {
           "hunk_index": 12,
           "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "what_changed": "Replaced import of Predicate with import of Function to support functional transformations.",
-          "where_in_code": "imports section",
-          "intent": "To enable passing functions that transform IndexMetadata objects rather than just predicates for filtering.",
+          "what_changed": "Replaced import of Predicate with import of Function.",
+          "where_in_code": "imports",
+          "intent": "To support changing from predicate-based filtering to function-based transformation of IndexMetadata.",
           "change_type": "modify_import",
           "key_symbols": [
             "Function"
@@ -499,33 +519,33 @@
         {
           "hunk_index": 13,
           "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "what_changed": "Changed fromMetadata method signature to accept a Function that applies custom transformations to IndexMetadata instead of a Predicate for filtering index names.",
-          "where_in_code": "RelationMetadata.fromMetadata static method",
-          "intent": "To allow applying custom index settings or modifications to IndexMetadata objects during construction of RelationMetadata instances.",
+          "what_changed": "Changed from using a Predicate<String> filter parameter to a Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings parameter in fromMetadata method.",
+          "where_in_code": "RelationMetadata.fromMetadata method",
+          "intent": "To allow applying custom transformations to IndexMetadata objects when constructing RelationMetadata, enabling embedding of additional metadata like active shard status.",
           "change_type": "modify_signature",
-          "key_symbols": [
-            "fromMetadata",
-            "Function<IndexMetadata, IndexMetadata>"
-          ]
-        },
-        {
-          "hunk_index": 14,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "what_changed": "Updated fromMetadata method to apply the provided Function to each concrete IndexMetadata before adding it to the list; skipped null indices; similarly applied the function to the main index metadata before returning.",
-          "where_in_code": "RelationMetadata.fromMetadata static method",
-          "intent": "To ensure all IndexMetadata instances used in RelationMetadata are consistently transformed (e.g., annotated with custom settings) before use.",
-          "change_type": "modify_logic",
           "key_symbols": [
             "fromMetadata",
             "applyCustomIndexSettings"
           ]
         },
         {
+          "hunk_index": 14,
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
+          "what_changed": "Modified fromMetadata method to apply the custom IndexMetadata transformation function to each concrete index metadata and the main index metadata before constructing RelationMetadata; added null checks for concrete index metadata.",
+          "where_in_code": "RelationMetadata.fromMetadata method",
+          "intent": "To embed additional index settings (such as active routing state) into RelationMetadata instances for downstream use.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "applyCustomIndexSettings",
+            "fromMetadata"
+          ]
+        },
+        {
           "hunk_index": 15,
           "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
           "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE setting.",
-          "where_in_code": "imports section",
-          "intent": "To enable filtering or logic based on the new internal index setting within the repository code.",
+          "where_in_code": "imports",
+          "intent": "To use the active routing setting in repository logic.",
           "change_type": "modify_import",
           "key_symbols": [
             "REPLICATION_INDEX_ROUTING_ACTIVE"
@@ -534,9 +554,9 @@
         {
           "hunk_index": 16,
           "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
-          "what_changed": "Modified snapshot creation to filter concrete indices by the REPLICATION_INDEX_ROUTING_ACTIVE setting, only including indices marked as active in the snapshot info.",
+          "what_changed": "Modified snapshot creation logic to filter concrete indices to only those marked as active via REPLICATION_INDEX_ROUTING_ACTIVE setting before mapping to index names.",
           "where_in_code": "method creating SnapshotInfo from publications state",
-          "intent": "To exclude inactive indices from snapshots, preventing restore attempts on indices that are not fully active and avoiding potential failures.",
+          "intent": "To ensure snapshots only include indices that are active and ready for restoration, avoiding incomplete or inactive indices.",
           "change_type": "modify_logic",
           "key_symbols": [
             "SnapshotInfo",
@@ -546,26 +566,295 @@
         {
           "hunk_index": 17,
           "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
-          "what_changed": "When building index metadata for replication, removed the REPLICATION_INDEX_ROUTING_ACTIVE setting from the index settings before storing, treating it as a local marker not to be replicated.",
-          "where_in_code": "method building replicated index metadata in LogicalReplicationRepository",
-          "intent": "To prevent the internal active routing marker from being replicated to subscriber indices, as it is only relevant on the source cluster.",
+          "what_changed": "When building index metadata for replication, removed the REPLICATION_INDEX_ROUTING_ACTIVE setting from the index settings before storing them.",
+          "where_in_code": "method building replicated index metadata",
+          "intent": "To prevent the active routing marker setting from being propagated to replicated indices, as it is only relevant for source indices and should not be replicated.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "REPLICATION_INDEX_ROUTING_ACTIVE"
+            "REPLICATION_INDEX_ROUTING_ACTIVE",
+            "IndexMetadata.Builder"
           ]
         }
       ]
     },
     "agent8_syntax_repair_fallback_1": {
-      "syntax_repair_status": "skipped",
+      "syntax_repair_status": "clean",
       "syntax_repair_attempts": 0,
-      "syntax_repair_log": []
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+          "outcome": "clean"
+        }
+      ]
     },
     "agent7_validator_retry1": {
       "validation_passed": false,
       "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:254: error: cannot find symbol\nserver/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:282: error: cannot find symbol\nserver/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:311: error: cannot find symbol\nserver/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:337: error: cannot find symbol\nserver/src/test/java/io/crate/",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/replication/logical/metadata/Publication.java:146: error: cannot find symbol\nserver/src/main/java/io/crate/replication/logical/metadata/Publication.java:149: error: cannot find symbol\nserver/src/main/java/io/crate/replication/logical/metadata/Publication.java:150: error: no suitable method found for collect(Collector<RelationMetadata,CAP#1,Map<RelationName,Object>>)",
       "validation_attempts": 2,
+      "retry_files": [
+        "server/src/main/java/io/crate/replication/logical/metadata/Publication.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "line": 146,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "line": 149,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "line": 150,
+          "message": "error: no suitable method found for collect(Collector<RelationMetadata,CAP#1,Map<RelationName,Object>>)"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 1,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java",
+          "what_changed": "Added import of IndexMetadata class.",
+          "where_in_code": "imports",
+          "intent": "To enable usage of IndexMetadata type in the class.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "IndexMetadata"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java",
+          "what_changed": "Changed iteration over concrete indices from strings to IndexMetadata objects, extracting index names from them before checking existence.",
+          "where_in_code": "LogicalReplicationService (method context around index existence check)",
+          "intent": "To work directly with IndexMetadata objects for more accurate metadata handling instead of just index name strings.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "stateResponse.concreteIndices",
+            "IndexMetadata"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java",
+          "what_changed": "Added a new internal boolean index setting to mark an index as active for replication routing purposes.",
+          "where_in_code": "LogicalReplicationSettings class",
+          "intent": "To track whether an index is active (all primary shards active) and should be considered for restore or tracking in replication.",
+          "change_type": "add_field",
+          "key_symbols": [
+            "REPLICATION_INDEX_ROUTING_ACTIVE"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java",
+          "what_changed": "Included the newly added REPLICATION_INDEX_ROUTING_ACTIVE setting in the list of non-replicated settings.",
+          "where_in_code": "LogicalReplicationSettings class, nonReplicatedSettings list",
+          "intent": "To ensure the new internal setting is excluded from replication between subscribed/replicated indices.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "REPLICATION_INDEX_ROUTING_ACTIVE"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+          "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE setting.",
+          "where_in_code": "imports",
+          "intent": "To use the new replication active routing setting in MetadataTracker logic.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "REPLICATION_INDEX_ROUTING_ACTIVE"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+          "what_changed": "Changed stream processing of concreteIndices from strings to IndexMetadata objects, extracting index names for filtering and mapping.",
+          "where_in_code": "MetadataTracker class, method processing existingRelations",
+          "intent": "To operate on richer IndexMetadata objects rather than just index name strings for more precise metadata handling.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "concreteIndices",
+            "IndexMetadata"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+          "what_changed": "Refactored loop over concrete indices to use IndexMetadata objects; added logic to skip indices marked as inactive by the REPLICATION_INDEX_ROUTING_ACTIVE setting; reordered checks to add relation names for state update accordingly.",
+          "where_in_code": "MetadataTracker class, method processing indices for restoration and state update",
+          "intent": "To avoid restoring indices that are not active (all primary shards assigned), improving replication correctness and stability.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "REPLICATION_INDEX_ROUTING_ACTIVE",
+            "toRestore",
+            "relationNamesForStateUpdate"
+          ]
+        },
+        {
+          "hunk_index": 7,
+          "file_path": "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java",
+          "what_changed": "Added import of IndexMetadata class.",
+          "where_in_code": "imports",
+          "intent": "To enable returning IndexMetadata objects in PublicationsStateAction.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "IndexMetadata"
+          ]
+        },
+        {
+          "hunk_index": 8,
+          "file_path": "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java",
+          "what_changed": "Changed method concreteIndices() to return a list of IndexMetadata objects instead of just index name strings.",
+          "where_in_code": "PublicationsStateAction.Response class, concreteIndices() method",
+          "intent": "To provide richer metadata information about concrete indices in publications.",
+          "change_type": "modify_method",
+          "key_symbols": [
+            "concreteIndices",
+            "IndexMetadata"
+          ]
+        },
+        {
+          "hunk_index": 9,
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE and other related classes; introduced Function usage for applying custom index settings.",
+          "where_in_code": "imports",
+          "intent": "To support enhanced index metadata processing with custom settings in Publication class.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "REPLICATION_INDEX_ROUTING_ACTIVE",
+            "Function"
+          ]
+        },
+        {
+          "hunk_index": 10,
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "what_changed": "Removed the previous indexFilter predicate that checked if all primary shards are active via routing table.",
+          "where_in_code": "Publication class, method constructing indexFilter predicate",
+          "intent": "To replace shard activity filtering logic with a different approach elsewhere.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "indexFilter"
+          ]
+        },
+        {
+          "hunk_index": 11,
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
+          "what_changed": "Refactored relation filtering to remove indexFilter predicate and instead apply a custom index settings function that marks indices as active or not based on shard assignment; added a static method applyCustomIndexSettings to annotate IndexMetadata with active status; adjusted mapping accordingly.",
+          "where_in_code": "Publication class, method returning filtered relations map",
+          "intent": "To embed active shard status into index metadata for replication logic and improve filtering based on index readiness.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "applyCustomIndexSettings",
+            "RelationMetadata.fromMetadata",
+            "REPLICATION_INDEX_ROUTING_ACTIVE"
+          ]
+        },
+        {
+          "hunk_index": 12,
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
+          "what_changed": "Replaced import of Predicate with Function to support applying custom transformations on IndexMetadata.",
+          "where_in_code": "imports",
+          "intent": "To enable passing a function to modify IndexMetadata when constructing RelationMetadata.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Function"
+          ]
+        },
+        {
+          "hunk_index": 13,
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
+          "what_changed": "Changed fromMetadata method signature to accept a Function that applies custom settings to IndexMetadata instead of a Predicate filter.",
+          "where_in_code": "RelationMetadata class, fromMetadata method",
+          "intent": "To allow dynamic modification of IndexMetadata (e.g., marking active status) when creating RelationMetadata instances.",
+          "change_type": "modify_signature",
+          "key_symbols": [
+            "fromMetadata",
+            "Function<IndexMetadata, IndexMetadata>"
+          ]
+        },
+        {
+          "hunk_index": 14,
+          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
+          "what_changed": "Updated fromMetadata method to apply the provided custom settings function to each concrete IndexMetadata before adding it to the list; skipped null indices; applied the function also to the single indexMetadata fallback.",
+          "where_in_code": "RelationMetadata class, fromMetadata method",
+          "intent": "To ensure all index metadata used in RelationMetadata reflects the custom settings such as active shard status.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "applyCustomIndexSettings",
+            "fromMetadata"
+          ]
+        },
+        {
+          "hunk_index": 15,
+          "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
+          "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE setting.",
+          "where_in_code": "imports",
+          "intent": "To use the active routing setting in repository logic.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "REPLICATION_INDEX_ROUTING_ACTIVE"
+          ]
+        },
+        {
+          "hunk_index": 16,
+          "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
+          "what_changed": "Modified snapshot creation to filter concrete indices by the REPLICATION_INDEX_ROUTING_ACTIVE setting, only including active indices in the snapshot info.",
+          "where_in_code": "LogicalReplicationRepository class, snapshot method",
+          "intent": "To exclude inactive indices from snapshots to avoid restoring incomplete or unready indices.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "REPLICATION_INDEX_ROUTING_ACTIVE",
+            "snapshot"
+          ]
+        },
+        {
+          "hunk_index": 17,
+          "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
+          "what_changed": "When building index metadata for replication, removed the REPLICATION_INDEX_ROUTING_ACTIVE setting from the index settings to prevent it from being restored or tracked on the subscriber cluster.",
+          "where_in_code": "LogicalReplicationRepository class, method building replicated index metadata",
+          "intent": "To ensure the active routing marker is only used internally on the publisher side and not propagated to subscriber indices.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "REPLICATION_INDEX_ROUTING_ACTIVE",
+            "indexMetadata"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry2": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:254: error: cannot find symbol\nserver/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:282: error: cannot find symbol\nserver/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:311: error: cannot find symbol\nserver/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:337: error: cannot find symbol\nserver/src/test/java/io/crate/",
+      "validation_attempts": 3,
       "retry_files": [
         "server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java",
         "server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java"
@@ -643,281 +932,6 @@
           "message": "error: cannot find symbol"
         }
       ]
-    },
-    "agent9_fallback_2": {
-      "fallback_status": "applied",
-      "fallback_attempts": 2,
-      "synthesized_count": 6,
-      "hunk_descriptions": [
-        {
-          "hunk_index": 0,
-          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java",
-          "what_changed": "Added import of IndexMetadata class.",
-          "where_in_code": "imports",
-          "intent": "To enable usage of IndexMetadata type in the class.",
-          "change_type": "modify_import",
-          "key_symbols": [
-            "IndexMetadata"
-          ]
-        },
-        {
-          "hunk_index": 1,
-          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java",
-          "what_changed": "Changed iteration over concrete indices from strings to IndexMetadata objects and extracted index names accordingly.",
-          "where_in_code": "method containing iteration over stateResponse.concreteIndices()",
-          "intent": "To work directly with IndexMetadata objects for more detailed metadata access instead of just index names.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "stateResponse.concreteIndices",
-            "IndexMetadata"
-          ]
-        },
-        {
-          "hunk_index": 2,
-          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java",
-          "what_changed": "Added a new internal boolean index setting REPLICATION_INDEX_ROUTING_ACTIVE to mark indices as active for replication purposes.",
-          "where_in_code": "LogicalReplicationSettings class, field declarations",
-          "intent": "To track whether an index is active (all primary shards active) and should be considered for restore or tracking in replication.",
-          "change_type": "add_field",
-          "key_symbols": [
-            "REPLICATION_INDEX_ROUTING_ACTIVE"
-          ]
-        },
-        {
-          "hunk_index": 3,
-          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationSettings.java",
-          "what_changed": "Included the newly added REPLICATION_INDEX_ROUTING_ACTIVE setting in the list of non-replicated settings.",
-          "where_in_code": "LogicalReplicationSettings class, NON_REPLICATED_SETTINGS declaration",
-          "intent": "To ensure the new internal setting is excluded from replication between subscribed/replicated indices.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "REPLICATION_INDEX_ROUTING_ACTIVE",
-            "NON_REPLICATED_SETTINGS"
-          ]
-        },
-        {
-          "hunk_index": 4,
-          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-          "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE setting.",
-          "where_in_code": "imports",
-          "intent": "To use the new replication active routing setting in MetadataTracker logic.",
-          "change_type": "modify_import",
-          "key_symbols": [
-            "REPLICATION_INDEX_ROUTING_ACTIVE"
-          ]
-        },
-        {
-          "hunk_index": 5,
-          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-          "what_changed": "Changed stream processing of concreteIndices from strings to IndexMetadata objects and extracted index names for filtering.",
-          "where_in_code": "method processing publisherStateResponse.concreteIndices()",
-          "intent": "To operate on IndexMetadata objects directly for more accurate metadata handling.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "publisherStateResponse.concreteIndices",
-            "IndexMetadata"
-          ]
-        },
-        {
-          "hunk_index": 6,
-          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-          "what_changed": "Refactored loop over concreteIndices to use IndexMetadata objects; added check for REPLICATION_INDEX_ROUTING_ACTIVE setting to skip inactive indices; reordered logic to add relation names for state update before skipping inactive indices.",
-          "where_in_code": "method processing stateResponse.concreteIndices()",
-          "intent": "To avoid restoring indices that are not active (all primary shards assigned), improving replication correctness and stability.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "REPLICATION_INDEX_ROUTING_ACTIVE",
-            "stateResponse.concreteIndices",
-            "toRestore"
-          ]
-        },
-        {
-          "hunk_index": 7,
-          "file_path": "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java",
-          "what_changed": "Added import of IndexMetadata class.",
-          "where_in_code": "imports",
-          "intent": "To support returning IndexMetadata objects in PublicationsStateAction.",
-          "change_type": "modify_import",
-          "key_symbols": [
-            "IndexMetadata"
-          ]
-        },
-        {
-          "hunk_index": 8,
-          "file_path": "server/src/main/java/io/crate/replication/logical/action/PublicationsStateAction.java",
-          "what_changed": "Changed method concreteIndices() to return a list of IndexMetadata objects instead of just index names.",
-          "where_in_code": "PublicationsStateAction.Response class, concreteIndices() method",
-          "intent": "To provide richer metadata information about concrete indices in publications.",
-          "change_type": "modify_method",
-          "key_symbols": [
-            "concreteIndices",
-            "IndexMetadata"
-          ]
-        },
-        {
-          "hunk_index": 9,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE and other utility classes; reorganized imports.",
-          "where_in_code": "imports",
-          "intent": "To support new logic related to replication active routing setting and improve code clarity.",
-          "change_type": "modify_import",
-          "key_symbols": [
-            "REPLICATION_INDEX_ROUTING_ACTIVE"
-          ]
-        },
-        {
-          "hunk_index": 10,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "what_changed": "Removed the indexFilter predicate that checked for all primary shards active via routing table; replaced with alternative approach.",
-          "where_in_code": "Publication constructor or method filtering indices",
-          "intent": "To simplify or change the way active indices are determined, possibly deferring this logic elsewhere.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "indexFilter"
-          ]
-        },
-        {
-          "hunk_index": 11,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "what_changed": "Removed filtering of relations by indexFilter predicate; introduced a method applyCustomIndexSettings that marks indices with REPLICATION_INDEX_ROUTING_ACTIVE based on routing table shard activity; updated fromMetadata call to use this function to apply custom index settings.",
-          "where_in_code": "Publication class, method returning filtered relations map",
-          "intent": "To embed active shard status into index metadata settings for replication logic to use consistently.",
-          "change_type": "add_method",
-          "key_symbols": [
-            "applyCustomIndexSettings",
-            "REPLICATION_INDEX_ROUTING_ACTIVE"
-          ]
-        },
-        {
-          "hunk_index": 12,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "what_changed": "Replaced import of Predicate with Function to support applying transformations to IndexMetadata.",
-          "where_in_code": "imports",
-          "intent": "To enable passing a function that modifies IndexMetadata when constructing RelationMetadata.",
-          "change_type": "modify_import",
-          "key_symbols": [
-            "Function"
-          ]
-        },
-        {
-          "hunk_index": 13,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "what_changed": "Changed fromMetadata method signature to accept a Function that applies custom settings to IndexMetadata instead of a Predicate filter.",
-          "where_in_code": "RelationMetadata.fromMetadata method",
-          "intent": "To allow modification of index metadata (e.g., adding active routing flag) when creating RelationMetadata instances.",
-          "change_type": "modify_signature",
-          "key_symbols": [
-            "fromMetadata",
-            "Function<IndexMetadata, IndexMetadata>"
-          ]
-        },
-        {
-          "hunk_index": 14,
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "what_changed": "Updated fromMetadata method to apply the custom IndexMetadata transformation function to each concrete index metadata before adding it; skipped null indices; applied the function also to the main index metadata.",
-          "where_in_code": "RelationMetadata.fromMetadata method",
-          "intent": "To ensure all index metadata used in RelationMetadata includes the custom settings such as replication active routing flag.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "fromMetadata",
-            "applyCustomIndexSettings"
-          ]
-        },
-        {
-          "hunk_index": 15,
-          "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
-          "what_changed": "Added import of REPLICATION_INDEX_ROUTING_ACTIVE setting.",
-          "where_in_code": "imports",
-          "intent": "To use the replication active routing setting in repository logic.",
-          "change_type": "modify_import",
-          "key_symbols": [
-            "REPLICATION_INDEX_ROUTING_ACTIVE"
-          ]
-        },
-        {
-          "hunk_index": 16,
-          "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
-          "what_changed": "Modified snapshot creation to filter concrete indices by the REPLICATION_INDEX_ROUTING_ACTIVE setting, only including active indices in the snapshot info.",
-          "where_in_code": "method creating SnapshotInfo from publications state",
-          "intent": "To exclude inactive indices from snapshots to avoid restoring incomplete or inactive data.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "SnapshotInfo",
-            "REPLICATION_INDEX_ROUTING_ACTIVE"
-          ]
-        },
-        {
-          "hunk_index": 17,
-          "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
-          "what_changed": "When building index metadata for replication, removed the REPLICATION_INDEX_ROUTING_ACTIVE setting from the index settings before storing, treating it as an internal marker not to be replicated.",
-          "where_in_code": "method building replicated index metadata",
-          "intent": "To prevent the internal active routing marker from being replicated to subscriber indices.",
-          "change_type": "modify_logic",
-          "key_symbols": [
-            "REPLICATION_INDEX_ROUTING_ACTIVE",
-            "IndexMetadata.Builder"
-          ]
-        }
-      ]
-    },
-    "agent8_syntax_repair_fallback_2": {
-      "syntax_repair_status": "clean",
-      "syntax_repair_attempts": 0,
-      "syntax_repair_log": [
-        {
-          "file_path": "server/src/main/java/io/crate/replication/logical/LogicalReplicationService.java",
-          "outcome": "clean"
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/replication/logical/MetadataTracker.java",
-          "outcome": "clean"
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "outcome": "clean"
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "outcome": "clean"
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/replication/logical/repository/LogicalReplicationRepository.java",
-          "outcome": "clean"
-        }
-      ]
-    },
-    "agent7_validator_retry2": {
-      "validation_passed": false,
-      "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/replication/logical/metadata/Publication.java:123: error: cannot find symbol\nserver/src/main/java/io/crate/replication/logical/metadata/Publication.java:174: error: no suitable method found for collect(Collector<RelationMetadata,CAP#1,Map<RelationName,Object>>)\nserver/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java:74: error: cannot find symbol",
-      "validation_attempts": 3,
-      "retry_files": [
-        "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-        "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java"
-      ],
-      "build_success": false,
-      "build_mode": "crate-helper",
-      "test_success": null,
-      "test_mode": null,
-      "test_state": null,
-      "test_state_transition": null,
-      "compile_errors": [
-        {
-          "file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "line": 123,
-          "message": "error: cannot find symbol"
-        },
-        {
-          "file": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-          "line": 174,
-          "message": "error: no suitable method found for collect(Collector<RelationMetadata,CAP#1,Map<RelationName,Object>>)"
-        },
-        {
-          "file": "server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java",
-          "line": 74,
-          "message": "error: cannot find symbol"
-        }
-      ]
     }
   },
   "summary": {
@@ -951,27 +965,41 @@
       9,
       10
     ],
-    "tokens_used": 13610,
-    "synthesis_status": "partial",
+    "tokens_used": 66722,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 19452,
+        "output": 2299
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 59338,
+        "output": 7384
+      }
+    },
+    "synthesis_status": "success",
     "applied_on_disk_ag3": 13,
-    "synthesized_count": 6,
-    "failed_hunks_total": 2,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
     "syntax_repair_status": "clean",
-    "fallback_status": "applied",
+    "fallback_status": "failed",
     "fallback_attempts": 2,
     "retry_contexts": [
-      {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
       {
         "error_type": "unknown",
         "error_message": "[ERROR] /repo/server/src/main/java/io/crate/replication/logical/MetadataTracker.java:23:1: 'import' should be separated from previous line. [EmptyLineSeparator]\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (validate) on project crate-server: Failed during checkstyle execution: There is 1 error reported by Checkstyle 10.20.0 with checkstyle.xml ruleset. -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
@@ -980,57 +1008,21 @@
       },
       {
         "error_type": "api_mismatch",
-        "error_message": "symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[337,109] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[362,109] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[403,91] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[434,95] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[462,125] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[490,126] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java:[295,19] error: cannot find symbol\n[ERROR]   symbol:   variable REPLICATION_INDEX_ROUTING_ACTIVE\n[ERROR]   location: class PublicationsStateActionTest\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java:[299,19] error: cannot find symbol\n[ERROR]   symbol:   variable REPLICATION_INDEX_ROUTING_ACTIVE\n[ERROR]   location: class PublicationsStateActionTest\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java:[333,19] error: cannot find symbol\n[ERROR]   symbol:   variable REPLICATION_INDEX_ROUTING_ACTIVE\n[ERROR]   location: class PublicationsStateActionTest\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java:[371,19] error: cannot find symbol\n[ERROR]   symbol:   variable REPLICATION_INDEX_ROUTING_ACTIVE\n[ERROR]   location: class PublicationsStateActionTest\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "or: cannot find symbol\n  symbol:   variable indexFilter\n[ERROR] /repo/server/src/main/java/io/crate/replication/logical/metadata/Publication.java:[150,12] error: no suitable method found for collect(Collector<RelationMetadata,CAP#1,Map<RelationName,Object>>)\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/replication/logical/metadata/Publication.java:[146,36] error: cannot find symbol\n[ERROR]   symbol:   variable indexFilter\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/main/java/io/crate/replication/logical/metadata/Publication.java:[149,95] error: cannot find symbol\n[ERROR]   symbol:   variable indexFilter\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/main/java/io/crate/replication/logical/metadata/Publication.java:[150,12] error: no suitable method found for collect(Collector<RelationMetadata,CAP#1,Map<RelationName,Object>>)\n[ERROR]     method Stream.<R#1>collect(Supplier<R#1>,BiConsumer<R#1,? super Object>,BiConsumer<R#1,R#1>) is not applicable\n[ERROR]       (cannot infer type-variable(s) R#1\n[ERROR]         (actual and formal argument lists differ in length))\n[ERROR]     method Stream.<R#2,A>collect(Collector<? super Object,A,R#2>) is not applicable\n[ERROR]       (inference variable T#2 has incompatible bounds\n[ERROR]         upper bounds: Object,RelationMetadata\n[ERROR]         lower bounds: Object)\n[ERROR]   where R#1,T#1,R#2,A,T#2,K,U are type-variables:\n[ERROR]     R#1 extends Object declared in method <R#1>collect(Supplier<R#1>,BiConsumer<R#1,? super T#1>,BiConsumer<R#1,R#1>)\n[ERROR]     T#1 extends Object declared in interface Stream\n[ERROR]     R#2 extends Object declared in method <R#2,A>collect(Collector<? super T#1,A,R#2>)\n[ERROR]     A extends Object declared in method <R#2,A>collect(Collector<? super T#1,A,R#2>)\n[ERROR]     T#2 extends Object declared in method <T#2,K,U>toMap(Function<? super T#2,? extends K>,Function<? super T#2,? extends U>)\n[ERROR]     K extends Object declared in method <T#2,K,U>toMap(Function<? super T#2,? extends K>,Function<? super T#2,? extends U>)\n[ERROR]     U extends Object declared in method <T#2,K,U>toMap(Function<? super T#2,? extends K>,Function<? super T#2,? extends U>)\n[ERROR]   where CAP#1 is a fresh type-variable:\n[ERROR]     CAP#1 extends Object from capture of ?\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 2,
         "suggested_action": "route_to_namespace_or_structural"
       },
       {
         "error_type": "api_mismatch",
-        "error_message": "error: no suitable method found for collect(Collector<RelationMetadata,CAP#1,Map<RelationName,Object>>)\n[ERROR] /repo/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java:[74,20] error: cannot find symbol\n  symbol:   variable filter\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/replication/logical/metadata/Publication.java:[123,8] error: cannot find symbol\n[ERROR]   symbol:   class Predicate\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/main/java/io/crate/replication/logical/metadata/Publication.java:[174,12] error: no suitable method found for collect(Collector<RelationMetadata,CAP#1,Map<RelationName,Object>>)\n[ERROR]     method Stream.<R#1>collect(Supplier<R#1>,BiConsumer<R#1,? super Object>,BiConsumer<R#1,R#1>) is not applicable\n[ERROR]       (cannot infer type-variable(s) R#1\n[ERROR]         (actual and formal argument lists differ in length))\n[ERROR]     method Stream.<R#2,A>collect(Collector<? super Object,A,R#2>) is not applicable\n[ERROR]       (inference variable T#2 has incompatible bounds\n[ERROR]         upper bounds: Object,RelationMetadata\n[ERROR]         lower bounds: Object)\n[ERROR]   where R#1,T#1,R#2,A,T#2,K,U are type-variables:\n[ERROR]     R#1 extends Object declared in method <R#1>collect(Supplier<R#1>,BiConsumer<R#1,? super T#1>,BiConsumer<R#1,R#1>)\n[ERROR]     T#1 extends Object declared in interface Stream\n[ERROR]     R#2 extends Object declared in method <R#2,A>collect(Collector<? super T#1,A,R#2>)\n[ERROR]     A extends Object declared in method <R#2,A>collect(Collector<? super T#1,A,R#2>)\n[ERROR]     T#2 extends Object declared in method <T#2,K,U>toMap(Function<? super T#2,? extends K>,Function<? super T#2,? extends U>)\n[ERROR]     K extends Object declared in method <T#2,K,U>toMap(Function<? super T#2,? extends K>,Function<? super T#2,? extends U>)\n[ERROR]     U extends Object declared in method <T#2,K,U>toMap(Function<? super T#2,? extends K>,Function<? super T#2,? extends U>)\n[ERROR]   where CAP#1 is a fresh type-variable:\n[ERROR]     CAP#1 extends Object from capture of ?\n[ERROR] /repo/server/src/main/java/io/crate/replication/logical/metadata/RelationMetadata.java:[74,20] error: cannot find symbol\n[ERROR]   symbol:   variable filter\n[ERROR]   location: class RelationMetadata\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[337,109] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[362,109] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[403,91] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[434,95] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[462,125] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/MetadataTrackerTest.java:[490,126] error: cannot find symbol\n[ERROR]   symbol:   method applyCustomIndexSettings(ClusterState)\n[ERROR]   location: class Publication\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java:[295,19] error: cannot find symbol\n[ERROR]   symbol:   variable REPLICATION_INDEX_ROUTING_ACTIVE\n[ERROR]   location: class PublicationsStateActionTest\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java:[299,19] error: cannot find symbol\n[ERROR]   symbol:   variable REPLICATION_INDEX_ROUTING_ACTIVE\n[ERROR]   location: class PublicationsStateActionTest\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java:[333,19] error: cannot find symbol\n[ERROR]   symbol:   variable REPLICATION_INDEX_ROUTING_ACTIVE\n[ERROR]   location: class PublicationsStateActionTest\n[ERROR] /repo/server/src/test/java/io/crate/replication/logical/action/PublicationsStateActionTest.java:[371,19] error: cannot find symbol\n[ERROR]   symbol:   variable REPLICATION_INDEX_ROUTING_ACTIVE\n[ERROR]   location: class PublicationsStateActionTest\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 3,
         "suggested_action": "route_to_namespace_or_structural"
       }
     ],
-    "failed_hunks": [
-      {
-        "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-        "old_content": "\npackage io.crate.replication.logical.metadata;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Predicate;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\nimport org.elasticsearch.index.IndexSettings;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;",
-        "new_content": "\npackage io.crate.replication.logical.metadata;\n\nimport static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Function;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\nimport org.elasticsearch.common.settings.Settings;\nimport org.jetbrains.annotations.VisibleForTesting;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;\n\n+    @VisibleForTesting\n+    public static Function<IndexMetadata, IndexMetadata> applyCustomIndexSettings(ClusterState state) {\n+        // mark indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n+        return im -> {\n+            var routingTable = state.routingTable().index(im.getIndex());\n+            assert routingTable != null : \"routingTable must not be null\";\n+            boolean isActive = routingTable.allPrimaryShardsActive();\n+            IndexMetadata.Builder builder = IndexMetadata.builder(im);\n+            return builder.settings(Settings.builder()\n+                    .put(im.getSettings())\n+                    .put(REPLICATION_INDEX_ROUTING_ACTIVE.getKey(), isActive))\n+                .build();\n+        };\n+    }",
-        "is_new_file": false,
-        "is_del_file": false,
-        "file_operation": "MODIFIED",
-        "imports_added": [
-          "import static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;",
-          "import java.util.function.Function;",
-          "import org.elasticsearch.cluster.metadata.IndexMetadata;",
-          "import org.elasticsearch.common.settings.Settings;",
-          "import org.jetbrains.annotations.VisibleForTesting;"
-        ],
-        "imports_removed": [
-          "import java.util.function.Predicate;"
-        ],
-        "adapted": true,
-        "loc_index": 9,
-        "original_old_content": "\npackage io.crate.replication.logical.metadata;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Predicate;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;\n",
-        "original_new_content": "\npackage io.crate.replication.logical.metadata;\n\nimport static io.crate.replication.logical.LogicalReplicationSettings.REPLICATION_INDEX_ROUTING_ACTIVE;\n\nimport java.io.IOException;\nimport java.util.ArrayList;\nimport java.util.HashSet;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.function.Function;\nimport java.util.stream.Collectors;\n\nimport org.apache.logging.log4j.LogManager;\nimport org.apache.logging.log4j.Logger;\nimport org.elasticsearch.cluster.ClusterState;\nimport org.elasticsearch.cluster.metadata.IndexMetadata;\nimport org.elasticsearch.cluster.metadata.Metadata;\nimport org.elasticsearch.common.io.stream.StreamInput;\nimport org.elasticsearch.common.io.stream.StreamOutput;\nimport org.elasticsearch.common.io.stream.Writeable;\nimport org.elasticsearch.common.settings.Settings;\nimport org.jetbrains.annotations.VisibleForTesting;\n\nimport io.crate.metadata.IndexName;\nimport io.crate.metadata.IndexParts;\n"
-      },
-      {
-        "file_path": "server/src/main/java/io/crate/replication/logical/metadata/Publication.java",
-        "old_content": "        // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n        Predicate<String> indexFilter = indexName -> {\n            var indexMetadata = state.metadata().index(indexName);\n            if (indexMetadata != null) {\n                boolean softDeletes = IndexSettings.INDEX_SOFT_DELETES_SETTING.get(indexMetadata.getSettings());\n                if (softDeletes == false) {\n                    LOGGER.warn(\n                        \"Table '{}' won't be replicated as the required table setting \" +\n                            \"'soft_deletes.enabled' is set to: {}\",\n                        RelationName.fromIndexName(indexName),\n                        softDeletes\n                    );\n                    return false;\n                }\n                var routingTable = state.routingTable().index(indexName);\n                assert routingTable != null : \"routingTable must not be null\";\n                return routingTable.allPrimaryShardsActive();\n\n            }\n            // Partitioned table case (template, no index).\n            return true;\n        };",
-        "new_content": "",
-        "is_new_file": false,
-        "is_del_file": false,
-        "file_operation": "MODIFIED",
-        "imports_added": [],
-        "imports_removed": [],
-        "adapted": true,
-        "loc_index": 10,
-        "original_old_content": "                                                                       Role publicationOwner,\n                                                                       Role subscriber,\n                                                                       String publicationName) {\n        // skip indices where not all shards are active yet, restore will fail if primaries are not (yet) assigned\n        Predicate<String> indexFilter = indexName -> {\n            var indexMetadata = state.metadata().index(indexName);\n            if (indexMetadata != null) {\n                var routingTable = state.routingTable().index(indexName);\n                assert routingTable != null : \"routingTable must not be null\";\n                return routingTable.allPrimaryShardsActive();\n\n            }\n            // Partitioned table case (template, no index).\n            return true;\n        };\n\n        var relations = new HashSet<RelationName>();\n\n",
-        "original_new_content": "                                                                       Role publicationOwner,\n                                                                       Role subscriber,\n                                                                       String publicationName) {\n\n        var relations = new HashSet<RelationName>();\n\n"
-      }
-    ],
-    "generated_patch_bytes": 12830,
+    "failed_hunks": [],
+    "generated_patch_bytes": 17735,
     "target_patch_bytes": 41304,
+    "patch_exact_match": false,
     "validation_passed": false,
     "validation_failure_category": "api_mismatch",
     "build_success": false,

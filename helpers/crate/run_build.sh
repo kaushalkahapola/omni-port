@@ -39,10 +39,13 @@ fi
 # Create persistent Maven cache volume
 ${DOCKER_CMD} volume create maven-cache-crate 2>/dev/null || true
 
-echo "--- Building Docker image... ---"
-# Use the helper directory as the build context (contains only the Dockerfile), not PROJECT_DIR
 HELPER_DIR="${TOOLKIT_DIR:-$(dirname "$0")}"
-${DOCKER_CMD} build -t ${IMAGE_TAG} "${HELPER_DIR}"
+if ${DOCKER_CMD} image inspect "${IMAGE_TAG}" > /dev/null 2>&1; then
+    echo "--- Docker image ${IMAGE_TAG} already exists, skipping build ---"
+else
+    echo "--- Building Docker image... ---"
+    ${DOCKER_CMD} build -t ${IMAGE_TAG} "${HELPER_DIR}"
+fi
 
 echo "--- Setting cache permissions... ---"
 ${DOCKER_CMD} run --rm -u root \

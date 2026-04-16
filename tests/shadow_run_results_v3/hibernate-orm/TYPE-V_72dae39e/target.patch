@@ -1,0 +1,158 @@
+commit cfd54a41298ae8b529a24a83435f0916f256b1ee
+Author: Rob Green <rob.green@greenbeard.io>
+Date:   Sun Oct 12 19:03:23 2025 -0400
+
+    HHH-18871 allow collections to be mapped correctly while determining navigation path
+
+diff --git a/hibernate-core/src/main/java/org/hibernate/query/sql/internal/ResultSetMappingProcessor.java b/hibernate-core/src/main/java/org/hibernate/query/sql/internal/ResultSetMappingProcessor.java
+index 486e00b433..8dc3880886 100644
+--- a/hibernate-core/src/main/java/org/hibernate/query/sql/internal/ResultSetMappingProcessor.java
++++ b/hibernate-core/src/main/java/org/hibernate/query/sql/internal/ResultSetMappingProcessor.java
+@@ -15,6 +15,7 @@
+ import java.util.Map;
+ import java.util.Set;
+ 
++import org.hibernate.AssertionFailure;
+ import org.hibernate.HibernateException;
+ import org.hibernate.LockMode;
+ import org.hibernate.MappingException;
+@@ -280,15 +281,21 @@ private void applyFetchBuilder(
+ 	}
+ 
+ 	private NavigablePath determineNavigablePath(DynamicFetchBuilderLegacy fetchBuilder) {
+-		final NativeQuery.ResultNode ownerResult = alias2Return.get( fetchBuilder.getOwnerAlias() );
++		final var ownerResult = alias2Return.get( fetchBuilder.getOwnerAlias() );
++		final NavigablePath basePath;
+ 		if ( ownerResult instanceof NativeQuery.RootReturn ) {
+-			return ( (NativeQuery.RootReturn) ownerResult ).getNavigablePath()
+-					.append( fetchBuilder.getFetchableName() );
++			basePath = ((NativeQuery.RootReturn) ownerResult).getNavigablePath();
++		}
++		else if ( ownerResult instanceof DynamicFetchBuilderLegacy ) {
++			basePath = determineNavigablePath( ((DynamicFetchBuilderLegacy) ownerResult) );
+ 		}
+ 		else {
+-			return determineNavigablePath( ( DynamicFetchBuilderLegacy) ownerResult )
+-					.append( fetchBuilder.getFetchableName() );
++			throw new AssertionFailure( "Unexpected fetch builder" );
+ 		}
++		final NavigablePath path = alias2CollectionPersister.containsKey( fetchBuilder.getOwnerAlias() )
++				? basePath.append( CollectionPart.Nature.ELEMENT.getName() )
++				: basePath;
++		return path.append( fetchBuilder.getFetchableName() );
+ 	}
+ 
+ 	private DynamicResultBuilderEntityStandard createSuffixedResultBuilder(
+diff --git a/hibernate-core/src/test/java/org/hibernate/orm/test/query/NativeQueryNestedTreeTest.java b/hibernate-core/src/test/java/org/hibernate/orm/test/query/NativeQueryNestedTreeTest.java
+new file mode 100644
+index 0000000000..36a5b49616
+--- /dev/null
++++ b/hibernate-core/src/test/java/org/hibernate/orm/test/query/NativeQueryNestedTreeTest.java
+@@ -0,0 +1,107 @@
++/*
++ * Hibernate, Relational Persistence for Idiomatic Java
++ *
++ * License: GNU Lesser General Public License (LGPL), version 2.1 or later.
++ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
++ */
++package org.hibernate.orm.test.query;
++
++import jakarta.persistence.CascadeType;
++import jakarta.persistence.Entity;
++import jakarta.persistence.FetchType;
++import jakarta.persistence.GeneratedValue;
++import jakarta.persistence.Id;
++import jakarta.persistence.JoinColumn;
++import jakarta.persistence.ManyToOne;
++import jakarta.persistence.OneToMany;
++import jakarta.persistence.Table;
++import org.hibernate.testing.orm.junit.DomainModel;
++import org.hibernate.testing.orm.junit.Jira;
++import org.hibernate.testing.orm.junit.SessionFactory;
++import org.hibernate.testing.orm.junit.SessionFactoryScope;
++import org.junit.jupiter.api.Test;
++
++import java.util.HashSet;
++import java.util.Set;
++
++import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
++
++/**
++ * This reproduces an issue in Hibernate 6 parsing native queries.
++ */
++@DomainModel(
++		annotatedClasses = {
++				NativeQueryNestedTreeTest.Tree.class,
++				NativeQueryNestedTreeTest.Forest.class
++		}
++)
++@SessionFactory
++@Jira("https://hibernate.atlassian.net/browse/HHH-18871")
++public class NativeQueryNestedTreeTest {
++
++	@Test
++	public void test(SessionFactoryScope scope) {
++		// We want to make sure 'Could not locate TableGroup' no longer is thrown
++		assertDoesNotThrow( () -> scope.inTransaction( session ->
++				session.createNativeQuery(
++								"select {t.*}, {t2.*}, {t3.*}\n" +
++								"from tree t\n" +
++								"inner join tree t2 on t2.parent_id = t.id\n" +
++								"inner join tree t3 on t3.parent_id = t2.id\n", Tree.class )
++						.addEntity( "t", Tree.class )
++						.addJoin( "t2", "t.children" )
++						.addJoin( "t3", "t2.children" )
++						.list()
++		) );
++
++		assertDoesNotThrow( () -> scope.inTransaction( session ->
++				session.createNativeQuery(
++								"select {t.*}, {t2.*}, {t3.*}, {t4.*}\n" +
++								"from tree t\n" +
++								"inner join tree t2 on t2.parent_id = t.id\n" +
++								"inner join tree t3 on t3.parent_id = t2.id\n" +
++								"inner join tree t4 on t4.parent_id = t3.id\n", Tree.class )
++						.addEntity( "t", Tree.class )
++						.addJoin( "t2", "t.children" )
++						.addJoin( "t3", "t2.children" )
++						.addJoin( "t4", "t3.children" )
++						.list()
++		) );
++
++		assertDoesNotThrow( () -> scope.inTransaction( session ->
++				session.createNativeQuery(
++								"select {f.*}, {t.*}, {t2.*}\n" +
++								"from forest f\n" +
++								"inner join tree t on t.parent_id is null\n" +
++								"inner join tree t2 on t2.parent_id = t.id\n", Forest.class )
++						.addEntity( "f", Forest.class )
++						.addJoin( "t", "f.trees" )
++						.addJoin( "t2", "t.children" )
++						.list()
++		) );
++	}
++
++	@Entity(name = "Tree")
++	@Table(name = "tree")
++	public static class Tree {
++		@ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
++		@JoinColumn(name = "parent_id")
++		private Tree parent;
++		@OneToMany(mappedBy = "parent", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
++		private Set<Tree> children = new HashSet<>();
++		@Id
++		@GeneratedValue
++		private long id;
++	}
++
++	@Entity(name = "Forest")
++	@Table(name = "forest")
++	public static class Forest {
++		@Id
++		@GeneratedValue
++		private Long id;
++		@OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
++		@JoinColumn(name = "forest_id")
++		private Set<Tree> trees = new HashSet<>();
++	}
++}

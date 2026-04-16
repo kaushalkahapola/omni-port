@@ -1,0 +1,106 @@
+commit b6a5402d885c41c911b42d35b3cd9e1f13d63ebf
+Author: Brian Clozel <brian.clozel@broadcom.com>
+Date:   Tue Feb 25 17:11:37 2025 +0100
+
+    Fix multiple Content-Language values in MockHttpServletResponse
+    
+    Prior to this commit, `MockHttpServletResponse` would only support
+    adding a `Content-Language` once. Adding multiple header values would
+    always replace the content-language property in the response and the
+    entire header value.
+    
+    This commit ensures that this behavior is supported.
+    
+    Fixes gh-34488
+
+diff --git a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+index 38bc1b72d1..3217d6e8eb 100644
+--- a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
++++ b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2024 the original author or authors.
++ * Copyright 2002-2025 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -743,14 +743,17 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		}
+ 		else if (HttpHeaders.CONTENT_LANGUAGE.equalsIgnoreCase(name)) {
+ 			String contentLanguages = value.toString();
+-			HttpHeaders headers = new HttpHeaders();
+-			headers.add(HttpHeaders.CONTENT_LANGUAGE, contentLanguages);
+-			Locale language = headers.getContentLanguage();
+-			setLocale(language != null ? language : Locale.getDefault());
+-			// Since setLocale() sets the Content-Language header to the given
+-			// single Locale, we have to explicitly set the Content-Language header
+-			// to the user-provided value.
+-			doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, true);
++			// only set the locale if we replace the header or if there was none before
++			if (replaceHeader || !this.headers.containsKey(HttpHeaders.CONTENT_LANGUAGE)) {
++				HttpHeaders headers = new HttpHeaders();
++				headers.add(HttpHeaders.CONTENT_LANGUAGE, contentLanguages);
++				Locale language = headers.getContentLanguage();
++				this.locale = language != null ? language : Locale.getDefault();
++				doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, replaceHeader);
++			}
++			else {
++				doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, false);
++			}
+ 			return true;
+ 		}
+ 		else if (HttpHeaders.SET_COOKIE.equalsIgnoreCase(name)) {
+diff --git a/spring-test/src/test/java/org/springframework/mock/web/MockHttpServletResponseTests.java b/spring-test/src/test/java/org/springframework/mock/web/MockHttpServletResponseTests.java
+index 131e069667..68c23013bd 100644
+--- a/spring-test/src/test/java/org/springframework/mock/web/MockHttpServletResponseTests.java
++++ b/spring-test/src/test/java/org/springframework/mock/web/MockHttpServletResponseTests.java
+@@ -641,4 +641,12 @@ class MockHttpServletResponseTests {
+ 		assertThat(response.getContentAsString()).isEqualTo(content);
+ 	}
+ 
++	@Test // gh-34488
++	void shouldAddMultipleContentLanguage() {
++		response.addHeader("Content-Language", "en");
++		response.addHeader("Content-Language", "fr");
++		assertThat(response.getHeaders("Content-Language")).contains("en", "fr");
++		assertThat(response.getLocale()).isEqualTo(Locale.ENGLISH);
++	}
++
+ }
+diff --git a/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java b/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
+index 21db967017..5de70d3295 100644
+--- a/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
++++ b/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2024 the original author or authors.
++ * Copyright 2002-2025 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -743,14 +743,17 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		}
+ 		else if (HttpHeaders.CONTENT_LANGUAGE.equalsIgnoreCase(name)) {
+ 			String contentLanguages = value.toString();
+-			HttpHeaders headers = new HttpHeaders();
+-			headers.add(HttpHeaders.CONTENT_LANGUAGE, contentLanguages);
+-			Locale language = headers.getContentLanguage();
+-			setLocale(language != null ? language : Locale.getDefault());
+-			// Since setLocale() sets the Content-Language header to the given
+-			// single Locale, we have to explicitly set the Content-Language header
+-			// to the user-provided value.
+-			doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, true);
++			// only set the locale if we replace the header or if there was none before
++			if (replaceHeader || !this.headers.containsKey(HttpHeaders.CONTENT_LANGUAGE)) {
++				HttpHeaders headers = new HttpHeaders();
++				headers.add(HttpHeaders.CONTENT_LANGUAGE, contentLanguages);
++				Locale language = headers.getContentLanguage();
++				this.locale = language != null ? language : Locale.getDefault();
++				doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, replaceHeader);
++			}
++			else {
++				doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, false);
++			}
+ 			return true;
+ 		}
+ 		else if (HttpHeaders.SET_COOKIE.equalsIgnoreCase(name)) {

@@ -1,0 +1,164 @@
+diff --git a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+index 19e8753e4f..063bac47e4 100644
+--- a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
++++ b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+@@ -72,7 +72,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private static final TimeZone GMT = TimeZone.getTimeZone("GMT");
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// ServletResponse properties
+ 	//---------------------------------------------------------------------
+@@ -110,7 +109,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private Locale locale = Locale.getDefault();
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// HttpServletResponse properties
+ 	//---------------------------------------------------------------------
+@@ -124,7 +122,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 	@Nullable
+ 	private String errorMessage;
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// Properties for MockRequestDispatcher
+ 	//---------------------------------------------------------------------
+@@ -134,7 +131,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private final List<String> includedUrls = new ArrayList<>();
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// ServletResponse interface
+ 	//---------------------------------------------------------------------
+@@ -434,7 +430,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.locale;
+ 	}
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// HttpServletResponse interface
+ 	//---------------------------------------------------------------------
+@@ -671,7 +666,12 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	@Override
+ 	public void setHeader(String name, @Nullable String value) {
+-		setHeaderValue(name, value);
++		if (value == null) {
++			this.headers.remove(name);
++		}
++		else {
++			setHeaderValue(name, value);
++		}
+ 	}
+ 
+ 	@Override
+@@ -793,7 +793,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.errorMessage;
+ 	}
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// Methods for MockRequestDispatcher
+ 	//---------------------------------------------------------------------
+@@ -831,7 +830,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.includedUrls;
+ 	}
+ 
+-
+ 	/**
+ 	 * Inner class that adapts the ServletOutputStream to mark the
+ 	 * response as committed once the buffer size is exceeded.
+@@ -856,7 +854,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Inner class that adapts the PrintWriter to mark the
+ 	 * response as committed once the buffer size is exceeded.
+diff --git a/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java b/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
+index 9ced4d59b1..e0587b29d1 100644
+--- a/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
++++ b/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
+@@ -72,7 +72,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private static final TimeZone GMT = TimeZone.getTimeZone("GMT");
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// ServletResponse properties
+ 	//---------------------------------------------------------------------
+@@ -110,7 +109,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private Locale locale = Locale.getDefault();
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// HttpServletResponse properties
+ 	//---------------------------------------------------------------------
+@@ -124,7 +122,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 	@Nullable
+ 	private String errorMessage;
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// Properties for MockRequestDispatcher
+ 	//---------------------------------------------------------------------
+@@ -134,7 +131,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private final List<String> includedUrls = new ArrayList<>();
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// ServletResponse interface
+ 	//---------------------------------------------------------------------
+@@ -434,7 +430,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.locale;
+ 	}
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// HttpServletResponse interface
+ 	//---------------------------------------------------------------------
+@@ -671,7 +666,12 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	@Override
+ 	public void setHeader(String name, @Nullable String value) {
+-		setHeaderValue(name, value);
++		if (value == null) {
++			this.headers.remove(name);
++		}
++		else {
++			setHeaderValue(name, value);
++		}
+ 	}
+ 
+ 	@Override
+@@ -793,7 +793,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.errorMessage;
+ 	}
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// Methods for MockRequestDispatcher
+ 	//---------------------------------------------------------------------
+@@ -831,7 +830,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.includedUrls;
+ 	}
+ 
+-
+ 	/**
+ 	 * Inner class that adapts the ServletOutputStream to mark the
+ 	 * response as committed once the buffer size is exceeded.
+@@ -856,7 +854,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Inner class that adapts the PrintWriter to mark the
+ 	 * response as committed once the buffer size is exceeded.

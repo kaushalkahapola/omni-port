@@ -1,0 +1,192 @@
+commit 9939fc98b6634296732db52462221b17d145a7c2
+Author: Lantao Jin <ltjin@amazon.com>
+Date:   Wed Jul 30 13:46:10 2025 +0800
+
+    Byte number should treated as Long in doc values (#3928)
+    
+    Signed-off-by: Lantao Jin <ltjin@amazon.com>
+
+diff --git a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalcitePPLAggregationIT.java b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalcitePPLAggregationIT.java
+index 05a97db1c..26a980b62 100644
+--- a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalcitePPLAggregationIT.java
++++ b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalcitePPLAggregationIT.java
+@@ -8,6 +8,7 @@ package org.opensearch.sql.calcite.remote;
+ import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_BANK;
+ import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_BANK_WITH_NULL_VALUES;
+ import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_CALCS;
++import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_DATATYPE_NUMERIC;
+ import static org.opensearch.sql.legacy.TestsConstants.TEST_INDEX_DATE_FORMATS;
+ import static org.opensearch.sql.util.MatcherUtils.assertJsonEquals;
+ import static org.opensearch.sql.util.MatcherUtils.rows;
+@@ -37,6 +38,7 @@ public class CalcitePPLAggregationIT extends PPLIntegTestCase {
+     loadIndex(Index.BANK_WITH_NULL_VALUES);
+     loadIndex(Index.CALCS);
+     loadIndex(Index.DATE_FORMATS);
++    loadIndex(Index.DATA_TYPE_NUMERIC);
+   }
+ 
+   @Test
+@@ -806,4 +808,14 @@ public class CalcitePPLAggregationIT extends PPLIntegTestCase {
+         schema("gender", null, "string"));
+     verifyDataRows(response, rows(121764, 1, "F"), rows(65909, 1, "M"));
+   }
++
++  @Test
++  public void testAggByByteNumberWithScript() throws IOException {
++    JSONObject response =
++        executeQuery(
++            String.format(
++                "source=%s | eval a = abs(byte_number) | stats count() by a",
++                TEST_INDEX_DATATYPE_NUMERIC));
++    verifyDataRows(response, rows(1, 4));
++  }
+ }
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/Content.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/Content.java
+index 3b1f4c956..d2fa68dac 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/Content.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/Content.java
+@@ -32,6 +32,12 @@ public interface Content {
+   /** Is double value. */
+   boolean isDouble();
+ 
++  /** Is short value. */
++  boolean isShort();
++
++  /** Is byte value. */
++  boolean isByte();
++
+   /** Is int value. */
+   boolean isInt();
+ 
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/ObjectContent.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/ObjectContent.java
+index 643d1425a..9ca3deadd 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/ObjectContent.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/ObjectContent.java
+@@ -104,6 +104,16 @@ public class ObjectContent implements Content {
+     return value instanceof Number;
+   }
+ 
++  @Override
++  public boolean isShort() {
++    return value instanceof Short;
++  }
++
++  @Override
++  public boolean isByte() {
++    return value instanceof Byte;
++  }
++
+   @Override
+   public boolean isInt() {
+     return value instanceof Integer;
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/OpenSearchJsonContent.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/OpenSearchJsonContent.java
+index 41b8c68e0..85a82ccd8 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/OpenSearchJsonContent.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/utils/OpenSearchJsonContent.java
+@@ -92,6 +92,16 @@ public class OpenSearchJsonContent implements Content {
+     return value().isNumber();
+   }
+ 
++  @Override
++  public boolean isShort() {
++    return value.isShort();
++  }
++
++  @Override
++  public boolean isByte() {
++    return false;
++  }
++
+   @Override
+   public boolean isInt() {
+     return value.isInt();
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/value/OpenSearchExprValueFactory.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/value/OpenSearchExprValueFactory.java
+index a26f56ef7..d813ffdb9 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/value/OpenSearchExprValueFactory.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/value/OpenSearchExprValueFactory.java
+@@ -220,6 +220,10 @@ public class OpenSearchExprValueFactory {
+     if (content.isNumber()) {
+       if (content.isInt()) {
+         return new ExprIntegerValue(content.intValue());
++      } else if (content.isShort()) {
++        return new ExprShortValue(content.shortValue());
++      } else if (content.isByte()) {
++        return new ExprByteValue(content.byteValue());
+       } else if (content.isLong()) {
+         return new ExprLongValue(content.longValue());
+       } else if (content.isFloat()) {
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/request/PredicateAnalyzer.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/request/PredicateAnalyzer.java
+index d8d3410a9..ac760b41b 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/request/PredicateAnalyzer.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/request/PredicateAnalyzer.java
+@@ -1458,7 +1458,7 @@ public class PredicateAnalyzer {
+       this.type = null;
+     }
+ 
+-    String getRootName() {
++    public String getRootName() {
+       return name;
+     }
+ 
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/script/CalciteScriptEngine.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/script/CalciteScriptEngine.java
+index 7876cc848..9b3bbd13b 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/script/CalciteScriptEngine.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/script/CalciteScriptEngine.java
+@@ -27,6 +27,7 @@
+ 
+ package org.opensearch.sql.opensearch.storage.script;
+ 
++import static org.opensearch.sql.data.type.ExprCoreType.BYTE;
+ import static org.opensearch.sql.data.type.ExprCoreType.FLOAT;
+ import static org.opensearch.sql.data.type.ExprCoreType.INTEGER;
+ import static org.opensearch.sql.data.type.ExprCoreType.SHORT;
+@@ -206,7 +207,7 @@ public class CalciteScriptEngine implements ScriptEngine {
+      */
+     private Expression tryConvertDocValue(Expression docValueExpr, ExprType exprType) {
+       return switch (exprType) {
+-        case INTEGER, SHORT -> EnumUtils.convert(docValueExpr, Long.class);
++        case INTEGER, SHORT, BYTE -> EnumUtils.convert(docValueExpr, Long.class);
+         case FLOAT -> EnumUtils.convert(docValueExpr, Double.class);
+         default -> docValueExpr;
+       };
+@@ -349,7 +350,7 @@ public class CalciteScriptEngine implements ScriptEngine {
+     String referenceField = expression.getReferenceForTermQuery();
+     if (StringUtils.isEmpty(referenceField)) {
+       throw new UnsupportedScriptException(
+-          "Field name cannot be empty for expression: " + expression);
++          "Field name cannot be empty for expression: " + expression.getRootName());
+     }
+     return Pair.of(referenceField, exprType);
+   }
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/serde/RelJsonSerializer.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/serde/RelJsonSerializer.java
+index f698aad3b..5d3949426 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/serde/RelJsonSerializer.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/serde/RelJsonSerializer.java
+@@ -108,11 +108,12 @@ public class RelJsonSerializer {
+    * @return map of RexNode, RelDataType and OpenSearch field types
+    */
+   public Map<String, Object> deserialize(String struct) {
++    Map<String, Object> objectMap = null;
+     try {
+       // Recover Map object from bytes
+       ByteArrayInputStream input = new ByteArrayInputStream(Base64.getDecoder().decode(struct));
+       ObjectInputStream objectInput = new ObjectInputStream(input);
+-      Map<String, Object> objectMap = (Map<String, Object>) objectInput.readObject();
++      objectMap = (Map<String, Object>) objectInput.readObject();
+ 
+       // PPL Expr types are all serializable
+       Map<String, ExprType> fieldTypes = (Map<String, ExprType>) objectMap.get(FIELD_TYPES);
+@@ -127,8 +128,12 @@ public class RelJsonSerializer {
+ 
+       return Map.of(EXPR, rexNode, FIELD_TYPES, fieldTypes, ROW_TYPE, rowType);
+     } catch (Exception e) {
++      if (objectMap == null) {
++        throw new IllegalStateException(
++            "Failed to deserialize RexNode due to object map is null", e);
++      }
+       throw new IllegalStateException(
+-          "Failed to deserialize RexNode and its required structure: " + struct, e);
++          "Failed to deserialize RexNode and its required structure: " + objectMap.get(EXPR), e);
+     }
+   }
+ }

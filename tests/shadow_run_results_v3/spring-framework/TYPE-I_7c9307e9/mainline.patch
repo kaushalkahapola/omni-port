@@ -1,0 +1,67 @@
+commit 7c9307e9706535e82de231a095d94fbf855dcc23
+Author: Brian Clozel <brian.clozel@broadcom.com>
+Date:   Thu Jan 4 16:44:00 2024 +0100
+
+    Fix HandlerMappingIntrospector uri matching
+    
+    Prior to this commit, the `HandlerMappingIntrospector` would comparea
+    request with a cached request by using `String#matches` on their String
+    URI. This could lead to `PatternSyntaxException` exceptions at runtime
+    if the request URI contained pattern characters.
+    
+    This commit fixes this typo to use `String#equals` instead.
+    
+    Fixes gh-31937
+
+diff --git a/spring-webmvc/src/main/java/org/springframework/web/servlet/handler/HandlerMappingIntrospector.java b/spring-webmvc/src/main/java/org/springframework/web/servlet/handler/HandlerMappingIntrospector.java
+index 18ecb7796f..e56d0561eb 100644
+--- a/spring-webmvc/src/main/java/org/springframework/web/servlet/handler/HandlerMappingIntrospector.java
++++ b/spring-webmvc/src/main/java/org/springframework/web/servlet/handler/HandlerMappingIntrospector.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2023 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -399,7 +399,7 @@ public class HandlerMappingIntrospector
+ 
+ 		public boolean matches(HttpServletRequest request) {
+ 			return (this.dispatcherType.equals(request.getDispatcherType()) &&
+-					this.requestURI.matches(request.getRequestURI()));
++					this.requestURI.equals(request.getRequestURI()));
+ 		}
+ 
+ 		@Nullable
+diff --git a/spring-webmvc/src/test/java/org/springframework/web/servlet/handler/HandlerMappingIntrospectorTests.java b/spring-webmvc/src/test/java/org/springframework/web/servlet/handler/HandlerMappingIntrospectorTests.java
+index 9f60f6b8ab..4d8a253847 100644
+--- a/spring-webmvc/src/test/java/org/springframework/web/servlet/handler/HandlerMappingIntrospectorTests.java
++++ b/spring-webmvc/src/test/java/org/springframework/web/servlet/handler/HandlerMappingIntrospectorTests.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2023 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -204,15 +204,16 @@ public class HandlerMappingIntrospectorTests {
+ 		assertThat(corsConfig.getAllowedMethods()).isEqualTo(Collections.singletonList("POST"));
+ 	}
+ 
+-	@Test
+-	void cacheFilter() throws Exception {
++	@ParameterizedTest
++	@ValueSource(strings = {"/test", "/resource/1234****"}) // gh-31937
++	void cacheFilter(String uri) throws Exception {
+ 		CorsConfiguration corsConfig = new CorsConfiguration();
+ 		TestMatchableHandlerMapping mapping = new TestMatchableHandlerMapping();
+-		mapping.registerHandler("/test", new TestHandler(corsConfig));
++		mapping.registerHandler("/*", new TestHandler(corsConfig));
+ 
+ 		HandlerMappingIntrospector introspector = initIntrospector(mapping);
+ 
+-		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/test");
++		MockHttpServletRequest request = new MockHttpServletRequest("GET", uri);
+ 		MockHttpServletResponse response = new MockHttpServletResponse();
+ 
+ 		MockFilterChain filterChain = new MockFilterChain(

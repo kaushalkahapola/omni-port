@@ -1,0 +1,14 @@
+diff --git a/server/src/main/java/io/crate/types/FloatVectorType.java b/server/src/main/java/io/crate/types/FloatVectorType.java
+index 9d129fb3b8..3f7999b293 100644
+--- a/server/src/main/java/io/crate/types/FloatVectorType.java
++++ b/server/src/main/java/io/crate/types/FloatVectorType.java
+@@ -103,6 +103,9 @@ public class FloatVectorType extends DataType<float[]> implements Streamer<float
+     private final int dimensions;
+ 
+     public FloatVectorType(int dimensions) {
++        if (dimensions > MAX_DIMENSIONS) {
++            throw new IllegalArgumentException("Float vector type's length cannot exceed " + MAX_DIMENSIONS);
++        }
+         this.dimensions = dimensions;
+     }
+ 

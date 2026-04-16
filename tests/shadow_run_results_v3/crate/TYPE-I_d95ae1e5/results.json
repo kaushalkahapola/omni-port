@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-12T04:51:45.786618",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-I",
   "original_commit": "d95ae1e55eea54e273f47a25b3514b6da52faa9e",
   "backport_commit": "c717f1504838a6d6b00fbb3a42084f0ee9809293",
   "description": "master \u2192 5.10",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 2.47,
+      "elapsed_s": 2.73,
       "error": null,
       "java_hunks": 35,
       "aux_hunks": 3,
@@ -331,12 +332,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.18,
+      "elapsed_s": 3.91,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_IV",
         "confidence": 0.95,
-        "reasoning": "The patch introduces a new class DelayableWriteChannel with complex synchronization and delayed write logic, modifies multiple existing classes to integrate this new channel type, and changes the message dispatching and execution flow in PostgresWireProtocol to handle delayed writes. The patch also includes changes to ResultSetReceiver and RowCountReceiver to work with delayed writes, and modifies Netty transport classes. The changes involve deep structural refactoring to handle message ordering and concurrency issues, indicating significant API divergence and complexity beyond simple string replacements or minor formatting changes. The localization evidence shows the patch applies exactly or with high confidence, but the complexity of the changes and the introduction of new concurrency control mechanisms justify a TYPE_IV classification.",
+        "reasoning": "The patch introduces a new class DelayableWriteChannel with complex synchronization and delayed write logic, modifies multiple existing classes to integrate this new channel type, and changes the message dispatching and execution flow in PostgresWireProtocol to handle delayed writes. It also updates ResultSetReceiver and RowCountReceiver to work with delayed writes. The changes involve deep structural modifications to the protocol handling and message ordering mechanisms, indicating significant API divergence and refactoring rather than simple string or formatting changes. The patch is large and touches many files with non-trivial logic, so it is classified as TYPE_IV with high confidence. The token budget estimate is high due to the complexity and size of the patch.",
         "is_auto_generated": false
       }
     },
@@ -503,7 +504,7 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 9.14,
+      "elapsed_s": 13.43,
       "error": null,
       "adapted_count": 2
     },
@@ -513,7 +514,7 @@
       "refactored_count": 0
     },
     "agent6_synthesizer": {
-      "elapsed_s": 13.53,
+      "elapsed_s": 21.19,
       "error": null,
       "synthesized_count": 3,
       "failed_count": 0,
@@ -598,7 +599,7 @@
           "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
           "what_changed": "Added a new class DelayableWriteChannel that wraps a Netty Channel to allow delaying writes until explicitly flushed or discarded.",
           "where_in_code": "class DelayableWriteChannel",
-          "intent": "To enable buffering and delaying of outbound write operations on a Netty channel, ensuring controlled write ordering and batching.",
+          "intent": "To provide a mechanism to buffer outgoing writes and control when they are actually sent, preventing out-of-order writes in asynchronous scenarios.",
           "change_type": "add_method",
           "key_symbols": [
             "DelayableWriteChannel",
@@ -626,7 +627,7 @@
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
           "what_changed": "Removed unused import of io.crate.session.Sessions.",
           "where_in_code": "imports",
-          "intent": "Cleanup unused import to reduce clutter.",
+          "intent": "Clean up unused imports to reduce clutter.",
           "change_type": "modify_import",
           "key_symbols": [
             "Sessions"
@@ -636,8 +637,8 @@
           "hunk_index": 3,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
           "what_changed": "Removed setting of child channel option AUTO_READ to false on bootstrap.",
-          "where_in_code": "method initializing bootstrap",
-          "intent": "To change channel auto-read behavior, likely to enable immediate reading on child channels.",
+          "where_in_code": "method initializing Netty ServerBootstrap",
+          "intent": "To change channel auto-read behavior, possibly to enable automatic reading of inbound data.",
           "change_type": "modify_logic",
           "key_symbols": [
             "bootstrap",
@@ -648,14 +649,13 @@
         {
           "hunk_index": 4,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
-          "what_changed": "Simplified pipeline setup by directly adding a new Netty4MessageChannelHandler instance instead of assigning it to a variable first and removed explicit AUTO_READ option setting on channel.",
+          "what_changed": "Simplified pipeline setup by directly adding a new Netty4MessageChannelHandler instance instead of assigning it to a variable first; removed explicit channel option AUTO_READ set to true.",
           "where_in_code": "channel initializer lambda",
-          "intent": "Streamline channel pipeline setup and rely on default or external configuration for AUTO_READ.",
+          "intent": "Streamline channel pipeline setup and possibly rely on default channel options.",
           "change_type": "modify_logic",
           "key_symbols": [
             "Netty4MessageChannelHandler",
-            "chPipeline",
-            "AUTO_READ"
+            "chPipeline"
           ]
         },
         {
@@ -673,8 +673,8 @@
           "hunk_index": 6,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
           "what_changed": "Changed the channel field type from Channel to DelayableWriteChannel.",
-          "where_in_code": "class fields",
-          "intent": "To enable delaying writes on the channel by using the new DelayableWriteChannel wrapper.",
+          "where_in_code": "PostgresWireProtocol class fields",
+          "intent": "To enable delaying writes on the channel by wrapping it with DelayableWriteChannel.",
           "change_type": "modify_field",
           "key_symbols": [
             "channel",
@@ -684,8 +684,8 @@
         {
           "hunk_index": 7,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Modified ReadyForQueryCallback constructor to remove Runnable parameter and only keep Channel and TransactionState fields.",
-          "where_in_code": "class ReadyForQueryCallback constructor",
+          "what_changed": "Modified ReadyForQueryCallback constructor to remove the Runnable parameter and only keep Channel and TransactionState fields.",
+          "where_in_code": "ReadyForQueryCallback inner class",
           "intent": "Simplify callback by removing the read Runnable, likely because reading is handled differently now.",
           "change_type": "modify_signature",
           "key_symbols": [
@@ -697,7 +697,7 @@
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
           "what_changed": "Removed invocation of read.run() in ReadyForQueryCallback.accept method.",
           "where_in_code": "ReadyForQueryCallback.accept",
-          "intent": "To stop triggering a read operation after sending ReadyForQuery, possibly to avoid premature reads or because reading is managed elsewhere.",
+          "intent": "Adjust callback behavior to no longer trigger read explicitly, possibly due to changed read management.",
           "change_type": "modify_logic",
           "key_symbols": [
             "ReadyForQueryCallback",
@@ -707,9 +707,9 @@
         {
           "hunk_index": 9,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Changed channelRegistered handler to wrap the Netty Channel in a DelayableWriteChannel.",
+          "what_changed": "Wrapped the channel from ChannelHandlerContext into a new DelayableWriteChannel instance upon channel registration.",
           "where_in_code": "channelRegistered method",
-          "intent": "To use DelayableWriteChannel for all channel operations to support delayed writes.",
+          "intent": "To use DelayableWriteChannel wrapper for all channel operations to support delayed writes.",
           "change_type": "modify_logic",
           "key_symbols": [
             "channelRegistered",
@@ -719,43 +719,54 @@
         {
           "hunk_index": 10,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Modified channelRead0 method to call dispatchState without ChannelHandlerContext parameter and use DelayableWriteChannel instead of Channel.",
-          "where_in_code": "channelRead0 method",
-          "intent": "To adapt dispatching logic to work with DelayableWriteChannel and simplify method signature.",
+          "what_changed": "Removed ChannelHandlerContext parameter from dispatchState and dispatchMessage calls and methods, passing only ByteBuf and DelayableWriteChannel instead.",
+          "where_in_code": "channelRead0 method and dispatchState/dispatchMessage methods",
+          "intent": "Simplify method signatures and adapt to use DelayableWriteChannel instead of raw Channel and context.",
           "change_type": "modify_signature",
           "key_symbols": [
-            "channelRead0",
-            "dispatchState"
+            "dispatchState",
+            "dispatchMessage",
+            "channelRead0"
           ]
         },
         {
           "hunk_index": 11,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Changed dispatchState method to remove ChannelHandlerContext parameter and use DelayableWriteChannel instead of Channel; removed calls to ctx.read().",
-          "where_in_code": "dispatchState method",
-          "intent": "To decouple dispatchState from Netty context and adapt to DelayableWriteChannel usage.",
-          "change_type": "modify_signature",
+          "what_changed": "Removed calls to ctx.read() from dispatchState and dispatchMessage methods.",
+          "where_in_code": "dispatchState and dispatchMessage methods",
+          "intent": "Shift responsibility for reading from context out of these methods, likely to better control flow with delayed writes.",
+          "change_type": "modify_logic",
           "key_symbols": [
-            "dispatchState"
+            "dispatchState",
+            "dispatchMessage"
           ]
         },
         {
           "hunk_index": 12,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Modified dispatchMessage method to remove ChannelHandlerContext parameter and use DelayableWriteChannel; removed calls to ctx.read().",
-          "where_in_code": "dispatchMessage method",
-          "intent": "To adapt message dispatching to work with DelayableWriteChannel and remove dependency on Netty context for reading.",
+          "what_changed": "Removed ChannelHandlerContext parameter from dispatchMessage and related handler methods; removed calls to ctx.read(); replaced Channel with DelayableWriteChannel.",
+          "where_in_code": "dispatchMessage method and message handlers",
+          "intent": "Adapt message dispatching to use DelayableWriteChannel and remove direct context reads to better coordinate asynchronous writes.",
           "change_type": "modify_signature",
           "key_symbols": [
-            "dispatchMessage"
+            "dispatchMessage",
+            "handleSimpleQuery",
+            "handleParseMessage",
+            "handlePassword",
+            "handleBindMessage",
+            "handleDescribeMessage",
+            "handleExecute",
+            "handleFlush",
+            "handleSync",
+            "handleClose"
           ]
         },
         {
           "hunk_index": 13,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Removed call to ctx.read() after sending error response for unsupported message types.",
+          "what_changed": "Removed ctx.read() call after sending error response for unsupported message types.",
           "where_in_code": "dispatchMessage default case",
-          "intent": "To change flow control after error response, possibly because reading is managed differently now.",
+          "intent": "Prevent automatic reading after error to better control channel state.",
           "change_type": "modify_logic",
           "key_symbols": [
             "dispatchMessage"
@@ -764,20 +775,20 @@
         {
           "hunk_index": 14,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Replaced lambda parameter name from underscore (_) to f in chained listeners after sending AuthenticationOK.",
+          "what_changed": "Replaced lambda parameter name from underscore (_) to f in chained listeners after sending AuthenticationOK message.",
           "where_in_code": "authentication success handling",
-          "intent": "Cosmetic change to improve readability or consistency in lambda parameter naming.",
+          "intent": "Minor code style change for clarity or consistency.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "Messages.sendAuthenticationOK"
+            "sendAuthenticationOK"
           ]
         },
         {
           "hunk_index": 15,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Changed handleExecute method signature to accept ByteBuf and DelayableWriteChannel instead of ChannelHandlerContext and Channel.",
+          "what_changed": "Changed handleExecute method signature to remove ChannelHandlerContext and replace Channel with DelayableWriteChannel.",
           "where_in_code": "handleExecute method",
-          "intent": "To adapt execute handling to use DelayableWriteChannel and simplify parameters.",
+          "intent": "Adapt method to use DelayableWriteChannel for delayed write support and simplify parameters.",
           "change_type": "modify_signature",
           "key_symbols": [
             "handleExecute"
@@ -786,46 +797,46 @@
         {
           "hunk_index": 16,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Introduced delaying of writes by creating a DelayedWrites instance from the channel before executing the query; added detailed comment explaining the need to delay writes to preserve message order.",
+          "what_changed": "Introduced delaying of writes by creating a DelayedWrites instance from the channel before executing queries; added comments explaining the need to delay writes to preserve message order.",
           "where_in_code": "handleExecute method",
-          "intent": "To ensure correct ordering of messages sent asynchronously by buffering writes until execution completes.",
+          "intent": "Prevent out-of-order message sending by buffering writes during asynchronous query execution.",
           "change_type": "modify_logic",
           "key_symbols": [
             "handleExecute",
-            "DelayedWrites",
-            "delayWrites"
+            "delayWrites",
+            "DelayedWrites"
           ]
         },
         {
           "hunk_index": 17,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Modified RowCountReceiver construction to pass DelayedWrites instance.",
+          "what_changed": "Added DelayedWrites parameter to RowCountReceiver constructor call in handleExecute.",
           "where_in_code": "handleExecute method",
-          "intent": "To enable RowCountReceiver to participate in delayed write buffering.",
+          "intent": "Pass delayedWrites to RowCountReceiver to coordinate delayed write flushing.",
           "change_type": "modify_logic",
           "key_symbols": [
             "RowCountReceiver",
-            "DelayedWrites"
+            "delayedWrites"
           ]
         },
         {
           "hunk_index": 18,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Modified ResultSetReceiver construction to pass DelayedWrites instance; removed handling of pendingExecution future and ctx.read calls.",
+          "what_changed": "Added DelayedWrites parameter to ResultSetReceiver constructor call and removed handling of pendingExecution future and ctx.read() calls.",
           "where_in_code": "handleExecute method",
-          "intent": "To integrate delayed writes into ResultSetReceiver and simplify asynchronous execution flow.",
+          "intent": "Integrate delayed writes into ResultSetReceiver and simplify asynchronous execution flow by removing explicit read calls.",
           "change_type": "modify_logic",
           "key_symbols": [
             "ResultSetReceiver",
-            "DelayedWrites"
+            "delayedWrites"
           ]
         },
         {
           "hunk_index": 19,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "In handleSync method, replaced ctx.read calls with channel.writePendingMessages() to flush delayed writes; updated ReadyForQueryCallback usage and added discardDelayedWrites call on error.",
+          "what_changed": "In handleSync, replaced ctx.read() calls with channel.writePendingMessages() and removed ctx parameter; added call to discardDelayedWrites on error before sending error response.",
           "where_in_code": "handleSync method",
-          "intent": "To ensure all delayed writes are flushed on sync and to properly discard delayed writes on error.",
+          "intent": "Flush all delayed writes upon sync and properly discard delayed writes on error to maintain channel consistency.",
           "change_type": "modify_logic",
           "key_symbols": [
             "handleSync",
@@ -836,9 +847,9 @@
         {
           "hunk_index": 20,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Changed handleSimpleQuery method signature to accept ByteBuf and DelayableWriteChannel instead of Runnable and Channel.",
+          "what_changed": "Changed handleSimpleQuery method signature to remove Runnable read parameter and replace Channel with DelayableWriteChannel.",
           "where_in_code": "handleSimpleQuery method",
-          "intent": "To adapt simple query handling to use DelayableWriteChannel and remove explicit read callback.",
+          "intent": "Adapt method to use DelayableWriteChannel and remove explicit read callback.",
           "change_type": "modify_signature",
           "key_symbols": [
             "handleSimpleQuery"
@@ -847,9 +858,9 @@
         {
           "hunk_index": 21,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Removed call to read.run() after sending error response in handleSimpleQuery catch block.",
+          "what_changed": "Removed read.run() call after sending error response in handleSimpleQuery catch block.",
           "where_in_code": "handleSimpleQuery method",
-          "intent": "To change flow control after error response, likely because reading is managed differently now.",
+          "intent": "Avoid triggering read explicitly after error, consistent with other changes to read management.",
           "change_type": "modify_logic",
           "key_symbols": [
             "handleSimpleQuery"
@@ -858,11 +869,12 @@
         {
           "hunk_index": 22,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Modified composedFuture.whenComplete call to use new ReadyForQueryCallback constructor without Runnable; changed handleSingleQuery signature to accept DelayableWriteChannel.",
-          "where_in_code": "handleSimpleQuery method and handleSingleQuery method",
-          "intent": "To adapt asynchronous query handling to use DelayableWriteChannel and updated callback.",
+          "what_changed": "Changed ReadyForQueryCallback instantiation to remove read Runnable and use DelayableWriteChannel instead of Channel in handleSimpleQuery and handleSingleQuery signatures.",
+          "where_in_code": "handleSimpleQuery and handleSingleQuery methods",
+          "intent": "Adapt to use DelayableWriteChannel and simplify callback interface.",
           "change_type": "modify_signature",
           "key_symbols": [
+            "handleSimpleQuery",
             "handleSingleQuery",
             "ReadyForQueryCallback"
           ]
@@ -870,38 +882,35 @@
         {
           "hunk_index": 23,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "In handleDescribeMessage, added creation of DelayedWrites from channel and passed it to RowCountReceiver.",
-          "where_in_code": "handleDescribeMessage method",
-          "intent": "To enable delayed write buffering during describe message handling for DML queries.",
+          "what_changed": "Added delayedWrites creation and passed it to RowCountReceiver constructor in describe message handling.",
+          "where_in_code": "dispatchMessage -> handleDescribeMessage",
+          "intent": "Enable delayed writes buffering during describe message execution to maintain message order.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "handleDescribeMessage",
-            "DelayedWrites",
-            "RowCountReceiver"
+            "RowCountReceiver",
+            "delayedWrites"
           ]
         },
         {
           "hunk_index": 24,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "In handleDescribeMessage, added creation of DelayedWrites from channel and passed it to ResultSetReceiver for queries with fields.",
-          "where_in_code": "handleDescribeMessage method",
-          "intent": "To enable delayed write buffering during describe message handling for queries returning result sets.",
+          "what_changed": "Added delayedWrites creation and passed it to ResultSetReceiver constructor in describe message handling.",
+          "where_in_code": "dispatchMessage -> handleDescribeMessage",
+          "intent": "Enable delayed writes buffering during describe message execution for result sets.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "handleDescribeMessage",
-            "DelayedWrites",
-            "ResultSetReceiver"
+            "ResultSetReceiver",
+            "delayedWrites"
           ]
         },
         {
           "hunk_index": 25,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "In handleSingleQuery, added call to channel.discardDelayedWrites() before sending error response on exception.",
+          "what_changed": "Added call to channel.discardDelayedWrites() before sending error response in handleSingleQuery catch block.",
           "where_in_code": "handleSingleQuery method",
-          "intent": "To clean up any buffered delayed writes when an error occurs during query handling.",
+          "intent": "Ensure delayed writes are discarded on error to avoid stale buffered writes.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "handleSingleQuery",
             "discardDelayedWrites"
           ]
         },
@@ -920,8 +929,8 @@
           "hunk_index": 27,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
           "what_changed": "Changed channel field type from Channel to DelayableWriteChannel; added fields for DelayedWrites and directChannel (bypassing delay).",
-          "where_in_code": "class fields and constructor",
-          "intent": "To support delayed write buffering and direct channel access for sending messages.",
+          "where_in_code": "ResultSetReceiver class fields and constructor",
+          "intent": "Support delayed writes by holding DelayedWrites and direct access to underlying channel for immediate writes.",
           "change_type": "modify_field",
           "key_symbols": [
             "channel",
@@ -934,20 +943,20 @@
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
           "what_changed": "Modified constructor to accept DelayedWrites and initialize directChannel by bypassing delay.",
           "where_in_code": "ResultSetReceiver constructor",
-          "intent": "To integrate delayed write buffering into ResultSetReceiver and allow direct writes bypassing delay.",
+          "intent": "Enable coordination of delayed writes and direct channel access for sending messages.",
           "change_type": "modify_signature",
           "key_symbols": [
             "ResultSetReceiver",
-            "DelayedWrites",
+            "delayedWrites",
             "directChannel"
           ]
         },
         {
           "hunk_index": 29,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
-          "what_changed": "Changed setNextRow method to send data rows via directChannel instead of delayed channel; checked writability on directChannel.",
-          "where_in_code": "setNextRow method",
-          "intent": "To send row data immediately on the underlying channel while buffering other writes.",
+          "what_changed": "Changed setNextRow to send data rows via directChannel and check writability on directChannel instead of delayed channel.",
+          "where_in_code": "ResultSetReceiver.setNextRow method",
+          "intent": "Ensure data rows are sent immediately bypassing delay, while delayed writes are managed separately.",
           "change_type": "modify_logic",
           "key_symbols": [
             "setNextRow",
@@ -957,9 +966,9 @@
         {
           "hunk_index": 30,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
-          "what_changed": "Modified batchFinished, allFinished, and fail methods to flush directChannel and write out pending delayed writes before flushing; replaced listener parameter names with f.",
-          "where_in_code": "batchFinished, allFinished, fail methods",
-          "intent": "To ensure all delayed writes are flushed before signaling completion or failure and improve lambda parameter naming consistency.",
+          "what_changed": "Changed flush and message sending methods to use directChannel for immediate writes; added calls to channel.writePendingMessages(delayedWrites) before flushing to flush delayed writes; updated listener lambdas to use parameter f instead of underscore.",
+          "where_in_code": "ResultSetReceiver batchFinished, allFinished, fail methods",
+          "intent": "Flush delayed writes before sending completion or error messages to maintain correct message order and ensure all buffered writes are sent.",
           "change_type": "modify_logic",
           "key_symbols": [
             "batchFinished",
@@ -972,9 +981,9 @@
         {
           "hunk_index": 31,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/RowCountReceiver.java",
-          "what_changed": "Changed channel field type from Channel to DelayableWriteChannel; added DelayedWrites field; updated constructor accordingly.",
-          "where_in_code": "class fields and constructor",
-          "intent": "To support delayed write buffering in RowCountReceiver.",
+          "what_changed": "Changed channel field type from Channel to DelayableWriteChannel; added DelayedWrites field and updated constructor accordingly.",
+          "where_in_code": "RowCountReceiver class fields and constructor",
+          "intent": "Support delayed writes buffering and coordination in RowCountReceiver.",
           "change_type": "modify_field",
           "key_symbols": [
             "channel",
@@ -984,9 +993,9 @@
         {
           "hunk_index": 32,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/RowCountReceiver.java",
-          "what_changed": "Modified allFinished and fail methods to send responses via channel.bypassDelay(), flush channel after writing pending delayed writes, and updated listener parameter names.",
-          "where_in_code": "allFinished and fail methods",
-          "intent": "To ensure delayed writes are flushed before signaling completion or failure and send responses directly on underlying channel.",
+          "what_changed": "Modified allFinished and fail methods to send messages via channel.bypassDelay(), flush delayed writes via channel.writePendingMessages(delayedWrites), and flush the channel; updated listener lambdas to use parameter f instead of underscore.",
+          "where_in_code": "RowCountReceiver allFinished and fail methods",
+          "intent": "Ensure delayed writes are flushed before sending completion or error messages to maintain correct message order.",
           "change_type": "modify_logic",
           "key_symbols": [
             "allFinished",
@@ -998,25 +1007,23 @@
         {
           "hunk_index": 33,
           "file_path": "server/src/main/java/org/elasticsearch/transport/netty4/Netty4Transport.java",
-          "what_changed": "Replaced local variable assignment of Netty4MessageChannelHandler with direct instantiation in pipeline.addLast call.",
+          "what_changed": "Replaced local variable assignment of Netty4MessageChannelHandler with direct instantiation in pipeline addLast call.",
           "where_in_code": "channel initializer",
-          "intent": "Simplify pipeline setup by removing unnecessary local variable.",
+          "intent": "Simplify pipeline setup by removing unnecessary variable.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "Netty4MessageChannelHandler",
-            "pipeline.addLast"
+            "Netty4MessageChannelHandler"
           ]
         },
         {
           "hunk_index": 34,
           "file_path": "server/src/main/java/org/elasticsearch/transport/netty4/Netty4Transport.java",
-          "what_changed": "Replaced local variable assignment of Netty4MessageChannelHandler with direct instantiation in pipeline.addLast call.",
+          "what_changed": "Replaced local variable assignment of Netty4MessageChannelHandler with direct instantiation in pipeline addLast call.",
           "where_in_code": "channel initializer",
-          "intent": "Simplify pipeline setup by removing unnecessary local variable.",
+          "intent": "Simplify pipeline setup by removing unnecessary variable.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "Netty4MessageChannelHandler",
-            "pipeline.addLast"
+            "Netty4MessageChannelHandler"
           ]
         }
       ]
@@ -1038,10 +1045,11 @@
     },
     "agent7_validator_retry1": {
       "validation_passed": false,
-      "validation_failure_category": "unknown",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:38: error: package io.crate.protocols.postgres.DelayableWriteChannel does not exist",
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java:142: error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;\nserver/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java:869: error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;\nserver/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:56: error: constru",
       "validation_attempts": 2,
       "retry_files": [
+        "server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java",
         "server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java"
       ],
       "build_success": false,
@@ -1052,23 +1060,43 @@
       "test_state_transition": null,
       "compile_errors": [
         {
+          "file": "server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java",
+          "line": 142,
+          "message": "error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;"
+        },
+        {
+          "file": "server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java",
+          "line": 869,
+          "message": "error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;"
+        },
+        {
           "file": "server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java",
-          "line": 38,
-          "message": "error: package io.crate.protocols.postgres.DelayableWriteChannel does not exist"
+          "line": 56,
+          "message": "error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;"
+        },
+        {
+          "file": "server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java",
+          "line": 76,
+          "message": "error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;"
+        },
+        {
+          "file": "server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java",
+          "line": 112,
+          "message": "error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;"
         }
       ]
     },
     "agent9_fallback_2": {
-      "fallback_status": "applied",
+      "fallback_status": "failed",
       "fallback_attempts": 2,
-      "synthesized_count": 11,
+      "synthesized_count": 2,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/DelayableWriteChannel.java",
           "what_changed": "Added a new class DelayableWriteChannel that wraps a Netty Channel to allow delaying writes until explicitly flushed or discarded.",
           "where_in_code": "class DelayableWriteChannel",
-          "intent": "To enable buffering and delaying of write operations on a Netty channel to ensure ordered message delivery and control over when writes are flushed to the network.",
+          "intent": "To provide a mechanism to buffer and delay outbound writes on a channel, enabling controlled write ordering and batching.",
           "change_type": "add_method",
           "key_symbols": [
             "DelayableWriteChannel",
@@ -1076,8 +1104,8 @@
             "write",
             "writeAndFlush",
             "delayWrites",
-            "writePendingMessages",
-            "discardDelayedWrites"
+            "discardDelayedWrites",
+            "writePendingMessages"
           ]
         },
         {
@@ -1085,7 +1113,7 @@
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
           "what_changed": "Added import of io.crate.session.Sessions.",
           "where_in_code": "imports",
-          "intent": "To include Sessions class for later use or dependency.",
+          "intent": "To include session management capabilities in PostgresNetty.",
           "change_type": "modify_import",
           "key_symbols": [
             "Sessions"
@@ -1096,7 +1124,7 @@
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
           "what_changed": "Removed unused import of io.crate.session.Sessions.",
           "where_in_code": "imports",
-          "intent": "Clean up unused import to reduce clutter.",
+          "intent": "Cleanup unused imports to reduce clutter.",
           "change_type": "modify_import",
           "key_symbols": [
             "Sessions"
@@ -1105,27 +1133,25 @@
         {
           "hunk_index": 3,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
-          "what_changed": "Removed setting of child channel option AUTO_READ to false on bootstrap.",
-          "where_in_code": "method initializing bootstrap",
-          "intent": "To change channel auto-read behavior, possibly to enable automatic reading of inbound data.",
+          "what_changed": "Removed setting of ChannelOption.AUTO_READ to false on bootstrap child options.",
+          "where_in_code": "PostgresNetty constructor or initialization block",
+          "intent": "To change channel auto-read behavior, possibly to enable immediate reading on new channels.",
           "change_type": "modify_logic",
           "key_symbols": [
             "bootstrap",
-            "childOption",
-            "AUTO_READ"
+            "ChannelOption.AUTO_READ"
           ]
         },
         {
           "hunk_index": 4,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
           "what_changed": "Simplified channel pipeline setup by directly adding Netty4MessageChannelHandler without assigning it to a variable and removed explicit setting of AUTO_READ to true.",
-          "where_in_code": "channel initializer lambda",
+          "where_in_code": "ChannelInitializer lambda in PostgresNetty",
           "intent": "Streamline pipeline setup and rely on default channel read behavior.",
           "change_type": "modify_logic",
           "key_symbols": [
             "Netty4MessageChannelHandler",
-            "chPipeline",
-            "AUTO_READ"
+            "chPipeline"
           ]
         },
         {
@@ -1133,7 +1159,7 @@
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
           "what_changed": "Added import of DelayableWriteChannel.DelayedWrites.",
           "where_in_code": "imports",
-          "intent": "To use the DelayedWrites inner class from DelayableWriteChannel for delayed write management.",
+          "intent": "To support delayed write buffering in PostgresWireProtocol.",
           "change_type": "modify_import",
           "key_symbols": [
             "DelayedWrites"
@@ -1143,8 +1169,8 @@
           "hunk_index": 6,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
           "what_changed": "Changed the channel field type from Channel to DelayableWriteChannel.",
-          "where_in_code": "PostgresWireProtocol class, field declarations",
-          "intent": "To enable delaying writes on the channel by wrapping it with DelayableWriteChannel.",
+          "where_in_code": "PostgresWireProtocol class fields",
+          "intent": "To enable delaying writes on the channel within PostgresWireProtocol.",
           "change_type": "modify_field",
           "key_symbols": [
             "channel",
@@ -1154,9 +1180,9 @@
         {
           "hunk_index": 7,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Modified ReadyForQueryCallback constructor to remove the Runnable parameter and only keep Channel and TransactionState fields.",
-          "where_in_code": "ReadyForQueryCallback class constructor",
-          "intent": "Simplify callback by removing unused Runnable parameter, reflecting changes in how ready-for-query signaling is handled.",
+          "what_changed": "Modified ReadyForQueryCallback constructor to remove the Runnable read parameter.",
+          "where_in_code": "ReadyForQueryCallback inner class",
+          "intent": "Simplify callback by removing unused read runnable, reflecting changes in how reads are triggered.",
           "change_type": "modify_signature",
           "key_symbols": [
             "ReadyForQueryCallback"
@@ -1166,8 +1192,8 @@
           "hunk_index": 8,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
           "what_changed": "Removed invocation of read.run() in ReadyForQueryCallback.accept method.",
-          "where_in_code": "ReadyForQueryCallback.accept method",
-          "intent": "Adjust callback behavior to no longer trigger read explicitly, possibly due to changes in channel read management.",
+          "where_in_code": "ReadyForQueryCallback.accept",
+          "intent": "Avoid triggering channel read explicitly here, possibly to centralize read control elsewhere.",
           "change_type": "modify_logic",
           "key_symbols": [
             "ReadyForQueryCallback",
@@ -1177,9 +1203,9 @@
         {
           "hunk_index": 9,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Wrapped the channel from ChannelHandlerContext in a DelayableWriteChannel when channel is registered.",
-          "where_in_code": "channelRegistered method",
-          "intent": "To use the DelayableWriteChannel wrapper for all channel operations to support delayed writes.",
+          "what_changed": "Wrapped the channel from ChannelHandlerContext into a DelayableWriteChannel upon channel registration.",
+          "where_in_code": "PostgresWireProtocol.channelRegistered",
+          "intent": "To enable delayed write buffering on the channel from the start of its lifecycle.",
           "change_type": "modify_logic",
           "key_symbols": [
             "channelRegistered",
@@ -1189,22 +1215,21 @@
         {
           "hunk_index": 10,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Removed ChannelHandlerContext parameter from dispatchState and dispatchMessage calls and methods, passing only ByteBuf and DelayableWriteChannel.",
-          "where_in_code": "channelRead0 method and dispatchState/dispatchMessage methods",
-          "intent": "Simplify method signatures to work directly with DelayableWriteChannel and ByteBuf, removing dependency on ChannelHandlerContext.",
+          "what_changed": "Removed ChannelHandlerContext parameter from dispatchState and dispatchMessage calls, and updated method signatures accordingly.",
+          "where_in_code": "PostgresWireProtocol.channelRead0 and dispatchState/dispatchMessage methods",
+          "intent": "Simplify method signatures and decouple from Netty context, focusing on buffer and DelayableWriteChannel only.",
           "change_type": "modify_signature",
           "key_symbols": [
             "dispatchState",
-            "dispatchMessage",
-            "channelRead0"
+            "dispatchMessage"
           ]
         },
         {
           "hunk_index": 11,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Removed calls to ctx.read() from dispatchState and dispatchMessage methods, and updated method signatures to remove ChannelHandlerContext parameter.",
-          "where_in_code": "dispatchState and dispatchMessage methods",
-          "intent": "To decouple reading from ChannelHandlerContext and possibly manage reads differently with DelayableWriteChannel.",
+          "what_changed": "Removed calls to ctx.read() from dispatchState and dispatchMessage methods.",
+          "where_in_code": "PostgresWireProtocol.dispatchState and dispatchMessage",
+          "intent": "Shift responsibility for reading from channel out of these methods, likely to better control flow and avoid premature reads.",
           "change_type": "modify_logic",
           "key_symbols": [
             "dispatchState",
@@ -1214,10 +1239,10 @@
         {
           "hunk_index": 12,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Removed calls to ctx.read() in message dispatching and updated dispatchMessage method to use DelayableWriteChannel instead of Channel.",
-          "where_in_code": "dispatchMessage method",
-          "intent": "To manage channel reads externally and use DelayableWriteChannel for write buffering and ordering.",
-          "change_type": "modify_logic",
+          "what_changed": "Removed ctx.read() calls from dispatchMessage and updated method signatures to use DelayableWriteChannel instead of Channel and removed ChannelHandlerContext parameter.",
+          "where_in_code": "PostgresWireProtocol.dispatchMessage",
+          "intent": "To decouple message dispatching from Netty context and centralize read control, adapting to delayed write channel usage.",
+          "change_type": "modify_signature",
           "key_symbols": [
             "dispatchMessage"
           ]
@@ -1225,9 +1250,9 @@
         {
           "hunk_index": 13,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Removed call to ctx.read() after sending error response for unsupported message types.",
-          "where_in_code": "dispatchMessage default case",
-          "intent": "To avoid automatic read triggering after error, possibly to better control flow after error handling.",
+          "what_changed": "Removed ctx.read() call after sending error response for unsupported message types.",
+          "where_in_code": "PostgresWireProtocol.dispatchMessage default case",
+          "intent": "To avoid automatic read after error, possibly to better control error handling and flow.",
           "change_type": "modify_logic",
           "key_symbols": [
             "dispatchMessage"
@@ -1236,20 +1261,20 @@
         {
           "hunk_index": 14,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Replaced lambda parameter name from '_' to 'f' in chained listeners after sending AuthenticationOK message.",
-          "where_in_code": "method sending AuthenticationOK and subsequent messages",
-          "intent": "Code style improvement for clarity in lambda parameters.",
+          "what_changed": "Replaced lambda parameter name from underscore (_) to f in chained listeners after sending AuthenticationOK message.",
+          "where_in_code": "PostgresWireProtocol authentication success handling",
+          "intent": "Minor stylistic change for clarity or consistency in lambda parameter naming.",
           "change_type": "modify_logic",
           "key_symbols": [
-            "sendAuthenticationOK"
+            "Messages.sendAuthenticationOK"
           ]
         },
         {
           "hunk_index": 15,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
           "what_changed": "Changed handleExecute method signature to accept ByteBuf and DelayableWriteChannel instead of ChannelHandlerContext and Channel.",
-          "where_in_code": "handleExecute method",
-          "intent": "Adapt method to work with DelayableWriteChannel for delayed write support and simplify parameters.",
+          "where_in_code": "PostgresWireProtocol.handleExecute",
+          "intent": "Adapt method to work with delayed write channel abstraction and remove dependency on Netty context.",
           "change_type": "modify_signature",
           "key_symbols": [
             "handleExecute"
@@ -1258,46 +1283,46 @@
         {
           "hunk_index": 16,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Introduced delaying of writes by creating a DelayedWrites instance from the channel before executing queries, with detailed comment explaining the need to delay writes to preserve message order.",
-          "where_in_code": "handleExecute method",
+          "what_changed": "Introduced delayed write buffering by calling channel.delayWrites() before executing queries in handleExecute, with detailed comment explaining the need to delay writes to preserve message order.",
+          "where_in_code": "PostgresWireProtocol.handleExecute",
           "intent": "Prevent out-of-order message delivery by buffering writes during asynchronous query execution.",
           "change_type": "modify_logic",
           "key_symbols": [
             "handleExecute",
-            "delayWrites",
-            "DelayedWrites"
+            "delayWrites"
           ]
         },
         {
           "hunk_index": 17,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Added DelayedWrites parameter to RowCountReceiver constructor call in handleExecute.",
-          "where_in_code": "handleExecute method",
-          "intent": "Pass delayedWrites to RowCountReceiver to coordinate delayed write flushing.",
+          "what_changed": "Added delayedWrites parameter to RowCountReceiver constructor call in handleExecute.",
+          "where_in_code": "PostgresWireProtocol.handleExecute",
+          "intent": "Pass delayed write context to RowCountReceiver to coordinate buffered writes.",
           "change_type": "modify_logic",
           "key_symbols": [
             "RowCountReceiver",
-            "DelayedWrites"
+            "delayedWrites"
           ]
         },
         {
           "hunk_index": 18,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Added DelayedWrites parameter to ResultSetReceiver constructor call and removed handling of pendingExecution future and ctx.read calls.",
-          "where_in_code": "handleExecute method",
-          "intent": "Integrate delayed write buffering into ResultSetReceiver and simplify asynchronous execution flow by removing explicit read calls.",
+          "what_changed": "Added delayedWrites parameter to ResultSetReceiver constructor call and removed handling of pendingExecution future and ctx.read calls in handleExecute; replaced with direct session.execute call.",
+          "where_in_code": "PostgresWireProtocol.handleExecute",
+          "intent": "Simplify execution flow and integrate delayed write buffering into result receivers.",
           "change_type": "modify_logic",
           "key_symbols": [
             "ResultSetReceiver",
-            "DelayedWrites"
+            "delayedWrites",
+            "session.execute"
           ]
         },
         {
           "hunk_index": 19,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "In handleSync, replaced ctx.read() calls with channel.writePendingMessages() to flush delayed writes before sending ready-for-query; also discard delayed writes on error before sending error response.",
-          "where_in_code": "handleSync method",
-          "intent": "Ensure all delayed writes are flushed or discarded appropriately on sync or error to maintain correct message order and channel state.",
+          "what_changed": "In handleSync, added calls to channel.writePendingMessages() before sending ReadyForQuery and removed ctx.read calls; also updated ReadyForQueryCallback usage and added discardDelayedWrites call on error.",
+          "where_in_code": "PostgresWireProtocol.handleSync",
+          "intent": "Ensure all delayed writes are flushed on sync and properly discard buffered writes on error to maintain protocol correctness.",
           "change_type": "modify_logic",
           "key_symbols": [
             "handleSync",
@@ -1308,9 +1333,9 @@
         {
           "hunk_index": 20,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Changed handleSimpleQuery method signature to accept ByteBuf and DelayableWriteChannel instead of Runnable and Channel.",
-          "where_in_code": "handleSimpleQuery method",
-          "intent": "Adapt method to use DelayableWriteChannel for delayed write support and simplify parameters.",
+          "what_changed": "Changed handleSimpleQuery signature to accept ByteBuf and DelayableWriteChannel instead of Runnable and Channel.",
+          "where_in_code": "PostgresWireProtocol.handleSimpleQuery",
+          "intent": "Adapt method to use delayed write channel abstraction and remove explicit read runnable parameter.",
           "change_type": "modify_signature",
           "key_symbols": [
             "handleSimpleQuery"
@@ -1319,9 +1344,9 @@
         {
           "hunk_index": 21,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Removed call to read.run() after sending error response in handleSimpleQuery catch block.",
-          "where_in_code": "handleSimpleQuery method",
-          "intent": "Adjust error handling to not trigger read explicitly, consistent with other changes in read management.",
+          "what_changed": "Removed read.run() call after sending error response in handleSimpleQuery catch block.",
+          "where_in_code": "PostgresWireProtocol.handleSimpleQuery",
+          "intent": "Avoid triggering channel read explicitly after error, consistent with other changes to read control.",
           "change_type": "modify_logic",
           "key_symbols": [
             "handleSimpleQuery"
@@ -1330,9 +1355,9 @@
         {
           "hunk_index": 22,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "Updated handleSingleQuery method signature to accept DelayableWriteChannel instead of Channel and adjusted whenComplete callback to use new ReadyForQueryCallback constructor without Runnable.",
-          "where_in_code": "handleSimpleQuery and handleSingleQuery methods",
-          "intent": "Adapt to use DelayableWriteChannel and updated callback signature for consistency with delayed write handling.",
+          "what_changed": "Updated handleSingleQuery method signature to accept DelayableWriteChannel instead of Channel and removed read runnable from ReadyForQueryCallback usage.",
+          "where_in_code": "PostgresWireProtocol.handleSingleQuery",
+          "intent": "Adapt to delayed write channel usage and simplify callback handling.",
           "change_type": "modify_signature",
           "key_symbols": [
             "handleSingleQuery",
@@ -1342,33 +1367,33 @@
         {
           "hunk_index": 23,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "In describe message handling, added creation of DelayedWrites from channel and passed it to RowCountReceiver constructor.",
-          "where_in_code": "handleDescribeMessage method",
-          "intent": "Enable delayed write buffering during describe message handling for consistent message ordering.",
+          "what_changed": "Added delayedWrites buffering in describeResult handling by calling channel.delayWrites() and passing delayedWrites to RowCountReceiver.",
+          "where_in_code": "PostgresWireProtocol.handleDescribeMessage or related method",
+          "intent": "Ensure writes during describe execution are buffered to maintain correct message ordering.",
           "change_type": "modify_logic",
           "key_symbols": [
             "RowCountReceiver",
-            "DelayedWrites"
+            "delayedWrites"
           ]
         },
         {
           "hunk_index": 24,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "In describe message handling, added creation of DelayedWrites from channel and passed it to ResultSetReceiver constructor.",
-          "where_in_code": "handleDescribeMessage method",
-          "intent": "Enable delayed write buffering during describe message handling for consistent message ordering.",
+          "what_changed": "Added delayedWrites buffering in describeResult handling for ResultSetReceiver by calling channel.delayWrites() and passing delayedWrites to ResultSetReceiver.",
+          "where_in_code": "PostgresWireProtocol.handleDescribeMessage or related method",
+          "intent": "Buffer writes during describe execution to maintain correct message ordering.",
           "change_type": "modify_logic",
           "key_symbols": [
             "ResultSetReceiver",
-            "DelayedWrites"
+            "delayedWrites"
           ]
         },
         {
           "hunk_index": 25,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "what_changed": "In handleSingleQuery, added call to discardDelayedWrites on channel before sending error response on exception.",
-          "where_in_code": "handleSingleQuery method",
-          "intent": "Ensure any buffered delayed writes are discarded on error to prevent stale or inconsistent writes.",
+          "what_changed": "Added call to channel.discardDelayedWrites() before sending error response in handleSingleQuery catch block.",
+          "where_in_code": "PostgresWireProtocol.handleSingleQuery",
+          "intent": "Ensure buffered writes are discarded on error to avoid sending stale or inconsistent messages.",
           "change_type": "modify_logic",
           "key_symbols": [
             "discardDelayedWrites"
@@ -1379,7 +1404,7 @@
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
           "what_changed": "Added import of DelayableWriteChannel.DelayedWrites.",
           "where_in_code": "imports",
-          "intent": "To support delayed write buffering in ResultSetReceiver.",
+          "intent": "Support delayed write buffering in ResultSetReceiver.",
           "change_type": "modify_import",
           "key_symbols": [
             "DelayedWrites"
@@ -1388,9 +1413,9 @@
         {
           "hunk_index": 27,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
-          "what_changed": "Changed channel field type from Channel to DelayableWriteChannel and added fields for DelayedWrites and directChannel (bypassing delay).",
+          "what_changed": "Changed channel field type from Channel to DelayableWriteChannel and added fields for delayedWrites and directChannel (bypassing delay).",
           "where_in_code": "ResultSetReceiver class fields and constructor",
-          "intent": "To manage delayed writes and direct writes separately for proper flushing and ordering.",
+          "intent": "Enable buffering of writes and direct access to underlying channel for flushing.",
           "change_type": "modify_field",
           "key_symbols": [
             "channel",
@@ -1401,9 +1426,9 @@
         {
           "hunk_index": 28,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
-          "what_changed": "Updated constructor to accept DelayedWrites and initialize directChannel by bypassing delay.",
+          "what_changed": "Updated constructor to accept DelayableWriteChannel and DelayedWrites, storing directChannel as bypassDelay() of channel.",
           "where_in_code": "ResultSetReceiver constructor",
-          "intent": "To coordinate delayed write buffering and direct channel writes for message ordering.",
+          "intent": "Initialize delayed write buffering context and direct channel access for sending messages.",
           "change_type": "modify_signature",
           "key_symbols": [
             "ResultSetReceiver",
@@ -1414,9 +1439,9 @@
         {
           "hunk_index": 29,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
-          "what_changed": "Changed setNextRow to send data rows via directChannel (bypassing delay) and check writability on directChannel.",
-          "where_in_code": "setNextRow method",
-          "intent": "To send row data immediately while managing delayed writes separately to maintain order and performance.",
+          "what_changed": "Changed setNextRow to send data rows via directChannel and check writability on directChannel instead of delayed channel.",
+          "where_in_code": "ResultSetReceiver.setNextRow",
+          "intent": "Send messages immediately on underlying channel while buffering writes logically, ensuring correct flow control.",
           "change_type": "modify_logic",
           "key_symbols": [
             "setNextRow",
@@ -1426,24 +1451,23 @@
         {
           "hunk_index": 30,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/ResultSetReceiver.java",
-          "what_changed": "In batchFinished, allFinished, and fail methods, flushed directChannel and invoked channel.writePendingMessages(delayedWrites) before flushing to ensure delayed writes are sent; updated listeners to use lambda parameter 'f'.",
-          "where_in_code": "batchFinished, allFinished, fail methods",
-          "intent": "To flush all delayed writes before signaling completion or failure, ensuring correct message order and channel state.",
+          "what_changed": "Changed flush and message sending methods to use directChannel for sending messages and added calls to channel.writePendingMessages(delayedWrites) before flushing in batchFinished, allFinished, and fail methods.",
+          "where_in_code": "ResultSetReceiver.batchFinished, allFinished, fail",
+          "intent": "Ensure all delayed writes are flushed before sending final messages to maintain correct message order and completeness.",
           "change_type": "modify_logic",
           "key_symbols": [
             "batchFinished",
             "allFinished",
             "fail",
-            "writePendingMessages",
-            "directChannel"
+            "writePendingMessages"
           ]
         },
         {
           "hunk_index": 31,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/RowCountReceiver.java",
-          "what_changed": "Changed channel field type from Channel to DelayableWriteChannel and added DelayedWrites field; updated constructor accordingly.",
+          "what_changed": "Added import of DelayableWriteChannel.DelayedWrites and changed channel field type to DelayableWriteChannel; added delayedWrites field.",
           "where_in_code": "RowCountReceiver class fields and constructor",
-          "intent": "To support delayed write buffering in RowCountReceiver for ordered message delivery.",
+          "intent": "Enable delayed write buffering support in RowCountReceiver.",
           "change_type": "modify_field",
           "key_symbols": [
             "channel",
@@ -1453,23 +1477,23 @@
         {
           "hunk_index": 32,
           "file_path": "server/src/main/java/io/crate/protocols/postgres/RowCountReceiver.java",
-          "what_changed": "In allFinished and fail methods, flushed channel.bypassDelay() and invoked channel.writePendingMessages(delayedWrites) before flushing to ensure delayed writes are sent; updated listeners to use lambda parameter 'f'.",
-          "where_in_code": "allFinished and fail methods",
-          "intent": "To flush all delayed writes before signaling completion or failure, ensuring correct message order and channel state.",
+          "what_changed": "Modified allFinished and fail methods to send messages via channel.bypassDelay() and flush after writing pending delayed writes.",
+          "where_in_code": "RowCountReceiver.allFinished and fail",
+          "intent": "Ensure all buffered writes are flushed before sending completion or error messages to maintain correct protocol message order.",
           "change_type": "modify_logic",
           "key_symbols": [
             "allFinished",
             "fail",
-            "writePendingMessages",
-            "bypassDelay"
+            "bypassDelay",
+            "writePendingMessages"
           ]
         },
         {
           "hunk_index": 33,
           "file_path": "server/src/main/java/org/elasticsearch/transport/netty4/Netty4Transport.java",
           "what_changed": "Replaced local variable assignment of Netty4MessageChannelHandler with direct instantiation in pipeline.addLast call.",
-          "where_in_code": "channel initializer",
-          "intent": "Simplify pipeline setup by removing unnecessary local variable.",
+          "where_in_code": "Netty4Transport channel initializer",
+          "intent": "Simplify pipeline handler addition by removing unnecessary variable.",
           "change_type": "modify_logic",
           "key_symbols": [
             "Netty4MessageChannelHandler"
@@ -1479,8 +1503,8 @@
           "hunk_index": 34,
           "file_path": "server/src/main/java/org/elasticsearch/transport/netty4/Netty4Transport.java",
           "what_changed": "Replaced local variable assignment of Netty4MessageChannelHandler with direct instantiation in pipeline.addLast call.",
-          "where_in_code": "channel initializer",
-          "intent": "Simplify pipeline setup by removing unnecessary local variable.",
+          "where_in_code": "Netty4Transport server accepted channel pipeline setup",
+          "intent": "Simplify pipeline handler addition by removing unnecessary variable.",
           "change_type": "modify_logic",
           "key_symbols": [
             "Netty4MessageChannelHandler"
@@ -1499,11 +1523,6 @@
         },
         {
           "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
-          "outcome": "skipped",
-          "reason": "apply errors: [\"old_string not found in server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java (first 60 chars: 'var handler = new Netty4MessageChannelHandler(pageCacheRecyc')\"]"
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
           "outcome": "clean"
         }
       ]
@@ -1511,11 +1530,11 @@
     "agent7_validator_retry2": {
       "validation_passed": false,
       "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/protocols/postgres/PostgresNetty.java:92: error: cannot find symbol\nserver/src/main/java/io/crate/protocols/postgres/PostgresNetty.java:125: error: cannot find symbol\nserver/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java:207: error: cannot find symbol",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java:142: error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;\nserver/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java:869: error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;\nserver/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:56: error: constru",
       "validation_attempts": 3,
       "retry_files": [
-        "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
-        "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java"
+        "server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java",
+        "server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java"
       ],
       "build_success": false,
       "build_mode": "crate-helper",
@@ -1525,19 +1544,29 @@
       "test_state_transition": null,
       "compile_errors": [
         {
-          "file": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
-          "line": 92,
-          "message": "error: cannot find symbol"
+          "file": "server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java",
+          "line": 142,
+          "message": "error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;"
         },
         {
-          "file": "server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java",
-          "line": 125,
-          "message": "error: cannot find symbol"
+          "file": "server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java",
+          "line": 869,
+          "message": "error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;"
         },
         {
-          "file": "server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java",
-          "line": 207,
-          "message": "error: cannot find symbol"
+          "file": "server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java",
+          "line": 56,
+          "message": "error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;"
+        },
+        {
+          "file": "server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java",
+          "line": 76,
+          "message": "error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;"
+        },
+        {
+          "file": "server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java",
+          "line": 112,
+          "message": "error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;"
         }
       ]
     }
@@ -1589,7 +1618,7 @@
       22,
       24
     ],
-    "tokens_used": 130227,
+    "tokens_used": 237392,
     "llm_token_usage": {
       "agent2_classifier": {
         "input": 0,
@@ -1597,7 +1626,7 @@
       },
       "agent4_namespace": {
         "input": 7838,
-        "output": 665
+        "output": 621
       },
       "agent5_structural": {
         "input": 0,
@@ -1612,16 +1641,16 @@
         "output": 0
       },
       "agent9_fallback": {
-        "input": 111063,
-        "output": 13409
+        "input": 221609,
+        "output": 10028
       }
     },
     "synthesis_status": "success",
     "applied_on_disk_ag3": 31,
-    "synthesized_count": 11,
+    "synthesized_count": 2,
     "failed_hunks_total": 0,
     "syntax_repair_status": "clean",
-    "fallback_status": "applied",
+    "fallback_status": "failed",
     "fallback_attempts": 2,
     "retry_contexts": [
       {
@@ -1631,21 +1660,22 @@
         "suggested_action": "route_to_namespace_or_structural"
       },
       {
-        "error_type": "unknown",
-        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:[38,56] error: package io.crate.protocols.postgres.DelayableWriteChannel does not exist\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:testCompile (default-testCompile) on project crate-server: Compilation failure\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:[38,56] error: package io.crate.protocols.postgres.DelayableWriteChannel does not exist\n[ERROR] \n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_type": "api_mismatch",
+        "error_message": "en-compiler-plugin:3.13.0:testCompile (default-testCompile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java:[142,15] error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;\n[ERROR]   required: Runnable,ByteBuf,Channel\n[ERROR]   found:    ByteBuf,DelayableWriteChannel\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java:[869,15] error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;\n[ERROR]   required: Runnable,ByteBuf,Channel\n[ERROR]   found:    ByteBuf,DelayableWriteChannel\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:[56,46] error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;\n[ERROR]   required: String,Channel,AccessControl,List<PGType<?>>,FormatCode[]\n[ERROR]   found:    String,DelayableWriteChannel,DelayedWrites,AccessControl,List<PGType<CAP#1>>,<null>\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR]   where CAP#1 is a fresh type-variable:\n[ERROR]     CAP#1 extends Object from capture of ?\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:[76,46] error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;\n[ERROR]   required: String,Channel,AccessControl,List<PGType<?>>,FormatCode[]\n[ERROR]   found:    String,DelayableWriteChannel,DelayedWrites,AccessControl,List<PGType<CAP#1>>,<null>\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR]   where CAP#1 is a fresh type-variable:\n[ERROR]     CAP#1 extends Object from capture of ?\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:[112,46] error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;\n[ERROR]   required: String,Channel,AccessControl,List<PGType<?>>,FormatCode[]\n[ERROR]   found:    String,DelayableWriteChannel,DelayedWrites,AccessControl,List<PGType<CAP#1>>,<null>\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR]   where CAP#1 is a fresh type-variable:\n[ERROR]     CAP#1 extends Object from capture of ?\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 2,
-        "suggested_action": "inspect_and_retry"
+        "suggested_action": "route_to_namespace_or_structural"
       },
       {
         "error_type": "api_mismatch",
-        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java:[92,18] error: cannot find symbol\n  symbol:   class Sessions\n[ERROR] /repo/server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java:[125,25] error: cannot find symbol\n  symbol:   class Sessions\n[ERROR] /repo/server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java:[207,12] error: cannot find symbol\n  symbol:   class DelayableWriteChannel\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java:[92,18] error: cannot find symbol\n[ERROR]   symbol:   class Sessions\n[ERROR]   location: class PostgresNetty\n[ERROR] /repo/server/src/main/java/io/crate/protocols/postgres/PostgresNetty.java:[125,25] error: cannot find symbol\n[ERROR]   symbol:   class Sessions\n[ERROR]   location: class PostgresNetty\n[ERROR] /repo/server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java:[207,12] error: cannot find symbol\n[ERROR]   symbol:   class DelayableWriteChannel\n[ERROR]   location: class PostgresWireProtocol\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "en-compiler-plugin:3.13.0:testCompile (default-testCompile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java:[142,15] error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;\n[ERROR]   required: Runnable,ByteBuf,Channel\n[ERROR]   found:    ByteBuf,DelayableWriteChannel\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/PostgresWireProtocolTest.java:[869,15] error: method handleSimpleQuery in class PostgresWireProtocol cannot be applied to given types;\n[ERROR]   required: Runnable,ByteBuf,Channel\n[ERROR]   found:    ByteBuf,DelayableWriteChannel\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:[56,46] error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;\n[ERROR]   required: String,Channel,AccessControl,List<PGType<?>>,FormatCode[]\n[ERROR]   found:    String,DelayableWriteChannel,DelayedWrites,AccessControl,List<PGType<CAP#1>>,<null>\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR]   where CAP#1 is a fresh type-variable:\n[ERROR]     CAP#1 extends Object from capture of ?\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:[76,46] error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;\n[ERROR]   required: String,Channel,AccessControl,List<PGType<?>>,FormatCode[]\n[ERROR]   found:    String,DelayableWriteChannel,DelayedWrites,AccessControl,List<PGType<CAP#1>>,<null>\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR]   where CAP#1 is a fresh type-variable:\n[ERROR]     CAP#1 extends Object from capture of ?\n[ERROR] /repo/server/src/test/java/io/crate/protocols/postgres/ResultSetReceiverTest.java:[112,46] error: constructor ResultSetReceiver in class ResultSetReceiver cannot be applied to given types;\n[ERROR]   required: String,Channel,AccessControl,List<PGType<?>>,FormatCode[]\n[ERROR]   found:    String,DelayableWriteChannel,DelayedWrites,AccessControl,List<PGType<CAP#1>>,<null>\n[ERROR]   reason: actual and formal argument lists differ in length\n[ERROR]   where CAP#1 is a fresh type-variable:\n[ERROR]     CAP#1 extends Object from capture of ?\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 3,
         "suggested_action": "route_to_namespace_or_structural"
       }
     ],
     "failed_hunks": [],
-    "generated_patch_bytes": 39925,
+    "generated_patch_bytes": 36578,
     "target_patch_bytes": 44891,
+    "patch_exact_match": false,
     "validation_passed": false,
     "validation_failure_category": "api_mismatch",
     "build_success": false,

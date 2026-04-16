@@ -1,0 +1,196 @@
+{
+  "run_timestamp": "2026-04-12T05:06:45.578385",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "8a576607bed8c1f6bb093fb60f82e710c32090c6",
+  "backport_commit": "ff85ddf12940122a217b6ae48b8e62523fac5d81",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/lucene/DisableGraphAttributeImpl.java",
+          "method_used": "new_file",
+          "confidence": 1.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.49,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch adds a new implementation class DisableGraphAttributeImpl which was missing, along with a test and documentation update. The changes are straightforward additions without structural or API changes to existing code. The new file is added cleanly (new_file) with no conflicts or complex modifications. The test addition and release notes update are also simple additions. Overall, this is a trivial backport involving exact string additions and minor test code, fitting the TYPE_I classification with high confidence.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.03,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 4.56,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "server/src/main/java/io/crate/lucene/DisableGraphAttributeImpl.java",
+          "old_string": "",
+          "new_string": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.lucene;\n\nimport org.apache.lucene.util.AttributeImpl;\nimport org.apache.lucene.util.AttributeReflector;\n\n/** Default implementation of {@link io.crate.lucene.DisableGraphAttribute} */\npublic class DisableGraphAttributeImpl extends AttributeImpl implements DisableGraphAttribute {\n\n    @Override\n    public void clear() {\n\n    }\n\n    @Override\n    public void reflectWith(AttributeReflector reflector) {\n\n    }\n\n    @Override\n    public void copyTo(AttributeImpl target) {\n\n    }\n}",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.04,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/lucene/DisableGraphAttributeImpl.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/plugins/es-analysis-common/target/surefire-reports/TEST-io.crate.analysis.common.CommonAnalyzerITest.xml"
+        ],
+        "target_classes": [
+          "CommonAnalyzerITest"
+        ],
+        "test_cases": {
+          "io.crate.analysis.common.CommonAnalyzerITest#testSelectFromRoutines": "passed",
+          "io.crate.analysis.common.CommonAnalyzerITest#test_select_from_information_schema_with_custom_analyzer": "passed",
+          "io.crate.analysis.common.CommonAnalyzerITest#testShingleFilterWithGraphOutput": "passed"
+        },
+        "classes": {
+          "io.crate.analysis.common.CommonAnalyzerITest": "passed"
+        },
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0,
+          "total": 3
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.analysis.common.CommonAnalyzerITest#testSelectFromRoutines",
+          "io.crate.analysis.common.CommonAnalyzerITest#testShingleFilterWithGraphOutput",
+          "io.crate.analysis.common.CommonAnalyzerITest#test_select_from_information_schema_with_custom_analyzer"
+        ],
+        "baseline_total": 0,
+        "patched_total": 3,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [],
+    "tokens_used": 2606,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 2290,
+        "output": 316
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1891,
+    "target_patch_bytes": 5115,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.analysis.common.CommonAnalyzerITest#testSelectFromRoutines",
+        "io.crate.analysis.common.CommonAnalyzerITest#testShingleFilterWithGraphOutput",
+        "io.crate.analysis.common.CommonAnalyzerITest#test_select_from_information_schema_with_custom_analyzer"
+      ],
+      "baseline_total": 0,
+      "patched_total": 3,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 3,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

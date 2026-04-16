@@ -1,0 +1,878 @@
+{
+  "run_timestamp": "2026-04-15T07:55:39.298124",
+  "repo": "hadoop",
+  "patch_type": "TYPE-V",
+  "original_commit": "ecf665c6facf89d3b87b6e3cc684274b8155ca60",
+  "backport_commit": "75ad60ba99bdb4bd044879af20cab4f368866613",
+  "description": "trunk \u2192 branch-3.3",
+  "skip_validation": false,
+  "skip_test": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 22.18,
+      "error": null,
+      "java_hunks": 6,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/LeafQueue.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.85,
+          "start_line": 379,
+          "end_line": 384,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueueStore.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.85,
+          "start_line": 21,
+          "end_line": 26,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/SchedulerNode.java",
+          "method_used": "embedding",
+          "confidence": 0.705,
+          "start_line": 476,
+          "end_line": 485,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueue.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 157,
+          "end_line": 162,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/preemption/PreemptionManager.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 28,
+          "end_line": 33,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/preemption/PreemptionManager.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 55,
+          "end_line": 62,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.1,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.95,
+        "reasoning": "The patch introduces new methods (getChildQueuesByTryLock) in multiple classes and interfaces, modifies locking behavior with tryLock and LockSupport, and adds a complex concurrency test to prevent deadlocks. These changes involve structural modifications to class interfaces and implementations, as well as concurrency control logic, which go beyond simple string replacements or formatting changes. The localization evidence shows some hunks found via 'git_exact' with high confidence, but the nature of the changes (new methods, concurrency control) indicates structural changes. Therefore, the patch is best classified as TYPE_III with high confidence. The token budget estimate is moderate due to the complexity of concurrency and structural changes but not a full redesign or deep refactoring.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 3,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueue.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/preemption/PreemptionManager.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/preemption/PreemptionManager.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 8.15,
+      "error": null,
+      "adapted_count": 1
+    },
+    "agent5_structural": {
+      "elapsed_s": 30.22,
+      "error": null,
+      "refactored_count": 1
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 3,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueueStore.java",
+          "old_string": "import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;\nimport org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;\nimport org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;\n\nimport java.util.Collection;\nimport java.util.HashMap;",
+          "new_string": "import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;\nimport org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;\nimport org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;\n\nimport java.util.Collection;\nimport java.util.HashMap;\nimport java.util.concurrent.locks.LockSupport;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/LeafQueue.java",
+          "old_string": "    return null;\n  }\n  \n  /**\n   * Set user limit - used only for testing.\n   * @param userLimit new user limit",
+          "new_string": "    return null;\n  }\n\n  @Override\n  public List<CSQueue> getChildQueuesByTryLock() {\n    return null;\n  }\n\n  /**\n   * Set user limit.\n   * @param userLimit new user limit",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/SchedulerNode.java",
+          "old_string": "\n  /**\n   * Recover a container.\n   * @param rmContainer Container to recover.\n   */\n  public synchronized void recoverContainer(RMContainer rmContainer) {\n    if (rmContainer.getState().equals(RMContainerState.COMPLETED)) {\n      return;\n    }\n    allocateContainer(rmContainer, true);\n  }\n\n  /**\n   * Get the labels for the node.\n   * @return Set of labels for the node.\n   */\n",
+          "new_string": "\n  /**\n   * Recover a container.\n\n  }\n\n  @Override\n  public List<CSQueue> getChildQueuesByTryLock() {\n    try {\n      while (!readLock.tryLock()){\n        LockSupport.parkNanos(10000);\n      }\n      return new ArrayList<>(childQueues);\n    } finally {\n      readLock.unlock();\n    }\n  }\n\n  @Override\n  public void recoverContainer(Resource clusterResource,\n      SchedulerApplicationAttempt attempt, RMContainer rmContainer) {\n   * Get the labels for the node.\n   * @return Set of labels for the node.\n   */\n",
+          "confidence": 1.0,
+          "context_lines_included": 3,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.35,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueueStore.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/LeafQueue.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/SchedulerNode.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 3
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (hadoop-helper): [\u001b[1;33mWARNING\u001b[m] PROTOC: HdfsServer.proto:35:1: warning: Import HAServiceProtocol.proto is unused.\nJournalProtocol.proto:34:1: warning: Import hdfs.proto is unused.\nJournalProtocol.proto:35:1: warning: Import HdfsServer.proto is unused.\nfsimage.proto:25:1: warning: Import acl.proto is unused.\nfsimage.proto:26:1: warning: Import xattr.proto is unused.\nQJournalProtocol.proto:31:1: warning: Import hdfs.proto is unused.\nInterQJournalProtocol.proto:31:1: warning: Impo",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": false,
+      "build_mode": "hadoop-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "applied",
+      "fallback_attempts": 1,
+      "synthesized_count": 1,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/LeafQueue.java",
+          "what_changed": "Added an override method getChildQueuesByTryLock returning null.",
+          "where_in_code": "LeafQueue class",
+          "intent": "To implement the getChildQueuesByTryLock method in LeafQueue, likely to fulfill an interface or abstract class contract.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "getChildQueuesByTryLock"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueueStore.java",
+          "what_changed": "Added import of LockSupport class.",
+          "where_in_code": "Imports section",
+          "intent": "To enable usage of LockSupport for thread parking in concurrency control.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "LockSupport"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/SchedulerNode.java",
+          "what_changed": "Added an override method getChildQueuesByTryLock that attempts to acquire a read lock with tryLock in a loop, parking the thread briefly if lock acquisition fails, then returns a copy of childQueues under the lock.",
+          "where_in_code": "SchedulerNode class",
+          "intent": "To provide a thread-safe way to retrieve child queues by attempting to acquire the read lock without blocking indefinitely, improving concurrency behavior.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "getChildQueuesByTryLock",
+            "readLock"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueue.java",
+          "what_changed": "Added a new method declaration getChildQueuesByTryLock to the CSQueue interface.",
+          "where_in_code": "CSQueue interface",
+          "intent": "To extend the interface with a method that allows retrieving child queues using a tryLock mechanism for concurrency control.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "getChildQueuesByTryLock"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/preemption/PreemptionManager.java",
+          "what_changed": "Added import of java.util.List.",
+          "where_in_code": "Imports section",
+          "intent": "To support usage of List collections in the PreemptionManager class.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "List"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/preemption/PreemptionManager.java",
+          "what_changed": "Replaced direct calls to getChildQueues with calls to getChildQueuesByTryLock when iterating over child queues during queue refresh.",
+          "where_in_code": "PreemptionManager class, method containing refreshQueues invocation",
+          "intent": "To use a concurrency-friendly method for retrieving child queues that attempts to acquire locks without blocking, improving thread safety and performance during queue refresh.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "getChildQueuesByTryLock",
+            "refreshQueues"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueueStore.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (hadoop-helper): [\u001b[1;33mWARNING\u001b[m] PROTOC: HdfsServer.proto:35:1: warning: Import HAServiceProtocol.proto is unused.\nJournalProtocol.proto:34:1: warning: Import hdfs.proto is unused.\nJournalProtocol.proto:35:1: warning: Import HdfsServer.proto is unused.\nfsimage.proto:25:1: warning: Import acl.proto is unused.\nfsimage.proto:26:1: warning: Import xattr.proto is unused.\nQJournalProtocol.proto:31:1: warning: Import hdfs.proto is unused.\nInterQJournalProtocol.proto:31:1: warning: Impo",
+      "validation_attempts": 2,
+      "retry_files": [],
+      "build_success": false,
+      "build_mode": "hadoop-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": []
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "applied",
+      "fallback_attempts": 2,
+      "synthesized_count": 1,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/LeafQueue.java",
+          "what_changed": "Added an override method getChildQueuesByTryLock returning null.",
+          "where_in_code": "LeafQueue class",
+          "intent": "To implement the getChildQueuesByTryLock method in LeafQueue, likely to fulfill an interface or abstract class contract.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "getChildQueuesByTryLock",
+            "LeafQueue"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueueStore.java",
+          "what_changed": "Added import of LockSupport class.",
+          "where_in_code": "Imports section",
+          "intent": "To enable usage of LockSupport for thread parking in concurrency control.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "LockSupport"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/SchedulerNode.java",
+          "what_changed": "Added an override method getChildQueuesByTryLock that attempts to acquire a read lock with tryLock in a loop, parking the thread briefly if unsuccessful, then returns a copy of childQueues under the lock.",
+          "where_in_code": "SchedulerNode class, before recoverContainer method",
+          "intent": "To provide a thread-safe way to retrieve child queues by trying to acquire the read lock without blocking indefinitely, improving concurrency behavior.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "getChildQueuesByTryLock",
+            "readLock",
+            "childQueues"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueue.java",
+          "what_changed": "Added a new method declaration getChildQueuesByTryLock to the CSQueue interface.",
+          "where_in_code": "CSQueue interface",
+          "intent": "To extend the interface with a method that allows retrieving child queues using a tryLock mechanism for concurrency control.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "getChildQueuesByTryLock",
+            "CSQueue"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/preemption/PreemptionManager.java",
+          "what_changed": "Added import of java.util.List.",
+          "where_in_code": "Imports section",
+          "intent": "To support usage of List collections in the PreemptionManager class.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "List"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/preemption/PreemptionManager.java",
+          "what_changed": "Replaced direct calls to getChildQueues with calls to getChildQueuesByTryLock when iterating over child queues in refreshQueues method.",
+          "where_in_code": "PreemptionManager class, inside refreshQueues method",
+          "intent": "To improve concurrency safety by using a tryLock-based method to retrieve child queues, avoiding potential blocking or deadlocks.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "refreshQueues",
+            "getChildQueuesByTryLock"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/CSQueueStore.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry2": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 3,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "hadoop-helper",
+      "test_success": true,
+      "test_mode": "hadoop-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/hadoop/build/all-test-results/TEST-org.apache.hadoop.fs.TestLocalDirAllocator.xml",
+          "/home/kaushal/backport-claw/repos/hadoop/build/all-test-results/TEST-org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader.xml",
+          "/home/kaushal/backport-claw/repos/hadoop/build/all-test-results/TEST-org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler.xml",
+          "/home/kaushal/backport-claw/repos/hadoop/build/all-test-results/TEST-org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy.xml",
+          "/home/kaushal/backport-claw/repos/hadoop/hadoop-common-project/hadoop-common/target/surefire-reports/TEST-org.apache.hadoop.fs.TestLocalDirAllocator.xml",
+          "/home/kaushal/backport-claw/repos/hadoop/hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/TEST-org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader.xml",
+          "/home/kaushal/backport-claw/repos/hadoop/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/target/surefire-reports/TEST-org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler.xml",
+          "/home/kaushal/backport-claw/repos/hadoop/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/target/surefire-reports/TEST-org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy.xml"
+        ],
+        "target_classes": [],
+        "test_cases": {
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRWBufferDirBecomesRO[0]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testROBufferDirAndRWBufferDir[0]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#test0[0]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[0]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRWBufferDirBecomesRO[1]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testROBufferDirAndRWBufferDir[1]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#test0[1]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[1]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRWBufferDirBecomesRO[2]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testROBufferDirAndRWBufferDir[2]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#test0[2]": "failed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[2]": "passed",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[2]": "passed",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutTimeoutException": "passed",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testLoadLegacyJsonFile": "passed",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testLoadExistingJsonFile": "passed",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutSuccess": "passed",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testEmptyCombinedHostsFileReader": "passed",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutInterruptedException": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAddAndRemoveAppFromCapacityScheduler": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueMaximumAllocations": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testDefaultNodeLabelExpressionQueueConfig": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationPerQueueLarge": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationCSError": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRecoverRequestAfterPreemption": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAppReservationWithDominantResourceCalculator": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testConfValidation": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testBlackListNodes": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppViolateQueueState": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParseQueue": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSQueueMetrics": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllApps": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAllocateDoesNotBlockOnSchedulerLock": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAttemptNotAdded": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMUsedResource": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMLimitDouble": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testcheckAndGetApplicationLifetime": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPreemptionDisabled": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllAppsInvalidSource": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationRefresh": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppWithActiveUsersWithOnlyPendingApps": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCapacityScheduler": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testNotAssignMultiple": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppSuccess": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCapacitySchedulerInfo": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllAppsInvalidDestination": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPreemptionInfo": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testReconnectedNode": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationCSLarger": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testResourceUpdateDecommissioningNode": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueuesMaxAllocationInheritance": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMLimitUsage": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueues": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueueWithOpenPreemption": "error",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParentQueueMaxCapsAreRespected": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPendingResourceUpdatedAccordingToIncreaseRequestChanges": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppPendingMetrics": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAssignMultiple": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testKillAllAppsInvalidSource": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testResourceOverCommit": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testContainerAllocationLocalitySkipped": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testNumClusterNodes": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueMappingWithCurrentUserQueueMappingForaGroup": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithQueueDelete": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testKillAllAppsInQueue": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppForMoveToQueueWithFreeCap": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithAllChildQueuesDeleted": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParseQueueWithAbsoluteResource": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAllocateReorder": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppQueueMetricsCheck": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testGetAppsInQueue": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testConvertLeafQueueToParentQueue": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppSameParent": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testSchedulerKeyGarbageCollection": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testSchedulingOnRemovedNode": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSReservationWithRootUnblocked": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRemoveAttemptMoveAdded": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testHierarchyQueuesCurrentLimits": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSQueueBlocked": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAppAttemptLocalityStatistics": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAsyncScheduling": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testClearRequestsBeforeApplyTheProposal": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueHierarchyPendingResourceUpdate": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testHeadRoomCalculationWithDRC": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithNewQueue": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testVerifyQueuesMaxAllocationConf": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRemovedNodeDecomissioningNode": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppBasic": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testReservedContainerLeakWhenMoveApplication": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationRefreshLarger": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMaximumCapacitySetup": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testApplicationHeadRoom": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy#testComparatorDoesNotValidateGeneralContract": "failed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy#testPriorityUtilizationOrdering": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy#testUtilizationOrdering": "passed"
+        },
+        "classes": {
+          "org.apache.hadoop.fs.TestLocalDirAllocator": "failed",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader": "passed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler": "failed",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy": "failed"
+        },
+        "summary": {
+          "passed": 119,
+          "failed": 11,
+          "skipped": 0,
+          "total": 130
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[2]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[0]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[1]",
+          "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[2]",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testEmptyCombinedHostsFileReader",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testLoadExistingJsonFile",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testLoadLegacyJsonFile",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutInterruptedException",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutSuccess",
+          "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutTimeoutException",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMLimitDouble",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMLimitUsage",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMUsedResource",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAddAndRemoveAppFromCapacityScheduler",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAllocateDoesNotBlockOnSchedulerLock",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAllocateReorder",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAppAttemptLocalityStatistics",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAppReservationWithDominantResourceCalculator",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testApplicationHeadRoom",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAssignMultiple",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAsyncScheduling",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testBlackListNodes",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSQueueBlocked",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSQueueMetrics",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSReservationWithRootUnblocked",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCapacityScheduler",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCapacitySchedulerInfo",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testClearRequestsBeforeApplyTheProposal",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testConfValidation",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testContainerAllocationLocalitySkipped",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testConvertLeafQueueToParentQueue",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testDefaultNodeLabelExpressionQueueConfig",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testGetAppsInQueue",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testHeadRoomCalculationWithDRC",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testHierarchyQueuesCurrentLimits",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testKillAllAppsInQueue",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testKillAllAppsInvalidSource",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMaximumCapacitySetup",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllApps",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllAppsInvalidDestination",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllAppsInvalidSource",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppBasic",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppForMoveToQueueWithFreeCap",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppPendingMetrics",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppQueueMetricsCheck",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppSameParent",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppSuccess",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppViolateQueueState",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppWithActiveUsersWithOnlyPendingApps",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAttemptNotAdded",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testNotAssignMultiple",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testNumClusterNodes",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParentQueueMaxCapsAreRespected",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParseQueue",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParseQueueWithAbsoluteResource",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPendingResourceUpdatedAccordingToIncreaseRequestChanges",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPreemptionDisabled",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPreemptionInfo",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueHierarchyPendingResourceUpdate",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueMappingWithCurrentUserQueueMappingForaGroup",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueMaximumAllocations",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueuesMaxAllocationInheritance",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testReconnectedNode",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRecoverRequestAfterPreemption",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueues",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationCSError",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationCSLarger",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationPerQueueLarge",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationRefresh",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationRefreshLarger",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithAllChildQueuesDeleted",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithNewQueue",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithQueueDelete",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRemoveAttemptMoveAdded",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRemovedNodeDecomissioningNode",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testReservedContainerLeakWhenMoveApplication",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testResourceOverCommit",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testResourceUpdateDecommissioningNode",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testSchedulerKeyGarbageCollection",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testSchedulingOnRemovedNode",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testVerifyQueuesMaxAllocationConf",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testcheckAndGetApplicationLifetime",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy#testPriorityUtilizationOrdering",
+          "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy#testUtilizationOrdering"
+        ],
+        "baseline_total": 0,
+        "patched_total": 130,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 8,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-hadoop-helper",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 121
+    },
+    "java_production_hunks": 6,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      3,
+      4,
+      5,
+      1,
+      0
+    ],
+    "tokens_used": 46092,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 4945,
+        "output": 443
+      },
+      "agent5_structural": {
+        "input": 857,
+        "output": 876
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 42202,
+        "output": 3890
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 3,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "applied",
+    "fallback_attempts": 2,
+    "retry_contexts": [
+      {
+        "error_type": "unknown",
+        "error_message": "[\u001b[1;33mWARNING\u001b[m] PROTOC: HdfsServer.proto:35:1: warning: Import HAServiceProtocol.proto is unused.\nJournalProtocol.proto:34:1: warning: Import hdfs.proto is unused.\nJournalProtocol.proto:35:1: warning: Import HdfsServer.proto is unused.\nfsimage.proto:25:1: warning: Import acl.proto is unused.\nfsimage.proto:26:1: warning: Import xattr.proto is unused.\nQJournalProtocol.proto:31:1: warning: Import hdfs.proto is unused.\nInterQJournalProtocol.proto:31:1: warning: Import HdfsServer.proto is unused.\n[\u001b[1;34mINFO\u001b[m] \u001b[1;31mBUILD FAILURE\u001b[m\n[\u001b[1;31mERROR\u001b[m] Failed to execute goal on project \u001b[36mhadoop-yarn-server-common\u001b[m: \u001b[1;31mCould not resolve dependencies for project org.apache.hadoop:hadoop-yarn-server-common:jar:3.3.9-SNAPSHOT: Could not find artifact org.apache.hadoop:hadoop-yarn-common:jar:tests:3.3.9-SNAPSHOT in central-mirror (https://repo1.maven.org/maven2)\u001b[m -> \u001b[1m[Help 1]\u001b[m\n[\u001b[1;31mERROR\u001b[m] \n[\u001b[1;31mERROR\u001b[m] To see the full stack trace of the errors, re-run Maven with the \u001b[1m-e\u001b[m switch.\n[\u001b[1;31mERROR\u001b[m] Re-run Maven using the \u001b[1m-X\u001b[m switch to enable full debug logging.\n[\u001b[1;31mERROR\u001b[m] \n[\u001b[1;31mERROR\u001b[m] For more information about the errors and possible solutions, please read the following articles:\n[\u001b[1;31mERROR\u001b[m] \u001b[1m[Help 1]\u001b[m http://cwiki.apache.org/confluence/display/MAVEN/DependencyResolutionException\n[\u001b[1;31mERROR\u001b[m] \n[\u001b[1;31mERROR\u001b[m] After correcting the problems, you can resume the build with the command\n[\u001b[1;31mERROR\u001b[m]   \u001b[1mmvn <args> -rf :hadoop-yarn-server-common\u001b[m\n--- Build FAILED for efc53d8 ---",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "[\u001b[1;33mWARNING\u001b[m] PROTOC: HdfsServer.proto:35:1: warning: Import HAServiceProtocol.proto is unused.\nJournalProtocol.proto:34:1: warning: Import hdfs.proto is unused.\nJournalProtocol.proto:35:1: warning: Import HdfsServer.proto is unused.\nfsimage.proto:25:1: warning: Import acl.proto is unused.\nfsimage.proto:26:1: warning: Import xattr.proto is unused.\nQJournalProtocol.proto:31:1: warning: Import hdfs.proto is unused.\nInterQJournalProtocol.proto:31:1: warning: Import HdfsServer.proto is unused.\n[\u001b[1;33mWARNING\u001b[m] PROTOC: yarn_server_federation_protos.proto:27:1: warning: Import yarn_server_common_protos.proto is unused.\n[\u001b[1;34mINFO\u001b[m] \u001b[1;31mBUILD FAILURE\u001b[m\n[\u001b[1;31mERROR\u001b[m] Failed to execute goal on project \u001b[36mhadoop-yarn-server-resourcemanager\u001b[m: \u001b[1;31mCould not resolve dependencies for project org.apache.hadoop:hadoop-yarn-server-resourcemanager:jar:3.3.9-SNAPSHOT: Could not find artifact org.apache.hadoop:hadoop-yarn-server-timelineservice:jar:tests:3.3.9-SNAPSHOT in central-mirror (https://repo1.maven.org/maven2)\u001b[m -> \u001b[1m[Help 1]\u001b[m\n[\u001b[1;31mERROR\u001b[m] \n[\u001b[1;31mERROR\u001b[m] To see the full stack trace of the errors, re-run Maven with the \u001b[1m-e\u001b[m switch.\n[\u001b[1;31mERROR\u001b[m] Re-run Maven using the \u001b[1m-X\u001b[m switch to enable full debug logging.\n[\u001b[1;31mERROR\u001b[m] \n[\u001b[1;31mERROR\u001b[m] For more information about the errors and possible solutions, please read the following articles:\n[\u001b[1;31mERROR\u001b[m] \u001b[1m[Help 1]\u001b[m http://cwiki.apache.org/confluence/display/MAVEN/DependencyResolutionException\n[\u001b[1;31mERROR\u001b[m] \n[\u001b[1;31mERROR\u001b[m] After correcting the problems, you can resume the build with the command\n[\u001b[1;31mERROR\u001b[m]   \u001b[1mmvn <args> -rf :hadoop-yarn-server-resourcemanager\u001b[m\n--- Build FAILED for efc53d8 ---",
+        "attempt_count": 2,
+        "suggested_action": "inspect_and_retry"
+      }
+    ],
+    "failed_hunks": [],
+    "generated_patch_bytes": 22346,
+    "target_patch_bytes": 9804,
+    "patch_exact_match": false,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "hadoop-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFilesRandom[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testCreateManyFiles[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecoveryKnownSize[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirectoryRecovery[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testDirsNotExist[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetAllLocalPathsToRead[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForInvalidPaths[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathForWriteForLessSpace[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testGetLocalPathToRead[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testLocalPathForWriteDirCreation[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testNoSideEffects[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testRemoveContext[2]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[0]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[1]",
+        "org.apache.hadoop.fs.TestLocalDirAllocator#testShouldNotthrowNPE[2]",
+        "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testEmptyCombinedHostsFileReader",
+        "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testLoadExistingJsonFile",
+        "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testLoadLegacyJsonFile",
+        "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutInterruptedException",
+        "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutSuccess",
+        "org.apache.hadoop.hdfs.util.TestCombinedHostsFileReader#testReadFileWithTimeoutTimeoutException",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMLimitDouble",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMLimitUsage",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAMUsedResource",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAddAndRemoveAppFromCapacityScheduler",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAllocateDoesNotBlockOnSchedulerLock",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAllocateReorder",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAppAttemptLocalityStatistics",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAppReservationWithDominantResourceCalculator",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testApplicationHeadRoom",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAssignMultiple",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testAsyncScheduling",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testBlackListNodes",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSQueueBlocked",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSQueueMetrics",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCSReservationWithRootUnblocked",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCapacityScheduler",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testCapacitySchedulerInfo",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testClearRequestsBeforeApplyTheProposal",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testConfValidation",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testContainerAllocationLocalitySkipped",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testConvertLeafQueueToParentQueue",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testDefaultNodeLabelExpressionQueueConfig",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testGetAppsInQueue",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testHeadRoomCalculationWithDRC",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testHierarchyQueuesCurrentLimits",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testKillAllAppsInQueue",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testKillAllAppsInvalidSource",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMaximumCapacitySetup",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllApps",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllAppsInvalidDestination",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAllAppsInvalidSource",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppBasic",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppForMoveToQueueWithFreeCap",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppPendingMetrics",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppQueueMetricsCheck",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppSameParent",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppSuccess",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppViolateQueueState",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAppWithActiveUsersWithOnlyPendingApps",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testMoveAttemptNotAdded",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testNotAssignMultiple",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testNumClusterNodes",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParentQueueMaxCapsAreRespected",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParseQueue",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testParseQueueWithAbsoluteResource",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPendingResourceUpdatedAccordingToIncreaseRequestChanges",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPreemptionDisabled",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testPreemptionInfo",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueHierarchyPendingResourceUpdate",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueMappingWithCurrentUserQueueMappingForaGroup",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueueMaximumAllocations",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testQueuesMaxAllocationInheritance",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testReconnectedNode",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRecoverRequestAfterPreemption",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueues",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationCSError",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationCSLarger",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationPerQueueLarge",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationRefresh",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesMaxAllocationRefreshLarger",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithAllChildQueuesDeleted",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithNewQueue",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRefreshQueuesWithQueueDelete",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRemoveAttemptMoveAdded",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testRemovedNodeDecomissioningNode",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testReservedContainerLeakWhenMoveApplication",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testResourceOverCommit",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testResourceUpdateDecommissioningNode",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testSchedulerKeyGarbageCollection",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testSchedulingOnRemovedNode",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testVerifyQueuesMaxAllocationConf",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestCapacityScheduler#testcheckAndGetApplicationLifetime",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy#testPriorityUtilizationOrdering",
+        "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.TestPriorityUtilizationQueueOrderingPolicy#testUtilizationOrdering"
+      ],
+      "baseline_total": 0,
+      "patched_total": 130,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 119,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

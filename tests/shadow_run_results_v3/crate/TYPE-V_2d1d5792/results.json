@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-11T16:04:33.302350",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-V",
   "original_commit": "2d1d5792c54e7422dbb64fac5894ebcdcd1c92a0",
   "backport_commit": "6c4fd5e558079c125e6719e40633ba64e1fda2bf",
   "description": "master \u2192 5.8",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.15,
+      "elapsed_s": 0.17,
       "error": null,
       "java_hunks": 19,
       "aux_hunks": 7,
@@ -187,20 +188,25 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.3,
+      "elapsed_s": 4.43,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch introduces new operator classes (AllLikeOperator, AllNotLikeOperator) and extends existing classes (AllOperator, LikeOperators, Function) to support new 'ALL LIKE' and 'ALL NOT LIKE' operators. It involves adding new files, modifying multiple existing files with structural changes such as new methods, new operator registrations, and changes in function printing logic. The patch is not a trivial string replacement or whitespace change, but it does not represent a complete redesign or deep refactoring. The localization evidence shows all hunks were found exactly, indicating the patch applies cleanly but involves structural additions and modifications, consistent with TYPE_III complexity. The estimated token budget is moderate due to the number of files and complexity of changes.",
+        "reasoning": "The patch introduces new operator classes (AllLikeOperator, AllNotLikeOperator) and extends existing classes (AllOperator, LikeOperators, ExpressionAnalyzer, Function) to support new 'ALL LIKE' and 'ALL NOT LIKE' operators. It involves adding new files, modifying method signatures, and updating operator registration and printing logic. The changes are structural, involving new class hierarchies and integration into existing expression analysis and symbol printing frameworks. The patch is not a trivial string replacement or whitespace change, nor a deep refactoring or complete redesign, but a moderate structural extension, fitting TYPE_III classification. The localization evidence shows all hunks found exactly, indicating straightforward application but the complexity of new code and integration justifies a high confidence but not absolute certainty. The token budget estimate reflects the size and complexity of the patch including new classes and tests.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
-      "elapsed_s": 0.02,
+      "elapsed_s": 0.03,
       "error": null,
-      "applied_count": 16,
+      "applied_count": 17,
       "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
+          "error": null
+        },
         {
           "applied": true,
           "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
@@ -284,53 +290,64 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 26.08,
+      "elapsed_s": 0.0,
       "error": null,
-      "adapted_count": 3
+      "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.03,
+      "elapsed_s": 0.04,
       "error": null,
       "refactored_count": 0
     },
     "agent6_synthesizer": {
-      "elapsed_s": 0.07,
+      "elapsed_s": 22.57,
       "error": null,
-      "synthesized_count": 1,
-      "failed_count": 2,
-      "synthesis_status": "partial",
+      "synthesized_count": 2,
+      "failed_count": 0,
+      "synthesis_status": "success",
       "synthesized_hunks": [
         {
-          "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
-          "old_string": "import io.crate.expression.operator.EqOperator;\nimport io.crate.expression.operator.ExistsOperator;\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.operator.Operator;\nimport io.crate.expression.operator.OrOperator;\nimport io.crate.expression.operator.RegexpMatchCaseInsensitiveOperator;\nimport io.crate.expression.operator.RegexpMatchOperator;\nimport io.crate.expression.operator.any.AnyOperator;\nimport io.crate.expression.predicate.NotPredicate;\nimport io.crate.expression.scalar.ArraySliceFunction;\nimport io.crate.expression.scalar.ArrayUnnestFunction;\nimport io.crate.expression.scalar.CurrentDateFunction;\nimport io.crate.expression.scalar.ExtractFunctions;\n",
-          "new_string": "import io.crate.expression.operator.EqOperator;\nimport io.crate.expression.operator.ExistsOperator;\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.operator.Operator;\nimport io.crate.expression.operator.OrOperator;\nimport io.crate.expression.operator.RegexpMatchCaseInsensitiveOperator;\nimport io.crate.expression.operator.OrOperator;\nimport io.crate.expression.operator.RegexpMatchCaseInsensitiveOperator;\nimport io.crate.expression.operator.RegexpMatchOperator;\nimport io.crate.expression.operator.any.AnyOperator;\nimport io.crate.expression.predicate.NotPredicate;\nimport io.crate.expression.scalar.ArraySliceFunction;\nimport io.crate.expression.operator.any.AnyOperator;\nimport io.crate.expression.predicate.NotPredicate;\nimport io.crate.expression.scalar.ArraySliceFunction;\nimport io.crate.expression.scalar.ArrayUnnestFunction;\nimport io.crate.expression.scalar.CurrentDateFunction;\nimport io.crate.expression.scalar.ExtractFunctions;\n",
+          "file_path": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
+          "old_string": "",
+          "new_string": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators; // TODO: verify import\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType; // TODO: verify import\nimport io.crate.types.DataType; // TODO: verify import\nimport io.crate.types.ObjectType; // TODO: verify import\n\npublic final class AllLikeOperator extends AllOperator<String> {\n\n    private final LikeOperators.CaseSensitivity caseSensitivity;\n\n    public AllLikeOperator(Signature signature,\n                           BoundSignature boundSignature,\n                           LikeOperators.CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n        DataType<?> innerType = ((ArrayType<?>) boundSignature.argTypes().get(1)).innerType();\n        if (innerType.id() == ObjectType.ID) {\n            throw new IllegalArgumentException(\"ALL on object arrays is not supported\");\n        }\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) ||\n            LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}",
           "confidence": 1.0,
-          "context_lines_included": 3,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
+          "old_string": "",
+          "new_string": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.operator.LikeOperators.CaseSensitivity;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\n\npublic final class AllNotLikeOperator extends AllOperator<String> {\n\n    private final CaseSensitivity caseSensitivity;\n\n    public AllNotLikeOperator(Signature signature,\n                              BoundSignature boundSignature,\n                              CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n    }\n\n    @SuppressWarnings(\"unused\")\n    private static String negateWildcard(String wildCard) {\n        return \"~(\" + wildCard + ')';\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return !LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) &&\n            !LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}",
+          "confidence": 1.0,
+          "context_lines_included": 0,
           "verified": true
         }
       ]
     },
     "agent8_syntax_repair": {
-      "elapsed_s": 0.17,
+      "elapsed_s": 0.01,
       "error": null,
       "syntax_repair_status": "clean",
       "syntax_repair_attempts": 0,
       "syntax_repair_log": [
         {
-          "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
+          "file_path": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
           "outcome": "clean"
         }
       ],
-      "synthesized_count_after_repair": 1
+      "synthesized_count_after_repair": 2
     },
     "agent7_validator": {
       "validation_passed": false,
       "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:32: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:33: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/all/AllOperator.java:48: error: cannot find symbol",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:246: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:242: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:260: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:256: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/Like",
       "validation_attempts": 1,
       "retry_files": [
-        "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-        "server/src/main/java/io/crate/expression/operator/all/AllOperator.java"
+        "server/src/main/java/io/crate/expression/operator/LikeOperators.java"
       ],
       "build_success": false,
       "build_mode": "crate-helper",
@@ -341,32 +358,57 @@
       "compile_errors": [
         {
           "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "line": 32,
+          "line": 246,
           "message": "error: cannot find symbol"
         },
         {
           "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "line": 33,
+          "line": 242,
           "message": "error: cannot find symbol"
         },
         {
-          "file": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
-          "line": 48,
+          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+          "line": 260,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+          "line": 256,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+          "line": 274,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+          "line": 270,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+          "line": 288,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
+          "line": 284,
           "message": "error: cannot find symbol"
         }
       ]
     },
     "agent9_fallback_1": {
-      "fallback_status": "applied",
+      "fallback_status": "failed",
       "fallback_attempts": 1,
-      "synthesized_count": 4,
+      "synthesized_count": 2,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
           "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
           "what_changed": "Added import for AllOperator among existing operator imports.",
-          "where_in_code": "imports section",
-          "intent": "To enable usage of AllOperator in expression analysis.",
+          "where_in_code": "imports section of ExpressionAnalyzer.java",
+          "intent": "To enable usage of the AllOperator class in expression analysis.",
           "change_type": "modify_import",
           "key_symbols": [
             "AllOperator"
@@ -375,9 +417,9 @@
         {
           "hunk_index": 1,
           "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
-          "what_changed": "Removed import of AllOperator from imports.",
-          "where_in_code": "imports section",
-          "intent": "To clean up unused import or avoid duplicate import of AllOperator.",
+          "what_changed": "Removed import of AllOperator from the imports list.",
+          "where_in_code": "imports section of ExpressionAnalyzer.java",
+          "intent": "To clean up unused import, possibly because AllOperator is now imported elsewhere or no longer needed here.",
           "change_type": "modify_import",
           "key_symbols": [
             "AllOperator"
@@ -386,21 +428,20 @@
         {
           "hunk_index": 2,
           "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
-          "what_changed": "Modified call to LikeOperators.arrayOperatorName to include the quantifier parameter from the node instead of only inverse and ignoreCase flags.",
-          "where_in_code": "ExpressionAnalyzer, method handling array LIKE expressions",
-          "intent": "To correctly determine the operator name based on the quantifier (e.g., ANY or ALL) in addition to negation and case sensitivity.",
+          "what_changed": "Modified call to LikeOperators.arrayOperatorName to include an additional parameter 'quantifier' instead of just inverse and ignoreCase flags.",
+          "where_in_code": "ExpressionAnalyzer.visitArrayLikePredicate (or equivalent method handling array LIKE predicates)",
+          "intent": "To support array LIKE operators that distinguish between quantifiers (e.g., ANY, ALL) for more precise operator resolution.",
           "change_type": "modify_method",
           "key_symbols": [
-            "LikeOperators.arrayOperatorName",
-            "node.quantifier()"
+            "LikeOperators.arrayOperatorName"
           ]
         },
         {
           "hunk_index": 3,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
           "what_changed": "Added imports for AllLikeOperator, AllNotLikeOperator, and AllOperator alongside existing any-operator imports.",
-          "where_in_code": "imports section",
-          "intent": "To support new ALL variants of LIKE operators in the codebase.",
+          "where_in_code": "imports section of LikeOperators.java",
+          "intent": "To enable usage and registration of ALL variants of LIKE operators in the LikeOperators class.",
           "change_type": "modify_import",
           "key_symbols": [
             "AllLikeOperator",
@@ -411,9 +452,9 @@
         {
           "hunk_index": 4,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "what_changed": "Added import of ArrayComparison to support quantifier enum usage.",
-          "where_in_code": "imports section",
-          "intent": "To enable use of ArrayComparison.Quantifier for distinguishing ANY vs ALL semantics.",
+          "what_changed": "Added import of ArrayComparison to LikeOperators.java.",
+          "where_in_code": "imports section of LikeOperators.java",
+          "intent": "To use ArrayComparison.Quantifier enum for distinguishing ANY and ALL quantifiers in array LIKE operators.",
           "change_type": "modify_import",
           "key_symbols": [
             "ArrayComparison"
@@ -422,9 +463,9 @@
         {
           "hunk_index": 5,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "what_changed": "Introduced new string constants for ALL_LIKE, ALL_ILIKE, ALL_NOT_LIKE, and ALL_NOT_ILIKE operators.",
-          "where_in_code": "LikeOperators class, static fields",
-          "intent": "To define operator names for the ALL variants of LIKE and ILIKE operators.",
+          "what_changed": "Introduced new operator name constants for ALL variants of LIKE and ILIKE (ALL_LIKE, ALL_ILIKE, ALL_NOT_LIKE, ALL_NOT_ILIKE).",
+          "where_in_code": "LikeOperators class fields",
+          "intent": "To define operator name constants for the new ALL quantifier LIKE operators to be used in function registration and resolution.",
           "change_type": "add_field",
           "key_symbols": [
             "ALL_LIKE",
@@ -436,9 +477,9 @@
         {
           "hunk_index": 6,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "what_changed": "Modified arrayOperatorName method to accept an ArrayComparison.Quantifier parameter and select operator name based on quantifier (ANY or ALL), negation, and case sensitivity.",
-          "where_in_code": "LikeOperators class, arrayOperatorName method",
-          "intent": "To correctly resolve operator names for array LIKE operations depending on quantifier semantics (ANY vs ALL) and flags.",
+          "what_changed": "Modified arrayOperatorName method to accept an ArrayComparison.Quantifier parameter and return operator names based on quantifier (ANY or ALL), negate flag, and ignoreCase flag.",
+          "where_in_code": "LikeOperators.arrayOperatorName method",
+          "intent": "To support generating correct operator names for array LIKE operations depending on quantifier (ANY or ALL), enabling semantic distinction in operator resolution.",
           "change_type": "modify_signature",
           "key_symbols": [
             "arrayOperatorName",
@@ -448,9 +489,9 @@
         {
           "hunk_index": 7,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "what_changed": "Added registration of new scalar functions for ALL_LIKE, ALL_NOT_LIKE, ALL_ILIKE, and ALL_NOT_ILIKE with appropriate signatures and case sensitivity settings.",
-          "where_in_code": "LikeOperators class, static function registration block",
-          "intent": "To enable the system to recognize and instantiate ALL variants of LIKE operators as scalar functions.",
+          "what_changed": "Registered new scalar functions for ALL_LIKE, ALL_NOT_LIKE, ALL_ILIKE, and ALL_NOT_ILIKE with appropriate signatures and case sensitivity in the function builder.",
+          "where_in_code": "LikeOperators static function registration block",
+          "intent": "To add support for ALL quantifier LIKE operators as first-class scalar functions with proper signatures and case sensitivity handling.",
           "change_type": "add_method",
           "key_symbols": [
             "ALL_LIKE",
@@ -462,9 +503,9 @@
         {
           "hunk_index": 8,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
-          "what_changed": "Added new AllLikeOperator class implementing the ALL variant of LIKE operator with case sensitivity support and pattern matching logic.",
+          "what_changed": "Added new class AllLikeOperator implementing the ALL quantifier LIKE operator with case sensitivity support and validation against object arrays.",
           "where_in_code": "AllLikeOperator class",
-          "intent": "To provide an operator that matches a string against all elements of an array using LIKE semantics, supporting both case sensitive and insensitive modes.",
+          "intent": "To provide an operator implementation that matches a string against all elements of an array using LIKE semantics, supporting both case sensitive and insensitive modes.",
           "change_type": "add_method",
           "key_symbols": [
             "AllLikeOperator",
@@ -475,9 +516,9 @@
         {
           "hunk_index": 9,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
-          "what_changed": "Added new AllNotLikeOperator class implementing the ALL variant of NOT LIKE operator with case sensitivity and negated matching logic.",
+          "what_changed": "Added new class AllNotLikeOperator implementing the ALL quantifier NOT LIKE operator with case sensitivity support and validation.",
           "where_in_code": "AllNotLikeOperator class",
-          "intent": "To provide an operator that matches a string against all elements of an array ensuring none match the pattern, supporting case sensitivity.",
+          "intent": "To provide an operator implementation that matches a string against all elements of an array using NOT LIKE semantics, supporting both case sensitive and insensitive modes.",
           "change_type": "add_method",
           "key_symbols": [
             "AllNotLikeOperator",
@@ -488,9 +529,9 @@
         {
           "hunk_index": 10,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
-          "what_changed": "Added import of LikeOperators to AllOperator class.",
+          "what_changed": "Added import of LikeOperators to AllOperator.java.",
           "where_in_code": "imports section of AllOperator.java",
-          "intent": "To enable usage of LikeOperators utilities within AllOperator implementations.",
+          "intent": "To enable usage of LikeOperators utilities within the AllOperator base class or its subclasses.",
           "change_type": "modify_import",
           "key_symbols": [
             "LikeOperators"
@@ -499,9 +540,9 @@
         {
           "hunk_index": 11,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
-          "what_changed": "Extended AllOperator sealed class permits clause to include AllLikeOperator and AllNotLikeOperator.",
+          "what_changed": "Extended the sealed AllOperator class to permit new subclasses AllLikeOperator and AllNotLikeOperator.",
           "where_in_code": "AllOperator class declaration",
-          "intent": "To formally include the new ALL LIKE and ALL NOT LIKE operator classes as permitted subclasses.",
+          "intent": "To formally include the new ALL LIKE and ALL NOT LIKE operator implementations in the AllOperator hierarchy for type safety and pattern matching.",
           "change_type": "modify_logic",
           "key_symbols": [
             "AllOperator",
@@ -512,10 +553,10 @@
         {
           "hunk_index": 12,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
-          "what_changed": "Added ALL LIKE and ALL NOT LIKE operator names to the list of recognized operator names in AllOperator.",
-          "where_in_code": "AllOperator class, OPERATOR_NAMES static field",
-          "intent": "To register the new ALL LIKE and ALL NOT LIKE operators as valid operator names for dispatch and recognition.",
-          "change_type": "add_field",
+          "what_changed": "Added ALL LIKE and ALL NOT LIKE operator names to the list of recognized AllOperator names.",
+          "where_in_code": "AllOperator.OPERATOR_NAMES list field",
+          "intent": "To register the new ALL LIKE and ALL NOT LIKE operators as valid AllOperator names for function resolution and dispatch.",
+          "change_type": "modify_logic",
           "key_symbols": [
             "ALL_LIKE",
             "ALL_ILIKE",
@@ -526,21 +567,21 @@
         {
           "hunk_index": 13,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
-          "what_changed": "Modified iteration logic in AllOperator to not increment matches count when rightValue is null but still mark anyNulls true; added else block for validation and matching.",
-          "where_in_code": "AllOperator class, method iterating over rightValues for matching",
-          "intent": "To correctly handle null elements in the array by not counting them as matches but tracking their presence, ensuring accurate ALL semantics.",
+          "what_changed": "Changed iteration logic over rightValues to only increment matches count if rightValue is null or matches the leftValue, skipping validation and matching if rightValue is null.",
+          "where_in_code": "AllOperator.matchesArray method (or equivalent)",
+          "intent": "To correctly handle null elements in the array by counting them as matches without further validation or matching logic.",
           "change_type": "modify_logic",
           "key_symbols": [
             "matches",
-            "anyNulls"
+            "rightValues"
           ]
         },
         {
           "hunk_index": 14,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
-          "what_changed": "Adjusted toQuery method to use getFirst() instead of get(0) when unwrapping ArrayUnnestFunction argument; removed unchecked cast annotation and simplified casting.",
-          "where_in_code": "AllOperator class, toQuery method",
-          "intent": "To improve safety and correctness when extracting the underlying symbol from an unnest function and to simplify type handling.",
+          "what_changed": "Modified toQuery method to use getFirst() instead of get(0) when unwrapping ArrayUnnestFunction argument and removed unchecked cast on literalMatchesAllArrayRef call.",
+          "where_in_code": "AllOperator.toQuery method",
+          "intent": "To improve safety and correctness when extracting the underlying argument from an ArrayUnnestFunction and simplify type handling in query translation.",
           "change_type": "modify_logic",
           "key_symbols": [
             "toQuery",
@@ -551,8 +592,8 @@
           "hunk_index": 15,
           "file_path": "server/src/main/java/io/crate/expression/symbol/Function.java",
           "what_changed": "Added import of AllOperator alongside existing operator imports.",
-          "where_in_code": "imports section",
-          "intent": "To enable handling and printing of AllOperator functions.",
+          "where_in_code": "imports section of Function.java",
+          "intent": "To enable handling and printing of AllOperator functions in the Function class.",
           "change_type": "modify_import",
           "key_symbols": [
             "AllOperator"
@@ -561,9 +602,9 @@
         {
           "hunk_index": 16,
           "file_path": "server/src/main/java/io/crate/expression/symbol/Function.java",
-          "what_changed": "Extended function printing logic to recognize and print AllOperator functions similarly to AnyOperator functions.",
-          "where_in_code": "Function class, method handling function printing (likely toString or similar)",
-          "intent": "To support proper string representation of ALL operator functions in expressions.",
+          "what_changed": "Extended function printing logic to detect and print AllOperator functions similarly to AnyOperator functions.",
+          "where_in_code": "Function.toString or equivalent method handling function printing",
+          "intent": "To support correct string representation of ALL quantifier operators in expressions.",
           "change_type": "modify_logic",
           "key_symbols": [
             "AllOperator",
@@ -573,9 +614,9 @@
         {
           "hunk_index": 17,
           "file_path": "server/src/main/java/io/crate/expression/symbol/Function.java",
-          "what_changed": "Fixed substring offset when extracting operator name for AnyOperator functions to use the length of the operator prefix constant instead of hardcoded value.",
-          "where_in_code": "Function class, printAnyOperator method",
-          "intent": "To make operator name extraction robust and maintainable by using constant length rather than magic number.",
+          "what_changed": "Fixed substring offset when extracting operator name for AnyOperator functions to use the length of the operator prefix constant instead of a hardcoded number.",
+          "where_in_code": "Function.printAnyOperator method",
+          "intent": "To make operator name extraction robust and maintainable by using the defined prefix length constant.",
           "change_type": "modify_logic",
           "key_symbols": [
             "AnyOperator.OPERATOR_PREFIX",
@@ -585,9 +626,9 @@
         {
           "hunk_index": 18,
           "file_path": "server/src/main/java/io/crate/expression/symbol/Function.java",
-          "what_changed": "Added printAllOperator method to format ALL operator functions with proper syntax including 'ALL(...)' wrapping and operator name extraction.",
-          "where_in_code": "Function class, new private method printAllOperator",
-          "intent": "To provide a dedicated pretty-printing method for ALL operator functions for better readability and consistency.",
+          "what_changed": "Added a new private method printAllOperator to format ALL quantifier operator functions with proper syntax and operator name extraction.",
+          "where_in_code": "Function class",
+          "intent": "To provide a dedicated method for printing ALL quantifier operators in a human-readable and consistent manner.",
           "change_type": "add_method",
           "key_symbols": [
             "printAllOperator",
@@ -601,23 +642,25 @@
       "syntax_repair_attempts": 0,
       "syntax_repair_log": [
         {
-          "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
+          "file_path": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
           "outcome": "skipped",
-          "reason": "apply errors: [\"old_string not found in server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java (first 60 chars: 'import io.crate.expression.operator.EqOperator;\\\\nimport io.cr')\"]"
+          "reason": "file not readable"
         },
         {
-          "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "outcome": "clean"
+          "file_path": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
+          "outcome": "skipped",
+          "reason": "file not readable"
         }
       ]
     },
     "agent7_validator_retry1": {
       "validation_passed": false,
-      "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:40: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:71: error: package ArrayComparison does not exist",
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java:37: error: class is not allowed to extend sealed class: AllOperator (as it is not listed in its 'permits' clause)\nserver/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java:35: error: class is not allowed to extend sealed class: AllOperator (as it is not listed in its 'permits' clause)",
       "validation_attempts": 2,
       "retry_files": [
-        "server/src/main/java/io/crate/expression/operator/LikeOperators.java"
+        "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
+        "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java"
       ],
       "build_success": false,
       "build_mode": "crate-helper",
@@ -627,21 +670,21 @@
       "test_state_transition": null,
       "compile_errors": [
         {
-          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "line": 40,
-          "message": "error: cannot find symbol"
+          "file": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
+          "line": 37,
+          "message": "error: class is not allowed to extend sealed class: AllOperator (as it is not listed in its 'permits' clause)"
         },
         {
-          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "line": 71,
-          "message": "error: package ArrayComparison does not exist"
+          "file": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
+          "line": 35,
+          "message": "error: class is not allowed to extend sealed class: AllOperator (as it is not listed in its 'permits' clause)"
         }
       ]
     },
     "agent9_fallback_2": {
-      "fallback_status": "applied",
+      "fallback_status": "failed",
       "fallback_attempts": 2,
-      "synthesized_count": 5,
+      "synthesized_count": 0,
       "hunk_descriptions": [
         {
           "hunk_index": 0,
@@ -657,9 +700,9 @@
         {
           "hunk_index": 1,
           "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
-          "what_changed": "Removed import of AllOperator from the imports list.",
+          "what_changed": "Removed import of AllOperator from the imports.",
           "where_in_code": "imports section",
-          "intent": "To clean up unused import of AllOperator, possibly due to reordering or refactoring.",
+          "intent": "To clean up unused import or avoid duplicate import of AllOperator.",
           "change_type": "modify_import",
           "key_symbols": [
             "AllOperator"
@@ -668,12 +711,13 @@
         {
           "hunk_index": 2,
           "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
-          "what_changed": "Modified call to LikeOperators.arrayOperatorName to include an additional parameter 'quantifier' instead of only inverse and ignoreCase flags.",
-          "where_in_code": "ExpressionAnalyzer, method handling array LIKE expressions",
-          "intent": "To support array LIKE operations that distinguish between quantifiers (e.g., ANY, ALL) for more precise operator resolution.",
+          "what_changed": "Modified call to LikeOperators.arrayOperatorName to include the quantifier parameter instead of only inverse and ignoreCase flags.",
+          "where_in_code": "ExpressionAnalyzer class, method handling array LIKE expressions",
+          "intent": "To support array LIKE operators that depend on quantifiers (e.g., ANY, ALL) for correct operator resolution.",
           "change_type": "modify_method",
           "key_symbols": [
-            "LikeOperators.arrayOperatorName"
+            "LikeOperators.arrayOperatorName",
+            "quantifier"
           ]
         },
         {
@@ -681,7 +725,7 @@
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
           "what_changed": "Added imports for AllLikeOperator, AllNotLikeOperator, and AllOperator alongside existing any-operator imports.",
           "where_in_code": "imports section",
-          "intent": "To enable implementation and usage of ALL variants of LIKE operators.",
+          "intent": "To support new ALL variants of LIKE operators in the LikeOperators class.",
           "change_type": "modify_import",
           "key_symbols": [
             "AllLikeOperator",
@@ -692,9 +736,9 @@
         {
           "hunk_index": 4,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "what_changed": "Added import of ArrayComparison to support quantifier enums.",
+          "what_changed": "Added import of ArrayComparison to LikeOperators.",
           "where_in_code": "imports section",
-          "intent": "To use ArrayComparison.Quantifier for distinguishing ANY vs ALL semantics in LIKE operators.",
+          "intent": "To use ArrayComparison.Quantifier enum for distinguishing ANY and ALL quantifiers in LIKE operators.",
           "change_type": "modify_import",
           "key_symbols": [
             "ArrayComparison"
@@ -703,9 +747,9 @@
         {
           "hunk_index": 5,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "what_changed": "Introduced new string constants for ALL variants of LIKE and ILIKE operators (ALL_LIKE, ALL_ILIKE, ALL_NOT_LIKE, ALL_NOT_ILIKE).",
+          "what_changed": "Introduced new string constants for ALL_LIKE, ALL_ILIKE, ALL_NOT_LIKE, and ALL_NOT_ILIKE operator names.",
           "where_in_code": "LikeOperators class, static fields",
-          "intent": "To define operator names for ALL quantifier LIKE operations to distinguish them from ANY variants.",
+          "intent": "To define operator names for ALL variants of LIKE and ILIKE operators for use in function registration and resolution.",
           "change_type": "add_field",
           "key_symbols": [
             "ALL_LIKE",
@@ -717,9 +761,9 @@
         {
           "hunk_index": 6,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "what_changed": "Modified arrayOperatorName method to accept an ArrayComparison.Quantifier parameter and select operator name based on quantifier (ANY or ALL), negate flag, and ignoreCase flag.",
+          "what_changed": "Modified arrayOperatorName method to accept an ArrayComparison.Quantifier parameter and select operator names based on quantifier (ANY or ALL), negate flag, and ignoreCase flag.",
           "where_in_code": "LikeOperators class, arrayOperatorName method",
-          "intent": "To support generating correct operator names for array LIKE operations depending on quantifier semantics (ANY vs ALL).",
+          "intent": "To correctly resolve operator names for array LIKE expressions depending on quantifier semantics (ANY vs ALL) and case sensitivity.",
           "change_type": "modify_signature",
           "key_symbols": [
             "arrayOperatorName",
@@ -729,9 +773,9 @@
         {
           "hunk_index": 7,
           "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "what_changed": "Registered new scalar function signatures and implementations for ALL LIKE, ALL NOT LIKE, ALL ILIKE, and ALL NOT ILIKE operators with appropriate case sensitivity.",
-          "where_in_code": "LikeOperators class, static initialization block",
-          "intent": "To add support for ALL quantifier LIKE operators as first-class scalar functions in the system.",
+          "what_changed": "Added registration of scalar functions for ALL_LIKE, ALL_NOT_LIKE, ALL_ILIKE, and ALL_NOT_ILIKE with appropriate case sensitivity and argument types (string and string array).",
+          "where_in_code": "LikeOperators class, static function registration block",
+          "intent": "To enable the system to recognize and instantiate ALL variants of LIKE operators as scalar functions.",
           "change_type": "add_method",
           "key_symbols": [
             "ALL_LIKE",
@@ -743,25 +787,27 @@
         {
           "hunk_index": 8,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
-          "what_changed": "Added new class AllLikeOperator implementing LIKE semantics for ALL quantifier arrays, including case sensitivity handling and validation against object arrays.",
+          "what_changed": "Added new AllLikeOperator class implementing LIKE semantics for ALL quantifier arrays, including case sensitivity handling and validation against object arrays.",
           "where_in_code": "AllLikeOperator class",
-          "intent": "To provide implementation of LIKE operator that matches when all elements in an array satisfy the LIKE condition, supporting both sides as patterns.",
+          "intent": "To provide an operator that evaluates LIKE conditions where all elements of an array must match the pattern, supporting both sides as patterns.",
           "change_type": "add_method",
           "key_symbols": [
             "AllLikeOperator",
-            "matches"
+            "matches",
+            "validateRightArg"
           ]
         },
         {
           "hunk_index": 9,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
-          "what_changed": "Added new class AllNotLikeOperator implementing NOT LIKE semantics for ALL quantifier arrays, including case sensitivity and validation logic.",
+          "what_changed": "Added new AllNotLikeOperator class implementing NOT LIKE semantics for ALL quantifier arrays with case sensitivity and validation logic.",
           "where_in_code": "AllNotLikeOperator class",
-          "intent": "To provide implementation of NOT LIKE operator that matches when all elements in an array do not satisfy the LIKE condition, supporting both sides as patterns.",
+          "intent": "To provide an operator that evaluates NOT LIKE conditions where all elements of an array must not match the pattern, supporting both sides as patterns.",
           "change_type": "add_method",
           "key_symbols": [
             "AllNotLikeOperator",
-            "matches"
+            "matches",
+            "validateRightArg"
           ]
         },
         {
@@ -780,7 +826,7 @@
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
           "what_changed": "Extended AllOperator sealed class permits clause to include AllLikeOperator and AllNotLikeOperator.",
           "where_in_code": "AllOperator class declaration",
-          "intent": "To formally include the new ALL LIKE and ALL NOT LIKE operator implementations as permitted subclasses.",
+          "intent": "To formally include the new ALL LIKE and ALL NOT LIKE operators as permitted subclasses of AllOperator.",
           "change_type": "modify_logic",
           "key_symbols": [
             "AllLikeOperator",
@@ -791,8 +837,8 @@
           "hunk_index": 12,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
           "what_changed": "Added ALL LIKE and ALL NOT LIKE operator names to the list of recognized AllOperator names.",
-          "where_in_code": "AllOperator class, OPERATOR_NAMES list",
-          "intent": "To register the new ALL LIKE and ALL NOT LIKE operators as valid AllOperator variants.",
+          "where_in_code": "AllOperator class, static OPERATOR_NAMES list",
+          "intent": "To register the new ALL LIKE and ALL NOT LIKE operators for recognition and dispatch.",
           "change_type": "modify_field",
           "key_symbols": [
             "ALL_LIKE",
@@ -804,9 +850,9 @@
         {
           "hunk_index": 13,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
-          "what_changed": "Fixed logic in iteration over rightValues to not increment matches count when rightValue is null but instead just mark anyNulls true; only increment matches if rightValue is non-null and matches predicate.",
+          "what_changed": "Fixed logic in iteration over right array values to not increment matches count when rightValue is null, but still mark anyNulls true; added else branch for validation and matching.",
           "where_in_code": "AllOperator class, method evaluating matches over array elements",
-          "intent": "To correctly handle null values in array matching logic according to SQL semantics, avoiding false positives.",
+          "intent": "To correctly handle null elements in the array when evaluating ALL operator matches, ensuring accurate match counting.",
           "change_type": "modify_logic",
           "key_symbols": [
             "matches",
@@ -816,9 +862,9 @@
         {
           "hunk_index": 14,
           "file_path": "server/src/main/java/io/crate/expression/operator/all/AllOperator.java",
-          "what_changed": "Adjusted toQuery method to use getFirst() instead of get(0) when unwrapping ArrayUnnestFunction argument; also removed unchecked cast annotation and simplified literal/reference casting.",
+          "what_changed": "Modified toQuery method to use getFirst() instead of get(0) when unwrapping ArrayUnnestFunction argument; removed unchecked cast annotation and simplified casting in literalMatchesAllArrayRef and refMatchesAllArrayLiteral calls.",
           "where_in_code": "AllOperator class, toQuery method",
-          "intent": "To improve safety and correctness when extracting underlying symbols from unnest functions and handling literal/reference argument combinations.",
+          "intent": "To improve safety and clarity when extracting underlying symbols from unnest functions and avoid unchecked casts.",
           "change_type": "modify_logic",
           "key_symbols": [
             "toQuery",
@@ -830,7 +876,7 @@
           "file_path": "server/src/main/java/io/crate/expression/symbol/Function.java",
           "what_changed": "Added import of AllOperator alongside existing operator imports.",
           "where_in_code": "imports section",
-          "intent": "To enable handling and printing of AllOperator functions within the Function class.",
+          "intent": "To enable handling of AllOperator instances in Function class.",
           "change_type": "modify_import",
           "key_symbols": [
             "AllOperator"
@@ -839,9 +885,9 @@
         {
           "hunk_index": 16,
           "file_path": "server/src/main/java/io/crate/expression/symbol/Function.java",
-          "what_changed": "Extended function printing logic to recognize and print AllOperator functions similarly to AnyOperator functions.",
-          "where_in_code": "Function class, method handling function printing",
-          "intent": "To support correct string representation of ALL operator functions in query plans or debugging output.",
+          "what_changed": "Extended function printing logic to detect and print AllOperator functions similarly to AnyOperator functions.",
+          "where_in_code": "Function class, method handling function printing (likely toString or similar)",
+          "intent": "To support proper string representation of ALL operator functions in expressions.",
           "change_type": "modify_logic",
           "key_symbols": [
             "AllOperator",
@@ -851,9 +897,9 @@
         {
           "hunk_index": 17,
           "file_path": "server/src/main/java/io/crate/expression/symbol/Function.java",
-          "what_changed": "Corrected substring offset when extracting operator name for AnyOperator functions to use the length of the operator prefix constant instead of a hardcoded number.",
+          "what_changed": "Corrected substring offset when extracting operator name for printing AnyOperator functions to use the length of the AnyOperator prefix constant instead of a hardcoded value.",
           "where_in_code": "Function class, printAnyOperator method",
-          "intent": "To make operator name extraction robust and maintainable by using defined prefix length constant.",
+          "intent": "To make operator name extraction robust and consistent with prefix definition.",
           "change_type": "modify_logic",
           "key_symbols": [
             "AnyOperator.OPERATOR_PREFIX",
@@ -863,9 +909,9 @@
         {
           "hunk_index": 18,
           "file_path": "server/src/main/java/io/crate/expression/symbol/Function.java",
-          "what_changed": "Added new private method printAllOperator to format ALL operator functions with proper parentheses and ALL keyword wrapping; integrated it into function printing logic.",
-          "where_in_code": "Function class, new printAllOperator method",
-          "intent": "To provide consistent and clear string representation for ALL operator functions in expressions.",
+          "what_changed": "Added printAllOperator method to format ALL operator functions with proper parentheses and ALL keyword wrapping the second argument.",
+          "where_in_code": "Function class, new private method printAllOperator",
+          "intent": "To provide a consistent and clear string representation for ALL operator functions in expressions.",
           "change_type": "add_method",
           "key_symbols": [
             "printAllOperator",
@@ -875,56 +921,307 @@
       ]
     },
     "agent8_syntax_repair_fallback_2": {
-      "syntax_repair_status": "clean",
+      "syntax_repair_status": "skipped",
       "syntax_repair_attempts": 0,
-      "syntax_repair_log": [
-        {
-          "file_path": "server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java",
-          "outcome": "skipped",
-          "reason": "apply errors: [\"old_string not found in server/src/main/java/io/crate/analyze/expressions/ExpressionAnalyzer.java (first 60 chars: 'import io.crate.expression.operator.EqOperator;\\\\nimport io.cr')\"]"
-        },
-        {
-          "file_path": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "outcome": "clean"
-        }
-      ]
+      "syntax_repair_log": []
     },
     "agent7_validator_retry2": {
-      "validation_passed": false,
-      "validation_failure_category": "api_mismatch",
-      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:35: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:36: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:42: error: cannot find symbol\nserver/src/main/java/io/crate/expression/operator/LikeOperators.java:64: error: package ArrayComparison does not exist",
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
       "validation_attempts": 3,
-      "retry_files": [
-        "server/src/main/java/io/crate/expression/operator/LikeOperators.java"
-      ],
-      "build_success": false,
+      "retry_files": [],
+      "build_success": true,
       "build_mode": "crate-helper",
-      "test_success": null,
-      "test_mode": null,
-      "test_state": null,
-      "test_state_transition": null,
-      "compile_errors": [
-        {
-          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "line": 35,
-          "message": "error: cannot find symbol"
+      "test_success": false,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.analyze.expressions.ExpressionAnalyzerTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.operator.all.AllLikeOperatorTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.operator.all.AllNotLikeOperatorTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.operator.any.AnyLikeOperatorTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.operator.any.AnyNotLikeOperatorTest.xml",
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.expression.symbol.format.SymbolPrinterTest.xml"
+        ],
+        "target_classes": [],
+        "test_cases": {
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_partial_quoted_subscript": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_can_access_array_element_from_subscript_on_object_array": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testColumnsCanBeCastedWhenOnBothSidesOfOperator": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_resolve_eq_function_for_bit_types_with_different_length": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_object_cast_errors_contain_child_information": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testCallingUnknownFunctionWithExplicitSchemaRaisesNiceError": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testFunctionsCanBeCasted": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testTimestampTypesCanBeCastedToLong": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInSelfJoinCaseFunctionsThatLookTheSameMustNotReuseFunctionAllocation": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#windowDefinitionOrderedByArrayTypeIsUnsupported": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterSymbolCastsAreFlattened": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testIntervalInvalidStartEnd": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_between_rewrite_if_first_arg_is_a_reference": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_invalid_quoted_subscript": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_quoted_subscript_expression_with_base_column_name_containing_quotes": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenNullIsRewrittenToLteAndGte": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnalyzeSubscriptFunctionCall": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#limit_and_offset_only_accept_integer_types_for_cast": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testTypeAliasCanBeUsedInCastNotation": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testNonDeterministicFunctionsAlwaysNew": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnalyzeArraySliceFunctionCall": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testExpressionCurrentDateWorks": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInPredicateWithSubqueryIsRewrittenToAnyEq": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_analyze_all_like_operator_variants": "failed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_any_automatically_levels_array_dimensions": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testIntervalConversion": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testLiteralCastsAreFlattened": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testEarlyConstantFolding": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testSwapFunctionLeftSide": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testColumnsAreCastedToLiteralType": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_resolve_eq_function_for_text_types_with_length_limit_and_unbound": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterExpressionInAny": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_quoted_subscript": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenIsEagerlyEvaluatedIfPossible": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#windowDefinitionPartitionedByArrayTypeIsUnsupported": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenIsRewrittenToLteAndGte": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnyWithArrayOnBothSidesResultsInNiceErrorMessage": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInterval": "passed",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterExpressionInLikeAny": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSimpleSymbolEqual": "failed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeMixed": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeExactlyOne": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNegateLike": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#test_wildcard_escaped_in_c_style_string": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testEvaluateStraight": "failed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#test_all_like_ilike_with_trailing_escape_character": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolNull": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testEvaluateNull": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#test_patterns_on_right_arg": "passed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#test_non_string_values": "failed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testEvaluateLikeMixed": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_patterns_on_right_arg": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolNull": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolLikeExactlyOne": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testEvaluateLikeMixed": "failed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testEvaluateStraight": "failed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSimpleSymbolEqual": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore": "failed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolLikeMixed": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_all_not_like_ilike_with_trailing_escape_character": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testEvaluateNull": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_wildcard_escaped_in_c_style_string": "passed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNegateNotLike": "failed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSimpleSymbolEqual": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#test_non_string_values": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#test_patterns_on_right_arg": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateLikeMixed": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNegateLike": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeExactlyOne": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateStraight": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#test_wildcard_escaped_in_c_style_string": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeMixed": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#test_any_like_ilike_with_trailing_escape_character": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateNull": "passed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolNull": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateStraight": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSimpleSymbolEqual": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateNull": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolNull": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_wildcard_escaped_in_c_style_string": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeMixed": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeExactlyOne": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_any_not_like_ilike_with_trailing_escape_character": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateLikeMixed": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_patterns_on_right_arg": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNegateNotLike": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testQueries": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#test_all_operator": "failed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testCast": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintILikeOperator": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintAnyEqOperator": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#visitDoubleLiteral": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testSubstrFunctionWithLength": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testDynamicReference": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#test_negate_is_pretty_printed": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testExtract": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testIsNull": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintFetchRefs": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testLiteralEscaped": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#visitFloatLiteral": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testNullKey": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatOperatorWithStaticInstance": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testMaxDepthEllipsis": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testNativeArray": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#test_printing_nested_objects": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testVoidReference": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#visitStringLiteral": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintLikeOperator": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testNull": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatFunctionFullQualifiedInputName": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatFunctionsWithoutBrackets": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testDocReference": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testStyles": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatQualified": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testReferenceEscaped": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#test_subscript_function_quotes_root_column_if_required": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testBooleanLiteral": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintInputColumn": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testReference": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testWindowFunction": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatAggregation": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testNot": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testAnyLikeOperator": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testSubstrFunction": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testAnyNeqOperator": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testObjectLiteral": "passed"
         },
-        {
-          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "line": 36,
-          "message": "error: cannot find symbol"
+        "classes": {
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest": "failed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest": "failed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest": "failed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest": "passed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest": "passed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest": "failed"
         },
-        {
-          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "line": 42,
-          "message": "error: cannot find symbol"
-        },
-        {
-          "file": "server/src/main/java/io/crate/expression/operator/LikeOperators.java",
-          "line": 64,
-          "message": "error: package ArrayComparison does not exist"
+        "summary": {
+          "passed": 120,
+          "failed": 9,
+          "skipped": 0,
+          "total": 129
         }
-      ]
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#limit_and_offset_only_accept_integer_types_for_cast",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnalyzeArraySliceFunctionCall",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnalyzeSubscriptFunctionCall",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnyWithArrayOnBothSidesResultsInNiceErrorMessage",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenIsEagerlyEvaluatedIfPossible",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenIsRewrittenToLteAndGte",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenNullIsRewrittenToLteAndGte",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testCallingUnknownFunctionWithExplicitSchemaRaisesNiceError",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testColumnsAreCastedToLiteralType",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testColumnsCanBeCastedWhenOnBothSidesOfOperator",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testEarlyConstantFolding",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testExpressionCurrentDateWorks",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testFunctionsCanBeCasted",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInPredicateWithSubqueryIsRewrittenToAnyEq",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInSelfJoinCaseFunctionsThatLookTheSameMustNotReuseFunctionAllocation",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInterval",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testIntervalConversion",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testIntervalInvalidStartEnd",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testLiteralCastsAreFlattened",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testNonDeterministicFunctionsAlwaysNew",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterExpressionInAny",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterExpressionInLikeAny",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterSymbolCastsAreFlattened",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testSwapFunctionLeftSide",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testTimestampTypesCanBeCastedToLong",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#testTypeAliasCanBeUsedInCastNotation",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_any_automatically_levels_array_dimensions",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_between_rewrite_if_first_arg_is_a_reference",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_can_access_array_element_from_subscript_on_object_array",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_invalid_quoted_subscript",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_object_cast_errors_contain_child_information",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_partial_quoted_subscript",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_quoted_subscript",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_quoted_subscript_expression_with_base_column_name_containing_quotes",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_resolve_eq_function_for_bit_types_with_different_length",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_resolve_eq_function_for_text_types_with_length_limit_and_unbound",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#windowDefinitionOrderedByArrayTypeIsUnsupported",
+          "io.crate.analyze.expressions.ExpressionAnalyzerTest#windowDefinitionPartitionedByArrayTypeIsUnsupported",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testEvaluateLikeMixed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testEvaluateNull",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNegateLike",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeExactlyOne",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeMixed",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolNull",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#test_all_like_ilike_with_trailing_escape_character",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#test_patterns_on_right_arg",
+          "io.crate.expression.operator.all.AllLikeOperatorTest#test_wildcard_escaped_in_c_style_string",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testEvaluateNull",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSimpleSymbolEqual",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolLikeExactlyOne",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolLikeMixed",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolNull",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_all_not_like_ilike_with_trailing_escape_character",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_patterns_on_right_arg",
+          "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_wildcard_escaped_in_c_style_string",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateLikeMixed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateNull",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateStraight",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNegateLike",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSimpleSymbolEqual",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeExactlyOne",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeMixed",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolNull",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#test_any_like_ilike_with_trailing_escape_character",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#test_non_string_values",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#test_patterns_on_right_arg",
+          "io.crate.expression.operator.any.AnyLikeOperatorTest#test_wildcard_escaped_in_c_style_string",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateLikeMixed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateNull",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateStraight",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNegateNotLike",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSimpleSymbolEqual",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeExactlyOne",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeMixed",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolNull",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_any_not_like_ilike_with_trailing_escape_character",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_patterns_on_right_arg",
+          "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_wildcard_escaped_in_c_style_string",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testAnyLikeOperator",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testAnyNeqOperator",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testBooleanLiteral",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testCast",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testDocReference",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testDynamicReference",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testExtract",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatAggregation",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatFunctionFullQualifiedInputName",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatFunctionsWithoutBrackets",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatOperatorWithStaticInstance",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatQualified",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testIsNull",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testLiteralEscaped",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testMaxDepthEllipsis",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testNativeArray",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testNot",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testNull",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testNullKey",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testObjectLiteral",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintAnyEqOperator",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintFetchRefs",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintILikeOperator",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintInputColumn",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintLikeOperator",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testQueries",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testReference",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testReferenceEscaped",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testStyles",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testSubstrFunction",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testSubstrFunctionWithLength",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testVoidReference",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#testWindowFunction",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#test_negate_is_pretty_printed",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#test_printing_nested_objects",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#test_subscript_function_quotes_root_column_if_required",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#visitDoubleLiteral",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#visitFloatLiteral",
+          "io.crate.expression.symbol.format.SymbolPrinterTest#visitStringLiteral"
+        ],
+        "baseline_total": 0,
+        "patched_total": 129,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
     }
   },
   "summary": {
@@ -940,6 +1237,7 @@
     "developer_aux_hunks": 7,
     "processed_hunk_indices": [
       0,
+      1,
       2,
       3,
       4,
@@ -954,114 +1252,194 @@
       15,
       16,
       17,
-      18,
-      1,
-      8,
-      9
+      18
     ],
-    "tokens_used": 9744,
-    "synthesis_status": "partial",
-    "applied_on_disk_ag3": 16,
-    "synthesized_count": 5,
-    "failed_hunks_total": 2,
-    "syntax_repair_status": "clean",
-    "fallback_status": "applied",
+    "tokens_used": 98790,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 4840,
+        "output": 1230
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 87134,
+        "output": 5586
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 17,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
     "fallback_attempts": 2,
     "retry_contexts": [
       {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      },
-      {
         "error_type": "api_mismatch",
-        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[32,39] error: cannot find symbol\n  symbol:   class AllLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[33,39] error: cannot find symbol\n  symbol:   class AllNotLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllOperator.java:[48,87] error: cannot find symbol\n  symbol: class AllLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllOperator.java:[48,120] error: cannot find symbol\n  symbol: class AllNotLikeOperator\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[32,39] error: cannot find symbol\n[ERROR]   symbol:   class AllLikeOperator\n[ERROR]   location: package io.crate.expression.operator.all\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[33,39] error: cannot find symbol\n[ERROR]   symbol:   class AllNotLikeOperator\n[ERROR]   location: package io.crate.expression.operator.all\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllOperator.java:[48,87] error: cannot find symbol\n[ERROR]   symbol: class AllLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllOperator.java:[48,120] error: cannot find symbol\n[ERROR]   symbol: class AllNotLikeOperator\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_message": "ate/expression/operator/LikeOperators.java:[284,45] error: cannot find symbol\n  symbol:   variable FunctionType\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[246,70] error: cannot find symbol\n[ERROR]   symbol:   variable STRICTNULL\n[ERROR]   location: class Feature\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[242,40] error: cannot find symbol\n[ERROR]   symbol:   variable FunctionType\n[ERROR]   location: class LikeOperators\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[260,70] error: cannot find symbol\n[ERROR]   symbol:   variable STRICTNULL\n[ERROR]   location: class Feature\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[256,44] error: cannot find symbol\n[ERROR]   symbol:   variable FunctionType\n[ERROR]   location: class LikeOperators\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[274,70] error: cannot find symbol\n[ERROR]   symbol:   variable STRICTNULL\n[ERROR]   location: class Feature\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[270,41] error: cannot find symbol\n[ERROR]   symbol:   variable FunctionType\n[ERROR]   location: class LikeOperators\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[288,70] error: cannot find symbol\n[ERROR]   symbol:   variable STRICTNULL\n[ERROR]   location: class Feature\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[284,45] error: cannot find symbol\n[ERROR]   symbol:   variable FunctionType\n[ERROR]   location: class LikeOperators\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 1,
         "suggested_action": "route_to_namespace_or_structural"
       },
       {
-        "error_type": "api_mismatch",
-        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[40,39] error: cannot find symbol\n  symbol:   class ArrayComparison\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[71,94] error: package ArrayComparison does not exist\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[40,39] error: cannot find symbol\n[ERROR]   symbol:   class ArrayComparison\n[ERROR]   location: package io.crate.expression.operator.all\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[71,94] error: package ArrayComparison does not exist\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "error_type": "unknown",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java:[37,13] error: class is not allowed to extend sealed class: AllOperator (as it is not listed in its 'permits' clause)\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java:[35,13] error: class is not allowed to extend sealed class: AllOperator (as it is not listed in its 'permits' clause)\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: No elements to process\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java:[37,13] error: class is not allowed to extend sealed class: AllOperator (as it is not listed in its 'permits' clause)\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java:[35,13] error: class is not allowed to extend sealed class: AllOperator (as it is not listed in its 'permits' clause)\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
         "attempt_count": 2,
-        "suggested_action": "route_to_namespace_or_structural"
-      },
-      {
-        "error_type": "api_mismatch",
-        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n/repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[35,39] error: cannot find symbol\n  symbol:   class AllLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[36,39] error: cannot find symbol\n  symbol:   class AllNotLikeOperator\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[42,39] error: cannot find symbol\n  symbol:   class ArrayComparison\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[64,58] error: package ArrayComparison does not exist\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR]   on the class path. A future release of javac may disable annotation processing\n[ERROR]   unless at least one processor is specified by name (-processor), or a search\n[ERROR]   path is specified (--processor-path, --processor-module-path), or annotation\n[ERROR]   processing is enabled explicitly (-proc:only, -proc:full).\n[ERROR]   Use -Xlint:-options to suppress this message.\n[ERROR]   Use -proc:none to disable annotation processing.\n[ERROR] Note: Processing Log4j annotations\n[ERROR] Note: Annotations processed\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[35,39] error: cannot find symbol\n[ERROR]   symbol:   class AllLikeOperator\n[ERROR]   location: package io.crate.expression.operator.all\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[36,39] error: cannot find symbol\n[ERROR]   symbol:   class AllNotLikeOperator\n[ERROR]   location: package io.crate.expression.operator.all\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[42,39] error: cannot find symbol\n[ERROR]   symbol:   class ArrayComparison\n[ERROR]   location: package io.crate.expression.operator.all\n[ERROR] /repo/server/src/main/java/io/crate/expression/operator/LikeOperators.java:[64,58] error: package ArrayComparison does not exist\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
-        "attempt_count": 3,
-        "suggested_action": "route_to_namespace_or_structural"
+        "suggested_action": "inspect_and_retry"
       }
     ],
-    "failed_hunks": [
-      {
-        "file_path": "server/src/main/java/io/crate/expression/operator/all/AllLikeOperator.java",
-        "old_content": "",
-        "new_content": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataType;\nimport io.crate.types.ObjectType;\n\npublic final class AllLikeOperator extends AllOperator<String> {\n\n    private final LikeOperators.CaseSensitivity caseSensitivity;\n\n    public AllLikeOperator(Signature signature,\n                           BoundSignature boundSignature,\n                           LikeOperators.CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n        DataType<?> innerType = ((ArrayType<?>) boundSignature.argTypes().get(1)).innerType();\n        if (innerType.id() == ObjectType.ID) {\n            throw new IllegalArgumentException(\"ALL on object arrays is not supported\");\n        }\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) ||\n            LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}",
-        "is_new_file": true,
-        "is_del_file": false,
-        "file_operation": "ADDED",
-        "imports_added": [
-          "import org.apache.lucene.search.Query;",
-          "import io.crate.expression.operator.LikeOperators;",
-          "import io.crate.expression.symbol.Function;",
-          "import io.crate.expression.symbol.Literal;",
-          "import io.crate.lucene.LuceneQueryBuilder;",
-          "import io.crate.metadata.Reference;",
-          "import io.crate.metadata.functions.BoundSignature;",
-          "import io.crate.metadata.functions.Signature;",
-          "import io.crate.types.ArrayType;",
-          "import io.crate.types.DataType;",
-          "import io.crate.types.ObjectType;"
-        ],
-        "imports_removed": [],
-        "adapted": true,
-        "loc_index": 8,
-        "original_old_content": "",
-        "original_new_content": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\nimport io.crate.types.ArrayType;\nimport io.crate.types.DataType;\nimport io.crate.types.ObjectType;\n\npublic final class AllLikeOperator extends AllOperator<String> {\n\n    private final LikeOperators.CaseSensitivity caseSensitivity;\n\n    public AllLikeOperator(Signature signature,\n                           BoundSignature boundSignature,\n                           LikeOperators.CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n        DataType<?> innerType = ((ArrayType<?>) boundSignature.argTypes().get(1)).innerType();\n        if (innerType.id() == ObjectType.ID) {\n            throw new IllegalArgumentException(\"ALL on object arrays is not supported\");\n        }\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) ||\n            LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, LuceneQueryBuilder.Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}\n"
-      },
-      {
-        "file_path": "server/src/main/java/io/crate/expression/operator/all/AllNotLikeOperator.java",
-        "old_content": "",
-        "new_content": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.operator.LikeOperators.CaseSensitivity;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder.Context;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\n\npublic final class AllNotLikeOperator extends AllOperator<String> {\n\n    private final CaseSensitivity caseSensitivity;\n\n    public AllNotLikeOperator(Signature signature,\n                              BoundSignature boundSignature,\n                              CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n    }\n\n    @SuppressWarnings(\"unused\")\n    private static String negateWildcard(String wildCard) {\n        return \"~(\" + wildCard + ')';\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return !LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) &&\n            !LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}",
-        "is_new_file": true,
-        "is_del_file": false,
-        "file_operation": "ADDED",
-        "imports_added": [
-          "import org.apache.lucene.search.Query;",
-          "import io.crate.expression.operator.LikeOperators;",
-          "import io.crate.expression.operator.LikeOperators.CaseSensitivity;",
-          "import io.crate.expression.symbol.Function;",
-          "import io.crate.expression.symbol.Literal;",
-          "import io.crate.lucene.LuceneQueryBuilder.Context;",
-          "import io.crate.metadata.Reference;",
-          "import io.crate.metadata.functions.BoundSignature;",
-          "import io.crate.metadata.functions.Signature;"
-        ],
-        "imports_removed": [],
-        "adapted": true,
-        "loc_index": 9,
-        "original_old_content": "",
-        "original_new_content": "/*\n * Licensed to Crate.io GmbH (\"Crate\") under one or more contributor\n * license agreements.  See the NOTICE file distributed with this work for\n * additional information regarding copyright ownership.  Crate licenses\n * this file to you under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.  You may\n * obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS, WITHOUT\n * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the\n * License for the specific language governing permissions and limitations\n * under the License.\n *\n * However, if you have executed another commercial license agreement\n * with Crate these terms will supersede the license and you may use the\n * software solely pursuant to the terms of the relevant commercial agreement.\n */\n\npackage io.crate.expression.operator.all;\n\nimport org.apache.lucene.search.Query;\n\nimport io.crate.expression.operator.LikeOperators;\nimport io.crate.expression.operator.LikeOperators.CaseSensitivity;\nimport io.crate.expression.symbol.Function;\nimport io.crate.expression.symbol.Literal;\nimport io.crate.lucene.LuceneQueryBuilder.Context;\nimport io.crate.metadata.Reference;\nimport io.crate.metadata.functions.BoundSignature;\nimport io.crate.metadata.functions.Signature;\n\npublic final class AllNotLikeOperator extends AllOperator<String> {\n\n    private final CaseSensitivity caseSensitivity;\n\n    public AllNotLikeOperator(Signature signature,\n                              BoundSignature boundSignature,\n                              CaseSensitivity caseSensitivity) {\n        super(signature, boundSignature);\n        this.caseSensitivity = caseSensitivity;\n    }\n\n    @SuppressWarnings(\"unused\")\n    private static String negateWildcard(String wildCard) {\n        return \"~(\" + wildCard + ')';\n    }\n\n    @Override\n    boolean matches(String probe, String candidate) {\n        // Accept both sides of arguments to be patterns\n        return !LikeOperators.matches(probe, candidate, LikeOperators.DEFAULT_ESCAPE, caseSensitivity) &&\n            !LikeOperators.matches(candidate, probe, LikeOperators.DEFAULT_ESCAPE, caseSensitivity);\n    }\n\n    @Override\n    protected Query refMatchesAllArrayLiteral(Function all, Reference probe, Literal<?> literal, Context context) {\n        return null;\n    }\n\n    @Override\n    protected Query literalMatchesAllArrayRef(Function all, Literal<?> probe, Reference candidates, Context context) {\n        return null;\n    }\n\n    @Override\n    protected void validateRightArg(String arg) {\n        if (arg.endsWith(LikeOperators.DEFAULT_ESCAPE_STR)) {\n            LikeOperators.throwErrorForTrailingEscapeChar(arg, LikeOperators.DEFAULT_ESCAPE);\n        }\n    }\n}\n"
-      }
-    ],
-    "generated_patch_bytes": 14444,
+    "failed_hunks": [],
+    "generated_patch_bytes": 21108,
     "target_patch_bytes": 41927,
-    "validation_passed": false,
-    "validation_failure_category": "api_mismatch",
-    "build_success": false,
-    "test_success": null,
-    "test_mode": null,
-    "test_transition": {},
+    "patch_exact_match": false,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#limit_and_offset_only_accept_integer_types_for_cast",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnalyzeArraySliceFunctionCall",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnalyzeSubscriptFunctionCall",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testAnyWithArrayOnBothSidesResultsInNiceErrorMessage",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenIsEagerlyEvaluatedIfPossible",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenIsRewrittenToLteAndGte",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testBetweenNullIsRewrittenToLteAndGte",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testCallingUnknownFunctionWithExplicitSchemaRaisesNiceError",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testColumnsAreCastedToLiteralType",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testColumnsCanBeCastedWhenOnBothSidesOfOperator",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testEarlyConstantFolding",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testExpressionCurrentDateWorks",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testFunctionsCanBeCasted",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInPredicateWithSubqueryIsRewrittenToAnyEq",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInSelfJoinCaseFunctionsThatLookTheSameMustNotReuseFunctionAllocation",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testInterval",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testIntervalConversion",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testIntervalInvalidStartEnd",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testLiteralCastsAreFlattened",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testNonDeterministicFunctionsAlwaysNew",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterExpressionInAny",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterExpressionInLikeAny",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testParameterSymbolCastsAreFlattened",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testSwapFunctionLeftSide",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testTimestampTypesCanBeCastedToLong",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#testTypeAliasCanBeUsedInCastNotation",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_any_automatically_levels_array_dimensions",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_between_rewrite_if_first_arg_is_a_reference",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_can_access_array_element_from_subscript_on_object_array",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_invalid_quoted_subscript",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_object_cast_errors_contain_child_information",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_partial_quoted_subscript",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_quoted_subscript",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_quoted_subscript_expression_with_base_column_name_containing_quotes",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_resolve_eq_function_for_bit_types_with_different_length",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#test_resolve_eq_function_for_text_types_with_length_limit_and_unbound",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#windowDefinitionOrderedByArrayTypeIsUnsupported",
+        "io.crate.analyze.expressions.ExpressionAnalyzerTest#windowDefinitionPartitionedByArrayTypeIsUnsupported",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#testEvaluateLikeMixed",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#testEvaluateNull",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#testNegateLike",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeExactlyOne",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeMixed",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#testNormalizeSymbolNull",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#test_all_like_ilike_with_trailing_escape_character",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#test_patterns_on_right_arg",
+        "io.crate.expression.operator.all.AllLikeOperatorTest#test_wildcard_escaped_in_c_style_string",
+        "io.crate.expression.operator.all.AllNotLikeOperatorTest#testEvaluateNull",
+        "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSimpleSymbolEqual",
+        "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolLikeExactlyOne",
+        "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolLikeMixed",
+        "io.crate.expression.operator.all.AllNotLikeOperatorTest#testNormalizeSymbolNull",
+        "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_all_not_like_ilike_with_trailing_escape_character",
+        "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_patterns_on_right_arg",
+        "io.crate.expression.operator.all.AllNotLikeOperatorTest#test_wildcard_escaped_in_c_style_string",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateLikeMixed",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateNull",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testEvaluateStraight",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testNegateLike",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSimpleSymbolEqual",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeExactlyOne",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeMixed",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#testNormalizeSymbolNull",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#test_any_like_ilike_with_trailing_escape_character",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#test_non_string_values",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#test_patterns_on_right_arg",
+        "io.crate.expression.operator.any.AnyLikeOperatorTest#test_wildcard_escaped_in_c_style_string",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateLikeMixed",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateNull",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testEvaluateStraight",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNegateNotLike",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSimpleSymbolEqual",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeExactlyOne",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeMixed",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolLikeZeroOrMore",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#testNormalizeSymbolNull",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_any_not_like_ilike_with_trailing_escape_character",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_patterns_on_right_arg",
+        "io.crate.expression.operator.any.AnyNotLikeOperatorTest#test_wildcard_escaped_in_c_style_string",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testAnyLikeOperator",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testAnyNeqOperator",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testBooleanLiteral",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testCast",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testDocReference",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testDynamicReference",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testExtract",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatAggregation",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatFunctionFullQualifiedInputName",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatFunctionsWithoutBrackets",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatOperatorWithStaticInstance",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testFormatQualified",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testIsNull",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testLiteralEscaped",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testMaxDepthEllipsis",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testNativeArray",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testNot",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testNull",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testNullKey",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testObjectLiteral",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintAnyEqOperator",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintFetchRefs",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintILikeOperator",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintInputColumn",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testPrintLikeOperator",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testQueries",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testReference",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testReferenceEscaped",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testStyles",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testSubstrFunction",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testSubstrFunctionWithLength",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testVoidReference",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#testWindowFunction",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#test_negate_is_pretty_printed",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#test_printing_nested_objects",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#test_subscript_function_quotes_root_column_if_required",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#visitDoubleLiteral",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#visitFloatLiteral",
+        "io.crate.expression.symbol.format.SymbolPrinterTest#visitStringLiteral"
+      ],
+      "baseline_total": 0,
+      "patched_total": 129,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 120,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

@@ -1,0 +1,126 @@
+commit cc608eb88b81bd8dad4d3775d47a5f9017bd8b21
+Author: Cas Donoghue <cas.donoghue@gmail.com>
+Date:   Thu Jan 2 14:52:39 2025 -0800
+
+    Apply Jackson stream read constraints defaults at runtime (#16832)
+    
+    When Logstash 8.12.0 added increased Jackson stream read constraints to
+    jvm.options, assumptions about the existence of that file's contents
+    were invalidated. This led to issues like #16683.
+    
+    This change ensures Logstash applies defaults from config at runtime:
+    - MAX_STRING_LENGTH: 200_000_000
+    - MAX_NUMBER_LENGTH: 10_000
+    - MAX_NESTING_DEPTH: 1_000
+    
+    These match the jvm.options defaults and are applied even when config
+    is missing. Config values still override these defaults when present.
+
+diff --git a/logstash-core/src/main/java/org/logstash/jackson/StreamReadConstraintsUtil.java b/logstash-core/src/main/java/org/logstash/jackson/StreamReadConstraintsUtil.java
+index d8e5a96de..606cc313b 100644
+--- a/logstash-core/src/main/java/org/logstash/jackson/StreamReadConstraintsUtil.java
++++ b/logstash-core/src/main/java/org/logstash/jackson/StreamReadConstraintsUtil.java
+@@ -18,6 +18,14 @@ public class StreamReadConstraintsUtil {
+ 
+     private StreamReadConstraints configuredStreamReadConstraints;
+ 
++    // Provide default values for Jackson constraints in the case they are
++    // not specified in configuration file.
++    private static final Map<Override, Integer> JACKSON_DEFAULTS = Map.of(
++        Override.MAX_STRING_LENGTH, 200_000_000,
++        Override.MAX_NUMBER_LENGTH, 10_000,
++        Override.MAX_NESTING_DEPTH, 1_000
++    );
++
+     enum Override {
+         MAX_STRING_LENGTH(StreamReadConstraints.Builder::maxStringLength, StreamReadConstraints::getMaxStringLength),
+         MAX_NUMBER_LENGTH(StreamReadConstraints.Builder::maxNumberLength, StreamReadConstraints::getMaxNumberLength),
+@@ -78,6 +86,8 @@ public class StreamReadConstraintsUtil {
+         if (configuredStreamReadConstraints == null) {
+             final StreamReadConstraints.Builder builder = StreamReadConstraints.defaults().rebuild();
+ 
++            // Apply the Jackson defaults first, then the overrides from config
++            JACKSON_DEFAULTS.forEach((override, value) -> override.applicator.apply(builder, value));
+             eachOverride((override, value) -> override.applicator.apply(builder, value));
+ 
+             this.configuredStreamReadConstraints = builder.build();
+diff --git a/logstash-core/src/test/java/org/logstash/jackson/StreamReadConstraintsUtilTest.java b/logstash-core/src/test/java/org/logstash/jackson/StreamReadConstraintsUtilTest.java
+index ac4f1d0f4..e984a58d9 100644
+--- a/logstash-core/src/test/java/org/logstash/jackson/StreamReadConstraintsUtilTest.java
++++ b/logstash-core/src/test/java/org/logstash/jackson/StreamReadConstraintsUtilTest.java
+@@ -26,6 +26,10 @@ public class StreamReadConstraintsUtilTest {
+     private ListAppender listAppender;
+     private Logger observedLogger;
+ 
++    private static final int DEFAULT_MAX_STRING_LENGTH = 200_000_000;
++    private static final int DEFAULT_MAX_NUMBER_LENGTH = 10_000;
++    private static final int DEFAULT_MAX_NESTING_DEPTH = 1_000;
++
+     @Before
+     public void setUpLoggingListAppender() {
+         int i = 1+16;
+@@ -51,8 +55,8 @@ public class StreamReadConstraintsUtilTest {
+             assertThat(configuredConstraints).as("inherited defaults")
+                     .returns(defaults.getMaxDocumentLength(), from(StreamReadConstraints::getMaxDocumentLength))
+                     .returns(defaults.getMaxNameLength(), from(StreamReadConstraints::getMaxNameLength))
+-                    .returns(defaults.getMaxNestingDepth(), from(StreamReadConstraints::getMaxNestingDepth))
+-                    .returns(defaults.getMaxNumberLength(), from(StreamReadConstraints::getMaxNumberLength));
++                    .returns(DEFAULT_MAX_NESTING_DEPTH, from(StreamReadConstraints::getMaxNestingDepth))
++                    .returns(DEFAULT_MAX_NUMBER_LENGTH, from(StreamReadConstraints::getMaxNumberLength));
+ 
+             assertThatThrownBy(configuredUtil::validateIsGlobalDefault).isInstanceOf(IllegalStateException.class).hasMessageContaining(MAX_STRING_LENGTH.propertyName);
+ 
+@@ -94,8 +98,8 @@ public class StreamReadConstraintsUtilTest {
+             assertThat(configuredConstraints).as("inherited defaults")
+                     .returns(defaults.getMaxDocumentLength(), from(StreamReadConstraints::getMaxDocumentLength))
+                     .returns(defaults.getMaxNameLength(), from(StreamReadConstraints::getMaxNameLength))
+-                    .returns(defaults.getMaxNestingDepth(), from(StreamReadConstraints::getMaxNestingDepth))
+-                    .returns(defaults.getMaxStringLength(), from(StreamReadConstraints::getMaxStringLength));
++                    .returns(DEFAULT_MAX_NESTING_DEPTH, from(StreamReadConstraints::getMaxNestingDepth))
++                    .returns(DEFAULT_MAX_STRING_LENGTH, from(StreamReadConstraints::getMaxStringLength));
+ 
+             assertThatThrownBy(configuredUtil::validateIsGlobalDefault).isInstanceOf(IllegalStateException.class).hasMessageContaining(MAX_NUMBER_LENGTH.propertyName);
+ 
+@@ -137,8 +141,8 @@ public class StreamReadConstraintsUtilTest {
+             assertThat(configuredConstraints).as("inherited defaults")
+                     .returns(defaults.getMaxDocumentLength(), from(StreamReadConstraints::getMaxDocumentLength))
+                     .returns(defaults.getMaxNameLength(), from(StreamReadConstraints::getMaxNameLength))
+-                    .returns(defaults.getMaxStringLength(), from(StreamReadConstraints::getMaxStringLength))
+-                    .returns(defaults.getMaxNumberLength(), from(StreamReadConstraints::getMaxNumberLength));
++                    .returns(DEFAULT_MAX_STRING_LENGTH, from(StreamReadConstraints::getMaxStringLength))
++                    .returns(DEFAULT_MAX_NUMBER_LENGTH, from(StreamReadConstraints::getMaxNumberLength));
+ 
+             assertThatThrownBy(configuredUtil::validateIsGlobalDefault).isInstanceOf(IllegalStateException.class).hasMessageContaining(MAX_NESTING_DEPTH.propertyName);
+ 
+@@ -193,6 +197,31 @@ public class StreamReadConstraintsUtilTest {
+         assertLogObserved(Level.WARN, "override `" + PROP_PREFIX + "unsupported-option1` is unknown and has been ignored");
+     }
+ 
++    @Test
++    public void usesJacksonDefaultsWhenNoConfig() {
++        StreamReadConstraintsUtil util = new StreamReadConstraintsUtil(new Properties(), this.observedLogger);
++        StreamReadConstraints constraints = util.get();
++
++        assertThat(constraints)
++            .returns(DEFAULT_MAX_STRING_LENGTH, from(StreamReadConstraints::getMaxStringLength))
++            .returns(DEFAULT_MAX_NUMBER_LENGTH, from(StreamReadConstraints::getMaxNumberLength))
++            .returns(DEFAULT_MAX_NESTING_DEPTH, from(StreamReadConstraints::getMaxNestingDepth));
++    }
++
++    @Test
++    public void configOverridesDefault() {
++        Properties props = new Properties();
++        props.setProperty("logstash.jackson.stream-read-constraints.max-string-length", "100");
++
++        StreamReadConstraintsUtil util = new StreamReadConstraintsUtil(props, this.observedLogger);
++        StreamReadConstraints constraints = util.get();
++
++        assertThat(constraints)
++            .returns(100, from(StreamReadConstraints::getMaxStringLength))
++            .returns(DEFAULT_MAX_NUMBER_LENGTH, from(StreamReadConstraints::getMaxNumberLength))
++            .returns(DEFAULT_MAX_NESTING_DEPTH, from(StreamReadConstraints::getMaxNestingDepth));
++    }
++
+     private void assertLogObserved(final Level level, final String... messageFragments) {
+         List<LogEvent> logEvents = listAppender.getEvents();
+         assertThat(logEvents)

@@ -1,0 +1,23 @@
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/scan/PushDownContext.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/scan/PushDownContext.java
+index 43dd2e827..0397ffad3 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/scan/PushDownContext.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/scan/PushDownContext.java
+@@ -13,7 +13,6 @@ import java.util.Collections;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+-import java.util.stream.IntStream;
+ import lombok.Getter;
+ import org.apache.calcite.rel.RelFieldCollation;
+ import org.apache.calcite.rel.RelFieldCollation.Direction;
+@@ -310,8 +309,8 @@ class AggPushDownAction implements OSRequestBuilderAction {
+             newBucketNames.add(bucketName);
+             selected.add(bucketName);
+           });
+-      IntStream.range(0, buckets.size())
+-          .mapToObj(fieldNames::get)
++      buckets.stream()
++          .map(CompositeValuesSourceBuilder::name)
+           .filter(name -> !selected.contains(name))
+           .forEach(
+               name -> {

@@ -1,0 +1,118 @@
+commit 8a576607bed8c1f6bb093fb60f82e710c32090c6
+Author: Alan Woodward <romseygeek@apache.org>
+Date:   Thu Mar 6 15:17:43 2025 +0000
+
+    Add missing DisableGraphAttribute implementation
+    
+    ShingleTokenFilter can produce multiple tokens at each position of
+    differing lengths, which means downstream consumers that expect a
+    well-formed token graph, such as FixedShingleFilter or query parsers,
+    may produce nonsensical output. To prevent this, ShingleTokenFilter
+    will mark its TokenStream with a DisableGraphAttribute if it produces
+    output that cannot be coerced into a graph.
+    
+    The concrete implementation class for this attribute was missing,
+    meaning that attempts to use a shingle filter with output_unigrams=true
+    or with differing min and max shingle sizes would cause errors on
+    ingest.
+
+diff --git a/docs/appendices/release-notes/5.10.3.rst b/docs/appendices/release-notes/5.10.3.rst
+index e567ac078b..1a36d5ffb0 100644
+--- a/docs/appendices/release-notes/5.10.3.rst
++++ b/docs/appendices/release-notes/5.10.3.rst
+@@ -50,3 +50,6 @@ Fixes
+ 
+ - Fixed an issue that caused a :ref:`float vector <type-float_vector>` column
+   to be created with length exceeding the maximum.
++
++- Fixed an issue that prevented the use of custom analyzers with
++  :ref:`shingle token filters<shingle-tokenfilter>`.
+diff --git a/plugins/es-analysis-common/src/test/java/io/crate/analysis/common/CommonAnalyzerITest.java b/plugins/es-analysis-common/src/test/java/io/crate/analysis/common/CommonAnalyzerITest.java
+index 8658886f4d..909136f2a5 100644
+--- a/plugins/es-analysis-common/src/test/java/io/crate/analysis/common/CommonAnalyzerITest.java
++++ b/plugins/es-analysis-common/src/test/java/io/crate/analysis/common/CommonAnalyzerITest.java
+@@ -29,6 +29,8 @@ import org.elasticsearch.plugins.Plugin;
+ import org.elasticsearch.test.IntegTestCase;
+ import org.junit.Test;
+ 
++import io.crate.lucene.DisableGraphAttribute;
++import io.crate.lucene.DisableGraphAttributeImpl;
+ import io.crate.testing.TestingHelpers;
+ 
+ public class CommonAnalyzerITest extends IntegTestCase {
+@@ -106,4 +108,25 @@ public class CommonAnalyzerITest extends IntegTestCase {
+         execute("drop analyzer myanalyzer");
+         execute("drop analyzer myotheranalyzer");
+     }
++
++    @Test
++    public void testShingleFilterWithGraphOutput() {
++        execute("""
++            CREATE ANALYZER shingle_default (
++                TOKENIZER "standard",
++                TOKEN_FILTERS (
++                    "lowercase",
++                    "stop",
++                    "shingle"
++                )
++            );
++            """);
++        execute("create table t2  (c1 TEXT INDEX USING fulltext WITH (analyzer='shingle_default'));");
++        ensureGreen();
++        execute("insert into t2 (c1) values ('This sentence only has Humans in the text.');");
++        execute("drop analyzer shingle_default");
++
++        var impl = new DisableGraphAttributeImpl();
++        assertThat(impl).isInstanceOf(DisableGraphAttribute.class);
++    }
+ }
+diff --git a/server/src/main/java/io/crate/lucene/DisableGraphAttributeImpl.java b/server/src/main/java/io/crate/lucene/DisableGraphAttributeImpl.java
+new file mode 100644
+index 0000000000..b4e5b426ac
+--- /dev/null
++++ b/server/src/main/java/io/crate/lucene/DisableGraphAttributeImpl.java
+@@ -0,0 +1,44 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.lucene;
++
++import org.apache.lucene.util.AttributeImpl;
++import org.apache.lucene.util.AttributeReflector;
++
++/** Default implementation of {@link io.crate.lucene.DisableGraphAttribute} */
++public class DisableGraphAttributeImpl extends AttributeImpl implements DisableGraphAttribute {
++
++    @Override
++    public void clear() {
++
++    }
++
++    @Override
++    public void reflectWith(AttributeReflector reflector) {
++
++    }
++
++    @Override
++    public void copyTo(AttributeImpl target) {
++
++    }
++}

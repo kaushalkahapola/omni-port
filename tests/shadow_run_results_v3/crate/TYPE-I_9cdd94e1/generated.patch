@@ -1,0 +1,106 @@
+diff --git a/server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java b/server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java
+index 4c40be2f5a..3ed989537f 100644
+--- a/server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java
++++ b/server/src/main/java/io/crate/protocols/postgres/PostgresWireProtocol.java
+@@ -83,7 +83,6 @@ import io.netty.handler.ssl.SslContext;
+ import joptsimple.OptionParser;
+ import joptsimple.OptionSet;
+ 
+-
+ /**
+  * Netty Handler/FrameDecoder for the Postgres wire protocol.<br />
+  * This class handles the message flow and dispatching
+@@ -602,6 +601,8 @@ public class PostgresWireProtocol {
+     private void handleBindMessage(ByteBuf buffer, Channel channel) {
+         String portalName = readCString(buffer);
+         String statementName = readCString(buffer);
++        assert portalName != null : "portalName cannot be null";
++        assert statementName != null : "statementName cannot be null";
+ 
+         FormatCodes.FormatCode[] formatCodes = FormatCodes.fromBuffer(buffer);
+ 
+@@ -649,7 +650,6 @@ public class PostgresWireProtocol {
+         return size == 0 ? Collections.<T>emptyList() : new ArrayList<T>(size);
+     }
+ 
+-
+     /**
+      * Describe Message
+      * Header:
+diff --git a/server/src/main/java/io/crate/session/Session.java b/server/src/main/java/io/crate/session/Session.java
+index fd5640333b..955791924a 100644
+--- a/server/src/main/java/io/crate/session/Session.java
++++ b/server/src/main/java/io/crate/session/Session.java
+@@ -393,7 +393,7 @@ public class Session implements AutoCloseable {
+         try {
+             preparedStmt = getSafeStmt(statementName);
+         } catch (Throwable t) {
+-            jobsLogs.logPreExecutionFailure(UUIDs.dirtyUUID(), null, SQLExceptions.messageOf(t), sessionSettings.sessionUser());
++            jobsLogs.logPreExecutionFailure(UUIDs.dirtyUUID(), statementName, SQLExceptions.messageOf(t), sessionSettings.sessionUser());
+             throw t;
+         }
+ 
+@@ -700,7 +700,6 @@ public class Session implements AutoCloseable {
+             timeoutToken
+         );
+ 
+-
+         AnalyzedStatement analyzedStatement = firstPreparedStatement.analyzedStatement();
+         lastStmt = firstPreparedStatement.rawStatement();
+ 
+@@ -992,7 +991,6 @@ public class Session implements AutoCloseable {
+             this.startNanos = startNanos;
+         }
+ 
+-
+         public static TimeoutToken noopToken() {
+             return new TimeoutToken();
+         }
+diff --git a/server/src/test/java/org/elasticsearch/common/util/BigArraysTests.java b/server/src/test/java/org/elasticsearch/common/util/BigArraysTests.java
+new file mode 100644
+index 0000000000..8a1b91a8dc
+--- /dev/null
++++ b/server/src/test/java/org/elasticsearch/common/util/BigArraysTests.java
+@@ -0,0 +1,42 @@
++/*
++ * Licensed to Elasticsearch under one or more contributor
++ * license agreements. See the NOTICE file distributed with
++ * this work for additional information regarding copyright
++ * ownership. Elasticsearch licenses this file to you under
++ * the Apache License, Version 2.0 (the "License"); you may
++ * not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *    http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing,
++ * software distributed under the License is distributed on an
++ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++ * KIND, either express or implied.  See the License for the
++ * specific language governing permissions and limitations
++ * under the License.
++ */
++
++package org.elasticsearch.common.util;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import org.elasticsearch.test.ESTestCase;
++import org.junit.Test;
++
++public class BigArraysTests extends ESTestCase {
++
++    @Test
++    public void testOverSizeUsesMinPageCount() {
++        final int pageSize = 1 << (randomIntBetween(2, 16));
++        final int minSize = randomIntBetween(1, pageSize) * randomIntBetween(1, 100);
++        final long size = BigArrays.overSize(minSize, pageSize, 1);
++        assertThat(size).isGreaterThanOrEqualTo(minSize);
++        if (size >= pageSize) {
++            assertThat(size % pageSize)
++                .as(size + " is a multiple of " + pageSize)
++                .isEqualTo(0L);
++        }
++        assertThat(size - minSize).isLessThan(pageSize);
++    }
++}

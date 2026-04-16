@@ -1,0 +1,258 @@
+{
+  "run_timestamp": "2026-04-15T13:18:46.084726",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "06a389b5be468297e10fddaa40e041c0fc15d51c",
+  "backport_commit": "d30e42c6a81c43d32f76622226c13cb96c3ab67d",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "skip_test": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/common/util/BigArrays.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 52,
+          "end_line": 66,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.74,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies a method in BigArrays.java with a small, precise change that adjusts the calculation of newSize. The first hunk is found via 'git_exact' with confidence 1.00, indicating an exact match string replacement. The addition of a new test file is straightforward and does not add complexity to the backport. There are no structural or API changes, renames, or deep refactorings. Therefore, this patch is classified as TYPE_I with high confidence. The token budget estimate is moderate due to the small code change and the addition of a test file.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/common/util/BigArrays.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:53: error: cannot find symbol\nserver/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:62: error: cannot find symbol\nserver/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:122: error: cannot find symbol\nserver/src/test/java/org/elasticsearch/index/snapshots",
+      "validation_attempts": 1,
+      "retry_files": [
+        "server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java",
+          "line": 53,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java",
+          "line": 62,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java",
+          "line": 122,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java",
+          "line": 123,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java",
+          "line": 133,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java",
+          "line": 134,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "failed",
+      "fallback_attempts": 1,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/common/util/BigArrays.java",
+          "what_changed": "The logic for calculating the new size was modified to cap the oversize value at pageSize when minTargetSize is smaller than pageSize, and to compute the new size by rounding up to the nearest multiple of pageSize using division and multiplication instead of addition and modulo operations.",
+          "where_in_code": "BigArrays class, method responsible for resizing arrays (exact method name not provided)",
+          "intent": "To improve the calculation of the new array size by ensuring it does not exceed pageSize unnecessarily and by using a clearer and potentially more efficient way to round up to the nearest multiple of pageSize.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "newSize",
+            "pageSize"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 2,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": false,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-org.elasticsearch.common.util.BigArraysTests.xml"
+        ],
+        "target_classes": [],
+        "test_cases": {
+          "org.elasticsearch.common.util.BigArraysTests#testOverSizeUsesMinPageCount": "failed"
+        },
+        "classes": {
+          "org.elasticsearch.common.util.BigArraysTests": "failed"
+        },
+        "summary": {
+          "passed": 0,
+          "failed": 1,
+          "skipped": 0,
+          "total": 1
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 0,
+        "patched_total": 1,
+        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 2,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-skip",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 10255,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 8363,
+        "output": 1892
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 1,
+    "retry_contexts": [
+      {
+        "error_type": "api_mismatch",
+        "error_message": "ex/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[122,53] error: cannot find symbol\n  symbol:   method files()\n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[123,53] error: cannot find symbol\n  symbol:   method files()\n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[133,67] error: cannot find symbol\n  symbol:   method physicalFiles()\n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[134,67] error: cannot find symbol\n  symbol:   method physicalFiles()\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:testCompile (default-testCompile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[53,78] error: cannot find symbol\n[ERROR]   symbol:   method fromStream(StreamInput)\n[ERROR]   location: class BlobStoreIndexShardSnapshots\n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[62,49] error: cannot find symbol\n[ERROR]   symbol:   method fromStream(StreamInput)\n[ERROR]   location: class BlobStoreIndexShardSnapshots\n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[122,53] error: cannot find symbol\n[ERROR]   symbol:   method files()\n[ERROR]   location: variable shardSnapshot1 of type BlobStoreIndexShardSnapshots\n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[123,53] error: cannot find symbol\n[ERROR]   symbol:   method files()\n[ERROR]   location: variable shardSnapshot2 of type BlobStoreIndexShardSnapshots\n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[133,67] error: cannot find symbol\n[ERROR]   symbol:   method physicalFiles()\n[ERROR]   location: variable shardSnapshot1 of type BlobStoreIndexShardSnapshots\n[ERROR] /repo/server/src/test/java/org/elasticsearch/index/snapshots/blobstore/BlobStoreIndexShardSnapshotsTest.java:[134,67] error: cannot find symbol\n[ERROR]   symbol:   method physicalFiles()\n[ERROR]   location: variable shardSnapshot2 of type BlobStoreIndexShardSnapshots\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 1,
+        "suggested_action": "route_to_namespace_or_structural"
+      }
+    ],
+    "failed_hunks": [],
+    "generated_patch_bytes": 9444,
+    "target_patch_bytes": 3573,
+    "patch_exact_match": true,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 0,
+      "patched_total": 1,
+      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

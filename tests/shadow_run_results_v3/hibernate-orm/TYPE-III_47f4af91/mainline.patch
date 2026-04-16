@@ -1,0 +1,128 @@
+commit 47f4af91f50cb191f249d6944a29422b17af9616
+Author: 박종찬 <jongchan.park@42dot.ai>
+Date:   Tue May 27 17:51:54 2025 +0900
+
+    HHH-19490 Fix NPE when using array_position on sql array type
+    
+    Also fix hsqldb's param rendering
+
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/ArrayAndElementArgumentValidator.java b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/ArrayAndElementArgumentValidator.java
+index 17cf5cafed..4c87172ac8 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/ArrayAndElementArgumentValidator.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/ArrayAndElementArgumentValidator.java
+@@ -6,6 +6,7 @@
+ 
+ import java.util.List;
+ 
++import org.hibernate.query.sqm.SqmBindableType;
+ import org.hibernate.type.BindingContext;
+ import org.hibernate.query.sqm.SqmExpressible;
+ import org.hibernate.query.sqm.produce.function.ArgumentsValidator;
+@@ -36,7 +37,8 @@ public void validate(
+ 		for ( int elementIndex : elementIndexes ) {
+ 			if ( elementIndex < arguments.size() ) {
+ 				final SqmTypedNode<?> elementArgument = arguments.get( elementIndex );
+-				final SqmExpressible<?> elementType = elementArgument.getExpressible().getSqmType();
++				final SqmBindableType<?> expressible = elementArgument.getExpressible();
++				final SqmExpressible<?> elementType = expressible != null ? expressible.getSqmType() : null;
+ 				if ( expectedElementType != null && elementType != null && expectedElementType != elementType ) {
+ 					throw new FunctionArgumentException(
+ 							String.format(
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionFunction.java b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionFunction.java
+index 4341601740..bab60661f1 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionFunction.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionFunction.java
+@@ -7,6 +7,7 @@
+ import java.util.List;
+ 
+ import org.hibernate.metamodel.model.domain.ReturnableType;
++import org.hibernate.sql.ast.SqlAstNodeRenderingMode;
+ import org.hibernate.sql.ast.SqlAstTranslator;
+ import org.hibernate.sql.ast.spi.SqlAppender;
+ import org.hibernate.sql.ast.tree.SqlAstNode;
+@@ -35,7 +36,7 @@ public void render(
+ 		sqlAppender.append( " is not null then coalesce((select t.idx from unnest(");
+ 		arrayExpression.accept( walker );
+ 		sqlAppender.append(") with ordinality t(val,idx) where t.val is not distinct from " );
+-		elementExpression.accept( walker );
++		walker.render( elementExpression, SqlAstNodeRenderingMode.NO_PLAIN_PARAMETER );
+ 		if ( sqlAstArguments.size() > 2 ) {
+ 			sqlAppender.append( " and t.idx>=" );
+ 			sqlAstArguments.get( 2 ).accept( walker );
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionsFunction.java b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionsFunction.java
+index d20252f689..881f357521 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionsFunction.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/function/array/HSQLArrayPositionsFunction.java
+@@ -7,6 +7,7 @@
+ import java.util.List;
+ 
+ import org.hibernate.metamodel.model.domain.ReturnableType;
++import org.hibernate.sql.ast.SqlAstNodeRenderingMode;
+ import org.hibernate.sql.ast.SqlAstTranslator;
+ import org.hibernate.sql.ast.spi.SqlAppender;
+ import org.hibernate.sql.ast.tree.SqlAstNode;
+@@ -35,7 +36,7 @@ public void render(
+ 		sqlAppender.append( " is not null then coalesce((select array_agg(t.idx) from unnest(");
+ 		arrayExpression.accept( walker );
+ 		sqlAppender.append(") with ordinality t(val,idx) where t.val is not distinct from " );
+-		elementExpression.accept( walker );
++		walker.render( elementExpression, SqlAstNodeRenderingMode.NO_PLAIN_PARAMETER );
+ 		sqlAppender.append( "),cast(array[] as integer array)) end" );
+ 	}
+ }
+diff --git a/hibernate-core/src/test/java/org/hibernate/orm/test/function/array/ArrayPositionTest.java b/hibernate-core/src/test/java/org/hibernate/orm/test/function/array/ArrayPositionTest.java
+index 539411c6f8..020d2165a4 100644
+--- a/hibernate-core/src/test/java/org/hibernate/orm/test/function/array/ArrayPositionTest.java
++++ b/hibernate-core/src/test/java/org/hibernate/orm/test/function/array/ArrayPositionTest.java
+@@ -85,6 +85,18 @@ public void testPositionNull(SessionFactoryScope scope) {
+ 		} );
+ 	}
+ 
++	@Test
++	@Jira("https://hibernate.atlassian.net/browse/HHH-19490")
++	public void testPositionParam(SessionFactoryScope scope) {
++		scope.inSession( em -> {
++			List<EntityWithArrays> results = em.createQuery( "from EntityWithArrays e where array_position(e.theArray, ?1) = 1", EntityWithArrays.class )
++					.setParameter( 1, "abc" )
++					.getResultList();
++			assertEquals( 1, results.size() );
++			assertEquals( 2L, results.get( 0 ).getId() );
++		} );
++	}
++
+ 	@Test
+ 	@Jira("https://hibernate.atlassian.net/browse/HHH-17801")
+ 	public void testEnumPosition(SessionFactoryScope scope) {
+diff --git a/hibernate-core/src/test/java/org/hibernate/orm/test/function/array/ArrayPositionsTest.java b/hibernate-core/src/test/java/org/hibernate/orm/test/function/array/ArrayPositionsTest.java
+index 28afc5cf7b..909192adea 100644
+--- a/hibernate-core/src/test/java/org/hibernate/orm/test/function/array/ArrayPositionsTest.java
++++ b/hibernate-core/src/test/java/org/hibernate/orm/test/function/array/ArrayPositionsTest.java
+@@ -15,6 +15,7 @@
+ import org.hibernate.testing.orm.junit.BootstrapServiceRegistry;
+ import org.hibernate.testing.orm.junit.DialectFeatureChecks;
+ import org.hibernate.testing.orm.junit.DomainModel;
++import org.hibernate.testing.orm.junit.Jira;
+ import org.hibernate.testing.orm.junit.RequiresDialectFeature;
+ import org.hibernate.testing.orm.junit.SessionFactory;
+ import org.hibernate.testing.orm.junit.SessionFactoryScope;
+@@ -93,6 +94,20 @@ public void testPositionsNull(SessionFactoryScope scope) {
+ 		} );
+ 	}
+ 
++	@Test
++	@Jira("https://hibernate.atlassian.net/browse/HHH-19490")
++	public void testPositionsParam(SessionFactoryScope scope) {
++		scope.inSession( em -> {
++			List<int[]> results = em.createQuery( "select array_positions(e.theArray, ?1) from EntityWithArrays e order by e.id", int[].class )
++					.setParameter( 1, "abc" )
++					.getResultList();
++			assertEquals( 3, results.size() );
++			assertArrayEquals( new int[0], results.get( 0 ) );
++			assertArrayEquals( new int[]{ 1, 4 }, results.get( 1 ) );
++			assertNull( results.get( 2 ) );
++		} );
++	}
++
+ 	@Test
+ 	public void testPositionsList(SessionFactoryScope scope) {
+ 		scope.inSession( em -> {

@@ -1,0 +1,72 @@
+commit 6dd73ae3e4aec0450220f13e7a652334dae195e1
+Author: Brian Clozel <brian.clozel@broadcom.com>
+Date:   Fri Feb 21 14:23:12 2025 +0100
+
+    Handle null values in MockHttpServletResponse#setHeader
+    
+    Prior to this commit, `MockHttpServletResponse#setHeader` would not
+    remove the header entry when given a `null` value, as documented in the
+    Servlet API.
+    This commit ensures that this behavior is enforced.
+    
+    Fixes gh-34464
+
+diff --git a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+index 592e216763..38bc1b72d1 100644
+--- a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
++++ b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+@@ -686,7 +686,12 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	@Override
+ 	public void setHeader(String name, @Nullable String value) {
+-		setHeaderValue(name, value);
++		if (value == null) {
++			this.headers.remove(name);
++		}
++		else {
++			setHeaderValue(name, value);
++		}
+ 	}
+ 
+ 	@Override
+diff --git a/spring-test/src/test/java/org/springframework/mock/web/MockHttpServletResponseTests.java b/spring-test/src/test/java/org/springframework/mock/web/MockHttpServletResponseTests.java
+index 7c066fef0b..131e069667 100644
+--- a/spring-test/src/test/java/org/springframework/mock/web/MockHttpServletResponseTests.java
++++ b/spring-test/src/test/java/org/springframework/mock/web/MockHttpServletResponseTests.java
+@@ -88,6 +88,18 @@ class MockHttpServletResponseTests {
+ 		assertThat(response.containsHeader(headerName)).isFalse();
+ 	}
+ 
++	@ParameterizedTest
++	@ValueSource(strings = {
++			CONTENT_TYPE,
++			CONTENT_LANGUAGE,
++			"X-Test-Header"
++	})
++	void removeHeaderIfNullValue(String headerName) {
++		response.addHeader(headerName, "test");
++		response.setHeader(headerName, null);
++		assertThat(response.containsHeader(headerName)).isFalse();
++	}
++
+ 	@Test  // gh-26493
+ 	void setLocaleWithNullValue() {
+ 		assertThat(response.getLocale()).isEqualTo(Locale.getDefault());
+diff --git a/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java b/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
+index cbcff8f573..21db967017 100644
+--- a/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
++++ b/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
+@@ -686,7 +686,12 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	@Override
+ 	public void setHeader(String name, @Nullable String value) {
+-		setHeaderValue(name, value);
++		if (value == null) {
++			this.headers.remove(name);
++		}
++		else {
++			setHeaderValue(name, value);
++		}
+ 	}
+ 
+ 	@Override
