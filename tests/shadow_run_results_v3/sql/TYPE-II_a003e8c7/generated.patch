@@ -1,0 +1,236 @@
+diff --git a/core/src/main/java/org/opensearch/sql/ast/expression/QualifiedName.java b/core/src/main/java/org/opensearch/sql/ast/expression/QualifiedName.java
+index 55784d811..0970503fe 100644
+--- a/core/src/main/java/org/opensearch/sql/ast/expression/QualifiedName.java
++++ b/core/src/main/java/org/opensearch/sql/ast/expression/QualifiedName.java
+@@ -22,6 +22,7 @@ import org.opensearch.sql.ast.AbstractNodeVisitor;
+ @Getter
+ @EqualsAndHashCode(callSuper = false)
+ public class QualifiedName extends UnresolvedExpression {
++  public static final String DELIMITER = ".";
+   private final List<String> parts;
+ 
+   public QualifiedName(String name) {
+@@ -94,7 +95,7 @@ public class QualifiedName extends UnresolvedExpression {
+   }
+ 
+   public String toString() {
+-    return String.join(".", this.parts);
++    return String.join(DELIMITER, this.parts);
+   }
+ 
+   @Override
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/QualifiedNameResolver.java b/core/src/main/java/org/opensearch/sql/calcite/QualifiedNameResolver.java
+index 53cdba883..0bbf7fb4c 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/QualifiedNameResolver.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/QualifiedNameResolver.java
+@@ -270,8 +270,10 @@ public class QualifiedNameResolver {
+     if (length == parts.size() - start) {
+       return field;
+     } else {
+-      String itemName = joinParts(parts, length + start, parts.size() - 1 - length);
+-      return createItemAccess(field, itemName, context);
++      String itemName = joinParts(parts, length + start, parts.size() - length);
++      return context.relBuilder.alias(
++          createItemAccess(field, itemName, context),
++          String.join(QualifiedName.DELIMITER, parts.subList(start, parts.size())));
+     }
+   }
+ 
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/value/OpenSearchExprValueFactory.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/value/OpenSearchExprValueFactory.java
+index f54a6b198..af5c27327 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/data/value/OpenSearchExprValueFactory.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/data/value/OpenSearchExprValueFactory.java
+@@ -186,7 +186,12 @@ public class OpenSearchExprValueFactory {
+ 
+     // Field type may be not defined in mapping if users have disabled dynamic mapping.
+     // Then try to parse content directly based on the value itself
+-    if (fieldType.isEmpty()) {
++    // Besides, sub-fields of generated objects are also of type UNDEFINED. We parse the content
++    // directly on the value itself for this case as well.
++    // TODO: Remove the second condition once https://github.com/opensearch-project/sql/issues/3751
++    //  is resolved
++    if (fieldType.isEmpty()
++        || fieldType.get().equals(OpenSearchDataType.of(ExprCoreType.UNDEFINED))) {
+       return parseContent(content);
+     }
+ 
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/executor/OpenSearchExecutionEngine.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/executor/OpenSearchExecutionEngine.java
+index 079ba7337..980703fe0 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/executor/OpenSearchExecutionEngine.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/executor/OpenSearchExecutionEngine.java
+@@ -5,8 +5,7 @@
+ 
+ package org.opensearch.sql.opensearch.executor;
+ 
+-import static org.opensearch.sql.expression.function.BuiltinFunctionName.DISTINCT_COUNT_APPROX;
+-
++import com.google.common.base.Suppliers;
+ import java.security.AccessController;
+ import java.security.PrivilegedAction;
+ import java.sql.PreparedStatement;
+@@ -19,7 +18,9 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.stream.Collectors;
+ 
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.atomic.AtomicReference;
++import java.util.function.Supplier;
+ import org.apache.calcite.plan.RelOptUtil;
+ import org.apache.calcite.rel.RelNode;
+ import org.apache.calcite.rel.RelRoot;
+@@ -27,8 +28,11 @@ import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.rel.type.RelDataTypeField;
+ import org.apache.calcite.runtime.Hook;
+ import org.apache.calcite.sql.SqlExplainLevel;
++import org.apache.calcite.sql.SqlOperator;
++import org.apache.calcite.sql.SqlOperatorTable;
+ import org.apache.calcite.sql.type.ReturnTypes;
+ import org.apache.calcite.sql.type.SqlTypeName;
++import org.apache.calcite.sql.util.ListSqlOperatorTable;
+ import org.apache.calcite.sql.validate.SqlUserDefinedAggFunction;
+ import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+ import org.apache.logging.log4j.LogManager;
+@@ -53,10 +57,7 @@ import org.opensearch.sql.opensearch.client.OpenSearchClient;
+ import org.opensearch.sql.opensearch.executor.protector.ExecutionProtector;
+ import org.opensearch.sql.opensearch.functions.DistinctCountApproxAggFunction;
+ import org.opensearch.sql.expression.function.BuiltinFunctionName;
+-import org.opensearch.sql.expression.function.PPLFuncImpTable;
+-import org.opensearch.sql.opensearch.client.OpenSearchClient;
+ import org.opensearch.sql.opensearch.client.OpenSearchNodeClient;
+-import org.opensearch.sql.opensearch.executor.protector.ExecutionProtector;
+ import org.opensearch.sql.opensearch.functions.GeoIpFunction;
+ import org.opensearch.sql.opensearch.util.JdbcOpenSearchDataTypeConvertor;
+ import org.opensearch.sql.planner.physical.PhysicalPlan;
+@@ -283,8 +284,9 @@ public OpenSearchExecutionEngine(
+   private void registerOpenSearchFunctions() {
+     if (client instanceof OpenSearchNodeClient) {
+       SqlUserDefinedFunction geoIpFunction =
+-          new GeoIpFunction(client.getNodeClient()).toUDF("GEOIP");
++          new GeoIpFunction(client.getNodeClient()).toUDF(BuiltinFunctionName.GEOIP.name());
+       PPLFuncImpTable.INSTANCE.registerExternalOperator(BuiltinFunctionName.GEOIP, geoIpFunction);
++      OperatorTable.addOperator(BuiltinFunctionName.GEOIP.name(), geoIpFunction);
+     } else {
+       logger.info(
+           "Function [GEOIP] not registered: incompatible client type {}",
+@@ -294,10 +296,37 @@ public OpenSearchExecutionEngine(
+     SqlUserDefinedAggFunction approxDistinctCountFunction =
+         UserDefinedFunctionUtils.createUserDefinedAggFunction(
+             DistinctCountApproxAggFunction.class,
+-            DISTINCT_COUNT_APPROX.toString(),
++            BuiltinFunctionName.DISTINCT_COUNT_APPROX.name(),
+             ReturnTypes.BIGINT_FORCE_NULLABLE,
+             null);
+     PPLFuncImpTable.INSTANCE.registerExternalAggOperator(
+-        DISTINCT_COUNT_APPROX, approxDistinctCountFunction);
++        BuiltinFunctionName.DISTINCT_COUNT_APPROX, approxDistinctCountFunction);
++    OperatorTable.addOperator(
++        BuiltinFunctionName.DISTINCT_COUNT_APPROX.name(), approxDistinctCountFunction);
++  }
++
++  /**
++   * Dynamic SqlOperatorTable that allows adding operators after initialization. Similar to
++   * PPLBuiltinOperator.instance() or SqlStdOperatorTable.instance().
++   */
++  public static class OperatorTable extends ListSqlOperatorTable {
++    private static final Supplier<OperatorTable> INSTANCE =
++        Suppliers.memoize(() -> (OperatorTable) new OperatorTable().init());
++    // Use map instead of list to avoid duplicated elements if the class is initialized multiple
++    // times
++    private static final Map<String, SqlOperator> operators = new ConcurrentHashMap<>();
++
++    public static SqlOperatorTable instance() {
++      return INSTANCE.get();
++    }
++
++    private ListSqlOperatorTable init() {
++      setOperators(buildIndex(operators.values()));
++      return this;
++    }
++
++    public static synchronized void addOperator(String name, SqlOperator operator) {
++      operators.put(name, operator);
++    }
+   }
+ }
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/serde/RelJsonSerializer.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/serde/RelJsonSerializer.java
+index 113e855d4..fb751c8a7 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/serde/RelJsonSerializer.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/serde/RelJsonSerializer.java
+@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream;
+ import java.io.ByteArrayOutputStream;
+ import java.io.ObjectInputStream;
+ import java.io.ObjectOutputStream;
++import java.io.Serializable;
+ import java.util.Base64;
+ import java.util.HashMap;
+ import java.util.LinkedHashMap;
+@@ -31,6 +32,7 @@ import org.apache.commons.lang3.tuple.Pair;
+ import org.opensearch.sql.calcite.CalcitePlanContext;
+ import org.opensearch.sql.data.type.ExprType;
+ import org.opensearch.sql.expression.function.PPLBuiltinOperators;
++import org.opensearch.sql.opensearch.executor.OpenSearchExecutionEngine;
+ import org.opensearch.sql.opensearch.util.OpenSearchRelOptUtil;
+ 
+ /**
+@@ -39,7 +41,7 @@ import org.opensearch.sql.opensearch.util.OpenSearchRelOptUtil;
+  * <p>This serializer:
+  * <li>Uses Calcite's RelJson class to convert RexNode and RelDataType to/from JSON string
+  * <li>Manages required OpenSearch field mapping information Note: OpenSearch ExprType subclasses
+- *     implement {@link java.io.Serializable} and are handled through standard Java serialization.
++ *     implement {@link Serializable} and are handled through standard Java serialization.
+  */
+ @Getter
+ public class RelJsonSerializer {
+@@ -52,13 +54,7 @@ public class RelJsonSerializer {
+   private static final ObjectMapper mapper = new ObjectMapper();
+   private static final TypeReference<LinkedHashMap<String, Object>> TYPE_REF =
+       new TypeReference<>() {};
+-  private static final SqlOperatorTable pplSqlOperatorTable =
+-      SqlOperatorTables.chain(
+-          PPLBuiltinOperators.instance(),
+-          SqlStdOperatorTable.instance(),
+-          // Add a list of necessary SqlLibrary if needed
+-          SqlLibraryOperatorTableFactory.INSTANCE.getOperatorTable(
+-              SqlLibrary.MYSQL, SqlLibrary.BIG_QUERY, SqlLibrary.SPARK, SqlLibrary.POSTGRESQL));
++  private static volatile SqlOperatorTable pplSqlOperatorTable;
+ 
+   static {
+     mapper.configure(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS, true);
+@@ -68,6 +64,27 @@ public class RelJsonSerializer {
+     this.cluster = cluster;
+   }
+ 
++  private static SqlOperatorTable getPplSqlOperatorTable() {
++    if (pplSqlOperatorTable == null) {
++      synchronized (RelJsonSerializer.class) {
++        if (pplSqlOperatorTable == null) {
++          pplSqlOperatorTable =
++              SqlOperatorTables.chain(
++                  PPLBuiltinOperators.instance(),
++                  SqlStdOperatorTable.instance(),
++                  OpenSearchExecutionEngine.OperatorTable.instance(),
++                  // Add a list of necessary SqlLibrary if needed
++                  SqlLibraryOperatorTableFactory.INSTANCE.getOperatorTable(
++                      SqlLibrary.MYSQL,
++                      SqlLibrary.BIG_QUERY,
++                      SqlLibrary.SPARK,
++                      SqlLibrary.POSTGRESQL));
++        }
++      }
++    }
++    return pplSqlOperatorTable;
++  }
++
+   /**
+    * Serializes Calcite expressions and field types into a map object string.
+    *
+@@ -136,7 +153,8 @@ public class RelJsonSerializer {
+       Map<String, Object> rowTypeMap = mapper.readValue((String) objectMap.get(ROW_TYPE), TYPE_REF);
+       RelDataType rowType = relJson.toType(cluster.getTypeFactory(), rowTypeMap);
+       OpenSearchRelInputTranslator inputTranslator = new OpenSearchRelInputTranslator(rowType);
+-      relJson = relJson.withInputTranslator(inputTranslator).withOperatorTable(pplSqlOperatorTable);
++      relJson =
++          relJson.withInputTranslator(inputTranslator).withOperatorTable(getPplSqlOperatorTable());
+       Map<String, Object> exprMap = mapper.readValue((String) objectMap.get(EXPR), TYPE_REF);
+       RexNode rexNode = relJson.toRex(cluster, exprMap);
+ 

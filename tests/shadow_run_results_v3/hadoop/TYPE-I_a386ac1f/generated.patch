@@ -1,0 +1,615 @@
+diff --git a/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java
+new file mode 100644
+index 00000000000..ef7201f5864
+--- /dev/null
++++ b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/MappingRulesDescription.java
+@@ -0,0 +1,88 @@
++
++package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.placement.schema;
++
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.List;
++import java.util.Map;
++import javax.annotation.processing.Generated;
++import com.fasterxml.jackson.annotation.JsonAnyGetter;
++import com.fasterxml.jackson.annotation.JsonAnySetter;
++import com.fasterxml.jackson.annotation.JsonIgnore;
++import com.fasterxml.jackson.annotation.JsonInclude;
++import com.fasterxml.jackson.annotation.JsonProperty;
++import com.fasterxml.jackson.annotation.JsonPropertyOrder;
++
++@JsonInclude(JsonInclude.Include.NON_NULL)
++@JsonPropertyOrder({
++    "rules"
++})
++@Generated("jsonschema2pojo")
++public class MappingRulesDescription {
++
++    @JsonProperty("rules")
++    private List<Rule> rules = new ArrayList<Rule>();
++    @JsonIgnore
++    private Map<String, Object> additionalProperties = new HashMap<String, Object>();
++
++    @JsonProperty("rules")
++    public List<Rule> getRules() {
++        return rules;
++    }
++
++    @JsonProperty("rules")
++    public void setRules(List<Rule> rules) {
++        this.rules = rules;
++    }
++
++    @JsonAnyGetter
++    public Map<String, Object> getAdditionalProperties() {
++        return this.additionalProperties;
++    }
++
++    @JsonAnySetter
++    public void setAdditionalProperty(String name, Object value) {
++        this.additionalProperties.put(name, value);
++    }
++
++    @Override
++    public String toString() {
++        StringBuilder sb = new StringBuilder();
++        sb.append(MappingRulesDescription.class.getName()).append('@').append(Integer.toHexString(System.identityHashCode(this))).append('[');
++        sb.append("rules");
++        sb.append('=');
++        sb.append(((this.rules == null)?"<null>":this.rules));
++        sb.append(',');
++        sb.append("additionalProperties");
++        sb.append('=');
++        sb.append(((this.additionalProperties == null)?"<null>":this.additionalProperties));
++        sb.append(',');
++        if (sb.charAt((sb.length()- 1)) == ',') {
++            sb.setCharAt((sb.length()- 1), ']');
++        } else {
++            sb.append(']');
++        }
++        return sb.toString();
++    }
++
++    @Override
++    public int hashCode() {
++        int result = 1;
++        result = ((result* 31)+((this.rules == null)? 0 :this.rules.hashCode()));
++        result = ((result* 31)+((this.additionalProperties == null)? 0 :this.additionalProperties.hashCode()));
++        return result;
++    }
++
++    @Override
++    public boolean equals(Object other) {
++        if (other == this) {
++            return true;
++        }
++        if ((other instanceof MappingRulesDescription) == false) {
++            return false;
++        }
++        MappingRulesDescription rhs = ((MappingRulesDescription) other);
++        return (((this.rules == rhs.rules)||((this.rules!= null)&&this.rules.equals(rhs.rules)))&&((this.additionalProperties == rhs.additionalProperties)||((this.additionalProperties!= null)&&this.additionalProperties.equals(rhs.additionalProperties))));
++    }
++
++}
+diff --git a/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java
+new file mode 100644
+index 00000000000..eb0d753abd4
+--- /dev/null
++++ b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/placement/schema/Rule.java
+@@ -0,0 +1,345 @@
++
++package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.placement.schema;
++
++import java.util.HashMap;
++import java.util.Map;
++import javax.annotation.processing.Generated;
++import com.fasterxml.jackson.annotation.JsonAnyGetter;
++import com.fasterxml.jackson.annotation.JsonAnySetter;
++import com.fasterxml.jackson.annotation.JsonCreator;
++import com.fasterxml.jackson.annotation.JsonIgnore;
++import com.fasterxml.jackson.annotation.JsonInclude;
++import com.fasterxml.jackson.annotation.JsonProperty;
++import com.fasterxml.jackson.annotation.JsonPropertyOrder;
++import com.fasterxml.jackson.annotation.JsonValue;
++
++@JsonInclude(JsonInclude.Include.NON_NULL)
++@JsonPropertyOrder({
++    "type",
++    "matches",
++    "policy",
++    "parentQueue",
++    "fallbackResult",
++    "create",
++    "value",
++    "customPlacement"
++})
++@Generated("jsonschema2pojo")
++public class Rule {
++
++    @JsonProperty("type")
++    private Rule.Type type;
++    @JsonProperty("matches")
++    private String matches;
++    @JsonProperty("policy")
++    private Rule.Policy policy;
++    @JsonProperty("parentQueue")
++    private String parentQueue;
++    @JsonProperty("fallbackResult")
++    private Rule.FallbackResult fallbackResult;
++    @JsonProperty("create")
++    private Boolean create;
++    @JsonProperty("value")
++    private String value;
++    @JsonProperty("customPlacement")
++    private String customPlacement;
++    @JsonIgnore
++    private Map<String, Object> additionalProperties = new HashMap<String, Object>();
++
++    @JsonProperty("type")
++    public Rule.Type getType() {
++        return type;
++    }
++
++    @JsonProperty("type")
++    public void setType(Rule.Type type) {
++        this.type = type;
++    }
++
++    @JsonProperty("matches")
++    public String getMatches() {
++        return matches;
++    }
++
++    @JsonProperty("matches")
++    public void setMatches(String matches) {
++        this.matches = matches;
++    }
++
++    @JsonProperty("policy")
++    public Rule.Policy getPolicy() {
++        return policy;
++    }
++
++    @JsonProperty("policy")
++    public void setPolicy(Rule.Policy policy) {
++        this.policy = policy;
++    }
++
++    @JsonProperty("parentQueue")
++    public String getParentQueue() {
++        return parentQueue;
++    }
++
++    @JsonProperty("parentQueue")
++    public void setParentQueue(String parentQueue) {
++        this.parentQueue = parentQueue;
++    }
++
++    @JsonProperty("fallbackResult")
++    public Rule.FallbackResult getFallbackResult() {
++        return fallbackResult;
++    }
++
++    @JsonProperty("fallbackResult")
++    public void setFallbackResult(Rule.FallbackResult fallbackResult) {
++        this.fallbackResult = fallbackResult;
++    }
++
++    @JsonProperty("create")
++    public Boolean getCreate() {
++        return create;
++    }
++
++    @JsonProperty("create")
++    public void setCreate(Boolean create) {
++        this.create = create;
++    }
++
++    @JsonProperty("value")
++    public String getValue() {
++        return value;
++    }
++
++    @JsonProperty("value")
++    public void setValue(String value) {
++        this.value = value;
++    }
++
++    @JsonProperty("customPlacement")
++    public String getCustomPlacement() {
++        return customPlacement;
++    }
++
++    @JsonProperty("customPlacement")
++    public void setCustomPlacement(String customPlacement) {
++        this.customPlacement = customPlacement;
++    }
++
++    @JsonAnyGetter
++    public Map<String, Object> getAdditionalProperties() {
++        return this.additionalProperties;
++    }
++
++    @JsonAnySetter
++    public void setAdditionalProperty(String name, Object value) {
++        this.additionalProperties.put(name, value);
++    }
++
++    @Override
++    public String toString() {
++        StringBuilder sb = new StringBuilder();
++        sb.append(Rule.class.getName()).append('@').append(Integer.toHexString(System.identityHashCode(this))).append('[');
++        sb.append("type");
++        sb.append('=');
++        sb.append(((this.type == null)?"<null>":this.type));
++        sb.append(',');
++        sb.append("matches");
++        sb.append('=');
++        sb.append(((this.matches == null)?"<null>":this.matches));
++        sb.append(',');
++        sb.append("policy");
++        sb.append('=');
++        sb.append(((this.policy == null)?"<null>":this.policy));
++        sb.append(',');
++        sb.append("parentQueue");
++        sb.append('=');
++        sb.append(((this.parentQueue == null)?"<null>":this.parentQueue));
++        sb.append(',');
++        sb.append("fallbackResult");
++        sb.append('=');
++        sb.append(((this.fallbackResult == null)?"<null>":this.fallbackResult));
++        sb.append(',');
++        sb.append("create");
++        sb.append('=');
++        sb.append(((this.create == null)?"<null>":this.create));
++        sb.append(',');
++        sb.append("value");
++        sb.append('=');
++        sb.append(((this.value == null)?"<null>":this.value));
++        sb.append(',');
++        sb.append("customPlacement");
++        sb.append('=');
++        sb.append(((this.customPlacement == null)?"<null>":this.customPlacement));
++        sb.append(',');
++        sb.append("additionalProperties");
++        sb.append('=');
++        sb.append(((this.additionalProperties == null)?"<null>":this.additionalProperties));
++        sb.append(',');
++        if (sb.charAt((sb.length()- 1)) == ',') {
++            sb.setCharAt((sb.length()- 1), ']');
++        } else {
++            sb.append(']');
++        }
++        return sb.toString();
++    }
++
++    @Override
++    public int hashCode() {
++        int result = 1;
++        result = ((result* 31)+((this.fallbackResult == null)? 0 :this.fallbackResult.hashCode()));
++        result = ((result* 31)+((this.customPlacement == null)? 0 :this.customPlacement.hashCode()));
++        result = ((result* 31)+((this.create == null)? 0 :this.create.hashCode()));
++        result = ((result* 31)+((this.parentQueue == null)? 0 :this.parentQueue.hashCode()));
++        result = ((result* 31)+((this.additionalProperties == null)? 0 :this.additionalProperties.hashCode()));
++        result = ((result* 31)+((this.type == null)? 0 :this.type.hashCode()));
++        result = ((result* 31)+((this.matches == null)? 0 :this.matches.hashCode()));
++        result = ((result* 31)+((this.value == null)? 0 :this.value.hashCode()));
++        result = ((result* 31)+((this.policy == null)? 0 :this.policy.hashCode()));
++        return result;
++    }
++
++    @Override
++    public boolean equals(Object other) {
++        if (other == this) {
++            return true;
++        }
++        if ((other instanceof Rule) == false) {
++            return false;
++        }
++        Rule rhs = ((Rule) other);
++        return ((((((((((this.fallbackResult == rhs.fallbackResult)||((this.fallbackResult!= null)&&this.fallbackResult.equals(rhs.fallbackResult)))&&((this.customPlacement == rhs.customPlacement)||((this.customPlacement!= null)&&this.customPlacement.equals(rhs.customPlacement))))&&((this.create == rhs.create)||((this.create!= null)&&this.create.equals(rhs.create))))&&((this.parentQueue == rhs.parentQueue)||((this.parentQueue!= null)&&this.parentQueue.equals(rhs.parentQueue))))&&((this.additionalProperties == rhs.additionalProperties)||((this.additionalProperties!= null)&&this.additionalProperties.equals(rhs.additionalProperties))))&&((this.type == rhs.type)||((this.type!= null)&&this.type.equals(rhs.type))))&&((this.matches == rhs.matches)||((this.matches!= null)&&this.matches.equals(rhs.matches))))&&((this.value == rhs.value)||((this.value!= null)&&this.value.equals(rhs.value))))&&((this.policy == rhs.policy)||((this.policy!= null)&&this.policy.equals(rhs.policy))));
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum FallbackResult {
++
++        SKIP("skip"),
++        REJECT("reject"),
++        PLACE_DEFAULT("placeDefault");
++        private final String value;
++        private final static Map<String, Rule.FallbackResult> CONSTANTS = new HashMap<String, Rule.FallbackResult>();
++
++        static {
++            for (Rule.FallbackResult c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        FallbackResult(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.FallbackResult fromValue(String value) {
++            Rule.FallbackResult constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum Policy {
++
++        SPECIFIED("specified"),
++        REJECT("reject"),
++        DEFAULT_QUEUE("defaultQueue"),
++        USER("user"),
++        PRIMARY_GROUP("primaryGroup"),
++        SECONDARY_GROUP("secondaryGroup"),
++        PRIMARY_GROUP_USER("primaryGroupUser"),
++        SECONDARY_GROUP_USER("secondaryGroupUser"),
++        APPLICATION_NAME("applicationName"),
++        SET_DEFAULT_QUEUE("setDefaultQueue"),
++        CUSTOM("custom");
++        private final String value;
++        private final static Map<String, Rule.Policy> CONSTANTS = new HashMap<String, Rule.Policy>();
++
++        static {
++            for (Rule.Policy c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        Policy(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.Policy fromValue(String value) {
++            Rule.Policy constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++    @Generated("jsonschema2pojo")
++    public enum Type {
++
++        USER("user"),
++        GROUP("group"),
++        APPLICATION("application");
++        private final String value;
++        private final static Map<String, Rule.Type> CONSTANTS = new HashMap<String, Rule.Type>();
++
++        static {
++            for (Rule.Type c: values()) {
++                CONSTANTS.put(c.value, c);
++            }
++        }
++
++        Type(String value) {
++            this.value = value;
++        }
++
++        @Override
++        public String toString() {
++            return this.value;
++        }
++
++        @JsonValue
++        public String value() {
++            return this.value;
++        }
++
++        @JsonCreator
++        public static Rule.Type fromValue(String value) {
++            Rule.Type constant = CONSTANTS.get(value);
++            if (constant == null) {
++                throw new IllegalArgumentException(value);
++            } else {
++                return constant;
++            }
++        }
++
++    }
++
++}
+diff --git a/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/policy/PriorityUtilizationQueueOrderingPolicy.java b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/policy/PriorityUtilizationQueueOrderingPolicy.java
+index 90ea082426d..5b4c103071d 100644
+--- a/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/policy/PriorityUtilizationQueueOrderingPolicy.java
++++ b/hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/src/main/java/org/apache/hadoop/yarn/server/resourcemanager/scheduler/capacity/policy/PriorityUtilizationQueueOrderingPolicy.java
+@@ -20,6 +20,7 @@
+ 
+ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+ import org.apache.commons.lang3.StringUtils;
++import org.apache.hadoop.yarn.api.records.Priority;
+ import org.apache.hadoop.yarn.api.records.Resource;
+ import org.apache.hadoop.yarn.server.resourcemanager.nodelabels
+     .RMNodeLabelsManager;
+@@ -32,7 +33,6 @@
+ import java.util.Comparator;
+ import java.util.Iterator;
+ import java.util.List;
+-import java.util.function.Supplier;
+ import java.util.stream.Collectors;
+ 
+ /**
+@@ -54,17 +54,7 @@
+ public class PriorityUtilizationQueueOrderingPolicy
+     implements QueueOrderingPolicy {
+   private List<CSQueue> queues;
+-  private boolean respectPriority;
+-
+-  // This makes multiple threads can sort queues at the same time
+-  // For different partitions.
+-  private static ThreadLocal<String> partitionToLookAt =
+-      ThreadLocal.withInitial(new Supplier<String>() {
+-        @Override
+-        public String get() {
+-          return RMNodeLabelsManager.NO_LABEL;
+-        }
+-      });
++  private final boolean respectPriority;
+ 
+   /**
+    * Compare two queues with possibly different priority and assigned capacity,
+@@ -101,15 +91,21 @@ public static int compare(double relativeAssigned1, double relativeAssigned2,
+   /**
+    * Comparator that both looks at priority and utilization
+    */
+-  private class PriorityQueueComparator
++  final private class PriorityQueueComparator
+       implements Comparator<PriorityQueueResourcesForSorting> {
+ 
++    final private String partition;
++
++    private PriorityQueueComparator(String partition) {
++      this.partition = partition;
++    }
++
+     @Override
+     public int compare(PriorityQueueResourcesForSorting q1Sort,
+         PriorityQueueResourcesForSorting q2Sort) {
+-      String p = partitionToLookAt.get();
+-
+-      int rc = compareQueueAccessToPartition(q1Sort.queue, q2Sort.queue, p);
++      int rc = compareQueueAccessToPartition(
++          q1Sort.nodeLabelAccessible,
++          q2Sort.nodeLabelAccessible);
+       if (0 != rc) {
+         return rc;
+       }
+@@ -133,8 +129,8 @@ public int compare(PriorityQueueResourcesForSorting q1Sort,
+         float used2 = q2Sort.absoluteUsedCapacity;
+ 
+         return compare(q1Sort, q2Sort, used1, used2,
+-            q1Sort.queue.getPriority().
+-                getPriority(), q2Sort.queue.getPriority().getPriority());
++            q1Sort.priority.
++                getPriority(), q2Sort.priority.getPriority());
+       } else{
+         // both q1 has positive abs capacity and q2 has positive abs
+         // capacity
+@@ -142,8 +138,8 @@ public int compare(PriorityQueueResourcesForSorting q1Sort,
+         float used2 = q2Sort.usedCapacity;
+ 
+         return compare(q1Sort, q2Sort, used1, used2,
+-            q1Sort.queue.getPriority().getPriority(),
+-            q2Sort.queue.getPriority().getPriority());
++            q1Sort.priority.getPriority(),
++            q2Sort.priority.getPriority());
+       }
+     }
+ 
+@@ -181,8 +177,7 @@ private int compare(PriorityQueueResourcesForSorting q1Sort,
+       return rc;
+     }
+ 
+-    private int compareQueueAccessToPartition(CSQueue q1, CSQueue q2,
+-        String partition) {
++    private int compareQueueAccessToPartition(boolean q1Accessible, boolean q2Accessible) {
+       // Everybody has access to default partition
+       if (StringUtils.equals(partition, RMNodeLabelsManager.NO_LABEL)) {
+         return 0;
+@@ -192,14 +187,6 @@ private int compareQueueAccessToPartition(CSQueue q1, CSQueue q2,
+        * Check accessible to given partition, if one queue accessible and
+        * the other not, accessible queue goes first.
+        */
+-      boolean q1Accessible =
+-          q1.getAccessibleNodeLabels() != null && q1.getAccessibleNodeLabels()
+-              .contains(partition) || q1.getAccessibleNodeLabels().contains(
+-              RMNodeLabelsManager.ANY);
+-      boolean q2Accessible =
+-          q2.getAccessibleNodeLabels() != null && q2.getAccessibleNodeLabels()
+-              .contains(partition) || q2.getAccessibleNodeLabels().contains(
+-              RMNodeLabelsManager.ANY);
+       if (q1Accessible && !q2Accessible) {
+         return -1;
+       } else if (!q1Accessible && q2Accessible) {
+@@ -218,22 +205,32 @@ public static class PriorityQueueResourcesForSorting {
+     private final float usedCapacity;
+     private final Resource configuredMinResource;
+     private final float absoluteCapacity;
++    private final Priority priority;
++    private final boolean nodeLabelAccessible;
+     private final CSQueue queue;
+ 
+-    PriorityQueueResourcesForSorting(CSQueue queue) {
++    PriorityQueueResourcesForSorting(CSQueue queue, String partition) {
+       this.queue = queue;
+       this.absoluteUsedCapacity =
+           queue.getQueueCapacities().
+-              getAbsoluteUsedCapacity(partitionToLookAt.get());
++              getAbsoluteUsedCapacity(partition);
+       this.usedCapacity =
+           queue.getQueueCapacities().
+-              getUsedCapacity(partitionToLookAt.get());
++              getUsedCapacity(partition);
+       this.absoluteCapacity =
+           queue.getQueueCapacities().
+-              getAbsoluteCapacity(partitionToLookAt.get());
++              getAbsoluteCapacity(partition);
+       this.configuredMinResource =
+           queue.getQueueResourceQuotas().
+-              getConfiguredMinResource(partitionToLookAt.get());
++              getConfiguredMinResource(partition);
++      this.priority = queue.getPriority();
++      this.nodeLabelAccessible = queue.getAccessibleNodeLabels() != null &&
++          queue.getAccessibleNodeLabels().contains(partition) ||
++          queue.getAccessibleNodeLabels().contains(RMNodeLabelsManager.ANY);
++    }
++
++    static PriorityQueueResourcesForSorting create(CSQueue queue, String partition) {
++      return new PriorityQueueResourcesForSorting(queue, partition);
+     }
+ 
+     public CSQueue getQueue() {
+@@ -252,14 +249,13 @@ public void setQueues(List<CSQueue> queues) {
+ 
+   @Override
+   public Iterator<CSQueue> getAssignmentIterator(String partition) {
+-    // partitionToLookAt is a thread local variable, therefore it is safe to mutate it.
+-    PriorityUtilizationQueueOrderingPolicy.partitionToLookAt.set(partition);
+-
+     // Copy (for thread safety) and sort the snapshot of the queues in order to avoid breaking
+     // the prerequisites of TimSort. See YARN-10178 for details.
+-    return new ArrayList<>(queues).stream().map(PriorityQueueResourcesForSorting::new).sorted(
+-        new PriorityQueueComparator()).map(PriorityQueueResourcesForSorting::getQueue).collect(
+-            Collectors.toList()).iterator();
++    return new ArrayList<>(queues).stream()
++        .map(queue -> PriorityQueueResourcesForSorting.create(queue, partition))
++        .sorted(new PriorityQueueComparator(partition))
++        .map(PriorityQueueResourcesForSorting::getQueue)
++        .collect(Collectors.toList()).iterator();
+   }
+ 
+   @Override

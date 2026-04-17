@@ -98,72 +98,94 @@ def main():
     parser.add_argument("--repo", required=True, help="Path to the repository")
     parser.add_argument("--commit", help="Commit SHA to examine")
     parser.add_argument("--worktree", action="store_true", help="Analyze uncommitted changes")
+    parser.add_argument("--files-json", help="JSON array of [status, filepath] pairs (skips git)")
     args = parser.parse_args()
 
-    if not args.commit and not args.worktree:
-        print("Usage: get_test_targets.py --repo <repo_dir> [--commit <commit_sha> | --worktree]", file=sys.stderr)
+    if not args.commit and not args.worktree and not args.files_json:
+        print("Usage: get_test_targets.py --repo <repo_dir> [--commit <sha> | --worktree | --files-json <json>]", file=sys.stderr)
         sys.exit(1)
-    
+
     repo_dir = args.repo
-    
-    # Get modified and added test files
-    modified_test_files = get_modified_test_files(repo_dir, commit_sha=args.commit, use_worktree=args.worktree)
-    added_test_files = get_added_test_files(repo_dir, commit_sha=args.commit, use_worktree=args.worktree)
-    
+
+    # Build (status, filepath) list — either from --files-json or from git
+    if args.files_json:
+        try:
+            raw_entries = json.loads(args.files_json)
+            # Accept [[status, path], ...] or [path, ...] for backwards compat
+            entries: list[tuple[str, str]] = []
+            for item in raw_entries:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    entries.append((str(item[0]), str(item[1])))
+                else:
+                    entries.append(("M", str(item)))
+        except Exception:
+            entries = []
+    else:
+        modified = get_modified_test_files(repo_dir, commit_sha=args.commit, use_worktree=args.worktree)
+        added = get_added_test_files(repo_dir, commit_sha=args.commit, use_worktree=args.worktree)
+        entries = [("M", f) for f in modified] + [("A", f) for f in added]
+
     modified_targets = []
     added_targets = []
     source_modules = set()
     all_modules = set()
-    
-    # Process modified test files
-    for test_file in modified_test_files:
-        module = find_module_for_file(test_file, repo_dir)
-        test_class = extract_test_class_name(test_file)
-        
-        if module:
-            all_modules.add(module)
-            target = f"{module}:{test_class}"
-            modified_targets.append(target)
-            
-    # Process added test files
-    for test_file in added_test_files:
-        module = find_module_for_file(test_file, repo_dir)
-        test_class = extract_test_class_name(test_file)
-        
-        if module:
-            all_modules.add(module)
-            target = f"{module}:{test_class}"
-            added_targets.append(target)
 
-    # Simple source module detection (heuristic)
-    try:
-        if args.worktree:
-            cmd = "git diff --name-only"
-        else:
-            cmd = f"git diff-tree --no-commit-id --name-only -r {args.commit}"
-            
-        result = subprocess.run(
-            cmd,
-            shell=True, cwd=repo_dir, capture_output=True, text=True, check=True
-        )
-        all_changed = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
-        for f in all_changed:
+    for status, test_file in entries:
+        if not (('test' in test_file.lower() or 'Test' in test_file) and test_file.endswith('.java')):
+            # Track source modules for non-test Java files
+            if test_file.endswith('.java') and 'src/main/java/' in test_file:
+                mod = find_module_for_file(test_file, repo_dir)
+                if mod:
+                    source_modules.add(mod)
+                    all_modules.add(mod)
+            continue
+
+        module = find_module_for_file(test_file, repo_dir)
+        test_class = extract_test_class_name(test_file)
+
+        if module:
+            all_modules.add(module)
+            target = f"{module}:{test_class}"
+            if status == "A":
+                added_targets.append(target)
+            else:
+                modified_targets.append(target)
+
+    # Also collect source modules when using --files-json
+    if args.files_json:
+        for status, f in entries:
             if f.endswith(".java") and "src/main/java/" in f:
                 mod = find_module_for_file(f, repo_dir)
                 if mod:
                     source_modules.add(mod)
                     all_modules.add(mod)
-    except:
-        pass
-    
-    # Return JSON format
+    else:
+        # Original source module detection via git
+        try:
+            if args.worktree:
+                cmd = "git diff --name-only"
+            else:
+                cmd = f"git diff-tree --no-commit-id --name-only -r {args.commit}"
+            result = subprocess.run(
+                cmd, shell=True, cwd=repo_dir, capture_output=True, text=True, check=True
+            )
+            all_changed = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
+            for f in all_changed:
+                if f.endswith(".java") and "src/main/java/" in f:
+                    mod = find_module_for_file(f, repo_dir)
+                    if mod:
+                        source_modules.add(mod)
+                        all_modules.add(mod)
+        except Exception:
+            pass
+
     result = {
         "modified": sorted(list(modified_targets)),
         "added": sorted(list(added_targets)),
         "source_modules": sorted(list(source_modules)),
         "all_modules": sorted(list(all_modules))
     }
-    
+
     print(json.dumps(result))
 
 

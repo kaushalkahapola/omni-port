@@ -1,0 +1,554 @@
+commit ba5d3b1b9d5dc56ff337426d36af865c7d805fa4
+Author: Kai Huang <105710027+ahkcs@users.noreply.github.com>
+Date:   Fri Oct 31 18:37:05 2025 -0700
+
+    bin command error message enhancement (#4690) (#4712)
+
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/OpenSearchTypeFactory.java b/core/src/main/java/org/opensearch/sql/calcite/utils/OpenSearchTypeFactory.java
+index e348a6e66..c99e894f4 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/utils/OpenSearchTypeFactory.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/OpenSearchTypeFactory.java
+@@ -356,4 +356,68 @@ public class OpenSearchTypeFactory extends JavaTypeFactoryImpl {
+   public static boolean isUserDefinedType(RelDataType type) {
+     return type instanceof AbstractExprRelDataType<?>;
+   }
++
++  /**
++   * Checks if the RelDataType represents a numeric field. Supports both standard SQL numeric types
++   * (INTEGER, BIGINT, SMALLINT, TINYINT, FLOAT, DOUBLE, DECIMAL, REAL) and OpenSearch UDT numeric
++   * types.
++   *
++   * @param fieldType the RelDataType to check
++   * @return true if the type is numeric, false otherwise
++   */
++  public static boolean isNumericType(RelDataType fieldType) {
++    // Check standard SQL numeric types
++    SqlTypeName sqlType = fieldType.getSqlTypeName();
++    if (sqlType == SqlTypeName.INTEGER
++        || sqlType == SqlTypeName.BIGINT
++        || sqlType == SqlTypeName.SMALLINT
++        || sqlType == SqlTypeName.TINYINT
++        || sqlType == SqlTypeName.FLOAT
++        || sqlType == SqlTypeName.DOUBLE
++        || sqlType == SqlTypeName.DECIMAL
++        || sqlType == SqlTypeName.REAL) {
++      return true;
++    }
++
++    // Check for OpenSearch UDT numeric types
++    if (isUserDefinedType(fieldType)) {
++      AbstractExprRelDataType<?> exprType = (AbstractExprRelDataType<?>) fieldType;
++      ExprType udtType = exprType.getExprType();
++      return ExprCoreType.numberTypes().contains(udtType);
++    }
++
++    return false;
++  }
++
++  /**
++   * Checks if the RelDataType represents a time-based field (timestamp, date, or time). Supports
++   * both standard SQL time types (including TIMESTAMP, TIMESTAMP_WITH_LOCAL_TIME_ZONE, DATE, TIME,
++   * and their timezone variants) and OpenSearch UDT time types.
++   *
++   * @param fieldType the RelDataType to check
++   * @return true if the type is time-based, false otherwise
++   */
++  public static boolean isTimeBasedType(RelDataType fieldType) {
++    // Check standard SQL time types
++    SqlTypeName sqlType = fieldType.getSqlTypeName();
++    if (sqlType == SqlTypeName.TIMESTAMP
++        || sqlType == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
++        || sqlType == SqlTypeName.DATE
++        || sqlType == SqlTypeName.TIME
++        || sqlType == SqlTypeName.TIME_WITH_LOCAL_TIME_ZONE) {
++      return true;
++    }
++
++    // Check for OpenSearch UDT types (EXPR_TIMESTAMP mapped to VARCHAR)
++    if (isUserDefinedType(fieldType)) {
++      AbstractExprRelDataType<?> exprType = (AbstractExprRelDataType<?>) fieldType;
++      ExprType udtType = exprType.getExprType();
++      return udtType == ExprCoreType.TIMESTAMP
++          || udtType == ExprCoreType.DATE
++          || udtType == ExprCoreType.TIME;
++    }
++
++    // Fallback check if type string contains EXPR_TIMESTAMP
++    return fieldType.toString().contains("EXPR_TIMESTAMP");
++  }
+ }
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/BinFieldValidator.java b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/BinFieldValidator.java
+index bc18a564b..3bdbad694 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/BinFieldValidator.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/BinFieldValidator.java
+@@ -6,16 +6,11 @@
+ package org.opensearch.sql.calcite.utils.binning;
+ 
+ import java.util.List;
+-import org.apache.calcite.rel.type.RelDataType;
+-import org.apache.calcite.sql.type.SqlTypeName;
+ import org.opensearch.sql.ast.expression.Field;
+ import org.opensearch.sql.ast.tree.Bin;
+ import org.opensearch.sql.calcite.CalcitePlanContext;
+-import org.opensearch.sql.calcite.type.AbstractExprRelDataType;
+-import org.opensearch.sql.data.type.ExprCoreType;
+-import org.opensearch.sql.data.type.ExprType;
+ 
+-/** Utility class for field validation and type checking in bin operations. */
++/** Utility class for bin-specific field operations. */
+ public class BinFieldValidator {
+ 
+   /** Extracts the field name from a Bin node. */
+@@ -37,27 +32,4 @@ public class BinFieldValidator {
+               "Field '%s' not found in dataset. Available fields: %s", fieldName, availableFields));
+     }
+   }
+-
+-  /** Checks if the field type is time-based. */
+-  public static boolean isTimeBasedField(RelDataType fieldType) {
+-    // Check standard SQL time types
+-    SqlTypeName sqlType = fieldType.getSqlTypeName();
+-    if (sqlType == SqlTypeName.TIMESTAMP
+-        || sqlType == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+-        || sqlType == SqlTypeName.DATE) {
+-      return true;
+-    }
+-
+-    // Check for OpenSearch UDT types (EXPR_TIMESTAMP mapped to VARCHAR)
+-    if (fieldType instanceof AbstractExprRelDataType<?>) {
+-      AbstractExprRelDataType<?> exprType = (AbstractExprRelDataType<?>) fieldType;
+-      ExprType udtType = exprType.getExprType();
+-      return udtType == ExprCoreType.TIMESTAMP
+-          || udtType == ExprCoreType.DATE
+-          || udtType == ExprCoreType.TIME;
+-    }
+-
+-    // Check if type string contains EXPR_TIMESTAMP
+-    return fieldType.toString().contains("EXPR_TIMESTAMP");
+-  }
+ }
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/BinnableField.java b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/BinnableField.java
+new file mode 100644
+index 000000000..c8c73ce3a
+--- /dev/null
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/BinnableField.java
+@@ -0,0 +1,64 @@
++/*
++ * Copyright OpenSearch Contributors
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package org.opensearch.sql.calcite.utils.binning;
++
++import lombok.Getter;
++import org.apache.calcite.rel.type.RelDataType;
++import org.apache.calcite.rex.RexNode;
++import org.opensearch.sql.calcite.utils.OpenSearchTypeFactory;
++import org.opensearch.sql.exception.SemanticCheckException;
++
++/**
++ * Represents a validated field that supports binning operations. The existence of this class
++ * guarantees that validation has been run - the field is either numeric or time-based.
++ *
++ * <p>This design encodes validation in the type system, preventing downstream code from forgetting
++ * to validate or running validation multiple times.
++ */
++@Getter
++public class BinnableField {
++  private final RexNode fieldExpr;
++  private final RelDataType fieldType;
++  private final String fieldName;
++  private final boolean isTimeBased;
++  private final boolean isNumeric;
++
++  /**
++   * Creates a validated BinnableField. Throws SemanticCheckException if the field is neither
++   * numeric nor time-based.
++   *
++   * @param fieldExpr The Rex expression for the field
++   * @param fieldType The relational data type of the field
++   * @param fieldName The name of the field (for error messages)
++   * @throws SemanticCheckException if the field is neither numeric nor time-based
++   */
++  public BinnableField(RexNode fieldExpr, RelDataType fieldType, String fieldName) {
++    this.fieldExpr = fieldExpr;
++    this.fieldType = fieldType;
++    this.fieldName = fieldName;
++
++    this.isTimeBased = OpenSearchTypeFactory.isTimeBasedType(fieldType);
++    this.isNumeric = OpenSearchTypeFactory.isNumericType(fieldType);
++
++    // Validation: field must be either numeric or time-based
++    if (!isNumeric && !isTimeBased) {
++      throw new SemanticCheckException(
++          String.format(
++              "Cannot apply binning: field '%s' is non-numeric and not time-related, expected"
++                  + " numeric or time-related type",
++              fieldName));
++    }
++  }
++
++  /**
++   * Returns true if this field requires numeric binning logic (not time-based binning).
++   *
++   * @return true if the field should use numeric binning, false if it should use time-based binning
++   */
++  public boolean requiresNumericBinning() {
++    return !isTimeBased;
++  }
++}
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/CountBinHandler.java b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/CountBinHandler.java
+index 9716eab99..7422a26f0 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/CountBinHandler.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/CountBinHandler.java
+@@ -13,7 +13,9 @@ import org.opensearch.sql.ast.tree.CountBin;
+ import org.opensearch.sql.calcite.CalcitePlanContext;
+ import org.opensearch.sql.calcite.CalciteRexNodeVisitor;
+ import org.opensearch.sql.calcite.utils.binning.BinConstants;
++import org.opensearch.sql.calcite.utils.binning.BinFieldValidator;
+ import org.opensearch.sql.calcite.utils.binning.BinHandler;
++import org.opensearch.sql.calcite.utils.binning.BinnableField;
+ import org.opensearch.sql.expression.function.PPLBuiltinOperators;
+ 
+ /** Handler for bins-based (count) binning operations. */
+@@ -25,6 +27,11 @@ public class CountBinHandler implements BinHandler {
+ 
+     CountBin countBin = (CountBin) node;
+ 
++    // Create validated binnable field (validates that field is numeric or time-based)
++    // Note: bins parameter works with both numeric and time-based fields
++    String fieldName = BinFieldValidator.extractFieldName(node);
++    BinnableField field = new BinnableField(fieldExpr, fieldExpr.getType(), fieldName);
++
+     Integer requestedBins = countBin.getBins();
+     if (requestedBins == null) {
+       requestedBins = BinConstants.DEFAULT_BINS;
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/DefaultBinHandler.java b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/DefaultBinHandler.java
+index b022df03b..e68477a95 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/DefaultBinHandler.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/DefaultBinHandler.java
+@@ -5,7 +5,6 @@
+ 
+ package org.opensearch.sql.calcite.utils.binning.handlers;
+ 
+-import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.rex.RexNode;
+ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+ import org.opensearch.sql.ast.tree.Bin;
+@@ -15,6 +14,7 @@ import org.opensearch.sql.calcite.CalciteRexNodeVisitor;
+ import org.opensearch.sql.calcite.utils.BinTimeSpanUtils;
+ import org.opensearch.sql.calcite.utils.binning.BinFieldValidator;
+ import org.opensearch.sql.calcite.utils.binning.BinHandler;
++import org.opensearch.sql.calcite.utils.binning.BinnableField;
+ import org.opensearch.sql.calcite.utils.binning.RangeFormatter;
+ 
+ /** Handler for default binning when no parameters are specified. */
+@@ -25,11 +25,13 @@ public class DefaultBinHandler implements BinHandler {
+       Bin node, RexNode fieldExpr, CalcitePlanContext context, CalciteRexNodeVisitor visitor) {
+ 
+     DefaultBin defaultBin = (DefaultBin) node;
+-    RelDataType fieldType = fieldExpr.getType();
+     String fieldName = BinFieldValidator.extractFieldName(node);
+ 
++    // Create validated binnable field (validates that field is numeric or time-based)
++    BinnableField field = new BinnableField(fieldExpr, fieldExpr.getType(), fieldName);
++
+     // Use time-based binning for time fields
+-    if (BinFieldValidator.isTimeBasedField(fieldType)) {
++    if (field.isTimeBased()) {
+       BinFieldValidator.validateFieldExists(fieldName, context);
+       return BinTimeSpanUtils.createBinTimeSpanExpression(fieldExpr, 1, "h", 0, context);
+     }
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/MinSpanBinHandler.java b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/MinSpanBinHandler.java
+index 31e3c11d2..16e11b7ab 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/MinSpanBinHandler.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/MinSpanBinHandler.java
+@@ -15,7 +15,9 @@ import org.opensearch.sql.ast.tree.Bin;
+ import org.opensearch.sql.ast.tree.MinSpanBin;
+ import org.opensearch.sql.calcite.CalcitePlanContext;
+ import org.opensearch.sql.calcite.CalciteRexNodeVisitor;
++import org.opensearch.sql.calcite.utils.binning.BinFieldValidator;
+ import org.opensearch.sql.calcite.utils.binning.BinHandler;
++import org.opensearch.sql.calcite.utils.binning.BinnableField;
+ import org.opensearch.sql.expression.function.PPLBuiltinOperators;
+ 
+ /** Handler for minspan-based binning operations. */
+@@ -27,6 +29,16 @@ public class MinSpanBinHandler implements BinHandler {
+ 
+     MinSpanBin minSpanBin = (MinSpanBin) node;
+ 
++    // Create validated binnable field (validates that field is numeric or time-based)
++    String fieldName = BinFieldValidator.extractFieldName(node);
++    BinnableField field = new BinnableField(fieldExpr, fieldExpr.getType(), fieldName);
++
++    // Minspan binning requires numeric fields
++    if (!field.requiresNumericBinning()) {
++      throw new IllegalArgumentException(
++          "Minspan binning is only supported for numeric fields, not time-based fields");
++    }
++
+     RexNode minspanValue = visitor.analyze(minSpanBin.getMinspan(), context);
+ 
+     if (!minspanValue.isA(LITERAL)) {
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/RangeBinHandler.java b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/RangeBinHandler.java
+index 85e2b7015..aa726cb9d 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/RangeBinHandler.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/RangeBinHandler.java
+@@ -10,7 +10,9 @@ import org.opensearch.sql.ast.tree.Bin;
+ import org.opensearch.sql.ast.tree.RangeBin;
+ import org.opensearch.sql.calcite.CalcitePlanContext;
+ import org.opensearch.sql.calcite.CalciteRexNodeVisitor;
++import org.opensearch.sql.calcite.utils.binning.BinFieldValidator;
+ import org.opensearch.sql.calcite.utils.binning.BinHandler;
++import org.opensearch.sql.calcite.utils.binning.BinnableField;
+ import org.opensearch.sql.expression.function.PPLBuiltinOperators;
+ 
+ /** Handler for range-based binning (start/end parameters only). */
+@@ -22,6 +24,16 @@ public class RangeBinHandler implements BinHandler {
+ 
+     RangeBin rangeBin = (RangeBin) node;
+ 
++    // Create validated binnable field (validates that field is numeric or time-based)
++    String fieldName = BinFieldValidator.extractFieldName(node);
++    BinnableField field = new BinnableField(fieldExpr, fieldExpr.getType(), fieldName);
++
++    // Range binning requires numeric fields
++    if (!field.requiresNumericBinning()) {
++      throw new IllegalArgumentException(
++          "Range binning (start/end) is only supported for numeric fields, not time-based fields");
++    }
++
+     // Simple MIN/MAX calculation - cleaner than complex CASE expressions
+     RexNode dataMin = context.relBuilder.min(fieldExpr).over().toRex();
+     RexNode dataMax = context.relBuilder.max(fieldExpr).over().toRex();
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/SpanBinHandler.java b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/SpanBinHandler.java
+index ba482f8fd..1548ae3e7 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/SpanBinHandler.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/binning/handlers/SpanBinHandler.java
+@@ -29,8 +29,12 @@ public class SpanBinHandler implements BinHandler {
+ 
+     SpanBin spanBin = (SpanBin) node;
+ 
++    // Create validated binnable field (validates that field is numeric or time-based)
++    String fieldName = BinFieldValidator.extractFieldName(node);
++    BinnableField field = new BinnableField(fieldExpr, fieldExpr.getType(), fieldName);
++
+     // Handle time-based fields
+-    if (BinFieldValidator.isTimeBasedField(fieldExpr.getType())) {
++    if (field.isTimeBased()) {
+       return handleTimeBasedSpan(spanBin, fieldExpr, context, visitor);
+     }
+ 
+@@ -64,6 +68,7 @@ public class SpanBinHandler implements BinHandler {
+   private RexNode handleNumericOrLogSpan(
+       SpanBin node, RexNode fieldExpr, CalcitePlanContext context, CalciteRexNodeVisitor visitor) {
+ 
++    // Field is already validated by createExpression - must be numeric since we're in this branch
+     RexNode spanValue = visitor.analyze(node.getSpan(), context);
+ 
+     if (!spanValue.isA(LITERAL)) {
+diff --git a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteBinCommandIT.java b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteBinCommandIT.java
+index 736f844aa..ef8abc3cb 100644
+--- a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteBinCommandIT.java
++++ b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteBinCommandIT.java
+@@ -5,6 +5,7 @@
+ 
+ package org.opensearch.sql.calcite.remote;
+ 
++import static org.junit.Assert.assertTrue;
+ import static org.opensearch.sql.legacy.TestsConstants.*;
+ import static org.opensearch.sql.util.MatcherUtils.rows;
+ import static org.opensearch.sql.util.MatcherUtils.schema;
+@@ -506,6 +507,145 @@ public class CalciteBinCommandIT extends PPLIntegTestCase {
+         errorMessage.contains("non_existent_field") || errorMessage.contains("not found"));
+   }
+ 
++  @Test
++  public void testBinWithMinspanOnNonNumericField() {
++    // Test that bin command with minspan throws clear error for non-numeric field
++    ResponseException exception =
++        assertThrows(
++            ResponseException.class,
++            () -> {
++              executeQuery(
++                  String.format(
++                      "source=%s | bin firstname minspan=10 | head 1", TEST_INDEX_ACCOUNT));
++            });
++
++    // Get the full error message
++    String errorMessage = exception.getMessage();
++
++    // Verify the error message is clear and specific
++    String expectedMessage =
++        "Cannot apply binning: field 'firstname' is non-numeric and not time-related, expected"
++            + " numeric or time-related type";
++    assertTrue(
++        "Error message should contain: '" + expectedMessage + "'",
++        errorMessage.contains(expectedMessage));
++  }
++
++  @Test
++  public void testBinWithSpanOnNonNumericField() {
++    // Test that bin command with span throws clear error for non-numeric field
++    ResponseException exception =
++        assertThrows(
++            ResponseException.class,
++            () -> {
++              executeQuery(
++                  String.format("source=%s | bin lastname span=5 | head 1", TEST_INDEX_ACCOUNT));
++            });
++
++    // Get the full error message
++    String errorMessage = exception.getMessage();
++
++    // Verify the error message is clear and specific
++    String expectedMessage =
++        "Cannot apply binning: field 'lastname' is non-numeric and not time-related, expected"
++            + " numeric or time-related type";
++    assertTrue(
++        "Error message should contain: '" + expectedMessage + "'",
++        errorMessage.contains(expectedMessage));
++  }
++
++  @Test
++  public void testBinWithBinsOnNonNumericField() {
++    // Test that bin command with bins throws clear error for non-numeric field
++    ResponseException exception =
++        assertThrows(
++            ResponseException.class,
++            () -> {
++              executeQuery(
++                  String.format("source=%s | bin state bins=10 | head 1", TEST_INDEX_ACCOUNT));
++            });
++
++    // Get the full error message
++    String errorMessage = exception.getMessage();
++
++    // Verify the error message is clear and specific
++    String expectedMessage =
++        "Cannot apply binning: field 'state' is non-numeric and not time-related, expected numeric"
++            + " or time-related type";
++    assertTrue(
++        "Error message should contain: '" + expectedMessage + "'",
++        errorMessage.contains(expectedMessage));
++  }
++
++  @Test
++  public void testBinWithStartEndOnNonNumericField() {
++    // Test that bin command with start/end throws clear error for non-numeric field
++    ResponseException exception =
++        assertThrows(
++            ResponseException.class,
++            () -> {
++              executeQuery(
++                  String.format(
++                      "source=%s | bin city start=0 end=100 | head 1", TEST_INDEX_ACCOUNT));
++            });
++
++    // Get the full error message
++    String errorMessage = exception.getMessage();
++
++    // Verify the error message is clear and specific
++    String expectedMessage =
++        "Cannot apply binning: field 'city' is non-numeric and not time-related, expected numeric"
++            + " or time-related type";
++    assertTrue(
++        "Error message should contain: '" + expectedMessage + "'",
++        errorMessage.contains(expectedMessage));
++  }
++
++  @Test
++  public void testBinDefaultOnNonNumericField() {
++    // Test that default bin (no parameters) throws clear error for non-numeric field
++    ResponseException exception =
++        assertThrows(
++            ResponseException.class,
++            () -> {
++              executeQuery(String.format("source=%s | bin email | head 1", TEST_INDEX_ACCOUNT));
++            });
++
++    // Get the full error message
++    String errorMessage = exception.getMessage();
++
++    // Verify the error message is clear and specific
++    String expectedMessage =
++        "Cannot apply binning: field 'email' is non-numeric and not time-related, expected numeric"
++            + " or time-related type";
++    assertTrue(
++        "Error message should contain: '" + expectedMessage + "'",
++        errorMessage.contains(expectedMessage));
++  }
++
++  @Test
++  public void testBinLogSpanOnNonNumericField() {
++    // Test that bin command with log span throws clear error for non-numeric field
++    ResponseException exception =
++        assertThrows(
++            ResponseException.class,
++            () -> {
++              executeQuery(
++                  String.format("source=%s | bin gender span=log10 | head 1", TEST_INDEX_ACCOUNT));
++            });
++
++    // Get the full error message
++    String errorMessage = exception.getMessage();
++
++    // Verify the error message is clear and specific
++    String expectedMessage =
++        "Cannot apply binning: field 'gender' is non-numeric and not time-related, expected numeric"
++            + " or time-related type";
++    assertTrue(
++        "Error message should contain: '" + expectedMessage + "'",
++        errorMessage.contains(expectedMessage));
++  }
++
+   @Test
+   public void testBinSpanWithStartEndNeverShrinkRange() throws IOException {
+     JSONObject result =
+diff --git a/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLBinTest.java b/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLBinTest.java
+index c940a750c..ddb22092c 100644
+--- a/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLBinTest.java
++++ b/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLBinTest.java
+@@ -8,6 +8,7 @@ package org.opensearch.sql.ppl.calcite;
+ import org.apache.calcite.rel.RelNode;
+ import org.apache.calcite.test.CalciteAssert;
+ import org.junit.Test;
++import org.opensearch.sql.exception.SemanticCheckException;
+ 
+ public class CalcitePPLBinTest extends CalcitePPLAbstractTest {
+ 
+@@ -118,4 +119,34 @@ public class CalcitePPLBinTest extends CalcitePPLAbstractTest {
+             + " 3600 / 1) * 3600) `SYS_START`\n"
+             + "FROM `scott`.`products_temporal`");
+   }
++
++  @Test(expected = SemanticCheckException.class)
++  public void testBinWithMinspanOnNonNumericField() {
++    String ppl = "source=EMP | bin ENAME minspan=10";
++    getRelNode(ppl); // Should throw SemanticCheckException
++  }
++
++  @Test(expected = SemanticCheckException.class)
++  public void testBinWithSpanOnNonNumericField() {
++    String ppl = "source=EMP | bin JOB span=5";
++    getRelNode(ppl); // Should throw SemanticCheckException
++  }
++
++  @Test(expected = SemanticCheckException.class)
++  public void testBinWithBinsOnNonNumericField() {
++    String ppl = "source=EMP | bin ENAME bins=10";
++    getRelNode(ppl); // Should throw SemanticCheckException
++  }
++
++  @Test(expected = SemanticCheckException.class)
++  public void testBinWithStartEndOnNonNumericField() {
++    String ppl = "source=EMP | bin JOB start=1 end=10";
++    getRelNode(ppl); // Should throw SemanticCheckException
++  }
++
++  @Test(expected = SemanticCheckException.class)
++  public void testBinDefaultOnNonNumericField() {
++    String ppl = "source=EMP | bin ENAME";
++    getRelNode(ppl); // Should throw SemanticCheckException
++  }
+ }

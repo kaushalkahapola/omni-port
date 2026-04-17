@@ -1,0 +1,92 @@
+diff --git a/spring-webmvc/src/main/java/org/springframework/web/servlet/handler/HandlerMappingIntrospector.java b/spring-webmvc/src/main/java/org/springframework/web/servlet/handler/HandlerMappingIntrospector.java
+index 30a2d6755b..f3b4e252b1 100644
+--- a/spring-webmvc/src/main/java/org/springframework/web/servlet/handler/HandlerMappingIntrospector.java
++++ b/spring-webmvc/src/main/java/org/springframework/web/servlet/handler/HandlerMappingIntrospector.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2023 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -94,7 +94,6 @@ public class HandlerMappingIntrospector
+ 	private static final String CACHED_RESULT_ATTRIBUTE =
+ 			HandlerMappingIntrospector.class.getName() + ".CachedResult";
+ 
+-
+ 	@Nullable
+ 	private ApplicationContext applicationContext;
+ 
+@@ -105,7 +104,6 @@ public class HandlerMappingIntrospector
+ 
+ 	private final CacheResultLogHelper cacheLogHelper = new CacheResultLogHelper();
+ 
+-
+ 	@Override
+ 	public void setApplicationContext(ApplicationContext applicationContext) {
+ 		this.applicationContext = applicationContext;
+@@ -164,7 +162,6 @@ public class HandlerMappingIntrospector
+ 		return result;
+ 	}
+ 
+-
+ 	/**
+ 	 * Return the configured or detected {@code HandlerMapping}s.
+ 	 */
+@@ -172,7 +169,6 @@ public class HandlerMappingIntrospector
+ 		return (this.handlerMappings != null ? this.handlerMappings : Collections.emptyList());
+ 	}
+ 
+-
+ 	/**
+ 	 * {@link Filter} that looks up the {@code MatchableHandlerMapping} and
+ 	 * {@link CorsConfiguration} for the request proactively before delegating
+@@ -360,7 +356,6 @@ public class HandlerMappingIntrospector
+ 		return null;
+ 	}
+ 
+-
+ 	/**
+ 	 * Container for a {@link MatchableHandlerMapping} and {@link CorsConfiguration}
+ 	 * for a given request matched by dispatcher type and requestURI.
+@@ -399,7 +394,7 @@ public class HandlerMappingIntrospector
+ 
+ 		public boolean matches(HttpServletRequest request) {
+ 			return (this.dispatcherType.equals(request.getDispatcherType()) &&
+-					this.requestURI.matches(request.getRequestURI()));
++					this.requestURI.equals(request.getRequestURI()));
+ 		}
+ 
+ 		@Nullable
+@@ -423,7 +418,6 @@ public class HandlerMappingIntrospector
+ 			return "CachedResult for " + this.dispatcherType + " dispatch to '" + this.requestURI + "'";
+ 		}
+ 
+-
+ 		/**
+ 		 * Return a {@link CachedResult} that matches the given request.
+ 		 */
+@@ -434,7 +428,6 @@ public class HandlerMappingIntrospector
+ 		}
+ 	}
+ 
+-
+ 	private static class CacheResultLogHelper {
+ 
+ 		private final Map<String, AtomicInteger> counters =
+@@ -469,7 +462,6 @@ public class HandlerMappingIntrospector
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Request wrapper that buffers request attributes in order protect the
+ 	 * underlying request from attribute changes.
+@@ -514,7 +506,6 @@ public class HandlerMappingIntrospector
+ 		}
+ 	}
+ 
+-
+ 	private static class LookupPathMatchableHandlerMapping implements MatchableHandlerMapping {
+ 
+ 		private final MatchableHandlerMapping delegate;

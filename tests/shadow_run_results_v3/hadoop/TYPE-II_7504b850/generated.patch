@@ -1,0 +1,213 @@
+diff --git a/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/conf/Configuration.java b/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/conf/Configuration.java
+index 7c4f617b179..7f83a79519a 100755
+--- a/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/conf/Configuration.java
++++ b/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/conf/Configuration.java
+@@ -308,7 +308,6 @@ private static boolean getRestrictParserDefault(Object resource) {
+    */
+   static final String UNKNOWN_RESOURCE = "Unknown";
+ 
+-
+   /**
+    * List of configuration parameters marked <b>final</b>. 
+    */
+@@ -1014,8 +1013,6 @@ public void addResource(Configuration conf) {
+     addResourceObject(new Resource(conf.getProps(), conf.restrictSystemProps));
+   }
+ 
+-  
+-  
+   /**
+    * Reload configuration from previously added resources.
+    *
+@@ -1581,7 +1578,6 @@ public void setInt(String name, int value) {
+     set(name, Integer.toString(value));
+   }
+ 
+-
+   /** 
+    * Get the value of the <code>name</code> property as a <code>long</code>.  
+    * If no such property exists, the provided default value is returned,
+@@ -2339,8 +2335,8 @@ public Collection<String> getTrimmedStringCollection(String name) {
+     }
+     return StringUtils.getTrimmedStringCollection(valueString);
+   }
+-  
+-  /** 
++
++  /**
+    * Get the comma delimited values of the <code>name</code> property as 
+    * an array of <code>String</code>s, trimmed of the leading and trailing whitespace.
+    * If no such property is specified then an empty array is returned.
+diff --git a/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/util/StringUtils.java b/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/util/StringUtils.java
+index 3debd36da78..b8d999162d3 100644
+--- a/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/util/StringUtils.java
++++ b/hadoop-common-project/hadoop-common/src/main/java/org/apache/hadoop/util/StringUtils.java
+@@ -25,6 +25,7 @@
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Collection;
++import java.util.HashMap;
+ import java.util.Iterator;
+ import java.util.LinkedHashSet;
+ import java.util.List;
+@@ -479,7 +480,28 @@ public static Collection<String> getTrimmedStringCollection(String str){
+     set.remove("");
+     return set;
+   }
+-  
++
++  /**
++   * Splits an "=" separated value <code>String</code>, trimming leading and
++   * trailing whitespace on each value after splitting by comma and new line separator.
++   *
++   * @param str a comma separated <code>String</code> with values, may be null
++   * @return a <code>Map</code> of <code>String</code> keys and values, empty
++   * Collection if null String input.
++   */
++  public static Map<String, String> getTrimmedStringCollectionSplitByEquals(
++      String str) {
++    String[] trimmedList = getTrimmedStrings(str);
++    Map<String, String> pairs = new HashMap<>();
++    for (String s : trimmedList) {
++      String[] splitByKeyVal = getTrimmedStringsSplitByEquals(s);
++      if (splitByKeyVal.length == 2) {
++        pairs.put(splitByKeyVal[0], splitByKeyVal[1]);
++      }
++    }
++    return pairs;
++  }
++
+   /**
+    * Splits a comma or newline separated value <code>String</code>, trimming
+    * leading and trailing whitespace on each value.
+@@ -497,6 +519,22 @@ public static String[] getTrimmedStrings(String str){
+     return str.trim().split("\\s*[,\n]\\s*");
+   }
+ 
++  /**
++   * Splits "=" separated value <code>String</code>, trimming
++   * leading and trailing whitespace on each value.
++   *
++   * @param str an "=" separated <code>String</code> with values,
++   *            may be null
++   * @return an array of <code>String</code> values, empty array if null String
++   *         input
++   */
++  public static String[] getTrimmedStringsSplitByEquals(String str){
++    if (null == str || str.trim().isEmpty()) {
++      return emptyStringArray;
++    }
++    return str.trim().split("\\s*=\\s*");
++  }
++
+   final public static String[] emptyStringArray = {};
+   final public static char COMMA = ',';
+   final public static String COMMA_STR = ",";
+diff --git a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/Constants.java b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/Constants.java
+index 9ed6594244b..91ab7057a2d 100644
+--- a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/Constants.java
++++ b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/Constants.java
+@@ -68,6 +68,13 @@ private Constants() {
+   public static final String AWS_CREDENTIALS_PROVIDER =
+       "fs.s3a.aws.credentials.provider";
+ 
++  /**
++   * AWS credentials providers mapping with key/value pairs.
++   * Value = {@value}
++   */
++  public static final String AWS_CREDENTIALS_PROVIDER_MAPPING =
++      "fs.s3a.aws.credentials.provider.mapping";
++
+   /**
+    * Extra set of security credentials which will be prepended to that
+    * set in {@code "hadoop.security.credential.provider.path"}.
+@@ -151,7 +158,6 @@ private Constants() {
+   public static final String ASSUMED_ROLE_CREDENTIALS_DEFAULT =
+       SimpleAWSCredentialsProvider.NAME;
+ 
+-
+   /**
+    * The maximum number of tasks queued (other than prefetcher tasks) if all threads are
+    * busy: {@value}.
+@@ -1277,7 +1283,6 @@ private Constants() {
+   public static final String DEFAULT_DIRECTORY_MARKER_POLICY =
+       DIRECTORY_MARKER_POLICY_KEEP;
+ 
+-
+   /**
+    * {@code PathCapabilities} probe to verify that an S3A Filesystem
+    * has the changes needed to safely work with buckets where
+@@ -1531,7 +1536,6 @@ private Constants() {
+    */
+   public static final boolean DIRECTORY_OPERATIONS_PURGE_UPLOADS_DEFAULT = false;
+ 
+-
+   /**
+    * Is the higher performance copy from local file to S3 enabled?
+    * This switch allows for it to be disabled if there are problems.
+diff --git a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/S3AUtils.java b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/S3AUtils.java
+index cceaea6159d..2cbe8e764c9 100644
+--- a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/S3AUtils.java
++++ b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/S3AUtils.java
+@@ -66,6 +66,7 @@
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Date;
++import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Optional;
+@@ -694,7 +695,6 @@ public static <InstanceT> InstanceT getInstanceFromReflection(String className,
+     }
+   }
+ 
+-
+   /**
+    * Set a key if the value is non-empty.
+    * @param config config to patch
+@@ -1127,7 +1127,6 @@ public static Configuration propagateBucketOptions(Configuration source,
+     return dest;
+   }
+ 
+-
+   /**
+    * Delete a path quietly: failures are logged at DEBUG.
+    * @param fs filesystem
+diff --git a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/auth/CredentialProviderListFactory.java b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/auth/CredentialProviderListFactory.java
+index b106777dd29..8bb0381e97f 100644
+--- a/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/auth/CredentialProviderListFactory.java
++++ b/hadoop-tools/hadoop-aws/src/main/java/org/apache/hadoop/fs/s3a/auth/CredentialProviderListFactory.java
+@@ -51,6 +51,7 @@
+ import org.apache.hadoop.fs.store.LogExactlyOnce;
+ 
+ import static org.apache.hadoop.fs.s3a.Constants.AWS_CREDENTIALS_PROVIDER;
++import static org.apache.hadoop.fs.s3a.Constants.AWS_CREDENTIALS_PROVIDER_MAPPING;
+ import static org.apache.hadoop.fs.s3a.adapter.AwsV1BindingSupport.isAwsV1SdkAvailable;
+ 
+ /**
+@@ -216,11 +217,13 @@ public static AWSCredentialProviderList buildAWSProviderList(
+         key,
+         defaultValues.toArray(new Class[defaultValues.size()]));
+ 
++    Map<String, String> awsCredsMappedClasses =
++        S3AUtils.getTrimmedStringCollectionSplitByEquals(conf,
++            AWS_CREDENTIALS_PROVIDER_MAPPING);
+     Map<String, String> v1v2CredentialProviderMap = V1_V2_CREDENTIAL_PROVIDER_MAP;
+     final Set<String> forbiddenClassnames =
+         forbidden.stream().map(c -> c.getName()).collect(Collectors.toSet());
+ 
+-
+     // iterate through, checking for forbidden values and then instantiating
+     // each provider
+     AWSCredentialProviderList providers = new AWSCredentialProviderList();
+@@ -232,6 +235,10 @@ public static AWSCredentialProviderList buildAWSProviderList(
+         LOG_REMAPPED_ENTRY.warn("Credentials option {} contains AWS v1 SDK entry {}; mapping to {}",
+             key, className, mapped);
+         className = mapped;
++      } else if (awsCredsMappedClasses != null && awsCredsMappedClasses.containsKey(className)) {
++        final String mapped = awsCredsMappedClasses.get(className);
++        LOG_REMAPPED_ENTRY.debug("Credential entry {} is mapped to {}", className, mapped);
++        className = mapped;
+       }
+       // now scan the forbidden list. doing this after any mappings ensures the v1 names
+       // are also blocked

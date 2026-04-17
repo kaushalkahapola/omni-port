@@ -1,0 +1,202 @@
+diff --git a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+index 03b54d6a01..aec0f9d0c8 100644
+--- a/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
++++ b/spring-test/src/main/java/org/springframework/mock/web/MockHttpServletResponse.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2024 the original author or authors.
++ * Copyright 2002-2025 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -72,7 +72,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private static final TimeZone GMT = TimeZone.getTimeZone("GMT");
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// ServletResponse properties
+ 	//---------------------------------------------------------------------
+@@ -110,7 +109,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private Locale locale = Locale.getDefault();
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// HttpServletResponse properties
+ 	//---------------------------------------------------------------------
+@@ -124,7 +122,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 	@Nullable
+ 	private String errorMessage;
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// Properties for MockRequestDispatcher
+ 	//---------------------------------------------------------------------
+@@ -134,7 +131,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private final List<String> includedUrls = new ArrayList<>();
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// ServletResponse interface
+ 	//---------------------------------------------------------------------
+@@ -434,7 +430,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.locale;
+ 	}
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// HttpServletResponse interface
+ 	//---------------------------------------------------------------------
+@@ -728,14 +723,17 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		}
+ 		else if (HttpHeaders.CONTENT_LANGUAGE.equalsIgnoreCase(name)) {
+ 			String contentLanguages = value.toString();
+-			HttpHeaders headers = new HttpHeaders();
+-			headers.add(HttpHeaders.CONTENT_LANGUAGE, contentLanguages);
+-			Locale language = headers.getContentLanguage();
+-			setLocale(language != null ? language : Locale.getDefault());
+-			// Since setLocale() sets the Content-Language header to the given
+-			// single Locale, we have to explicitly set the Content-Language header
+-			// to the user-provided value.
+-			doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, true);
++			// only set the locale if we replace the header or if there was none before
++			if (replaceHeader || !this.headers.containsKey(HttpHeaders.CONTENT_LANGUAGE)) {
++				HttpHeaders headers = new HttpHeaders();
++				headers.add(HttpHeaders.CONTENT_LANGUAGE, contentLanguages);
++				Locale language = headers.getContentLanguage();
++				this.locale = language != null ? language : Locale.getDefault();
++				doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, replaceHeader);
++			}
++			else {
++				doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, false);
++			}
+ 			return true;
+ 		}
+ 		else if (HttpHeaders.SET_COOKIE.equalsIgnoreCase(name)) {
+@@ -798,7 +796,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.errorMessage;
+ 	}
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// Methods for MockRequestDispatcher
+ 	//---------------------------------------------------------------------
+@@ -836,7 +833,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.includedUrls;
+ 	}
+ 
+-
+ 	/**
+ 	 * Inner class that adapts the ServletOutputStream to mark the
+ 	 * response as committed once the buffer size is exceeded.
+@@ -861,7 +857,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Inner class that adapts the PrintWriter to mark the
+ 	 * response as committed once the buffer size is exceeded.
+diff --git a/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java b/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
+index 9e29ad3a60..483e32925d 100644
+--- a/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
++++ b/spring-web/src/testFixtures/java/org/springframework/web/testfixture/servlet/MockHttpServletResponse.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2024 the original author or authors.
++ * Copyright 2002-2025 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -72,7 +72,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private static final TimeZone GMT = TimeZone.getTimeZone("GMT");
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// ServletResponse properties
+ 	//---------------------------------------------------------------------
+@@ -110,7 +109,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private Locale locale = Locale.getDefault();
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// HttpServletResponse properties
+ 	//---------------------------------------------------------------------
+@@ -124,7 +122,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 	@Nullable
+ 	private String errorMessage;
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// Properties for MockRequestDispatcher
+ 	//---------------------------------------------------------------------
+@@ -134,7 +131,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 
+ 	private final List<String> includedUrls = new ArrayList<>();
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// ServletResponse interface
+ 	//---------------------------------------------------------------------
+@@ -434,7 +430,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.locale;
+ 	}
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// HttpServletResponse interface
+ 	//---------------------------------------------------------------------
+@@ -728,14 +723,17 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		}
+ 		else if (HttpHeaders.CONTENT_LANGUAGE.equalsIgnoreCase(name)) {
+ 			String contentLanguages = value.toString();
+-			HttpHeaders headers = new HttpHeaders();
+-			headers.add(HttpHeaders.CONTENT_LANGUAGE, contentLanguages);
+-			Locale language = headers.getContentLanguage();
+-			setLocale(language != null ? language : Locale.getDefault());
+-			// Since setLocale() sets the Content-Language header to the given
+-			// single Locale, we have to explicitly set the Content-Language header
+-			// to the user-provided value.
+-			doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, true);
++			// only set the locale if we replace the header or if there was none before
++			if (replaceHeader || !this.headers.containsKey(HttpHeaders.CONTENT_LANGUAGE)) {
++				HttpHeaders headers = new HttpHeaders();
++				headers.add(HttpHeaders.CONTENT_LANGUAGE, contentLanguages);
++				Locale language = headers.getContentLanguage();
++				this.locale = language != null ? language : Locale.getDefault();
++				doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, replaceHeader);
++			}
++			else {
++				doAddHeaderValue(HttpHeaders.CONTENT_LANGUAGE, contentLanguages, false);
++			}
+ 			return true;
+ 		}
+ 		else if (HttpHeaders.SET_COOKIE.equalsIgnoreCase(name)) {
+@@ -798,7 +796,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.errorMessage;
+ 	}
+ 
+-
+ 	//---------------------------------------------------------------------
+ 	// Methods for MockRequestDispatcher
+ 	//---------------------------------------------------------------------
+@@ -836,7 +833,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		return this.includedUrls;
+ 	}
+ 
+-
+ 	/**
+ 	 * Inner class that adapts the ServletOutputStream to mark the
+ 	 * response as committed once the buffer size is exceeded.
+@@ -861,7 +857,6 @@ public class MockHttpServletResponse implements HttpServletResponse {
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Inner class that adapts the PrintWriter to mark the
+ 	 * response as committed once the buffer size is exceeded.

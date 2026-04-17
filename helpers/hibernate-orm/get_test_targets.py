@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""
+Extract Gradle test targets for Hibernate ORM modified/added test files.
+
+Output JSON schema (matches Elasticsearch/Druid/Crate format):
+  {
+    "modified": ["module:Full.Class.Name", ...],
+    "added":    ["module:Full.Class.Name", ...],
+    "source_modules": ["hibernate-core", "hibernate-envers", ...],
+    "all_modules":    ["hibernate-core", ...]
+  }
+
+The "module:ClassName" token is later converted to a Gradle task by run_tests.sh:
+  :hibernate-core:test --tests "org.hibernate.orm.test.bytecode.enhance.version.ReEnhancementTests"
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+
+# Hibernate ORM test source-set paths
+TEST_SOURCE_SETS = (
+    "/src/test/java/",
+    "/src/integTest/java/",
+    "/src/integrationTest/java/",
+    "/src/javaApiTest/java/",
+    "/src/javaApiIntegrationTest/java/",
+)
+
+# Hibernate test-class name suffixes
+TEST_CLASS_SUFFIXES = ("Tests.java", "Test.java", "IT.java", "TestCase.java")
+
+# Gradle modules to ignore
+IGNORED_MODULES = {"docs"}
+
+
+def _find_gradle_module(repo: str, rel_path: str) -> str:
+    """
+    Walk up the file path looking for build.gradle, build.gradle.kts, or
+    Hibernate ORM's <module-name>.gradle pattern.
+    Returns module path relative to repo root (e.g. 'hibernate-core').
+    Returns "" if none is found.
+    """
+    head = os.path.dirname(rel_path)
+    while head:
+        # Check for standard build files
+        for build_file in ("build.gradle", "build.gradle.kts"):
+            if os.path.exists(os.path.join(repo, head, build_file)):
+                return head.replace("\\", "/")
+
+        # Check for Hibernate ORM pattern: <module-name>.gradle
+        module_name = os.path.basename(head)
+        if module_name and os.path.exists(os.path.join(repo, head, f"{module_name}.gradle")):
+            return head.replace("\\", "/")
+
+        parent = os.path.dirname(head)
+        if parent == head:
+            break
+        head = parent
+
+    # Check root
+    for build_file in ("build.gradle", "build.gradle.kts"):
+        if os.path.exists(os.path.join(repo, build_file)):
+            return ""
+    return ""
+
+
+def _is_test_file(rel_path: str) -> bool:
+    """Return True if this file looks like a test source file."""
+    for src_set in TEST_SOURCE_SETS:
+        if src_set in rel_path:
+            return True
+    return any(rel_path.endswith(s) for s in TEST_CLASS_SUFFIXES)
+
+
+def _is_main_source(rel_path: str) -> bool:
+    return "/src/main/java/" in rel_path and rel_path.endswith(".java")
+
+
+def _extract_class_name(rel_path: str) -> str:
+    """
+    Convert repo-relative Java file path to fully-qualified class name.
+    Works for all test source sets.
+    """
+    for src_set in TEST_SOURCE_SETS:
+        if src_set in rel_path:
+            class_part = rel_path.split(src_set, 1)[1]
+            return class_part.replace("/", ".").replace("\\", ".").replace(".java", "")
+
+    # Fallback: look for any /java/ segment
+    if "/java/" in rel_path:
+        class_part = rel_path.split("/java/", 1)[1]
+        return class_part.replace("/", ".").replace("\\", ".").replace(".java", "")
+
+    return os.path.basename(rel_path).replace(".java", "")
+
+
+def _parse_status_output(output: str) -> list[tuple[str, str]]:
+    """Parse 'git diff --name-status' output."""
+    entries: list[tuple[str, str]] = []
+    for line in output.strip().splitlines():
+        parts = line.split("\t", 1)
+        if len(parts) == 2:
+            status, path = parts[0].strip(), parts[1].strip()
+            if status and path:
+                entries.append((status, path))
+    return entries
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Detect Hibernate ORM Gradle test targets from changed files."
+    )
+    parser.add_argument("--repo", required=True, help="Path to the git repository")
+    parser.add_argument("--commit", help="Commit hash to analyse")
+    parser.add_argument(
+        "--worktree",
+        action="store_true",
+        help="Analyse the current worktree diff (HEAD vs working tree)",
+    )
+    parser.add_argument("--files-json", help="JSON array of [status, filepath] pairs (skips git)")
+    args = parser.parse_args()
+
+    empty = {"modified": [], "added": [], "source_modules": [], "all_modules": []}
+
+    if not args.commit and not args.worktree and not args.files_json:
+        print(json.dumps(empty))
+        return
+
+    modified_tests: set[str] = set()
+    added_tests: set[str] = set()
+    source_modules: set[str] = set()
+    all_modules: set[str] = set()
+    changed_files: list[str] = []
+
+    if args.files_json:
+        try:
+            raw_entries = json.loads(args.files_json)
+            entries: list[tuple[str, str]] = []
+            for item in raw_entries:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    entries.append((str(item[0]), str(item[1])))
+                else:
+                    entries.append(("M", str(item)))
+        except Exception:
+            entries = []
+    else:
+        if args.worktree:
+            cmd = ["git", "diff", "--name-status", "--diff-filter=AMRT"]
+        else:
+            cmd = ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", args.commit]
+
+        try:
+            output = subprocess.check_output(cmd, cwd=args.repo, text=True, timeout=60)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            print(json.dumps(empty))
+            return
+
+        entries = _parse_status_output(output)
+
+    for status, f in entries:
+        module = _find_gradle_module(args.repo, f)
+
+        top_level = module.split("/")[0] if module else ""
+        if top_level in IGNORED_MODULES:
+            continue
+
+        if module:
+            all_modules.add(module)
+
+        if _is_main_source(f) and module:
+            source_modules.add(module)
+
+        if not _is_test_file(f):
+            continue
+
+        changed_files.append(f)
+
+        class_name = _extract_class_name(f)
+        target = f"{module}:{class_name}" if module else class_name
+
+        if status == "A":
+            added_tests.add(target)
+        else:
+            modified_tests.add(target)
+
+    result = {
+        "modified": sorted(modified_tests),
+        "added": sorted(added_tests),
+        "source_modules": sorted(source_modules),
+        "all_modules": sorted(all_modules),
+        "changed_files": sorted(changed_files),
+    }
+    print(json.dumps(result))
+
+
+if __name__ == "__main__":
+    main()

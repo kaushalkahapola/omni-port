@@ -1,0 +1,680 @@
+commit 6c3efa1475f815fc9025a2e3c533b7b21d9ea8cf
+Author: Xinyu Hao <75524174+ishaoxy@users.noreply.github.com>
+Date:   Fri Jul 11 17:27:09 2025 +0800
+
+    Add compare_ip operator udfs (#3821)
+    
+    * ip_compare operator added
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * only type checker issue left
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * fix by modifying ip.sqlTypeName from OTHER to NULL in type checker
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * fix less
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * modify the CalcitePPLFunctionTypeTest text
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * allow CalciteIPComparisonIT in CalciteNoPushdownIT
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * Modify the signature description in udf
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * fix some typing errors
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * modify the udfs for better style
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * Make IpComparisonOperators an inner enum of CompareIPFunction
+    
+    Signed-off-by: Yuanchun Shen <yuanchu@amazon.com>
+    
+    * modify registerOperator
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * modify registerOperator
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * add type checker for cidr
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * add javadoc
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    * move switch case to the implement method
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    
+    ---------
+    
+    Signed-off-by: Xinyu Hao <haoxinyu@amazon.com>
+    Signed-off-by: Yuanchun Shen <yuanchu@amazon.com>
+    Co-authored-by: Yuanchun Shen <yuanchu@amazon.com>
+
+diff --git a/core/src/main/java/org/opensearch/sql/calcite/utils/UserDefinedFunctionUtils.java b/core/src/main/java/org/opensearch/sql/calcite/utils/UserDefinedFunctionUtils.java
+index 9f691479f..aac002f19 100644
+--- a/core/src/main/java/org/opensearch/sql/calcite/utils/UserDefinedFunctionUtils.java
++++ b/core/src/main/java/org/opensearch/sql/calcite/utils/UserDefinedFunctionUtils.java
+@@ -121,7 +121,9 @@ public class UserDefinedFunctionUtils {
+         case EXPR_DATE -> SqlTypeName.DATE;
+         case EXPR_TIME -> SqlTypeName.TIME;
+         case EXPR_TIMESTAMP -> SqlTypeName.TIMESTAMP;
+-        case EXPR_IP -> SqlTypeName.VARCHAR;
++          // EXPR_IP is mapped to SqlTypeName.OTHER since there is no
++          // corresponding SqlTypeName in Calcite.
++        case EXPR_IP -> SqlTypeName.OTHER;
+         case EXPR_BINARY -> SqlTypeName.VARBINARY;
+         default -> type.getSqlTypeName();
+       };
+diff --git a/core/src/main/java/org/opensearch/sql/expression/function/PPLBuiltinOperators.java b/core/src/main/java/org/opensearch/sql/expression/function/PPLBuiltinOperators.java
+index 3da366da8..6c2d0af8e 100644
+--- a/core/src/main/java/org/opensearch/sql/expression/function/PPLBuiltinOperators.java
++++ b/core/src/main/java/org/opensearch/sql/expression/function/PPLBuiltinOperators.java
+@@ -72,6 +72,7 @@ import org.opensearch.sql.expression.function.udf.datetime.WeekFunction;
+ import org.opensearch.sql.expression.function.udf.datetime.WeekdayFunction;
+ import org.opensearch.sql.expression.function.udf.datetime.YearweekFunction;
+ import org.opensearch.sql.expression.function.udf.ip.CidrMatchFunction;
++import org.opensearch.sql.expression.function.udf.ip.CompareIpFunction;
+ import org.opensearch.sql.expression.function.udf.math.CRC32Function;
+ import org.opensearch.sql.expression.function.udf.math.ConvFunction;
+ import org.opensearch.sql.expression.function.udf.math.DivideFunction;
+@@ -103,6 +104,15 @@ public class PPLBuiltinOperators extends ReflectiveSqlOperatorTable {
+   public static final SqlOperator SHA2 = CryptographicFunction.sha2().toUDF("SHA2");
+   public static final SqlOperator CIDRMATCH = new CidrMatchFunction().toUDF("CIDRMATCH");
+ 
++  // IP comparing functions
++  public static final SqlOperator NOT_EQUALS_IP =
++      CompareIpFunction.notEquals().toUDF("NOT_EQUALS_IP");
++  public static final SqlOperator EQUALS_IP = CompareIpFunction.equals().toUDF("EQUALS_IP");
++  public static final SqlOperator GREATER_IP = CompareIpFunction.greater().toUDF("GREATER_IP");
++  public static final SqlOperator GTE_IP = CompareIpFunction.greaterOrEquals().toUDF("GTE_IP");
++  public static final SqlOperator LESS_IP = CompareIpFunction.less().toUDF("LESS_IP");
++  public static final SqlOperator LTE_IP = CompareIpFunction.lessOrEquals().toUDF("LTE_IP");
++
+   // Condition function
+   public static final SqlOperator EARLIEST = new EarliestFunction().toUDF("EARLIEST");
+   public static final SqlOperator LATEST = new LatestFunction().toUDF("LATEST");
+diff --git a/core/src/main/java/org/opensearch/sql/expression/function/PPLFuncImpTable.java b/core/src/main/java/org/opensearch/sql/expression/function/PPLFuncImpTable.java
+index 363baff3e..dc4f195d6 100644
+--- a/core/src/main/java/org/opensearch/sql/expression/function/PPLFuncImpTable.java
++++ b/core/src/main/java/org/opensearch/sql/expression/function/PPLFuncImpTable.java
+@@ -458,7 +458,10 @@ public class PPLFuncImpTable {
+     }
+     StringJoiner allowedSignatures = new StringJoiner(",");
+     for (var implement : implementList) {
+-      allowedSignatures.add(implement.getKey().typeChecker().getAllowedSignatures());
++      String signature = implement.getKey().typeChecker().getAllowedSignatures();
++      if (!signature.isEmpty()) {
++        allowedSignatures.add(signature);
++      }
+     }
+     throw new ExpressionEvaluationException(
+         String.format(
+@@ -481,40 +484,70 @@ public class PPLFuncImpTable {
+     /** Maps an operator to an implementation. */
+     abstract void register(BuiltinFunctionName functionName, FunctionImp functionImp);
+ 
+-    void registerOperator(BuiltinFunctionName functionName, SqlOperator operator) {
+-      SqlOperandTypeChecker typeChecker;
+-      if (operator instanceof SqlUserDefinedFunction udfOperator) {
+-        typeChecker = extractTypeCheckerFromUDF(udfOperator);
+-      } else {
+-        typeChecker = operator.getOperandTypeChecker();
+-      }
++    /**
++     * Register one or multiple operators under a single function name. This allows function
++     * overloading based on operand types.
++     *
++     * <p>When a function is called, the system will try each registered operator in sequence,
++     * checking if the provided arguments match the operator's type requirements. The first operator
++     * whose type checker accepts the arguments will be used to execute the function.
++     *
++     * @param functionName the built-in function name under which to register the operators
++     * @param operators the operators to associate with this function name, tried in sequence until
++     *     one matches the argument types during resolution
++     */
++    public void registerOperator(BuiltinFunctionName functionName, SqlOperator... operators) {
++      for (SqlOperator operator : operators) {
++        SqlOperandTypeChecker typeChecker;
++        if (operator instanceof SqlUserDefinedFunction udfOperator) {
++          typeChecker = extractTypeCheckerFromUDF(udfOperator);
++        } else {
++          typeChecker = operator.getOperandTypeChecker();
++        }
+ 
+-      // Only the composite operand type checker for UDFs are concerned here.
+-      if (operator instanceof SqlUserDefinedFunction
+-          && typeChecker instanceof CompositeOperandTypeChecker compositeTypeChecker) {
+-        // UDFs implement their own composite type checkers, which always use OR logic for argument
+-        // types. Verifying the composition type would require accessing a protected field in
+-        // CompositeOperandTypeChecker. If access to this field is not allowed, type checking will
+-        // be skipped, so we avoid checking the composition type here.
+-        register(functionName, wrapWithCompositeTypeChecker(operator, compositeTypeChecker, false));
+-      } else if (typeChecker instanceof ImplicitCastOperandTypeChecker implicitCastTypeChecker) {
+-        register(functionName, wrapWithImplicitCastTypeChecker(operator, implicitCastTypeChecker));
+-      } else if (typeChecker instanceof CompositeOperandTypeChecker compositeTypeChecker) {
+-        // If compositeTypeChecker contains operand checkers other than family type checkers or
+-        // other than OR compositions, the function with be registered with a null type checker,
+-        // which means the function will not be type checked.
+-        register(functionName, wrapWithCompositeTypeChecker(operator, compositeTypeChecker, true));
+-      } else if (typeChecker instanceof SameOperandTypeChecker comparableTypeChecker) {
+-        // Comparison operators like EQUAL, GREATER_THAN, LESS_THAN, etc.
+-        // SameOperandTypeCheckers like COALESCE, IFNULL, etc.
+-        register(functionName, wrapWithComparableTypeChecker(operator, comparableTypeChecker));
+-      } else {
+-        logger.info(
+-            "Cannot create type checker for function: {}. Will skip its type checking",
+-            functionName);
+-        register(
+-            functionName,
+-            (RexBuilder builder, RexNode... node) -> builder.makeCall(operator, node));
++        // Only the composite operand type checker for UDFs are concerned here.
++        if (operator instanceof SqlUserDefinedFunction
++            && typeChecker instanceof CompositeOperandTypeChecker compositeTypeChecker) {
++          // UDFs implement their own composite type checkers, which always use OR logic for
++          // argument
++          // types. Verifying the composition type would require accessing a protected field in
++          // CompositeOperandTypeChecker. If access to this field is not allowed, type checking will
++          // be skipped, so we avoid checking the composition type here.
++          register(
++              functionName, wrapWithCompositeTypeChecker(operator, compositeTypeChecker, false));
++        } else if (typeChecker instanceof ImplicitCastOperandTypeChecker implicitCastTypeChecker) {
++          register(
++              functionName, wrapWithImplicitCastTypeChecker(operator, implicitCastTypeChecker));
++        } else if (typeChecker instanceof CompositeOperandTypeChecker compositeTypeChecker) {
++          // If compositeTypeChecker contains operand checkers other than family type checkers or
++          // other than OR compositions, the function with be registered with a null type checker,
++          // which means the function will not be type checked.
++          register(
++              functionName, wrapWithCompositeTypeChecker(operator, compositeTypeChecker, true));
++        } else if (typeChecker instanceof SameOperandTypeChecker comparableTypeChecker) {
++          // Comparison operators like EQUAL, GREATER_THAN, LESS_THAN, etc.
++          // SameOperandTypeCheckers like COALESCE, IFNULL, etc.
++          register(functionName, wrapWithComparableTypeChecker(operator, comparableTypeChecker));
++        } else if (typeChecker instanceof UDFOperandMetadata.IPOperandMetadata) {
++          register(
++              functionName,
++              createFunctionImpWithTypeChecker(
++                  (builder, arg1, arg2) -> builder.makeCall(operator, arg1, arg2),
++                  new PPLTypeChecker.PPLIPCompareTypeChecker()));
++        } else if (typeChecker instanceof UDFOperandMetadata.CidrOperandMetadata) {
++          register(
++              functionName,
++              createFunctionImpWithTypeChecker(
++                  (builder, arg1, arg2) -> builder.makeCall(operator, arg1, arg2),
++                  new PPLTypeChecker.PPLCidrTypeChecker()));
++        } else {
++          logger.info(
++              "Cannot create type checker for function: {}. Will skip its type checking",
++              functionName);
++          register(
++              functionName,
++              (RexBuilder builder, RexNode... node) -> builder.makeCall(operator, node));
++        }
+       }
+     }
+ 
+@@ -622,16 +655,18 @@ public class PPLFuncImpTable {
+     }
+ 
+     void populate() {
++      // register operators for comparison
++      registerOperator(NOTEQUAL, PPLBuiltinOperators.NOT_EQUALS_IP, SqlStdOperatorTable.NOT_EQUALS);
++      registerOperator(EQUAL, PPLBuiltinOperators.EQUALS_IP, SqlStdOperatorTable.EQUALS);
++      registerOperator(GREATER, PPLBuiltinOperators.GREATER_IP, SqlStdOperatorTable.GREATER_THAN);
++      registerOperator(GTE, PPLBuiltinOperators.GTE_IP, SqlStdOperatorTable.GREATER_THAN_OR_EQUAL);
++      registerOperator(LESS, PPLBuiltinOperators.LESS_IP, SqlStdOperatorTable.LESS_THAN);
++      registerOperator(LTE, PPLBuiltinOperators.LTE_IP, SqlStdOperatorTable.LESS_THAN_OR_EQUAL);
++
+       // Register std operator
+       registerOperator(AND, SqlStdOperatorTable.AND);
+       registerOperator(OR, SqlStdOperatorTable.OR);
+       registerOperator(NOT, SqlStdOperatorTable.NOT);
+-      registerOperator(NOTEQUAL, SqlStdOperatorTable.NOT_EQUALS);
+-      registerOperator(EQUAL, SqlStdOperatorTable.EQUALS);
+-      registerOperator(GREATER, SqlStdOperatorTable.GREATER_THAN);
+-      registerOperator(GTE, SqlStdOperatorTable.GREATER_THAN_OR_EQUAL);
+-      registerOperator(LESS, SqlStdOperatorTable.LESS_THAN);
+-      registerOperator(LTE, SqlStdOperatorTable.LESS_THAN_OR_EQUAL);
+       registerOperator(ADD, SqlStdOperatorTable.PLUS);
+       registerOperator(SUBTRACT, SqlStdOperatorTable.MINUS);
+       registerOperator(MULTIPLY, SqlStdOperatorTable.MULTIPLY);
+diff --git a/core/src/main/java/org/opensearch/sql/expression/function/PPLTypeChecker.java b/core/src/main/java/org/opensearch/sql/expression/function/PPLTypeChecker.java
+index d3443ab85..b3de4de4f 100644
+--- a/core/src/main/java/org/opensearch/sql/expression/function/PPLTypeChecker.java
++++ b/core/src/main/java/org/opensearch/sql/expression/function/PPLTypeChecker.java
+@@ -23,7 +23,7 @@ import org.apache.calcite.sql.type.SqlOperandTypeChecker;
+ import org.apache.calcite.sql.type.SqlTypeFamily;
+ import org.apache.calcite.sql.type.SqlTypeName;
+ import org.apache.calcite.sql.type.SqlTypeUtil;
+-import org.opensearch.sql.calcite.type.AbstractExprRelDataType;
++import org.opensearch.sql.calcite.type.ExprIPType;
+ import org.opensearch.sql.calcite.utils.OpenSearchTypeFactory;
+ import org.opensearch.sql.calcite.utils.UserDefinedFunctionUtils;
+ import org.opensearch.sql.data.type.ExprCoreType;
+@@ -215,10 +215,6 @@ public interface PPLTypeChecker {
+         RelDataType type_l = types.get(i);
+         RelDataType type_r = types.get(i + 1);
+         if (!SqlTypeUtil.isComparable(type_l, type_r)) {
+-          if (areIpAndStringTypes(type_l, type_r) || areIpAndStringTypes(type_r, type_l)) {
+-            // Allow IP and string comparison
+-            continue;
+-          }
+           return false;
+         }
+         // Disallow coercing between strings and numeric, boolean
+@@ -239,14 +235,6 @@ public interface PPLTypeChecker {
+       };
+     }
+ 
+-    private static boolean areIpAndStringTypes(RelDataType typeIp, RelDataType typeString) {
+-      if (typeIp instanceof AbstractExprRelDataType<?> exprRelDataType) {
+-        return exprRelDataType.getExprType() == ExprCoreType.IP
+-            && typeString.getFamily() == SqlTypeFamily.CHARACTER;
+-      }
+-      return false;
+-    }
+-
+     @Override
+     public String getAllowedSignatures() {
+       int min = innerTypeChecker.getOperandCountRange().getMin();
+@@ -269,6 +257,53 @@ public interface PPLTypeChecker {
+     }
+   }
+ 
++  class PPLIPCompareTypeChecker implements PPLTypeChecker {
++    @Override
++    public boolean checkOperandTypes(List<RelDataType> types) {
++      if (types.size() != 2) {
++        return false;
++      }
++      RelDataType type1 = types.get(0);
++      RelDataType type2 = types.get(1);
++      return areIpAndStringTypes(type1, type2)
++          || areIpAndStringTypes(type2, type1)
++          || (type1 instanceof ExprIPType && type2 instanceof ExprIPType);
++    }
++
++    @Override
++    public String getAllowedSignatures() {
++      // Will be merged with the allowed signatures of comparable type checker,
++      // shown as [COMPARABLE_TYPE,COMPARABLE_TYPE]
++      return "";
++    }
++
++    private static boolean areIpAndStringTypes(RelDataType typeIp, RelDataType typeString) {
++      return typeIp instanceof ExprIPType && typeString.getFamily() == SqlTypeFamily.CHARACTER;
++    }
++  }
++
++  class PPLCidrTypeChecker implements PPLTypeChecker {
++    @Override
++    public boolean checkOperandTypes(List<RelDataType> types) {
++      if (types.size() != 2) {
++        return false;
++      }
++      RelDataType type1 = types.get(0);
++      RelDataType type2 = types.get(1);
++
++      // accept (STRING, STRING) or (IP, STRING)
++      if (type2.getFamily() != SqlTypeFamily.CHARACTER) {
++        return false;
++      }
++      return type1 instanceof ExprIPType || type1.getFamily() == SqlTypeFamily.CHARACTER;
++    }
++
++    @Override
++    public String getAllowedSignatures() {
++      return "[STRING,STRING],[IP,STRING]";
++    }
++  }
++
+   /**
+    * Creates a {@link PPLFamilyTypeChecker} with a fixed operand count, validating that each operand
+    * belongs to its corresponding {@link SqlTypeFamily}.
+diff --git a/core/src/main/java/org/opensearch/sql/expression/function/UDFOperandMetadata.java b/core/src/main/java/org/opensearch/sql/expression/function/UDFOperandMetadata.java
+index fcd7a6a2b..a7d12cbbb 100644
+--- a/core/src/main/java/org/opensearch/sql/expression/function/UDFOperandMetadata.java
++++ b/core/src/main/java/org/opensearch/sql/expression/function/UDFOperandMetadata.java
+@@ -14,10 +14,8 @@ import org.apache.calcite.sql.SqlOperandCountRange;
+ import org.apache.calcite.sql.SqlOperator;
+ import org.apache.calcite.sql.type.CompositeOperandTypeChecker;
+ import org.apache.calcite.sql.type.FamilyOperandTypeChecker;
+-import org.apache.calcite.sql.type.ImplicitCastOperandTypeChecker;
+ import org.apache.calcite.sql.type.SqlOperandMetadata;
+ import org.apache.calcite.sql.type.SqlOperandTypeChecker;
+-import org.apache.calcite.sql.type.SqlTypeFamily;
+ import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+ 
+ /**
+@@ -25,7 +23,7 @@ import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+  * creating UDFs, so that a type checker can be passed to the constructor of {@link
+  * SqlUserDefinedFunction} as a {@link SqlOperandMetadata}.
+  */
+-public interface UDFOperandMetadata extends SqlOperandMetadata, ImplicitCastOperandTypeChecker {
++public interface UDFOperandMetadata extends SqlOperandMetadata {
+   SqlOperandTypeChecker getInnerTypeChecker();
+ 
+   static UDFOperandMetadata wrap(FamilyOperandTypeChecker typeChecker) {
+@@ -35,17 +33,6 @@ public interface UDFOperandMetadata extends SqlOperandMetadata, ImplicitCastOper
+         return typeChecker;
+       }
+ 
+-      @Override
+-      public boolean checkOperandTypesWithoutTypeCoercion(
+-          SqlCallBinding callBinding, boolean throwOnFailure) {
+-        return typeChecker.checkOperandTypesWithoutTypeCoercion(callBinding, throwOnFailure);
+-      }
+-
+-      @Override
+-      public SqlTypeFamily getOperandSqlTypeFamily(int iFormalOperand) {
+-        return typeChecker.getOperandSqlTypeFamily(iFormalOperand);
+-      }
+-
+       @Override
+       public List<RelDataType> paramTypes(RelDataTypeFactory typeFactory) {
+         // This function is not used in the current context, so we return an empty list.
+@@ -89,18 +76,6 @@ public interface UDFOperandMetadata extends SqlOperandMetadata, ImplicitCastOper
+         return typeChecker;
+       }
+ 
+-      @Override
+-      public boolean checkOperandTypesWithoutTypeCoercion(
+-          SqlCallBinding callBinding, boolean throwOnFailure) {
+-        return typeChecker.checkOperandTypes(callBinding, throwOnFailure);
+-      }
+-
+-      @Override
+-      public SqlTypeFamily getOperandSqlTypeFamily(int iFormalOperand) {
+-        throw new IllegalStateException(
+-            "getOperandSqlTypeFamily is not supported for CompositeOperandTypeChecker");
+-      }
+-
+       @Override
+       public List<RelDataType> paramTypes(RelDataTypeFactory typeFactory) {
+         // This function is not used in the current context, so we return an empty list.
+@@ -129,4 +104,76 @@ public interface UDFOperandMetadata extends SqlOperandMetadata, ImplicitCastOper
+       }
+     };
+   }
++
++  /**
++   * A named class that serves as an identifier for IP comparator's operand metadata. It does not
++   * implement any actual type checking logic.
++   */
++  class IPOperandMetadata implements UDFOperandMetadata {
++    @Override
++    public SqlOperandTypeChecker getInnerTypeChecker() {
++      return this;
++    }
++
++    @Override
++    public List<RelDataType> paramTypes(RelDataTypeFactory typeFactory) {
++      return List.of();
++    }
++
++    @Override
++    public List<String> paramNames() {
++      return List.of();
++    }
++
++    @Override
++    public boolean checkOperandTypes(SqlCallBinding callBinding, boolean throwOnFailure) {
++      return false;
++    }
++
++    @Override
++    public SqlOperandCountRange getOperandCountRange() {
++      return null;
++    }
++
++    @Override
++    public String getAllowedSignatures(SqlOperator op, String opName) {
++      return "";
++    }
++  }
++
++  /**
++   * A named class that serves as an identifier for cidr's operand metadata. It does not implement
++   * any actual type checking logic.
++   */
++  class CidrOperandMetadata implements UDFOperandMetadata {
++    @Override
++    public SqlOperandTypeChecker getInnerTypeChecker() {
++      return this;
++    }
++
++    @Override
++    public List<RelDataType> paramTypes(RelDataTypeFactory typeFactory) {
++      return List.of();
++    }
++
++    @Override
++    public List<String> paramNames() {
++      return List.of();
++    }
++
++    @Override
++    public boolean checkOperandTypes(SqlCallBinding callBinding, boolean throwOnFailure) {
++      return false;
++    }
++
++    @Override
++    public SqlOperandCountRange getOperandCountRange() {
++      return null;
++    }
++
++    @Override
++    public String getAllowedSignatures(SqlOperator op, String opName) {
++      return "";
++    }
++  }
+ }
+diff --git a/core/src/main/java/org/opensearch/sql/expression/function/udf/ip/CidrMatchFunction.java b/core/src/main/java/org/opensearch/sql/expression/function/udf/ip/CidrMatchFunction.java
+index d7879d881..bba375079 100644
+--- a/core/src/main/java/org/opensearch/sql/expression/function/udf/ip/CidrMatchFunction.java
++++ b/core/src/main/java/org/opensearch/sql/expression/function/udf/ip/CidrMatchFunction.java
+@@ -12,7 +12,6 @@ import org.apache.calcite.adapter.enumerable.RexToLixTranslator;
+ import org.apache.calcite.linq4j.tree.Expression;
+ import org.apache.calcite.linq4j.tree.Expressions;
+ import org.apache.calcite.rex.RexCall;
+-import org.apache.calcite.sql.type.OperandTypes;
+ import org.apache.calcite.sql.type.ReturnTypes;
+ import org.apache.calcite.sql.type.SqlReturnTypeInference;
+ import org.opensearch.sql.data.model.ExprIpValue;
+@@ -44,9 +43,10 @@ public class CidrMatchFunction extends ImplementorUDF {
+ 
+   @Override
+   public UDFOperandMetadata getOperandMetadata() {
+-    // EXPR_IP is mapped to SqlTypeFamily.VARCHAR in
++    // EXPR_IP is mapped to SqlTypeFamily.OTHER in
+     // UserDefinedFunctionUtils.convertRelDataTypeToSqlTypeName
+-    return UDFOperandMetadata.wrap(OperandTypes.STRING_STRING);
++    // We use a specific type checker to serve
++    return new UDFOperandMetadata.CidrOperandMetadata();
+   }
+ 
+   public static class CidrMatchImplementor implements NotNullImplementor {
+diff --git a/core/src/main/java/org/opensearch/sql/expression/function/udf/ip/CompareIpFunction.java b/core/src/main/java/org/opensearch/sql/expression/function/udf/ip/CompareIpFunction.java
+new file mode 100644
+index 000000000..3821ec169
+--- /dev/null
++++ b/core/src/main/java/org/opensearch/sql/expression/function/udf/ip/CompareIpFunction.java
+@@ -0,0 +1,129 @@
++/*
++ * Copyright OpenSearch Contributors
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package org.opensearch.sql.expression.function.udf.ip;
++
++import java.util.List;
++import org.apache.calcite.adapter.enumerable.NotNullImplementor;
++import org.apache.calcite.adapter.enumerable.NullPolicy;
++import org.apache.calcite.adapter.enumerable.RexToLixTranslator;
++import org.apache.calcite.linq4j.tree.Expression;
++import org.apache.calcite.linq4j.tree.Expressions;
++import org.apache.calcite.rex.RexCall;
++import org.apache.calcite.sql.type.ReturnTypes;
++import org.apache.calcite.sql.type.SqlReturnTypeInference;
++import org.opensearch.sql.data.model.ExprIpValue;
++import org.opensearch.sql.expression.function.ImplementorUDF;
++import org.opensearch.sql.expression.function.UDFOperandMetadata;
++
++/**
++ * {@code compare(ip1, ip2)} compares two IP addresses using a provided op.
++ *
++ * <p>Signature:
++ *
++ * <ul>
++ *   <li>(IP, STRING) -> BOOLEAN
++ *   <li>(STRING, IP) -> BOOLEAN
++ *   <li>(IP, IP) -> BOOLEAN
++ * </ul>
++ */
++public class CompareIpFunction extends ImplementorUDF {
++
++  private CompareIpFunction(ComparisonType comparisonType) {
++    super(new CompareImplementor(comparisonType), NullPolicy.ANY);
++  }
++
++  public static CompareIpFunction less() {
++    return new CompareIpFunction(ComparisonType.LESS);
++  }
++
++  public static CompareIpFunction greater() {
++    return new CompareIpFunction(ComparisonType.GREATER);
++  }
++
++  public static CompareIpFunction lessOrEquals() {
++    return new CompareIpFunction(ComparisonType.LESS_OR_EQUAL);
++  }
++
++  public static CompareIpFunction greaterOrEquals() {
++    return new CompareIpFunction(ComparisonType.GREATER_OR_EQUAL);
++  }
++
++  public static CompareIpFunction equals() {
++    return new CompareIpFunction(ComparisonType.EQUALS);
++  }
++
++  public static CompareIpFunction notEquals() {
++    return new CompareIpFunction(ComparisonType.NOT_EQUALS);
++  }
++
++  @Override
++  public SqlReturnTypeInference getReturnTypeInference() {
++    return ReturnTypes.BOOLEAN_FORCE_NULLABLE;
++  }
++
++  @Override
++  public UDFOperandMetadata getOperandMetadata() {
++    return new UDFOperandMetadata.IPOperandMetadata();
++  }
++
++  public static class CompareImplementor implements NotNullImplementor {
++    private final ComparisonType comparisonType;
++
++    public CompareImplementor(ComparisonType comparisonType) {
++      this.comparisonType = comparisonType;
++    }
++
++    @Override
++    public Expression implement(
++        RexToLixTranslator translator, RexCall call, List<Expression> translatedOperands) {
++      Expression compareResult =
++          Expressions.call(
++              CompareImplementor.class,
++              "compareTo",
++              translatedOperands.get(0),
++              translatedOperands.get(1));
++
++      return generateComparisonExpression(compareResult, comparisonType);
++    }
++
++    private static Expression generateComparisonExpression(
++        Expression compareResult, ComparisonType comparisonType) {
++      return switch (comparisonType) {
++        case EQUALS -> Expressions.equal(compareResult, Expressions.constant(0));
++        case NOT_EQUALS -> Expressions.notEqual(compareResult, Expressions.constant(0));
++        case LESS -> Expressions.lessThan(compareResult, Expressions.constant(0));
++        case LESS_OR_EQUAL -> Expressions.lessThanOrEqual(compareResult, Expressions.constant(0));
++        case GREATER -> Expressions.greaterThan(compareResult, Expressions.constant(0));
++        case GREATER_OR_EQUAL -> Expressions.greaterThanOrEqual(
++            compareResult, Expressions.constant(0));
++      };
++    }
++
++    public static int compareTo(Object obj1, Object obj2) {
++      ExprIpValue v1 = toExprIpValue(obj1);
++      ExprIpValue v2 = toExprIpValue(obj2);
++      return v1.compare(v2);
++    }
++
++    private static ExprIpValue toExprIpValue(Object obj) {
++      if (obj instanceof ExprIpValue) {
++        return (ExprIpValue) obj;
++      } else if (obj instanceof String) {
++        return new ExprIpValue((String) obj);
++      }
++      throw new IllegalArgumentException("Invalid IP type: " + obj);
++    }
++  }
++
++  public enum ComparisonType {
++    EQUALS,
++    NOT_EQUALS,
++    LESS,
++    LESS_OR_EQUAL,
++    GREATER,
++    GREATER_OR_EQUAL
++  }
++}
+diff --git a/integ-test/src/test/java/org/opensearch/sql/calcite/CalciteNoPushdownIT.java b/integ-test/src/test/java/org/opensearch/sql/calcite/CalciteNoPushdownIT.java
+index 0597f36b0..de6b915a7 100644
+--- a/integ-test/src/test/java/org/opensearch/sql/calcite/CalciteNoPushdownIT.java
++++ b/integ-test/src/test/java/org/opensearch/sql/calcite/CalciteNoPushdownIT.java
+@@ -39,9 +39,7 @@ import org.opensearch.sql.ppl.PPLIntegTestCase;
+   CalciteGeoPointFormatsIT.class,
+   CalciteHeadCommandIT.class,
+   CalciteInformationSchemaCommandIT.class,
+-  // TODO: Enable after implementing comparison for IP addresses with Calcite
+-  //  https://github.com/opensearch-project/sql/issues/3776
+-  // CalciteIPComparisonIT.class,
++  CalciteIPComparisonIT.class,
+   CalciteIPFunctionsIT.class,
+   CalciteJsonFunctionsIT.class,
+   CalciteLegacyAPICompatibilityIT.class,
+diff --git a/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLFunctionTypeTest.java b/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLFunctionTypeTest.java
+index 55f563504..ef1237fa2 100644
+--- a/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLFunctionTypeTest.java
++++ b/ppl/src/test/java/org/opensearch/sql/ppl/calcite/CalcitePPLFunctionTypeTest.java
+@@ -49,7 +49,8 @@ public class CalcitePPLFunctionTypeTest extends CalcitePPLAbstractTest {
+     String ppl = "source=EMP | where ENAME < 6 | fields ENAME";
+     Throwable t = Assert.assertThrows(ExpressionEvaluationException.class, () -> getRelNode(ppl));
+     verifyErrorMessageContains(
+-        t, "LESS function expects {[COMPARABLE_TYPE,COMPARABLE_TYPE]}, but got [STRING,INTEGER]");
++        t,
++        "LESS function expects {[COMPARABLE_TYPE,COMPARABLE_TYPE]}," + " but got [STRING,INTEGER]");
+   }
+ 
+   @Test

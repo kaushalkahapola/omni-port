@@ -1,0 +1,148 @@
+diff --git a/spring-beans/src/main/java/org/springframework/beans/factory/aot/BeanInstanceSupplier.java b/spring-beans/src/main/java/org/springframework/beans/factory/aot/BeanInstanceSupplier.java
+index 265e939e01..70949a8969 100644
+--- a/spring-beans/src/main/java/org/springframework/beans/factory/aot/BeanInstanceSupplier.java
++++ b/spring-beans/src/main/java/org/springframework/beans/factory/aot/BeanInstanceSupplier.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2023 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -89,7 +89,6 @@ public final class BeanInstanceSupplier<T> extends AutowiredElementResolver impl
+ 	@Nullable
+ 	private final String[] shortcuts;
+ 
+-
+ 	private BeanInstanceSupplier(ExecutableLookup lookup,
+ 			@Nullable ThrowingBiFunction<RegisteredBean, AutowiredArguments, T> generator,
+ 			@Nullable String[] shortcuts) {
+@@ -99,7 +98,6 @@ public final class BeanInstanceSupplier<T> extends AutowiredElementResolver impl
+ 		this.shortcuts = shortcuts;
+ 	}
+ 
+-
+ 	/**
+ 	 * Create a {@link BeanInstanceSupplier} that resolves
+ 	 * arguments for the specified bean constructor.
+@@ -134,7 +132,6 @@ public final class BeanInstanceSupplier<T> extends AutowiredElementResolver impl
+ 				null, null);
+ 	}
+ 
+-
+ 	ExecutableLookup getLookup() {
+ 		return this.lookup;
+ 	}
+@@ -209,12 +206,13 @@ public final class BeanInstanceSupplier<T> extends AutowiredElementResolver impl
+ 		if (!(executable instanceof Method method)) {
+ 			return beanSupplier.get();
+ 		}
++		Method priorInvokedFactoryMethod = SimpleInstantiationStrategy.getCurrentlyInvokedFactoryMethod();
+ 		try {
+ 			SimpleInstantiationStrategy.setCurrentlyInvokedFactoryMethod(method);
+ 			return beanSupplier.get();
+ 		}
+ 		finally {
+-			SimpleInstantiationStrategy.setCurrentlyInvokedFactoryMethod(null);
++			SimpleInstantiationStrategy.setCurrentlyInvokedFactoryMethod(priorInvokedFactoryMethod);
+ 		}
+ 	}
+ 
+@@ -375,12 +373,10 @@ public final class BeanInstanceSupplier<T> extends AutowiredElementResolver impl
+ 		return constructor.newInstance(createInstance(enclosingClass));
+ 	}
+ 
+-
+ 	private static String toCommaSeparatedNames(Class<?>... parameterTypes) {
+ 		return Arrays.stream(parameterTypes).map(Class::getName).collect(Collectors.joining(", "));
+ 	}
+ 
+-
+ 	/**
+ 	 * Performs lookup of the {@link Executable}.
+ 	 */
+@@ -389,7 +385,6 @@ public final class BeanInstanceSupplier<T> extends AutowiredElementResolver impl
+ 		abstract Executable get(RegisteredBean registeredBean);
+ 	}
+ 
+-
+ 	/**
+ 	 * Performs lookup of the {@link Constructor}.
+ 	 */
+@@ -422,7 +417,6 @@ public final class BeanInstanceSupplier<T> extends AutowiredElementResolver impl
+ 		}
+ 	}
+ 
+-
+ 	/**
+ 	 * Performs lookup of the factory {@link Method}.
+ 	 */
+diff --git a/spring-beans/src/main/java/org/springframework/beans/factory/support/SimpleInstantiationStrategy.java b/spring-beans/src/main/java/org/springframework/beans/factory/support/SimpleInstantiationStrategy.java
+index 0fc15c5a35..3810b96ee2 100644
+--- a/spring-beans/src/main/java/org/springframework/beans/factory/support/SimpleInstantiationStrategy.java
++++ b/spring-beans/src/main/java/org/springframework/beans/factory/support/SimpleInstantiationStrategy.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2023 the original author or authors.
++ * Copyright 2002-2024 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -42,7 +42,6 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
+ 
+ 	private static final ThreadLocal<Method> currentlyInvokedFactoryMethod = new ThreadLocal<>();
+ 
+-
+ 	/**
+ 	 * Return the factory method currently being invoked or {@code null} if none.
+ 	 * <p>Allows factory method implementations to determine whether the current
+@@ -54,15 +53,20 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
+ 	}
+ 
+ 	/**
+-	 * Set the factory method currently being invoked or {@code null} to reset.
++	 * Set the factory method currently being invoked or {@code null} to remove
++	 * the  current value, if any.
+ 	 * @param method the factory method currently being invoked or {@code null}
+ 	 * @since 6.0
+ 	 */
+ 	public static void setCurrentlyInvokedFactoryMethod(@Nullable Method method) {
+-		currentlyInvokedFactoryMethod.set(method);
++		if (method != null) {
++			currentlyInvokedFactoryMethod.set(method);
++		}
++		else {
++			currentlyInvokedFactoryMethod.remove();
++		}
+ 	}
+ 
+-
+ 	@Override
+ 	public Object instantiate(RootBeanDefinition bd, @Nullable String beanName, BeanFactory owner) {
+ 		// Don't override the class with CGLIB if no overrides.
+@@ -133,9 +137,9 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
+ 		try {
+ 			ReflectionUtils.makeAccessible(factoryMethod);
+ 
+-			Method priorInvokedFactoryMethod = currentlyInvokedFactoryMethod.get();
++			Method priorInvokedFactoryMethod = getCurrentlyInvokedFactoryMethod();
+ 			try {
+-				currentlyInvokedFactoryMethod.set(factoryMethod);
++				setCurrentlyInvokedFactoryMethod(factoryMethod);
+ 				Object result = factoryMethod.invoke(factoryBean, args);
+ 				if (result == null) {
+ 					result = new NullBean();
+@@ -143,12 +147,7 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
+ 				return result;
+ 			}
+ 			finally {
+-				if (priorInvokedFactoryMethod != null) {
+-					currentlyInvokedFactoryMethod.set(priorInvokedFactoryMethod);
+-				}
+-				else {
+-					currentlyInvokedFactoryMethod.remove();
+-				}
++				setCurrentlyInvokedFactoryMethod(priorInvokedFactoryMethod);
+ 			}
+ 		}
+ 		catch (IllegalArgumentException ex) {

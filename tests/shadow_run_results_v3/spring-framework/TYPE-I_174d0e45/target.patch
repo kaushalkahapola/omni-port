@@ -1,0 +1,90 @@
+commit 65913c36552dc8cebf2d8862fab8a40d04c1a716
+Author: Brian Clozel <brian.clozel@broadcom.com>
+Date:   Thu Feb 6 18:27:07 2025 +0100
+
+    Fix "Nth day of week" Quartz-style cron expressions
+    
+    Prior to this commit, `CronExpression` would support Quartz-style
+    expressions with "Nth occurence of a  dayOfWeek" semantics by using the
+    `TemporalAdjusters.dayOfWeekInMonth` JDK support. This method will
+    return the Nth occurence starting with the month of the given temporal,
+    but in some cases will overflow to the next or previous month.
+    This behavior is not expected for our cron expression support.
+    
+    This commit ensures that when an overflow happens (meaning, the
+    resulting date is not in the same month as the input temporal), we
+    should instead have another attempt at finding a valid month for this
+    expression.
+    
+    Fixes gh-34377
+
+diff --git a/spring-context/src/main/java/org/springframework/scheduling/support/QuartzCronField.java b/spring-context/src/main/java/org/springframework/scheduling/support/QuartzCronField.java
+index 8c0873d151..b49b49357c 100644
+--- a/spring-context/src/main/java/org/springframework/scheduling/support/QuartzCronField.java
++++ b/spring-context/src/main/java/org/springframework/scheduling/support/QuartzCronField.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2024 the original author or authors.
++ * Copyright 2002-2025 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -317,8 +317,16 @@ final class QuartzCronField extends CronField {
+ 	private static TemporalAdjuster dayOfWeekInMonth(int ordinal, DayOfWeek dayOfWeek) {
+ 		TemporalAdjuster adjuster = TemporalAdjusters.dayOfWeekInMonth(ordinal, dayOfWeek);
+ 		return temporal -> {
+-			Temporal result = adjuster.adjustInto(temporal);
+-			return rollbackToMidnight(temporal, result);
++			// TemporalAdjusters can overflow to a different month
++			// in this case, attempt the same adjustment with the next/previous month
++			for (int i = 0; i < 12; i++) {
++				Temporal result = adjuster.adjustInto(temporal);
++				if (result.get(ChronoField.MONTH_OF_YEAR) == temporal.get(ChronoField.MONTH_OF_YEAR)) {
++					return rollbackToMidnight(temporal, result);
++				}
++				temporal = result;
++			}
++			return null;
+ 		};
+ 	}
+ 
+diff --git a/spring-context/src/test/java/org/springframework/scheduling/support/CronExpressionTests.java b/spring-context/src/test/java/org/springframework/scheduling/support/CronExpressionTests.java
+index 57372204cb..3c74291dc2 100644
+--- a/spring-context/src/test/java/org/springframework/scheduling/support/CronExpressionTests.java
++++ b/spring-context/src/test/java/org/springframework/scheduling/support/CronExpressionTests.java
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright 2002-2024 the original author or authors.
++ * Copyright 2002-2025 the original author or authors.
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+@@ -39,6 +39,7 @@ import static java.time.temporal.TemporalAdjusters.next;
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
+ /**
++ * Tests for {@link CronExpression}.
+  * @author Arjen Poutsma
+  */
+ class CronExpressionTests {
+@@ -1092,6 +1093,20 @@ class CronExpressionTests {
+ 		assertThat(actual.getDayOfWeek()).isEqualTo(FRIDAY);
+ 	}
+ 
++	@Test
++	void quartz5thMondayOfTheMonthDayName() {
++		CronExpression expression = CronExpression.parse("0 0 0 ? * MON#5");
++
++		LocalDateTime last = LocalDateTime.of(2025, 1, 1, 0, 0, 0);
++
++		// first occurrence of 5 mondays in a month from last
++		LocalDateTime expected = LocalDateTime.of(2025, 3, 31, 0, 0, 0);
++		LocalDateTime actual = expression.next(last);
++		assertThat(actual).isNotNull();
++		assertThat(actual).isEqualTo(expected);
++		assertThat(actual.getDayOfWeek()).isEqualTo(MONDAY);
++	}
++
+ 	@Test
+ 	void quartzFifthWednesdayOfTheMonth() {
+ 		CronExpression expression = CronExpression.parse("0 0 0 ? * 3#5");

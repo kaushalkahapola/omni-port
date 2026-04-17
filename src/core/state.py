@@ -110,6 +110,7 @@ class BackportState(TypedDict):
     validation_failure_category: str  # "context_mismatch" | "api_mismatch" | "test_failure" | "infrastructure" | ""
     validation_retry_files: List[str]  # files to re-localize on retry
     validation_results: Dict[str, Any]  # detailed per-step results
+    skip_test: Optional[bool]         # skip test execution in validator
 
     # Set to True by the pipeline harness after it pre-applies synthesized_hunks to disk
     # and captures generated.patch. The validator skips CLAW re-application on attempt 0
@@ -147,6 +148,17 @@ class BackportState(TypedDict):
     # ADDED files are handled inline by Agent 6 (new_file localization path) and do
     # not need a separate file_operations entry.
     file_operations: List[Dict[str, Any]]
+
+    # All file paths changed in the developer's backport commit (target.patch).
+    # Used to ensure phase 0 and validation run the same test targets.
+    # Populated by the pipeline harness from target.patch before phase 0.
+    target_patch_changed_files: List[str]
+
+    # (status, filepath) pairs extracted from target.patch — richer than
+    # target_patch_changed_files because it preserves add/modify/rename status.
+    # Passed to detect_test_targets so helpers skip their git step and derive
+    # targets directly from the patch, guaranteeing phase 0 == validation targets.
+    target_patch_file_entries: List[tuple]
 
     # Metrics
     tokens_used: int

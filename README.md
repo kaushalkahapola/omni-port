@@ -1,6 +1,10 @@
-# Backport CLAW — Multi-Agent Java Patch Backporting System
+# OmniPort — Multi-Agent Java Patch Backporting System
 
 A LangGraph-based orchestration system for automatically backporting Java patches across repository branches. Uses hybrid code localization, specialized agents, and structured validation to achieve high-accuracy patch application with minimal token usage.
+
+## Evaluation
+
+We use the [JavaBackports dataset](https://github.com/Javabackports/javabackports) for evaluation. We are currently achieving **more than 80% overall success rate** across all patch types and continuing the evaluation.
 
 ## Quick Start
 
@@ -9,12 +13,12 @@ A LangGraph-based orchestration system for automatically backporting Java patche
 ```bash
 # Clone and install
 git clone <repo>
-cd backport-claw
+cd omni-port
 uv sync  # or: pip install -r requirements.txt
 
 # Set API key
 cp .env.example .env
-# Edit .env: add ANTHROPIC_API_KEY=sk-...
+# Edit .env: add your API key
 
 # Build Java microservice
 cd java-microservice && mvn clean package && cd ..
@@ -24,16 +28,16 @@ cd java-microservice && mvn clean package && cd ..
 
 ```bash
 # Run all 5 reference patches (Elasticsearch)
-python tests/run_full_pipeline_shadow_v2.py
+python tests/run_full_pipeline_shadow_v3.py
 
 # Run just TYPE-I patches
-python tests/run_full_pipeline_shadow_v2.py --type TYPE-I
+python tests/run_full_pipeline_shadow_v3.py --type TYPE-I
 
 # Run first 3 patches
-python tests/run_full_pipeline_shadow_v2.py --count 3
+python tests/run_full_pipeline_shadow_v3.py --count 3
 
 # Add your own patches to tests/patches.yaml, then run
-python tests/run_full_pipeline_shadow_v2.py --repo myrepo --count 10
+python tests/run_full_pipeline_shadow_v3.py --repo myrepo --count 10
 ```
 
 Results appear in `tests/shadow_run_results/<TYPE>_<sha>/`:
@@ -44,10 +48,12 @@ Results appear in `tests/shadow_run_results/<TYPE>_<sha>/`:
 
 ## Architecture Overview
 
-The system processes patches through a **6-agent pipeline**:
+The system processes patches through a **10-agent pipeline**:
 
 ```
 [Patch Input]
+    ↓
+[Agent 0: Git Orchestrator] — Branch checkout, worktree isolation, patch extraction (no LLM)
     ↓
 [Agent 1: Code Localizer] — Finds hunk locations in target codebase (5-stage pipeline)
     ↓
@@ -59,7 +65,13 @@ The system processes patches through a **6-agent pipeline**:
     ↓
 [Agent 5: Structural Refactor] — Deep code restructuring (reasoning LLM)
     ↓
-[Agent 6: Hunk Synthesizer] — Produces final CLAW-compatible patches
+[Agent 6: Hunk Synthesizer] — Produces final OmniPortSource-compatible patches
+    ↓
+[Agent 8: Syntax Repair] — Pre-validates and repairs Java syntax errors (balanced LLM)
+    ↓
+[Agent 7: Validation Loop] — Build + test execution, failure categorisation (no LLM)
+    ↓ (on failure)
+[Agent 9: Fallback] — Semantic re-application via ReAct tool loop (fast + balanced LLM)
     ↓
 [Output: Applied patches + results.json]
 ```
@@ -69,6 +81,30 @@ Each agent reads from a shared `BackportState` and updates it with its results. 
 ---
 
 ## Agent Details
+
+### Agent 0: Git Orchestrator
+
+**Role:** Manages all git-level operations before the LLM pipeline begins — branch checkouts, worktree isolation, and patch extraction.
+
+**Input:**
+- `target_repo_path` — path to the target repository
+- `target_branch` — branch to backport onto
+- `original_commit` — SHA of the mainline commit to extract
+
+**Output:**
+- `worktree_path` — isolated git worktree for this run
+- `patch_content` — unified diff extracted from the original commit
+
+**Key Operations:**
+- `create_worktree(branch, dir)` — creates an isolated git worktree so the main repo stays clean
+- `remove_worktree(dir)` — tears down the worktree after the run
+- `get_patch_from_commit(sha)` — runs `git format-patch -1 <sha>` to extract the diff
+- `apply_patch(path)` — applies a patch file via `git apply`
+- `is_clean()` — checks repo cleanliness before starting
+
+**Model:** None (pure git subprocess logic, fails closed on errors)
+
+---
 
 ### Agent 1: Code Localizer
 
@@ -96,8 +132,6 @@ Each agent reads from a shared `BackportState` and updates it with its results. 
 5. **Embedding Search** (`embedding`) — UniXcoder embeddings + FAISS fallback
 
 Each stage has a **confidence threshold** — if met, processing stops (no point going deeper). Stages are ordered by computational cost.
-
-**Model:** Haiku 4.5 (but this agent doesn't use LLM; it's pure code logic)
 
 ---
 
@@ -127,8 +161,6 @@ Each stage has a **confidence threshold** — if met, processing stops (no point
 
 **Important:** Classifier output is **for observability only**. Downstream agents do NOT read `classification` for routing decisions. All routing is driven purely by localization evidence (method + confidence).
 
-**Model:** Haiku 4.5 (fast classification with structured output)
-
 ---
 
 ### Agent 3: Fast-Apply
@@ -157,8 +189,6 @@ Each stage has a **confidence threshold** — if met, processing stops (no point
 - Claims hunks where old_string found verbatim (or high-confidence git localization found the file)
 - Skips hunks it couldn't apply (passes to Agent 4)
 
-**Model:** None (pure Python logic, deterministic)
-
 ---
 
 ### Agent 4: Namespace Adapter
@@ -186,8 +216,6 @@ Each stage has a **confidence threshold** — if met, processing stops (no point
    - Produce `adapted_old_content` and `adapted_new_content`
    - Mark for synthesis in Agent 6
 2. Pass remaining hunks to Agent 5
-
-**Model:** Sonnet 4.6 (balanced reasoning for symbol mapping)
 
 ---
 
@@ -220,13 +248,11 @@ Each stage has a **confidence threshold** — if met, processing stops (no point
    - Mark for synthesis in Agent 6
 2. Pass unclaimed hunks (failed refactoring) to Agent 6 as-is
 
-**Model:** Opus 4.6 (deepest reasoning for hardest patches; downgraded to Sonnet/Haiku if token budget < 30%)
-
 ---
 
 ### Agent 6: Hunk Synthesizer
 
-**Role:** Final stage — produces CLAW-compatible `old_string`/`new_string` pairs and verifies they can be applied.
+**Role:** Final stage — produces OmniPortSource-compatible `old_string`/`new_string` pairs and verifies they can be applied.
 
 **Input:**
 - `adapted_hunks` from Agent 4
@@ -251,7 +277,108 @@ Each stage has a **confidence threshold** — if met, processing stops (no point
    - If still not found, mark as failed
 2. Write synthesized hunks to disk (final application)
 
-**Model:** Sonnet 4.6 (balanced reasoning; used only if synthesis requires LLM adaptation)
+---
+
+### Agent 8: Syntax Repair
+
+**Role:** Sits between Agent 6 and Agent 7. Applies synthesized hunks in-memory and checks each modified Java file for structural syntax errors before they hit the build, repairing broken hunks via LLM when needed.
+
+**Input:**
+- `synthesized_hunks` — output from Agent 6
+- `worktree_path` / `target_repo_path` — repo location
+- `hunks` — original mainline hunks (for intent context)
+
+**Output:**
+- `synthesized_hunks` — potentially updated with repaired `new_string` values
+- `syntax_repair_status` — `"clean"` | `"repaired"` | `"failed"` | `"skipped"`
+- `syntax_repair_attempts` — cumulative repair iterations
+- `syntax_repair_log` — per-file repair events
+
+**Algorithm:**
+1. Group synthesized hunks by file
+2. Apply each file's hunks in-memory (no disk writes)
+3. Call Java microservice `/api/javaparser/parse-check` to detect structural errors; falls back to brace-balance counting if the service is unreachable
+4. If errors found, call LLM with the error location, the broken hunk, and the mainline intent to produce a `fixed_new_string`
+5. Re-check the repaired content; retry up to `MAX_REPAIR_ATTEMPTS` times per file
+6. If still failing, pass through to Agent 7 to surface the error via the build
+
+**Model:** Balanced LLM (only invoked when syntax errors are detected)
+
+---
+
+### Agent 7: Validation Loop
+
+**Role:** "Prove Red, Make Green" — applies all patches to the worktree, runs the build and relevant tests, evaluates the test state transition, and on failure populates retry context for graph re-routing.
+
+**Input:**
+- `synthesized_hunks` — from Agent 8 (post syntax repair)
+- `applied_hunks` — from Agent 3 (already on disk, skipped here)
+- `developer_aux_hunks` — test files, non-Java files, auto-generated files segregated by Agent 1
+- `worktree_path` — isolated repo to build in
+
+**Output:**
+- `validation_status` — `"success"` | `"failed"`
+- `validation_error_context` — build/test error tail for downstream agents
+- `validation_failure_category` — `"context_mismatch"` | `"api_mismatch"` | `"test_failure"` | `"infrastructure"`
+- `validation_retry_files` — files that need attention on retry
+- `retry_context` — `PatchRetryContext` populated for graph retry routing
+
+**Algorithm:**
+1. Apply `synthesized_hunks` via CLAW exact-string replacement
+2. Apply `developer_aux_hunks` via `git apply` (with git-strict → git-tolerant → git-3way → GNU patch fallbacks)
+3. Execute file-level operations (RENAMED / DELETED production files)
+4. Strip unused Java imports (deterministic pre-build fix for checkstyle failures)
+5. Run build (`helpers/{project}/run_build.sh` or Maven/Gradle)
+6. Detect and run relevant tests
+7. Evaluate test state transition vs optional baseline
+8. On failure: restore repo state, classify failure category, populate `retry_context`
+
+**Retry routing:**
+- `"context_mismatch"` → re-localize (back to Agent 1)
+- `"api_mismatch"` → route to Agent 4 or Agent 5
+- `"test_failure"` → regenerate hunk (back to Agent 6)
+- `"infrastructure"` → abort
+
+**Model:** None (pure build/test orchestration logic)
+
+---
+
+### Agent 9: Fallback
+
+**Role:** Last resort when Agent 7 has failed and normal retry paths are exhausted. Rather than re-submitting raw patch syntax, it builds a semantic understanding of each change and applies it via a ReAct tool-calling loop.
+
+**Input:**
+- `hunks` — original mainline hunks
+- `localization_results` — from Agent 1
+- `validation_error_context` / `validation_failure_category` — from Agent 7
+- `validation_retry_files` — files that need regeneration
+- `synthesized_hunks` — existing hunks (non-retry files are preserved)
+
+**Output:**
+- `synthesized_hunks` — retry-file entries replaced; others preserved
+- `hunk_descriptions` — semantic descriptions from Phase 1
+- `fallback_status` — `"applied"` | `"failed"`
+- `fallback_attempts` — incremented each run
+
+**Two-phase algorithm:**
+
+**Phase 1 — Description Builder (Fast LLM, single call)**
+- Analyses each mainline hunk and produces structured natural-language descriptions: WHAT changed, WHERE in the code, WHY (semantic intent), change type, and key symbols
+- Raw unified-diff syntax is never forwarded to Phase 2
+
+**Phase 2 — Change Application Agent (Balanced LLM, ReAct loop, max 8 turns)**
+- Receives hunk descriptions + localization results + full error history
+- Uses tools to freely explore the repo:
+  - `read_target_file` — read current file content
+  - `search_in_target_repo` — grep for method/class definitions
+  - `get_class_hierarchy` — JavaParser BFS over superclasses
+  - `get_memory_lessons` — known API-rename lessons from PatchKnowledgeIndex
+  - `submit_changes` — submit final CLAW pairs (ends the loop)
+- Verifies every `old_string` exists verbatim before submitting
+- Handles version constant remapping (e.g. `Version.V_5_9_0` → correct release-branch constant)
+- Strips unused imports before submitting to avoid checkstyle failures
+
+**Model:** Fast LLM (Phase 1) + Balanced LLM with tool use (Phase 2)
 
 ---
 
@@ -288,19 +415,19 @@ repos:
 
 ```bash
 # Run all patches
-python tests/run_full_pipeline_shadow_v2.py
+python tests/run_full_pipeline_shadow_v3.py
 
 # By repo
-python tests/run_full_pipeline_shadow_v2.py --repo elasticsearch
+python tests/run_full_pipeline_shadow_v3.py --repo elasticsearch
 
 # By type
-python tests/run_full_pipeline_shadow_v2.py --type TYPE-II
+python tests/run_full_pipeline_shadow_v3.py --type TYPE-II
 
 # By count
-python tests/run_full_pipeline_shadow_v2.py --count 3
+python tests/run_full_pipeline_shadow_v3.py --count 3
 
 # Combine filters
-python tests/run_full_pipeline_shadow_v2.py --repo elasticsearch --type TYPE-I --count 5
+python tests/run_full_pipeline_shadow_v3.py --repo elasticsearch --type TYPE-I --count 5
 ```
 
 ---
@@ -390,7 +517,7 @@ if loc_result.confidence < 0.6:
 
 Low confidence is a signal that the hunk is probably in the wrong file or nearby but not exact. Reasoning agent takes over to verify semantics.
 
-### 3. CLAW verification is mandatory
+### 3. Verification is mandatory
 
 Before application, all synthesized hunks must have `old_string` verified as present in the target file:
 
@@ -407,14 +534,14 @@ This prevents silent misapplications.
 ### 4. Token budgets are enforced
 
 Track cumulative tokens across all agents. At thresholds:
-- **70%:** Downgrade Opus → Sonnet
-- **85%:** Downgrade all → Haiku with simplified prompts
+- **70%:** Downgrade to balanced reasoning model
+- **85%:** Downgrade all to fast model with simplified prompts
 - **95%:** Abort with partial progress
 
 Example:
 ```python
 if tokens_used / TOKEN_BUDGET > 0.85:
-    llm_tier = LLMTier.FAST  # Use Haiku
+    llm_tier = LLMTier.FAST
 ```
 
 ---
@@ -422,15 +549,20 @@ if tokens_used / TOKEN_BUDGET > 0.85:
 ## Project Structure
 
 ```
-/backport-claw
+/omniportsource
 ├── src/
-│   ├── agents/                    # Agent 1–6 implementations
+│   ├── agents/                    # Agent 0–9 implementations
+│   │   ├── agent0_git.py
 │   │   ├── agent1_localizer.py
 │   │   ├── agent2_classifier.py
 │   │   ├── agent3_fastapply.py
 │   │   ├── agent4_namespace.py
 │   │   ├── agent5_structural.py
-│   │   └── agent6_synthesizer.py
+│   │   ├── agent6_synthesizer.py
+│   │   ├── agent7_validator.py
+│   │   ├── agent8_syntax_repair.py
+│   │   ├── agent9_fallback.py
+│   │   └── hunk_router.py
 │   ├── localization/              # 5-stage localization pipeline
 │   │   ├── stage1_git.py
 │   │   ├── stage2_fuzzy.py
@@ -441,7 +573,7 @@ if tokens_used / TOKEN_BUDGET > 0.85:
 │   │   ├── patch_parser.py
 │   │   ├── java_client.py
 │   │   └── preprocessor.py
-│   ├── backport_claw/             # CLAW application logic
+│   ├── omniportsource/            # Patch application logic
 │   │   └── apply_hunk.py
 │   ├── core/                      # State, models, graph
 │   │   ├── state.py
@@ -451,7 +583,7 @@ if tokens_used / TOKEN_BUDGET > 0.85:
 │       └── patch_knowledge_index.py
 ├── tests/
 │   ├── patches.yaml               # Patch config (any repo/type/count)
-│   ├── run_full_pipeline_shadow_v2.py  # Parameterized shadow run
+│   ├── run_full_pipeline_shadow_v3.py  # Parameterized shadow run
 │   ├── shadow_run_results/        # Output directory
 │   └── unit/                      # Unit tests
 ├── java-microservice/             # GumTree + JavaParser service
@@ -469,14 +601,14 @@ if tokens_used / TOKEN_BUDGET > 0.85:
 ## Running Tests
 
 ```bash
-# Unit tests (no LLM API key required)
+# Unit tests (no API key required)
 pytest tests/unit -v
 
 # Shadow run on 5 reference patches
-python tests/run_full_pipeline_shadow_v2.py
+python tests/run_full_pipeline_shadow_v3.py
 
 # Full run on custom patches
-python tests/run_full_pipeline_shadow_v2.py --config custom_patches.yaml
+python tests/run_full_pipeline_shadow_v3.py --config custom_patches.yaml
 ```
 
 ---
@@ -508,7 +640,7 @@ python tests/run_full_pipeline_shadow_v2.py --config custom_patches.yaml
 
 4. Run:
    ```bash
-   python tests/run_full_pipeline_shadow_v2.py --repo myrepo
+   python tests/run_full_pipeline_shadow_v3.py --repo myrepo
    ```
 
 Results appear in `tests/shadow_run_results/TYPE-I_abc123de/results.json`.
@@ -549,18 +681,7 @@ git log --oneline | grep <original_commit_sha>
 - **docs/plan.md** — Full 9-agent system design (Phase 2+), hybrid localization architecture
 - **src/core/state.py** — State machine definition and TypedDicts
 - **src/core/graph.py** — LangGraph orchestration
-
----
-
-## Model Selection
-
-- **Agent 1 (Localizer):** No LLM (pure code logic)
-- **Agent 2 (Classifier):** Haiku 4.5 (fast, structured output)
-- **Agent 4 (Namespace):** Sonnet 4.6 (balanced reasoning)
-- **Agent 5 (Structural):** Opus 4.6 (deepest reasoning; with fallback to Sonnet/Haiku at token limits)
-- **Agent 6 (Synthesizer):** Sonnet 4.6 (final verification and context management)
-
-Token budgets are tracked globally; agents downgrade gracefully as budget depletes.
+- **Dataset:** [JavaBackports](https://github.com/Javabackports/javabackports)
 
 ---
 

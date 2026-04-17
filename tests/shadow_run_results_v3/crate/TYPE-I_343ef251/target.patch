@@ -1,0 +1,329 @@
+commit 3c7e6fce69a025d9623221727e21ec25daa39c08
+Author: baur <baurzhansahariev@gmail.com>
+Date:   Fri Feb 7 10:47:35 2025 +0100
+
+    Use same logic for adding fulltext fields for Indexer and TranslogIndexer
+    
+    Co-Authored-By: Sebastian Utz <su@rtme.net>
+    (cherry picked from commit 343ef2518266d8aa07e2f93033d8041fe902d234)
+    
+    # Conflicts:
+    #       docs/appendices/release-notes/5.10.1.rst
+    #       server/src/main/java/io/crate/execution/dml/TranslogIndexer.java
+
+diff --git a/docs/appendices/release-notes/5.9.10.rst b/docs/appendices/release-notes/5.9.10.rst
+index b563a636ae..bf3233eb74 100644
+--- a/docs/appendices/release-notes/5.9.10.rst
++++ b/docs/appendices/release-notes/5.9.10.rst
+@@ -46,6 +46,11 @@ See the :ref:`version_5.9.0` release notes for a full list of changes in the
+ Fixes
+ =====
+ 
++- Fixed a recovery issue that led to records of a table with an ``OBJECT``
++  sub-column being part of a standalone ``FULLTEXT`` index to be never visible
++  for ``MATCH`` queries. This issue cannot be mitigated and a full re-index of
++  the data is required.
++
+ - Fixed an issue that would lead to errors when attempting to select a
+   sub-column from a virtual table or view participating in a join, e.g.::
+ 
+diff --git a/libs/shared/src/main/java/io/crate/common/collections/Lists.java b/libs/shared/src/main/java/io/crate/common/collections/Lists.java
+index 5d91a37e67..10a6a178c3 100644
+--- a/libs/shared/src/main/java/io/crate/common/collections/Lists.java
++++ b/libs/shared/src/main/java/io/crate/common/collections/Lists.java
+@@ -74,6 +74,13 @@ public final class Lists {
+         return xs;
+     }
+ 
++    public static <T> List<T> concat(T item, Collection<? extends T> list1) {
++        ArrayList<T> xs = new ArrayList<>(list1.size() + 1);
++        xs.add(item);
++        xs.addAll(list1);
++        return xs;
++    }
++
+     @SafeVarargs
+     public static final <T> List<T> concat(T first, T ... tail) {
+         ArrayList<T> result = new ArrayList<>(1 + tail.length);
+diff --git a/server/src/main/java/io/crate/execution/dml/Indexer.java b/server/src/main/java/io/crate/execution/dml/Indexer.java
+index 1caf276125..a0921517bf 100644
+--- a/server/src/main/java/io/crate/execution/dml/Indexer.java
++++ b/server/src/main/java/io/crate/execution/dml/Indexer.java
+@@ -59,6 +59,7 @@ import io.crate.expression.symbol.Symbol;
+ import io.crate.expression.symbol.Symbols;
+ import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.GeneratedReference;
++import io.crate.metadata.IndexReference;
+ import io.crate.metadata.IndexType;
+ import io.crate.metadata.NodeContext;
+ import io.crate.metadata.PartitionName;
+@@ -117,7 +118,7 @@ public class Indexer {
+     private final boolean writeOids;
+     private final Version tableVersionCreated;
+ 
+-    record IndexColumn(Reference reference, List<Input<?>> inputs) {
++    public record IndexColumn(Reference reference, List<Input<?>> inputs) {
+     }
+ 
+     static class RefResolver implements ReferenceResolver<CollectExpression<IndexItem, Object>> {
+@@ -493,21 +494,7 @@ public class Indexer {
+                 undeterministic.add(synthetic);
+             }
+         }
+-        this.indexColumns = new ArrayList<>(table.indexColumns().size());
+-        for (var ref : table.indexColumns()) {
+-            ArrayList<Input<?>> indexInputs = new ArrayList<>(ref.columns().size());
+-
+-            for (var sourceRef : ref.columns()) {
+-                Reference reference = table.getReference(sourceRef.column());
+-                assert reference.equals(sourceRef) : "refs must match";
+-
+-                Input<?> input = ctxForRefs.add(sourceRef);
+-                indexInputs.add(input);
+-            }
+-            if (ref.indexType() != IndexType.NONE) {
+-                indexColumns.add(new IndexColumn(ref, indexInputs));
+-            }
+-        }
++        this.indexColumns = buildIndexColumns(table.indexColumns(), table::getReference, ctxForRefs::add);
+         if (returnValues == null) {
+             this.returnValueInputs = null;
+         } else {
+@@ -533,6 +520,27 @@ public class Indexer {
+         this.tableVersionCreated = table.versionCreated();
+     }
+ 
++    public static List<IndexColumn> buildIndexColumns(Collection<IndexReference> indexReferences,
++                                                      Function<ColumnIdent, Reference> getRef,
++                                                      Function<Reference, Input<?>> createInput) {
++        List<IndexColumn> indexColumns = new ArrayList<>(indexReferences.size());
++        for (var ref : indexReferences) {
++            ArrayList<Input<?>> indexInputs = new ArrayList<>(ref.columns().size());
++
++            for (var sourceRef : ref.columns()) {
++                Reference reference = getRef.apply(sourceRef.column());
++                assert reference.equals(sourceRef) : "refs must match";
++
++                Input<?> input = createInput.apply(sourceRef);
++                indexInputs.add(input);
++            }
++            if (ref.indexType() != IndexType.NONE) {
++                indexColumns.add(new IndexColumn(ref, indexInputs));
++            }
++        }
++        return indexColumns;
++    }
++
+     /**
+      * To ensure default or generated expressions of object children are evaluated
+      * it's necessary to ensure the parent has values (or is present in the insert)
+@@ -768,6 +776,20 @@ public class Indexer {
+             indexer.indexValue(value, docBuilder);
+         }
+ 
++        addIndexColumns(indexColumns, docBuilder);
++
++        for (var constraint : tableConstraints) {
++            constraint.verify(item.insertValues());
++        }
++
++        return docBuilder.build(item.id());
++    }
++
++    /**
++     * Doesn't add fields for NULL values.
++     */
++    public static void addIndexColumns(List<IndexColumn> indexColumns,
++                                       IndexDocumentBuilder docBuilder) {
+         for (var indexColumn : indexColumns) {
+             String fqn = indexColumn.reference.storageIdent();
+             for (var input : indexColumn.inputs) {
+@@ -789,12 +811,6 @@ public class Indexer {
+                 }
+             }
+         }
+-
+-        for (var constraint : tableConstraints) {
+-            constraint.verify(item.insertValues());
+-        }
+-
+-        return docBuilder.build(item.id());
+     }
+ 
+     private static <T> T valueForInsert(DataType<T> valueType, Object value) {
+diff --git a/server/src/main/java/io/crate/execution/dml/TranslogIndexer.java b/server/src/main/java/io/crate/execution/dml/TranslogIndexer.java
+index 60dd8a9342..007900b571 100644
+--- a/server/src/main/java/io/crate/execution/dml/TranslogIndexer.java
++++ b/server/src/main/java/io/crate/execution/dml/TranslogIndexer.java
+@@ -21,20 +21,26 @@
+ 
+ package io.crate.execution.dml;
+ 
++import static io.crate.execution.dml.Indexer.addIndexColumns;
++import static io.crate.execution.dml.Indexer.buildIndexColumns;
++
+ import java.io.IOException;
+ import java.io.UncheckedIOException;
+-import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.function.Supplier;
+ 
+-import org.apache.lucene.document.Field;
+ import org.elasticsearch.Version;
+ import org.elasticsearch.common.bytes.BytesReference;
+ import org.elasticsearch.index.mapper.MapperParsingException;
+ import org.elasticsearch.index.mapper.ParsedDocument;
+ 
++import io.crate.common.collections.Lists;
++import io.crate.common.collections.Maps;
++import io.crate.data.Input;
+ import io.crate.expression.reference.doc.lucene.SourceParser;
++import io.crate.metadata.ColumnIdent;
+ import io.crate.metadata.DocReferences;
+ import io.crate.metadata.RowGranularity;
+ import io.crate.metadata.doc.DocTableInfo;
+@@ -50,10 +56,12 @@ public class TranslogIndexer {
+     }
+ 
+     private final Map<String, ColumnIndexer<?>> indexers = new HashMap<>();
+-    private final Map<String, List<String>> tableIndexSources = new HashMap<>();
+     private final boolean ignoreUnknownColumns;
+     private final SourceParser sourceParser;
+     private final Version tableVersionCreated;
++    private Map<String, Object> sourceMap;
++
++    private final List<Indexer.IndexColumn> indexColumns;
+ 
+     /**
+      * Creates a new TranslogIndexer backed by a DocTableInfo instance
+@@ -73,15 +81,26 @@ public class TranslogIndexer {
+                 sourceParser.register(DocReferences.toDocLookup(ref).column(), ref.valueType());
+             }
+         }
+-        for (var ref : table.indexColumns()) {
+-            for (var source : ref.columns()) {
+-                tableIndexSources.computeIfAbsent(source.column().fqn(), _ -> new ArrayList<>()).add(ref.storageIdent());
+-            }
+-        }
++
++        this.indexColumns = buildIndexColumns(
++            table.indexColumns(),
++            table::getReference,
++            reference -> new IndexInput(reference.column(), () -> sourceMap)
++        );
+         ignoreUnknownColumns = table.columnPolicy() != ColumnPolicy.STRICT;
+         tableVersionCreated = table.versionCreated();
+     }
+ 
++
++    private record IndexInput(ColumnIdent columnIdent,
++                              Supplier<Map<String, Object>> sourceSupplier) implements Input<Object> {
++
++        @Override
++        public Object value() {
++            return Maps.getByPath(sourceSupplier.get(), Lists.concat(columnIdent.name(), columnIdent.path()));
++        }
++    }
++
+     /**
+      * Convert a transaction log entry to a ParsedDocument to be indexed
+      *
+@@ -90,17 +109,16 @@ public class TranslogIndexer {
+      */
+     public ParsedDocument index(String id, BytesReference source) {
+         try {
++            sourceMap = sourceParser.parse(source, ignoreUnknownColumns == false);
+             return populateLuceneFields(source).build(id);
+         } catch (IOException | UncheckedIOException e) {
+             throw new MapperParsingException("Error parsing translog source", e);
+         }
+-
+     }
+ 
+     private IndexDocumentBuilder populateLuceneFields(BytesReference source) throws IOException {
+-        Map<String, Object> docMap = sourceParser.parse(source, ignoreUnknownColumns == false);
+         IndexDocumentBuilder docBuilder = new IndexDocumentBuilder(new NoOpTranslogWriter(source), _ -> null, Map.of(), tableVersionCreated);
+-        for (var entry : docMap.entrySet()) {
++        for (var entry : sourceMap.entrySet()) {
+             var column = entry.getKey();
+             var indexer = indexers.get(column);
+             if (indexer == null) {
+@@ -113,11 +131,15 @@ public class TranslogIndexer {
+             Object castValue = valueForInsert(indexer.dataType, entry.getValue());
+             if (castValue != null) {
+                 indexer.valueIndexer.indexValue(castValue, docBuilder);
+-                if (tableIndexSources.containsKey(column)) {
+-                    addIndexField(docBuilder, tableIndexSources.get(column), castValue);
+-                }
+             }
++            // Make sanitized value visible for the index columns.
++            // Fulltext fields must use sanitized values.
++            // NULL values are skipped in the addIndexColumns.
++            entry.setValue(castValue);
+         }
++
++        addIndexColumns(indexColumns, docBuilder);
++
+         return docBuilder;
+     }
+ 
+@@ -196,24 +218,4 @@ public class TranslogIndexer {
+         return valueType.valueForInsert(valueType.sanitizeValueLenient(value));
+     }
+ 
+-    private static void addIndexField(IndexDocumentBuilder docBuilder, List<String> targetFields, Object value) {
+-        if (value == null) {
+-            return;
+-        }
+-        if (value instanceof Iterable<?> it) {
+-            for (Object val : it) {
+-                if (val == null) {
+-                    continue;
+-                }
+-                targetFields.forEach(field -> addIndexField(docBuilder, field, val));
+-            }
+-        } else {
+-            targetFields.forEach(field -> addIndexField(docBuilder, field, value));
+-        }
+-    }
+-
+-    private static void addIndexField(IndexDocumentBuilder docBuilder, String field, Object value) {
+-        docBuilder.addField(new Field(field, value.toString(), FulltextIndexer.FIELD_TYPE));
+-    }
+-
+ }
+diff --git a/server/src/test/java/io/crate/execution/dml/IndexerTest.java b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+index 1a8188b809..c352209c84 100644
+--- a/server/src/test/java/io/crate/execution/dml/IndexerTest.java
++++ b/server/src/test/java/io/crate/execution/dml/IndexerTest.java
+@@ -655,6 +655,28 @@ public class IndexerTest extends CrateDummyClusterServiceUnitTest {
+         assertTranslogParses(doc, table);
+     }
+ 
++    @Test
++    public void test_can_add_dedicated_fulltext_to_sub_column() throws Exception {
++        SQLExecutor e = SQLExecutor.of(clusterService)
++            .addTable("""
++                create table tbl (
++                    id int,
++                    author object as (
++                        name string
++                    ),
++                    index nested_ft using fulltext(author['name'])
++                )
++            """);
++        DocTableInfo table = e.resolveTableInfo("tbl");
++        var ref = table.indexColumn(ColumnIdent.of("nested_ft"));
++
++        var indexer = getIndexer(e, "tbl", "id", "author");
++        ParsedDocument doc = indexer.index(item(1, Map.of("name", "sub_col_name")));
++        IndexableField[] fields = doc.doc().getFields(ref.storageIdent());
++        assertThat(fields).hasSize(1);
++        assertTranslogParses(doc, table);
++    }
++
+     @Test
+     public void test_can_index_all_storable_types() throws Exception {
+         StringBuilder stmtBuilder = new StringBuilder()

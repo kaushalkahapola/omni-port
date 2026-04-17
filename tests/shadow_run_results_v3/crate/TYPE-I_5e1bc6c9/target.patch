@@ -1,0 +1,195 @@
+commit 999e769158bb2eec3bf25583583d95463c5dc3db
+Author: Sebastian Utz <su@rtme.net>
+Date:   Mon Feb 3 16:54:15 2025 +0100
+
+    Fix SubQueryResults.merge(), result values of both sides must be used
+    
+    When merging 2 SubQueryResults, the result values of both sides
+    must be taken into account and merged.
+    
+    Fixes #17307.
+    
+    (cherry picked from commit 5e1bc6c9d8ed874baa4fc99500561c4e94c37d9d)
+
+diff --git a/docs/appendices/release-notes/5.9.10.rst b/docs/appendices/release-notes/5.9.10.rst
+index 62951bf921..2615538801 100644
+--- a/docs/appendices/release-notes/5.9.10.rst
++++ b/docs/appendices/release-notes/5.9.10.rst
+@@ -65,3 +65,16 @@ Fixes
+         ) u
+     ORDER BY name
+ 
++- Fixed an issue that caused an error when using a correlated sub-query and
++  a normal subquery on the same level together with an additional sub-query on
++  an outer level. Example::
++
++    WITH tbl AS (SELECT 1 as x)
++    SELECT (
++      SELECT x FROM tbl
++      WHERE t.x = tbl.x
++        AND tbl.x IN (SELECT x FROM unnest([1]))
++    ),
++    (SELECT y FROM unnest([2]) as t2(y))
++    FROM tbl t
++
+diff --git a/server/src/main/java/io/crate/planner/operators/SubQueryResults.java b/server/src/main/java/io/crate/planner/operators/SubQueryResults.java
+index 57077b2404..832eee0345 100644
+--- a/server/src/main/java/io/crate/planner/operators/SubQueryResults.java
++++ b/server/src/main/java/io/crate/planner/operators/SubQueryResults.java
+@@ -22,6 +22,7 @@
+ package io.crate.planner.operators;
+ 
+ import java.util.Collections;
++import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+ 
+@@ -46,11 +47,10 @@ public class SubQueryResults {
+     private Row inputRow = Row.EMPTY;
+ 
+     public SubQueryResults(Map<SelectSymbol, Object> valuesBySubQuery) {
+-        this.valuesBySubQuery = valuesBySubQuery;
+-        this.boundOuterColumns = EMPTY_OUTER_COLUMNS;
++        this(valuesBySubQuery, EMPTY_OUTER_COLUMNS);
+     }
+ 
+-    public SubQueryResults(Map<SelectSymbol, Object> valuesBySubQuery,
++    private SubQueryResults(Map<SelectSymbol, Object> valuesBySubQuery,
+                            ObjectIntMap<OuterColumn> boundOuterColumns) {
+         this.valuesBySubQuery = valuesBySubQuery;
+         this.boundOuterColumns = boundOuterColumns;
+@@ -90,7 +90,15 @@ public class SubQueryResults {
+     }
+ 
+     public static SubQueryResults merge(SubQueryResults subQueryResults1, SubQueryResults subQueryResults2) {
+-        // Correlated subquery related fields.
++        // Correlated subquery related fields, expect only one of them to contain correlated subquery fields.
++        assert subQueryResults1.boundOuterColumns.isEmpty()
++            || subQueryResults2.boundOuterColumns.isEmpty()
++            : "Can't merge two SubQueryResults with non-empty boundOuterColumns";
++
++        assert subQueryResults1.inputRow.equals(Row.EMPTY)
++            || subQueryResults2.inputRow.equals(Row.EMPTY)
++            : "Can't merge two SubQueryResults with non-empty inputRow";
++
+         Row mergedRow = subQueryResults1.inputRow;
+         ObjectIntMap<OuterColumn> mergedBoundOuterColumns = subQueryResults1.boundOuterColumns;
+         if (mergedRow.equals(Row.EMPTY)) {
+@@ -100,11 +108,11 @@ public class SubQueryResults {
+             mergedBoundOuterColumns = subQueryResults2.boundOuterColumns;
+         }
+ 
+-        // Regular sub-select field.
+-        Map<SelectSymbol, Object> mergedValuesBySubQuery = subQueryResults1.valuesBySubQuery;
+-        if (mergedValuesBySubQuery.isEmpty()) {
+-            mergedValuesBySubQuery = subQueryResults2.valuesBySubQuery;
+-        }
++        // Fully merge regular sub-select field.
++        Map<SelectSymbol, Object> mergedValuesBySubQuery = new HashMap<>();
++        mergedValuesBySubQuery.putAll(subQueryResults1.valuesBySubQuery);
++        mergedValuesBySubQuery.putAll(subQueryResults2.valuesBySubQuery);
++
+ 
+         SubQueryResults combinedSubQueryResults = new SubQueryResults(mergedValuesBySubQuery, mergedBoundOuterColumns);
+         combinedSubQueryResults.bindOuterColumnInputRow(mergedRow);
+diff --git a/server/src/test/java/io/crate/integrationtests/CorrelatedSubqueryITest.java b/server/src/test/java/io/crate/integrationtests/CorrelatedSubqueryITest.java
+index 91ddb1fb56..f7eb7485e0 100644
+--- a/server/src/test/java/io/crate/integrationtests/CorrelatedSubqueryITest.java
++++ b/server/src/test/java/io/crate/integrationtests/CorrelatedSubqueryITest.java
+@@ -452,7 +452,7 @@ public class CorrelatedSubqueryITest extends IntegTestCase {
+      * Tests a bug https://github.com/crate/crate/issues/15398.
+      */
+     @Test
+-    public void test_can_mix_correlated_qubquery_and_sub_select() {
++    public void test_can_mix_correlated_subquery_and_sub_select() {
+         execute("CREATE TABLE tbl(x int)");
+         execute("INSERT INTO tbl(x) VALUES (1)");
+         execute("refresh table tbl");
+@@ -468,6 +468,23 @@ public class CorrelatedSubqueryITest extends IntegTestCase {
+         assertThat(response).hasRows("1");
+     }
+ 
++    /*
++     * https://github.com/crate/crate/issues/17307
++     */
++    @Test
++    public void test_can_mix_correlated_subquery_and_sub_selects_with_sub_select() {
++        execute("""
++            WITH tbl AS (SELECT 1 as x)
++            SELECT (
++              SELECT x FROM tbl
++              WHERE t.x = tbl.x
++                AND
++                tbl.x IN (SELECT x FROM unnest([1]))
++            ), (SELECT y FROM unnest([2]) as t2(y))
++            FROM tbl t
++            """);
++        assertThat(response).hasRows("1| 2");
++    }
+ 
+     /*
+      * https://github.com/crate/crate/issues/16124
+diff --git a/server/src/test/java/io/crate/planner/operators/SubQueryResultsTest.java b/server/src/test/java/io/crate/planner/operators/SubQueryResultsTest.java
+new file mode 100644
+index 0000000000..184e293601
+--- /dev/null
++++ b/server/src/test/java/io/crate/planner/operators/SubQueryResultsTest.java
+@@ -0,0 +1,58 @@
++/*
++ * Licensed to Crate.io GmbH ("Crate") under one or more contributor
++ * license agreements.  See the NOTICE file distributed with this work for
++ * additional information regarding copyright ownership.  Crate licenses
++ * this file to you under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.  You may
++ * obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ *
++ * However, if you have executed another commercial license agreement
++ * with Crate these terms will supersede the license and you may use the
++ * software solely pursuant to the terms of the relevant commercial agreement.
++ */
++
++package io.crate.planner.operators;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++import java.util.Map;
++
++import org.elasticsearch.test.ESTestCase;
++import org.junit.Test;
++
++import io.crate.expression.symbol.SelectSymbol;
++import io.crate.testing.DummyRelation;
++import io.crate.types.DataTypes;
++
++public class SubQueryResultsTest extends ESTestCase {
++
++    @Test
++    public void test_merges_values_of_both_sides() {
++        SelectSymbol selectSymbol1 = new SelectSymbol(
++            new DummyRelation("x"),
++            DataTypes.STRING_ARRAY,
++            SelectSymbol.ResultType.SINGLE_COLUMN_SINGLE_VALUE,
++            false);
++        SelectSymbol selectSymbol2 = new SelectSymbol(
++            new DummyRelation("y"),
++            DataTypes.STRING_ARRAY,
++            SelectSymbol.ResultType.SINGLE_COLUMN_SINGLE_VALUE,
++            false);
++
++        SubQueryResults subQueryResults1 = new SubQueryResults(Map.of(selectSymbol1, "foo"));
++        SubQueryResults subQueryResults2 = new SubQueryResults(Map.of(selectSymbol2, "bar"));
++
++        SubQueryResults merged = SubQueryResults.merge(subQueryResults1, subQueryResults2);
++
++        assertThat(merged.getSafe(selectSymbol1)).isEqualTo("foo");
++        assertThat(merged.getSafe(selectSymbol2)).isEqualTo("bar");
++    }
++}

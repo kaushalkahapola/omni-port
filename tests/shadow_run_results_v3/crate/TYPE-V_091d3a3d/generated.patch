@@ -52,7 +52,7 @@ index 8b700cd461..13290b6ad7 100644
      }
  }
 diff --git a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
-index 466ad54e85..12f1f8cf1f 100644
+index 466ad54e85..15a9589323 100644
 --- a/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
 +++ b/server/src/main/java/io/crate/execution/ddl/tables/TransportGCDanglingArtifacts.java
 @@ -92,10 +92,29 @@ public class TransportGCDanglingArtifacts extends AbstractDDLTransportAction<GCD
@@ -66,9 +66,9 @@ index 466ad54e85..12f1f8cf1f 100644
 +                if (gcDanglingArtifactsRequest.indexUUIDs().isEmpty()) {
 +                    for (ObjectCursor<IndexMetadata> cursor : metadata.indices().values()) {
 +                        Index index = cursor.value.getIndex();
-+                        RelationMetadata relation = metadata.getRelation(index.getUUID());
-+                        if (relation == null) {
-+                            if (allTableIndices.contains(index) == false) {
++                        if (allTableIndices.contains(index) == false) {
++                            RelationMetadata relation = metadata.getRelation(index.getUUID());
++                            if (relation == null) {
 +                                danglingIndicesToDelete.add(index);
 +                            }
 +                        }

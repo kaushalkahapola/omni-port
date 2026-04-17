@@ -1,0 +1,208 @@
+{
+  "run_timestamp": "2026-04-12T07:32:34.007062",
+  "repo": "crate",
+  "patch_type": "TYPE-I",
+  "original_commit": "146e80ab062cc5fe77f246dface16db51fc7f2ee",
+  "backport_commit": "314551c749e4fa5a2d9edcaa3ac28eee51ed1c90",
+  "description": "master \u2192 5.10",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageState.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 22,
+          "end_line": 27,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageState.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 44,
+          "end_line": 50,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.31,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies a single method by adding a MathContext parameter to a BigDecimal division to avoid ArithmeticException on infinite fractions. The change is localized, involves an exact string replacement with an additional import, and the test addition is straightforward. Both code hunks were found via 'git_exact' with high confidence, indicating minimal divergence from the target branch. Thus, the patch is a trivial backport classified as TYPE_I.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageState.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/io/crate/execution/engine/aggregation/impl/average/numeric/NumericAverageState.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "crate-helper",
+      "test_success": true,
+      "test_mode": "crate-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.execution.engine.aggregation.impl.AverageAggregationTest.xml"
+        ],
+        "target_classes": [
+          "AverageAggregationTest"
+        ],
+        "test_cases": {
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#testFloat": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#test_avg_numeric_can_handle_non_terminating_decimal_expansion": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#testShort": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#test_avg_numeric_on_long_non_doc_values_does_not_overflow": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#testUnsupportedType": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#testInterval": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#test_avg_numeric_with_precision_and_scale_on_double_non_doc_values": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#test_function_implements_doc_values_aggregator_for_numeric_types": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#test_avg_numeric_on_double_non_doc_values": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#testInteger": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#test_avg_with_byte_argument_type": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#testLong": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#testReturnType": "passed",
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#testDouble": "passed"
+        },
+        "classes": {
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest": "passed"
+        },
+        "summary": {
+          "passed": 14,
+          "failed": 0,
+          "skipped": 0,
+          "total": 14
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#test_avg_numeric_can_handle_non_terminating_decimal_expansion"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 14,
+        "patched_total": 14,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-crate-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 14
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1436,
+    "target_patch_bytes": 3991,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "crate-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.crate.execution.engine.aggregation.impl.AverageAggregationTest#test_avg_numeric_can_handle_non_terminating_decimal_expansion"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 14,
+      "patched_total": 14,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

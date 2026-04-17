@@ -1,11 +1,12 @@
 {
-  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-II",
   "original_commit": "c77d091150e74221bf13b8df3d8735649e544fdc",
   "backport_commit": "f1cc59544a06bc77f7e03cc7798454c6c92ef3a5",
   "description": "master \u2192 5.6",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
       "elapsed_s": 0.0,
@@ -70,17 +71,17 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.19,
+      "elapsed_s": 3.23,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
-        "confidence": 1.0,
-        "reasoning": "All code changes are exact matches to the target branch files, found via 'git_exact' with confidence 1.00. The patch consists of adding a deterministic function filter parameter to existing EvaluatingNormalizer constructors without structural or API changes. The release notes and test additions are straightforward text additions and a simple test method addition, respectively. There are no whitespace or formatting drifts, no structural or API refactorings, and no redesigns. Hence, the patch is a trivial backport with exact string replacements and additions.",
+        "confidence": 0.95,
+        "reasoning": "All changes are exact additions of a deterministic function filter parameter to constructors of EvaluatingNormalizer and related classes. The localization evidence shows all hunks were found via 'git_exact' with high confidence, indicating the patch applies cleanly and directly to the target branch without structural or API changes. The patch is a straightforward string addition with no complex refactoring or redesign, fitting the TYPE_I classification for trivial backport. The token budget estimate accounts for the moderate size of the patch and the need to verify all related files.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.01,
       "error": null,
       "applied_count": 6,
       "applied_hunks": [
@@ -156,28 +157,26 @@
         "xml_reports": [
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.integrationtests.DeleteIntegrationTest.xml"
         ],
-        "target_classes": [
-          "DeleteIntegrationTest"
-        ],
+        "target_classes": [],
         "test_cases": {
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteExceedingInternalDefaultBulkSize": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteWithNullArg": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteWhereIsNull": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteFromAlias": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteWithSubQueryOnPartition": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteToRoutedRequestByPlannerWhereIn": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testBulkDeleteNullAndSingleKey": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#test_delete_partitions_from_subquery_does_not_leave_empty_orphan_partitions": "passed",
           "io.crate.integrationtests.DeleteIntegrationTest#testDeleteTableWithoutWhere": "passed",
           "io.crate.integrationtests.DeleteIntegrationTest#testDeleteOnPKNoMatch": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteToDeleteRequestByPlanner": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testBulkDeleteNullAndSingleKey": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteFromAlias": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#test_delete_partitions_from_subquery_does_not_leave_empty_orphan_partitions": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteExceedingInternalDefaultBulkSize": "passed",
           "io.crate.integrationtests.DeleteIntegrationTest#testDeleteByIdWithMultiplePrimaryKey": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#test_can_reuse_prepared_statement_for_delete_containing_non_deterministic_function": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteOnIpType": "passed",
           "io.crate.integrationtests.DeleteIntegrationTest#testDeleteWithWhereDeletesCorrectRecord": "passed",
           "io.crate.integrationtests.DeleteIntegrationTest#testDeleteWithSubQuery": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteWithSubQueryOnPartition": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteWithNullArg": "passed",
           "io.crate.integrationtests.DeleteIntegrationTest#testDeleteToRoutedRequestByPlannerWhereOr": "passed",
-          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteByQueryWithMultiplePrimaryKey": "passed"
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteWhereIsNull": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteToDeleteRequestByPlanner": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteToRoutedRequestByPlannerWhereIn": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#test_can_reuse_prepared_statement_for_delete_containing_non_deterministic_function": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteByQueryWithMultiplePrimaryKey": "passed",
+          "io.crate.integrationtests.DeleteIntegrationTest#testDeleteOnIpType": "passed"
         },
         "classes": {
           "io.crate.integrationtests.DeleteIntegrationTest": "passed"
@@ -207,7 +206,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 18
     },
     "java_production_hunks": 6,
@@ -221,6 +220,20 @@
       5
     ],
     "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
     "synthesis_status": "success",
     "applied_on_disk_ag3": 6,
     "synthesized_count": 0,
@@ -232,6 +245,7 @@
     "failed_hunks": [],
     "generated_patch_bytes": 5539,
     "target_patch_bytes": 8379,
+    "patch_exact_match": true,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
@@ -249,6 +263,6 @@
     "fail_to_pass_count": 0,
     "newly_passing_count": 0,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

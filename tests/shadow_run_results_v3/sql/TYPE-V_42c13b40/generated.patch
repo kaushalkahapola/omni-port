@@ -1,0 +1,102 @@
+diff --git a/core/src/main/java/org/opensearch/sql/data/model/ExprDateValue.java b/core/src/main/java/org/opensearch/sql/data/model/ExprDateValue.java
+index 83450a3e5..35071fbcb 100644
+--- a/core/src/main/java/org/opensearch/sql/data/model/ExprDateValue.java
++++ b/core/src/main/java/org/opensearch/sql/data/model/ExprDateValue.java
+@@ -34,7 +34,14 @@ public class ExprDateValue extends AbstractExprValue {
+    */
+   public ExprDateValue(String date) {
+     try {
+-      this.date = LocalDate.parse(date, DateTimeFormatters.DATE_TIMESTAMP_FORMATTER);
++      LocalDateTime ldt;
++      try {
++        ldt = LocalDateTime.parse(date, DateTimeFormatters.DATE_TIMESTAMP_FORMATTER);
++      } catch (DateTimeParseException ignored) {
++        ZonedDateTime zdt = ZonedDateTime.parse(date, DateTimeFormatter.ISO_DATE_TIME);
++        ldt = zdt.withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
++      }
++      this.date = ldt.toLocalDate();
+     } catch (DateTimeParseException e) {
+       throw new ExpressionEvaluationException(
+           String.format("date:%s in unsupported format, please use 'yyyy-MM-dd'", date));
+diff --git a/core/src/main/java/org/opensearch/sql/data/model/ExprTimeValue.java b/core/src/main/java/org/opensearch/sql/data/model/ExprTimeValue.java
+index 0fe4a9ccb..f3e9db3ff 100644
+--- a/core/src/main/java/org/opensearch/sql/data/model/ExprTimeValue.java
++++ b/core/src/main/java/org/opensearch/sql/data/model/ExprTimeValue.java
+@@ -12,7 +12,9 @@ import java.time.Instant;
+ import java.time.LocalDate;
+ import java.time.LocalDateTime;
+ import java.time.LocalTime;
++import java.time.OffsetTime;
+ import java.time.ZonedDateTime;
++import java.time.format.DateTimeFormatter;
+ import java.time.format.DateTimeParseException;
+ import java.util.Objects;
+ import lombok.RequiredArgsConstructor;
+@@ -35,7 +37,23 @@ public class ExprTimeValue extends AbstractExprValue {
+    */
+   public ExprTimeValue(String time) {
+     try {
+-      this.time = LocalTime.parse(time, DateTimeFormatters.TIME_TIMESTAMP_FORMATTER);
++      LocalTime lt;
++      try {
++        lt = LocalTime.parse(time, DateTimeFormatters.TIME_TIMESTAMP_FORMATTER);
++      } catch (DateTimeParseException ignore) {
++        try {
++          lt =
++              ZonedDateTime.parse(time, DateTimeFormatter.ISO_DATE_TIME)
++                  .withZoneSameInstant(ZoneOffset.UTC)
++                  .toLocalTime();
++        } catch (DateTimeParseException ignore2) {
++          lt =
++              OffsetTime.parse(time, DateTimeFormatter.ISO_TIME)
++                  .withOffsetSameInstant(ZoneOffset.UTC)
++                  .toLocalTime();
++        }
++      }
++      this.time = lt;
+     } catch (DateTimeParseException e) {
+       throw new ExpressionEvaluationException(
+           String.format("time:%s in unsupported format, please use 'HH:mm:ss[.SSSSSSSSS]'", time));
+diff --git a/core/src/main/java/org/opensearch/sql/data/model/ExprTimestampValue.java b/core/src/main/java/org/opensearch/sql/data/model/ExprTimestampValue.java
+index e083b43e3..bed3c66b3 100644
+--- a/core/src/main/java/org/opensearch/sql/data/model/ExprTimestampValue.java
++++ b/core/src/main/java/org/opensearch/sql/data/model/ExprTimestampValue.java
+@@ -14,6 +14,8 @@ import java.time.LocalDate;
+ import java.time.LocalDateTime;
+ import java.time.LocalTime;
+ import java.time.ZoneOffset;
++import java.time.ZonedDateTime;
++import java.time.format.DateTimeFormatter;
+ import java.time.format.DateTimeParseException;
+ import java.time.temporal.ChronoUnit;
+ import java.util.Objects;
+@@ -32,17 +34,24 @@ public class ExprTimestampValue extends AbstractExprValue {
+   /**
+    * Constructor with timestamp string.
+    *
+-   * @param timestamp a date or timestamp string (does not accept time string)
++   * @param timestamp a date or timestamp string (does not accept time string). It accepts both ISO
++   *     8601 format and {@code yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]} format
+    */
+   public ExprTimestampValue(String timestamp) {
+     try {
+-      this.timestamp =
+-          LocalDateTime.parse(timestamp, DateTimeFormatters.DATE_TIMESTAMP_FORMATTER)
+-              .toInstant(ZoneOffset.UTC);
++      LocalDateTime ldt;
++      try {
++        ldt = LocalDateTime.parse(timestamp, DateTimeFormatters.DATE_TIMESTAMP_FORMATTER);
++      } catch (DateTimeParseException ignored) {
++        ZonedDateTime zdt = ZonedDateTime.parse(timestamp, DateTimeFormatter.ISO_DATE_TIME);
++        ldt = zdt.withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
++      }
++      this.timestamp = ldt.toInstant(ZoneOffset.UTC);
+     } catch (DateTimeParseException e) {
+       throw new ExpressionEvaluationException(
+           String.format(
+-              "timestamp:%s in unsupported format, please use 'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]'",
++              "timestamp:%s in unsupported format, please use 'yyyy-MM-dd HH:mm:ss[.SSSSSSSSS]' or"
++                  + " ISO 8601 format",
+               timestamp));
+     }
+   }

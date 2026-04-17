@@ -1,0 +1,218 @@
+commit 24104833a4860a7a61fb472a1e5dca633c145094
+Author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+Date:   Fri Jan 17 22:28:12 2025 +0000
+
+    Add %{{TIME_NOW}} pattern for sprintf (#16906) (#16908)
+    
+    * Add a new pattern %{{TIME_NOW}} to `event.sprintf` to generate a fresh timestamp.
+    The timestamp is represented as a string in the default ISO 8601 format
+    
+    For example,
+    ```
+    input {
+        heartbeat {
+        add_field => { "heartbeat_time" => "%{{TIME_NOW}}" }
+        }
+    }
+    ```
+    
+    (cherry picked from commit cd729b76828f6c99a41dadb62f229dfa1afe1304)
+    
+    Co-authored-by: kaisecheng <69120390+kaisecheng@users.noreply.github.com>
+
+diff --git a/docs/static/event-data.asciidoc b/docs/static/event-data.asciidoc
+index 9952fc168..3c4412c80 100644
+--- a/docs/static/event-data.asciidoc
++++ b/docs/static/event-data.asciidoc
+@@ -94,6 +94,23 @@ These formats are not directly interchangeable, and we advise you to begin using
+ 
+ NOTE: A Logstash timestamp represents an instant on the UTC-timeline, so using sprintf formatters will produce results that may not align with your machine-local timezone.
+ 
++You can generate a fresh timestamp by using `%{{TIME_NOW}}` syntax instead of relying on the value in `@timestamp`.
++This is particularly useful when you need to estimate the time span of each plugin.
++
++[source,js]
++----------------------------------
++input {
++  heartbeat {
++    add_field => { "heartbeat_time" => "%{{TIME_NOW}}" }
++  }
++}
++filter {
++  mutate {
++    add_field => { "mutate_time" => "%{{TIME_NOW}}" }
++  }
++}
++----------------------------------
++
+ [discrete]
+ [[conditionals]]
+ ==== Conditionals
+diff --git a/logstash-core/src/main/java/org/logstash/StringInterpolation.java b/logstash-core/src/main/java/org/logstash/StringInterpolation.java
+index 8209fdc59..0f7f3c470 100644
+--- a/logstash-core/src/main/java/org/logstash/StringInterpolation.java
++++ b/logstash-core/src/main/java/org/logstash/StringInterpolation.java
+@@ -29,9 +29,11 @@ import java.time.ZoneOffset;
+ import java.time.format.DateTimeFormatter;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Optional;
+ 
+ public final class StringInterpolation {
+ 
++    private static final String TIME_NOW = "TIME_NOW";
+     private static final ThreadLocal<StringBuilder> STRING_BUILDER =
+         new ThreadLocal<StringBuilder>() {
+             @Override
+@@ -83,13 +85,19 @@ public final class StringInterpolation {
+                 // JAVA-style @timestamp formatter:
+                 // - `%{{yyyy-MM-dd}}` -> `2021-08-11`
+                 // - `%{{YYYY-'W'ww}}` -> `2021-W32`
++                // A special pattern to generate a fresh current time
++                // - `%{{TIME_NOW}}` -> `2025-01-16T16:57:12.488955Z`
+                 close = close + 1; // consume extra closing squiggle
+-                final Timestamp t =  event.getTimestamp();
+-                if (t != null) {
+-                    final String javaTimeFormatPattern = template.substring(open+3, close-1);
+-                    final java.time.format.DateTimeFormatter javaDateTimeFormatter = DateTimeFormatter.ofPattern(javaTimeFormatPattern).withZone(ZoneOffset.UTC);
+-                    final String formattedTimestamp = javaDateTimeFormatter.format(t.toInstant());
+-                    builder.append(formattedTimestamp);
++                final String pattern = template.substring(open+3, close-1);
++                if (pattern.equals(TIME_NOW)) {
++                    builder.append(new Timestamp());
++                } else {
++                    Optional.ofNullable(event.getTimestamp())
++                            .map(Timestamp::toInstant)
++                            .map(instant -> DateTimeFormatter.ofPattern(pattern)
++                                    .withZone(ZoneOffset.UTC)
++                                    .format(instant))
++                            .ifPresent(builder::append);
+                 }
+             } else if (template.charAt(open + 2) == '+') {
+                 // JODA-style @timestamp formatter:
+diff --git a/logstash-core/src/test/java/org/logstash/StringInterpolationTest.java b/logstash-core/src/test/java/org/logstash/StringInterpolationTest.java
+index 1e664c5d0..c4b0f446b 100644
+--- a/logstash-core/src/test/java/org/logstash/StringInterpolationTest.java
++++ b/logstash-core/src/test/java/org/logstash/StringInterpolationTest.java
+@@ -21,16 +21,21 @@
+ package org.logstash;
+ 
+ 
++import org.awaitility.Awaitility;
+ import org.joda.time.DateTime;
+ import org.joda.time.DateTimeZone;
+ import org.junit.Test;
+ 
+ import java.io.IOException;
++import java.time.Duration;
++import java.time.Instant;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.Map;
+ 
+-import static org.junit.Assert.*;
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertThrows;
++import static org.junit.Assert.assertTrue;
+ 
+ 
+ public class StringInterpolationTest extends RubyTestBase {
+@@ -71,14 +76,14 @@ public class StringInterpolationTest extends RubyTestBase {
+     }
+ 
+     @Test
+-    public void TestMixDateAndFields() throws IOException {
++    public void testMixDateAndFields() throws IOException {
+         Event event = getTestEvent();
+         String path = "/full/%{+YYYY}/weeee/%{bar}";
+         assertEquals("/full/2015/weeee/foo", StringInterpolation.evaluate(event, path));
+     }
+ 
+     @Test
+-    public void TestMixDateAndFieldsJavaSyntax() throws IOException {
++    public void testMixDateAndFieldsJavaSyntax() throws IOException {
+         Event event = getTestEvent();
+         String path = "/full/%{{YYYY-DDD}}/weeee/%{bar}";
+         assertEquals("/full/2015-274/weeee/foo", StringInterpolation.evaluate(event, path));
+@@ -92,28 +97,28 @@ public class StringInterpolationTest extends RubyTestBase {
+     }
+ 
+     @Test
+-    public void TestStringIsOneDateTag() throws IOException {
++    public void testStringIsOneDateTag() throws IOException {
+         Event event = getTestEvent();
+         String path = "%{+YYYY}";
+         assertEquals("2015", StringInterpolation.evaluate(event, path));
+     }
+ 
+     @Test
+-    public void TestStringIsJavaDateTag() throws IOException {
++    public void testStringIsJavaDateTag() throws IOException {
+         Event event = getTestEvent();
+         String path = "%{{YYYY-'W'ww}}";
+         assertEquals("2015-W40", StringInterpolation.evaluate(event, path));
+     }
+ 
+     @Test
+-    public void TestFieldRef() throws IOException {
++    public void testFieldRef() throws IOException {
+         Event event = getTestEvent();
+         String path = "%{[j][k1]}";
+         assertEquals("v", StringInterpolation.evaluate(event, path));
+     }
+ 
+     @Test
+-    public void TestEpochSeconds() throws IOException {
++    public void testEpochSeconds() throws IOException {
+         Event event = getTestEvent();
+         String path = "%{+%ss}";
+         // `+%ss` bypasses the EPOCH syntax and instead matches the JODA syntax.
+@@ -122,14 +127,14 @@ public class StringInterpolationTest extends RubyTestBase {
+     }
+ 
+     @Test
+-    public void TestEpoch() throws IOException {
++    public void testEpoch() throws IOException {
+         Event event = getTestEvent();
+         String path = "%{+%s}";
+         assertEquals("1443657600", StringInterpolation.evaluate(event, path));
+     }
+ 
+     @Test
+-    public void TestValueIsArray() throws IOException {
++    public void testValueIsArray() throws IOException {
+         ArrayList<String> l = new ArrayList<>();
+         l.add("Hello");
+         l.add("world");
+@@ -142,13 +147,30 @@ public class StringInterpolationTest extends RubyTestBase {
+     }
+ 
+     @Test
+-    public void TestValueIsHash() throws IOException {
++    public void testValueIsHash() throws IOException {
+         Event event = getTestEvent();
+ 
+         String path = "%{j}";
+         assertEquals("{\"k1\":\"v\"}", StringInterpolation.evaluate(event, path));
+     }
+ 
++    @Test
++    public void testPatternTimeNowGenerateFreshTimestamp() throws IOException, InterruptedException {
++        Event event = getTestEvent();
++        Timestamp before = new Timestamp();
++        Awaitility.await("Make sure we sleep enough get another current timestamp")
++                .atMost(Duration.ofSeconds(1))
++                .until(() -> Instant.now().isAfter(before.toInstant()));
++        Timestamp result = new Timestamp(StringInterpolation.evaluate(event, "%{{TIME_NOW}}"));
++        assertTrue(before.compareTo(result) < 0);
++    }
++
++    @Test
++    public void testBadPatternTimeNowShouldThrowException() throws IOException {
++        Event event = getTestEvent();
++        assertThrows(IllegalArgumentException.class, () -> StringInterpolation.evaluate(event, "%{{BAD_TIME_NOW}}"));
++    }
++
+     public Event getTestEvent() {
+         Map<String, Object> data = new HashMap<>();
+         Map<String, String> inner = new HashMap<>();

@@ -109,9 +109,9 @@ if docker run --rm \
                  -Denforcer.skip=true; \
              MVN_EXIT_CODE=\$?; \
              echo 'Collecting test results...'; \
-             mkdir -p /repo/all-test-results; \
-             find . -path '*/target/surefire-reports/*.xml' -exec cp {} /repo/all-test-results/ \; 2>/dev/null || true; \
-             echo \"Found \$(ls /repo/all-test-results/*.xml 2>/dev/null | wc -l) test result files\"; \
+             mkdir -p /repo/build/all-test-results; \
+             find . -path '*/target/surefire-reports/*.xml' -exec cp {} /repo/build/all-test-results/ \; 2>/dev/null || true; \
+             echo \"Found \$(ls /repo/build/all-test-results/*.xml 2>/dev/null | wc -l) test result files\"; \
              exit \$MVN_EXIT_CODE"; then
     
     echo "✅ Tests Passed"

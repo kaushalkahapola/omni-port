@@ -1,0 +1,80 @@
+commit e536d73fcdcec2ded9c8b552d733c292e296978c
+Author: Michael Kleen <mkleen@gmail.com>
+Date:   Tue Feb 18 15:58:55 2025 +0100
+
+    Fix filter pushdown for views when filtered column is aliased.
+    
+    (cherry picked from commit bae2b2deb6226957867e68f61ffe89f2af69c73e)
+
+diff --git a/docs/appendices/release-notes/5.10.2.rst b/docs/appendices/release-notes/5.10.2.rst
+index 5e9a2d3f58..f7d4908e71 100644
+--- a/docs/appendices/release-notes/5.10.2.rst
++++ b/docs/appendices/release-notes/5.10.2.rst
+@@ -47,3 +47,7 @@ Fixes
+ - The ``status`` field within the JSON payload returned from the HTTP root
+   endpoint ``(/)`` now shows 503 instead of 200 if the cluster state is
+   considered unavailable to match how the ``ok`` field behaves.
++
++- Fixed an issue where a filter was not pushed down to the source when the
++  filtered column was aliased as part of a view. This could lead to an
++  unnecessary full table scan.
+diff --git a/server/src/main/java/io/crate/planner/optimizer/rule/MoveFilterBeneathProjectSet.java b/server/src/main/java/io/crate/planner/optimizer/rule/MoveFilterBeneathProjectSet.java
+index 90eb8be2b6..b02251a814 100644
+--- a/server/src/main/java/io/crate/planner/optimizer/rule/MoveFilterBeneathProjectSet.java
++++ b/server/src/main/java/io/crate/planner/optimizer/rule/MoveFilterBeneathProjectSet.java
+@@ -27,6 +27,7 @@ import static io.crate.planner.optimizer.matcher.Patterns.source;
+ import static io.crate.planner.optimizer.rule.Util.transpose;
+ 
+ import java.util.ArrayList;
++import java.util.HashSet;
+ import java.util.List;
+ 
+ import io.crate.expression.operator.AndOperator;
+@@ -62,12 +63,17 @@ public final class MoveFilterBeneathProjectSet implements Rule<Filter> {
+                              Rule.Context ruleContext) {
+         var projectSet = captures.get(projectSetCapture);
+ 
++        HashSet<Symbol> outputs = new HashSet<>();
++        for (Symbol output : projectSet.standaloneOutputs()) {
++            outputs.addAll(extractColumns(output));
++        }
++
+         var queryParts = AndOperator.split(filter.query());
+         ArrayList<Symbol> toPushDown = new ArrayList<>();
+         ArrayList<Symbol> toKeep = new ArrayList<>();
+         for (var part : queryParts) {
+-            if (!part.any(MoveFilterBeneathProjectSet::isTableFunction)
+-                && projectSet.standaloneOutputs().containsAll(extractColumns(part))) {
++            if (!part.any(MoveFilterBeneathProjectSet::isTableFunction) &&
++                outputs.containsAll(extractColumns(part))) {
+                 toPushDown.add(part);
+             } else {
+                 toKeep.add(part);
+diff --git a/server/src/test/java/io/crate/planner/ViewPlannerTest.java b/server/src/test/java/io/crate/planner/ViewPlannerTest.java
+index 77a7ffba54..7258712283 100644
+--- a/server/src/test/java/io/crate/planner/ViewPlannerTest.java
++++ b/server/src/test/java/io/crate/planner/ViewPlannerTest.java
+@@ -73,4 +73,23 @@ public class ViewPlannerTest extends CrateDummyClusterServiceUnitTest {
+             .isExactlyInstanceOf(OperationOnInaccessibleRelationException.class)
+             .hasMessage("The relation \"doc.v1\" doesn't support or allow REFRESH operations");
+     }
++
++    /**
++     * https://github.com/crate/crate/issues/17427
++     */
++    public void test_push_filter_beyond_view_with_aliased_column() throws Exception {
++        var e = SQLExecutor.of(clusterService)
++            .addTable("CREATE TABLE doc.t1 (field1 INT, arr ARRAY(OBJECT))")
++            .addView(new RelationName("doc", "v"),
++                "SELECT field1 as tableid, unnest(arr) FROM doc.t1");
++
++        var logicalPlan = e.logicalPlan(" SELECT * FROM doc.v WHERE tableid=1;");
++
++        assertThat(logicalPlan).hasOperators(
++            "Rename[tableid, \"unnest(arr)\"] AS doc.v",
++            "  └ Eval[field1 AS tableid, unnest(arr)]",
++            "    └ ProjectSet[unnest(arr), arr, field1 AS tableid]",
++            "      └ Collect[doc.t1 | [arr, field1 AS tableid] | (field1 AS tableid = 1)]"
++        );
++    }
+ }

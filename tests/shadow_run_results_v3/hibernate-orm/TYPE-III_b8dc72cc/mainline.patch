@@ -1,0 +1,25 @@
+commit b8dc72ccb2a0a5ee1a1e28c9cf7bda245a43db68
+Author: Selaron <selaron@posteo.de>
+Date:   Fri Oct 25 22:00:06 2024 +0200
+
+    HHH-18771: If positive,  substract listIndexBase from index
+
+diff --git a/hibernate-core/src/main/java/org/hibernate/sql/results/graph/collection/internal/ListInitializer.java b/hibernate-core/src/main/java/org/hibernate/sql/results/graph/collection/internal/ListInitializer.java
+index fbcc113f21..f42550c1f0 100644
+--- a/hibernate-core/src/main/java/org/hibernate/sql/results/graph/collection/internal/ListInitializer.java
++++ b/hibernate-core/src/main/java/org/hibernate/sql/results/graph/collection/internal/ListInitializer.java
+@@ -121,10 +121,13 @@ protected void resolveInstanceSubInitializers(ImmediateCollectionInitializerData
+ 		final Initializer<?> initializer = elementAssembler.getInitializer();
+ 		if ( initializer != null ) {
+ 			final RowProcessingState rowProcessingState = data.getRowProcessingState();
+-			final Integer index = listIndexAssembler.assemble( rowProcessingState );
++			Integer index = listIndexAssembler.assemble( rowProcessingState );
+ 			if ( index != null ) {
+ 				final PersistentList<?> list = getCollectionInstance( data );
+ 				assert list != null;
++				if ( listIndexBase != 0 ) {
++					index -= listIndexBase;
++				}
+ 				initializer.resolveInstance( list.get( index ), rowProcessingState );
+ 			}
+ 		}

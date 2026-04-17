@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-11T20:49:12.740210",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-II",
   "original_commit": "ea6fa68af2ba5631f29c2605dbc1c7b106951aeb",
   "backport_commit": "b6a6b281a07443c08ef0eaf4b32f7bd76353a20c",
   "description": "master \u2192 5.10",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 5.08,
+      "elapsed_s": 7.86,
       "error": null,
       "java_hunks": 15,
       "aux_hunks": 2,
@@ -151,17 +152,17 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.41,
+      "elapsed_s": 5.92,
       "error": null,
       "classification": {
-        "patch_type": "PatchType.TYPE_III",
+        "patch_type": "PatchType.TYPE_II",
         "confidence": 0.9,
-        "reasoning": "The patch involves a significant refactoring of the DocTableInfo class, including renaming fields (e.g., 'references' to 'allColumns'), changing data structures, and updating many method implementations to use the new field. These are structural changes affecting the internal representation and behavior of the class, not just simple string replacements or whitespace changes. The localization evidence shows a mix of 'git_exact' and 'git_pickaxe' matches with high confidence, indicating that the patch applies with some fuzziness but mostly exact matches. The complexity is beyond trivial or whitespace changes, but it does not reach deep API divergence or complete redesign. Therefore, it fits the TYPE_III classification for structural changes with renamed methods and fields. The confidence is high due to the clear structural nature and the token budget estimate reflects the moderate complexity and size of the patch.",
+        "reasoning": "The patch modifies the DocTableInfo.java file by renaming and restructuring internal fields (e.g., 'references' to 'allColumns', 'columns' to 'topLevelColumns') and updating many method implementations to use the new fields. These changes are mostly consistent and involve refactoring internal data structures without changing the overall class API or logic fundamentally. The patch also adds an eager check for column limits in addColumns to prevent long processing times. The localization evidence shows most hunks are found with high confidence via 'git_exact' or 'git_pickaxe', indicating the patch applies closely but requires some fuzzy matching due to renaming and structural adjustments. The changes are more than trivial string replacements but do not involve deep API redesign or complete rewrites, so TYPE_II (whitespace/formatting drift and minor structural changes) is appropriate. The confidence is high (0.9) given the strong localization evidence and the nature of changes. The token budget estimate is moderate (800) due to the patch size and complexity of updating many references and method bodies.",
         "is_auto_generated": false
       }
     },
     "agent3_fastapply": {
-      "elapsed_s": 0.01,
+      "elapsed_s": 0.02,
       "error": null,
       "applied_count": 9,
       "applied_hunks": [
@@ -213,21 +214,21 @@
       ]
     },
     "agent4_namespace": {
-      "elapsed_s": 25.76,
+      "elapsed_s": 38.24,
       "error": null,
       "adapted_count": 4
     },
     "agent5_structural": {
-      "elapsed_s": 155.3,
+      "elapsed_s": 189.31,
       "error": null,
       "refactored_count": 2
     },
     "agent6_synthesizer": {
-      "elapsed_s": 18.95,
+      "elapsed_s": 0.0,
       "error": null,
-      "synthesized_count": 5,
-      "failed_count": 1,
-      "synthesis_status": "partial",
+      "synthesized_count": 6,
+      "failed_count": 0,
+      "synthesis_status": "success",
       "synthesized_hunks": [
         {
           "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
@@ -248,7 +249,7 @@
         {
           "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
           "old_string": "\n    public DocTableInfo dropColumns(List<DropColumn> columns) {\n        validateDropColumns(columns);\n        HashSet<Reference> toDrop = HashSet.newHashSet(columns.size());\n        HashMap<ColumnIdent, Reference> newReferences = new HashMap<>(references);\n        droppedColumns.forEach(ref -> newReferences.put(ref.column(), ref));\n        for (var column : columns) {\n            ColumnIdent columnIdent = column.ref().column();\n            Reference reference = references.get(columnIdent);\n            if (toDrop.contains(reference)) {\n                continue;\n            }",
-          "new_string": "\n    public DocTableInfo dropColumns(List<DropColumn> columns) {\n        validateDropColumns(columns);\n        HashSet<Reference> newDroppedColumns = new HashSet<>();\n        HashMap<ColumnIdent, Reference> newReferences = new HashMap<>(allColumns);\n        for (var column : columns) {\n            ColumnIdent columnIdent = column.ref().column();\n            Reference reference = allColumns.get(columnIdent);\n            if (newDroppedColumns.contains(reference)) {\n                continue;\n            }",
+          "new_string": "\n    public DocTableInfo dropColumns(List<DropColumn> columns) {\n        validateDropColumns(columns);\n        HashSet<Reference> toDrop = HashSet.newHashSet(columns.size());\n        HashMap<ColumnIdent, Reference> newReferences = new HashMap<>(allColumns);\n        droppedColumns.forEach(ref -> newReferences.put(ref.column(), ref));\n        for (var column : columns) {\n            ColumnIdent columnIdent = column.ref().column();\n            Reference reference = allColumns.get(columnIdent);\n            if (toDrop.contains(reference)) {\n                continue;\n            }",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -263,8 +264,16 @@
         },
         {
           "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "old_string": "        Setting.longSetting(\"index.mapping.depth.limit\", 20L, 1, Property.Dynamic, Property.IndexScope);\n\n    private final List<Reference> columns;\n    private final Set<Reference> droppedColumns;\n    private final List<GeneratedReference> generatedColumns;\n    private final List<Reference> partitionedByColumns;\n    private final List<Reference> defaultExpressionColumns;\n    private final Collection<ColumnIdent> notNullColumns;\n    private final Map<ColumnIdent, IndexReference> indexColumns;\n    private final Map<ColumnIdent, Reference> references;\n    private final Map<String, String> leafNamesByOid;\n    private final RelationName ident;\n    @Nullable\n    private final String pkConstraintName;",
+          "new_string": "        Setting.longSetting(\"index.mapping.depth.limit\", 20L, 1, Property.Dynamic, Property.IndexScope);\n\n    private final List<Reference> topLevelColumns;\n    private final Set<Reference> droppedColumns;\n    private final List<GeneratedReference> generatedColumns;\n    private final List<Reference> partitionedByColumns;\n    private final List<Reference> defaultExpressionColumns;\n    private final Collection<ColumnIdent> notNullColumns;\n    private final Map<ColumnIdent, IndexReference> indexColumns;\n    /**\n     * Top level and nested columns, including system columns. Excludes dropped columns\n     **/\n    private final Map<ColumnIdent, Reference> allColumns;\n    private final Map<String, Reference> leafByOid;\n    private final RelationName ident;\n    @Nullable\n    private final String pkConstraintName;",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
           "old_string": "        droppedColumns.forEach(ref -> newReferences.put(ref.column(), ref));\n        int maxPosition = maxPosition();\n        AtomicInteger positions = new AtomicInteger(maxPosition);\n        List<Reference> newColumnsWithParents = addMissingParents(newColumns);\n        HashMap<ColumnIdent, List<Reference>> tree = Reference.buildTree(newColumnsWithParents);\n        boolean addedColumn = addNewReferences(acquireOid, positions, newReferences, tree, null);\n        if (!addedColumn) {",
-          "new_string": "        long allowedTotalColumns = TOTAL_COLUMNS_LIMIT.get(tableParameters);\n        int numSysColumns = SysColumns.COLUMN_IDENTS.size();\n        if (newColumns.size() + newReferences.size() - numSysColumns > allowedTotalColumns) {\n            throw new IllegalArgumentException(\"Limit of total columns [\" + allowedTotalColumns + \"] in table [\" + ident + \"] exceeded\");\n        }\n        droppedColumns.forEach(ref -> newReferences.put(ref.column(), ref));\n        int maxPosition = maxPosition();\n        AtomicInteger positions = new AtomicInteger(maxPosition);\n        List<Reference> newColumnsWithParents = addMissingParents(newColumns);\n        HashMap<ColumnIdent, List<Reference>> tree = Reference.buildTree(newColumnsWithParents);\n        boolean addedColumn = addNewReferences(acquireOid, positions, newReferences, tree, null);\n        if (!addedColumn) {",
+          "new_string": "        long allowedTotalColumns = TOTAL_COLUMNS_LIMIT.get(tableParameters);\n        int numSysColumns = SysColumns.COLUMN_IDENTS.size();\n        if (newColumns.size() + references.size() - numSysColumns > allowedTotalColumns) {\n            throw new IllegalArgumentException(\"Limit of total columns [\" + allowedTotalColumns + \"] in table [\" + ident + \"] exceeded\");\n        }\n        droppedColumns.forEach(ref -> newReferences.put(ref.column(), ref));\n        int maxPosition = maxPosition();\n        AtomicInteger positions = new AtomicInteger(maxPosition);\n        List<Reference> newColumnsWithParents = addMissingParents(newColumns);\n        HashMap<ColumnIdent, List<Reference>> tree = Reference.buildTree(newColumnsWithParents);\n        boolean addedColumn = addNewReferences(acquireOid, positions, newReferences, tree, null);\n        if (!addedColumn) {",
           "confidence": 1.0,
           "context_lines_included": 0,
           "verified": true
@@ -272,18 +281,548 @@
       ]
     },
     "agent8_syntax_repair": {
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.05,
       "error": null,
-      "syntax_repair_status": "skipped",
+      "syntax_repair_status": "clean",
       "syntax_repair_attempts": 0,
-      "syntax_repair_log": [],
-      "synthesized_count_after_repair": 0
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 6
     },
     "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:259: error: cannot find symbol\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:262: error: cannot find symbol\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:750: error: cannot find symbol\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:1208: error: cannot find symbol\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:1211: error: cannot find",
+      "validation_attempts": 1,
+      "retry_files": [
+        "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 259,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 262,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 750,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 1208,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 1211,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "applied",
+      "fallback_attempts": 1,
+      "synthesized_count": 2,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Replaced the field 'columns' with 'topLevelColumns' and renamed 'references' to 'allColumns' with added documentation indicating it includes top-level and nested columns excluding dropped ones.",
+          "where_in_code": "DocTableInfo class fields",
+          "intent": "To better distinguish between top-level columns and the complete set of columns (including nested and system columns) and clarify the role of the 'allColumns' map.",
+          "change_type": "add_field",
+          "key_symbols": [
+            "topLevelColumns",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed initialization to populate 'allColumns' from references excluding dropped columns, replaced usage of 'references' with 'allColumns' for filtering and collecting top-level columns, generated columns, partitioned columns, and system columns insertion.",
+          "where_in_code": "DocTableInfo constructor",
+          "intent": "To centralize column references in 'allColumns' and ensure all subsequent collections and mappings operate on this comprehensive set rather than the previous 'references' map.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "allColumns",
+            "topLevelColumns"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Updated usage of 'references' to 'allColumns' when creating 'docColumn' and collecting 'defaultExpressionColumns'.",
+          "where_in_code": "DocTableInfo constructor",
+          "intent": "To ensure system and nested columns are included when constructing the docColumn and identifying columns with default expressions.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "docColumn",
+            "defaultExpressionColumns",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Replaced lookup in 'references' with 'allColumns' in the 'getReference(ColumnIdent)' method.",
+          "where_in_code": "DocTableInfo.getReference(ColumnIdent)",
+          "intent": "To retrieve references from the comprehensive set of columns including nested and system columns, not just the previous subset.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "getReference",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed iteration over 'references' to 'allColumns' when searching for a Reference by storage OID in 'getReference(String)'.",
+          "where_in_code": "DocTableInfo.getReference(String)",
+          "intent": "To ensure the method can find references among all columns, including nested and system columns, by their OID.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "getReference",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Modified 'referenceTree()' method to build the tree from 'allColumns' instead of 'references' and changed 'columns()' method to return 'topLevelColumns' instead of 'columns'.",
+          "where_in_code": "DocTableInfo.referenceTree(), DocTableInfo.columns()",
+          "intent": "To reflect the updated column organization by using the full set of columns for the reference tree and returning only top-level columns for the public columns list.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "referenceTree",
+            "columns",
+            "allColumns",
+            "topLevelColumns"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed the stream source from 'references' to 'allColumns' when computing the maximum position of non-system columns in 'maxPosition()'.",
+          "where_in_code": "DocTableInfo.maxPosition()",
+          "intent": "To consider all columns, including nested and system columns, when determining the maximum position value.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "maxPosition",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 7,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Updated the iterator method to iterate over 'allColumns' values instead of 'references'.",
+          "where_in_code": "DocTableInfo.iterator()",
+          "intent": "To provide iteration over the complete set of columns including nested and system columns, sorted by position and name.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "iterator",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 8,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Replaced 'references' with 'allColumns' when retrieving a Reference for a given ColumnIdent in 'getAnalyzerForColumnIdent'.",
+          "where_in_code": "DocTableInfo.getAnalyzerForColumnIdent(ColumnIdent)",
+          "intent": "To ensure analyzer retrieval considers all columns, including generated and nested ones.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "getAnalyzerForColumnIdent",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 9,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed the constructor argument from 'references' to 'allColumns' when creating a new DocTableInfo instance in the 'dropColumns' method.",
+          "where_in_code": "DocTableInfo.dropColumns(List<DropColumn>)",
+          "intent": "To pass the updated comprehensive column map to the new instance reflecting the new state after dropping columns.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "DocTableInfo",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 10,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Replaced usage of 'references' with 'allColumns' when creating a new HashMap for references and when retrieving references for columns to be dropped.",
+          "where_in_code": "DocTableInfo.dropColumns(List<DropColumn>)",
+          "intent": "To ensure the drop operation works on the full set of columns including nested and system columns.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "dropColumns",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 11,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed iteration from 'references' to 'allColumns' when marking child columns as dropped and removing them from the references map during column drop processing.",
+          "where_in_code": "DocTableInfo.dropColumns(List<DropColumn>)",
+          "intent": "To correctly handle dropping of nested child columns by considering all columns in the table.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "dropColumns",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 12,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Replaced iteration over 'references' with 'allColumns' when building a map of old column names to renamed references during column rename operations.",
+          "where_in_code": "DocTableInfo.renameColumns(...) (method context inferred)",
+          "intent": "To ensure renaming logic applies to all columns, including nested and system columns.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 13,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Replaced the stream source from 'references' to 'allColumns' when concatenating streams for sorting and filtering columns.",
+          "where_in_code": "DocTableInfo (context of column stream concatenation)",
+          "intent": "To operate on the complete set of columns including nested and system columns for sorting and filtering purposes.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 14,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Added a check to enforce a limit on the total number of columns allowed in a table before adding new columns, using 'allColumns' to count existing columns and considering system columns; replaced 'references' with 'allColumns' when creating a new references map.",
+          "where_in_code": "DocTableInfo.addColumns(...) (method context inferred)",
+          "intent": "To prevent exceeding the configured total column limit in a table by accounting for all existing columns including nested and system columns.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "TOTAL_COLUMNS_LIMIT",
+            "allColumns"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "outcome": "clean"
+        }
+      ]
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (crate-helper) \u2014 compile errors:\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:303: error: cannot find symbol\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:304: error: cannot find symbol\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:320: error: cannot find symbol\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:331: error: cannot find symbol\nserver/src/main/java/io/crate/metadata/doc/DocTableInfo.java:381: error: cannot find s",
+      "validation_attempts": 2,
+      "retry_files": [
+        "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java"
+      ],
+      "build_success": false,
+      "build_mode": "crate-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 303,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 304,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 320,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 331,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 381,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 388,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 398,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 622,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 674,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 865,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 885,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 889,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 906,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 975,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 1059,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "line": 1217,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Replaced the field 'columns' with 'topLevelColumns' and renamed 'references' to 'allColumns' with added documentation clarifying it includes top-level and nested columns excluding dropped ones.",
+          "where_in_code": "DocTableInfo class fields",
+          "intent": "To better distinguish between top-level columns and all columns (including nested and system columns) and improve clarity and usage of column collections.",
+          "change_type": "add_field",
+          "key_symbols": [
+            "topLevelColumns",
+            "allColumns",
+            "columns",
+            "references"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Updated constructor logic to initialize 'allColumns' from references excluding dropped columns, replaced 'references' usage with 'allColumns' for column collections and system columns insertion, and replaced 'columns' with 'topLevelColumns'.",
+          "where_in_code": "DocTableInfo constructor",
+          "intent": "To unify column references under 'allColumns' for consistent handling of columns including nested and system columns, and to separate top-level columns explicitly.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "allColumns",
+            "topLevelColumns",
+            "references",
+            "columns"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed usage of 'references' to 'allColumns' when creating the 'docColumn' and when collecting default expression columns.",
+          "where_in_code": "DocTableInfo constructor",
+          "intent": "To ensure system and nested columns are included when creating the docColumn and identifying default expression columns.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "docColumn",
+            "defaultExpressionColumns",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Modified the getReference(ColumnIdent) method to retrieve references from 'allColumns' instead of 'references'.",
+          "where_in_code": "DocTableInfo.getReference(ColumnIdent)",
+          "intent": "To allow retrieval of both top-level and nested columns, including system columns, when looking up references by column identifier.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "getReference",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed the getReference(String) method to iterate over 'allColumns' instead of 'references' when searching by storage identifier (OID).",
+          "where_in_code": "DocTableInfo.getReference(String)",
+          "intent": "To ensure all columns, including nested and system columns, are considered when retrieving references by storage identifier.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "getReference",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Updated the referenceTree() method to build the tree from 'allColumns' instead of 'references' and changed the columns() method to return 'topLevelColumns' instead of 'columns'.",
+          "where_in_code": "DocTableInfo.referenceTree(), DocTableInfo.columns()",
+          "intent": "To reflect the new column organization by using the comprehensive 'allColumns' for the reference tree and explicitly returning only top-level columns for the columns() method.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "referenceTree",
+            "columns",
+            "allColumns",
+            "topLevelColumns"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Modified maxPosition() method to compute maximum position from 'allColumns' instead of 'references'.",
+          "where_in_code": "DocTableInfo.maxPosition()",
+          "intent": "To consider all columns, including nested and system columns, when determining the maximum column position.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "maxPosition",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 7,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed the iterator() method to iterate over 'allColumns' values instead of 'references' values.",
+          "where_in_code": "DocTableInfo.iterator()",
+          "intent": "To provide iteration over all columns including nested and system columns in a consistent order.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "iterator",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 8,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Updated getAnalyzerForColumnIdent() method to fetch references from 'allColumns' instead of 'references'.",
+          "where_in_code": "DocTableInfo.getAnalyzerForColumnIdent(ColumnIdent)",
+          "intent": "To ensure analyzers can be retrieved for all columns, including nested and system columns.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "getAnalyzerForColumnIdent",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 9,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Modified the dropColumns() method to pass 'allColumns' instead of 'references' when creating a new DocTableInfo instance after dropping columns.",
+          "where_in_code": "DocTableInfo.dropColumns()",
+          "intent": "To maintain consistency by using the comprehensive 'allColumns' map when creating updated table info after column drops.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "dropColumns",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 10,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "In dropColumns(), replaced usage of 'references' with 'allColumns' when creating new references map and when checking for child columns to drop.",
+          "where_in_code": "DocTableInfo.dropColumns()",
+          "intent": "To ensure all columns, including nested and system columns, are considered when marking columns as dropped and removing them.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "dropColumns",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 11,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "In renameColumns logic, replaced iteration over 'references' with 'allColumns' when identifying columns to rename.",
+          "where_in_code": "DocTableInfo.renameColumns() or similar renaming logic",
+          "intent": "To include all columns in the renaming process, ensuring nested and system columns are handled properly.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "renameColumns",
+            "allColumns"
+          ]
+        },
+        {
+          "hunk_index": 13,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Changed a stream concatenation to use 'allColumns' values instead of 'references' values when filtering and sorting columns.",
+          "where_in_code": "DocTableInfo (context of column streams for filtering/sorting)",
+          "intent": "To operate on the complete set of columns including nested and system columns for filtering and sorting operations.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "allColumns",
+            "references"
+          ]
+        },
+        {
+          "hunk_index": 14,
+          "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
+          "what_changed": "Added a check in the method adding new columns to enforce a limit on total columns by comparing the sum of new and existing columns (excluding system columns) against a configured maximum; also changed the base references map from 'references' to 'allColumns'.",
+          "where_in_code": "DocTableInfo method adding new columns (likely addColumns or constructor)",
+          "intent": "To enforce a total column count limit on the table including nested columns and to ensure new columns are added consistently with the comprehensive 'allColumns' map.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "TOTAL_COLUMNS_LIMIT",
+            "allColumns",
+            "newColumns"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry2": {
       "validation_passed": true,
       "validation_failure_category": "",
       "validation_error_context": "",
-      "validation_attempts": 1,
+      "validation_attempts": 3,
       "retry_files": [],
       "build_success": true,
       "build_mode": "crate-helper",
@@ -293,29 +832,27 @@
         "xml_reports": [
           "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.metadata.doc.DocTableInfoTest.xml"
         ],
-        "target_classes": [
-          "DocTableInfoTest"
-        ],
+        "target_classes": [],
         "test_cases": {
-          "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_dropped_columns_are_included_in_oid_to_column_map": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_add_columns_fails_eagerly_on_too_many_columns": "failed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_isIgnoredOrImmediateChildOfIgnored_method": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns": "passed",
           "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_add_columns_fails_eagerly_on_too_many_columns": "failed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_dropped_columns_are_included_in_oid_to_column_map": "passed",
           "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_isIgnoredOrImmediateChildOfIgnored_method": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns": "passed",
           "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents": "passed",
-          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent": "passed"
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents": "passed",
+          "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents": "passed"
         },
         "classes": {
           "io.crate.metadata.doc.DocTableInfoTest": "failed"
@@ -328,13 +865,32 @@
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
-        "baseline_total": 19,
+        "newly_passing": [
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo",
+          "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent",
+          "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table",
+          "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column",
+          "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents",
+          "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref",
+          "io.crate.metadata.doc.DocTableInfoTest#test_dropped_columns_are_included_in_oid_to_column_map",
+          "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references",
+          "io.crate.metadata.doc.DocTableInfoTest#test_isIgnoredOrImmediateChildOfIgnored_method",
+          "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0",
+          "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template",
+          "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices",
+          "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions"
+        ],
+        "baseline_total": 0,
         "patched_total": 19,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -345,7 +901,7 @@
     "phase0_baseline": {
       "mode": "baseline-crate-helper",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 19
     },
     "java_production_hunks": 15,
@@ -367,56 +923,94 @@
       0,
       14
     ],
-    "tokens_used": 0,
-    "synthesis_status": "partial",
+    "tokens_used": 133932,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 22549,
+        "output": 2219
+      },
+      "agent5_structural": {
+        "input": 3245,
+        "output": 4600
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 122734,
+        "output": 11198
+      }
+    },
+    "synthesis_status": "success",
     "applied_on_disk_ag3": 9,
     "synthesized_count": 0,
-    "failed_hunks_total": 1,
+    "failed_hunks_total": 0,
     "syntax_repair_status": "skipped",
-    "fallback_status": "not_run",
-    "fallback_attempts": 0,
+    "fallback_status": "failed",
+    "fallback_attempts": 2,
     "retry_contexts": [
       {
-        "error_type": "synthesis_failed_no_match",
-        "error_message": "Could not verify exact string in target file",
-        "attempt_count": 4,
-        "suggested_action": "relocalize"
-      }
-    ],
-    "failed_hunks": [
+        "error_type": "api_mismatch",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[259,8] error: cannot find symbol\n  symbol:   variable leafNamesByOid\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[262,26] error: cannot find symbol\n  symbol:   variable leafNamesByOid\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[750,26] error: cannot find symbol\n  symbol:   variable leafNamesByOid\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[1208,70] error: cannot find symbol\n  symbol:   variable references\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[1211,32] error: cannot find symbol\n  symbol:   variable references\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project crate-server: Compilation failure: Compilation failure: \n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[259,8] error: cannot find symbol\n[ERROR]   symbol:   variable leafNamesByOid\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[262,26] error: cannot find symbol\n[ERROR]   symbol:   variable leafNamesByOid\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[750,26] error: cannot find symbol\n[ERROR]   symbol:   variable leafNamesByOid\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[1208,70] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[1211,32] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 1,
+        "suggested_action": "route_to_namespace_or_structural"
+      },
       {
-        "file_path": "server/src/main/java/io/crate/metadata/doc/DocTableInfo.java",
-        "old_file_path": null,
-        "old_content": "        Setting.longSetting(\"index.mapping.depth.limit\", 20L, 1, Property.Dynamic, Property.IndexScope);\n\n    private final List<Reference> columns;\n    private final Set<Reference> droppedColumns;\n    private final List<GeneratedReference> generatedColumns;\n    private final List<Reference> partitionedByColumns;\n    private final List<Reference> defaultExpressionColumns;\n    private final Collection<ColumnIdent> notNullColumns;\n    private final Map<ColumnIdent, IndexReference> indexColumns;\n    private final Map<ColumnIdent, Reference> references;\n    private final Map<String, String> leafNamesByOid;\n    private final RelationName ident;\n    @Nullable\n    private final String pkConstraintName;\n",
-        "new_content": "    public static final Setting<Long> DEPTH_LIMIT_SETTING =\n        Setting.longSetting(\"index.mapping.depth.limit\", 20L, 1, Property.Dynamic, Property.IndexScope);\n\n    private final List<Reference> topLevelColumns;\n    private final Set<Reference> droppedColumns;\n    private final List<GeneratedReference> generatedColumns;\n    private final List<Reference> partitionedByColumns;\n    private final List<Reference> defaultExpressionColumns;\n    private final Collection<ColumnIdent> notNullColumns;\n    private final Map<ColumnIdent, IndexReference> indexColumns;\n    /**\n     * Top level and nested columns, including system columns. Excludes dropped columns\n     **/\n    private final Map<ColumnIdent, Reference> allColumns;\n    private final Map<String, Reference> leafByOid;\n    private final RelationName ident;\n    @Nullable\n    private final String pkConstraintName;",
-        "is_new_file": false,
-        "is_del_file": false,
-        "is_rename": false,
-        "file_operation": "MODIFIED",
-        "refactored": true,
-        "semantic_confidence": 0.77,
-        "loc_index": 0
+        "error_type": "api_mismatch",
+        "error_message": " location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[331,27] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[381,39] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[388,15] error: cannot find symbol\n[ERROR]   symbol:   variable columns\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[398,12] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[622,15] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[674,30] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[865,12] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[885,70] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[889,34] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[906,27] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[975,23] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[1059,16] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] /repo/server/src/main/java/io/crate/metadata/doc/DocTableInfo.java:[1217,70] error: cannot find symbol\n[ERROR]   symbol:   variable references\n[ERROR]   location: class DocTableInfo\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :crate-server",
+        "attempt_count": 2,
+        "suggested_action": "route_to_namespace_or_structural"
       }
     ],
-    "generated_patch_bytes": 0,
+    "failed_hunks": [],
+    "generated_patch_bytes": 10752,
     "target_patch_bytes": 13809,
+    "patch_exact_match": false,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
     "test_success": false,
     "test_mode": "crate-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
-      "baseline_total": 19,
+      "newly_passing": [
+        "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfo",
+        "io.crate.metadata.doc.DocTableInfoTest#testGetColumnInfoStrictParent",
+        "io.crate.metadata.doc.DocTableInfoTest#test_add_column_fixes_inner_types_of_all_its_parents",
+        "io.crate.metadata.doc.DocTableInfoTest#test_can_add_column_to_table",
+        "io.crate.metadata.doc.DocTableInfoTest#test_can_retrieve_all_parents_of_nested_object_column",
+        "io.crate.metadata.doc.DocTableInfoTest#test_cannot_add_child_column_without_defining_parents",
+        "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_after_drop_column_preserves_previous_dropped_columns",
+        "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_fixes_inner_types_of_all_its_parents",
+        "io.crate.metadata.doc.DocTableInfoTest#test_drop_column_updates_type_of_parent_ref",
+        "io.crate.metadata.doc.DocTableInfoTest#test_dropped_columns_are_included_in_oid_to_column_map",
+        "io.crate.metadata.doc.DocTableInfoTest#test_get_child_references",
+        "io.crate.metadata.doc.DocTableInfoTest#test_isIgnoredOrImmediateChildOfIgnored_method",
+        "io.crate.metadata.doc.DocTableInfoTest#test_lookup_name_by_source_with_columns_with_and_without_oids_added_to_table_created_before_5_5_0",
+        "io.crate.metadata.doc.DocTableInfoTest#test_rename_column_fixes_inner_types_of_all_its_parents",
+        "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_read_from_partitioned_template",
+        "io.crate.metadata.doc.DocTableInfoTest#test_version_created_is_set_to_current_version_if_unavailable_at_partitioned_template",
+        "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_indices",
+        "io.crate.metadata.doc.DocTableInfoTest#test_write_to_preserves_number_of_shards_of_partitions"
+      ],
+      "baseline_total": 0,
       "patched_total": 19,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 18,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

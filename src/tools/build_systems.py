@@ -198,6 +198,8 @@ def _filter_elasticsearch_test_targets(
     return kept, skipped
 
 
+
+
 def _is_test_file(file_path: str) -> bool:
     p = (file_path or "").replace("\\", "/").lower()
     if any(d.lower() in p for d in _TEST_SOURCE_DIRS):
@@ -209,14 +211,48 @@ def _is_test_file(file_path: str) -> bool:
     )
 
 
+def _extract_class_name_from_target(t: str) -> str:
+    """Extract bare class name from a test target string.
+
+    Handles three formats:
+      ":module:task --tests org.pkg.FooTest"  → "org.pkg.FooTest"
+      "module:org.pkg.FooTest"                → "org.pkg.FooTest"
+      ":module:task"  (module-level, no filter) → ""  (collect all)
+    """
+    if "--tests " in t:
+        return t.split("--tests ", 1)[1].strip()
+    if ":" in t:
+        # Check if the part after the last colon looks like a fully-qualified class name
+        # (contains dots, indicating package.ClassName) vs a task name (no dots)
+        last_part = t.rsplit(":", 1)[1]
+        if last_part and "." in last_part:
+            # Looks like a fully-qualified class name (e.g. "org.pkg.FooTest")
+            return last_part
+        # It's a task name (e.g. "test", "integTest") — module-level run
+        return ""
+    return t
+
+
 def _find_module_for_path(repo_path: str, rel_path: str) -> str:
     """Walk up looking for a build file; return module path relative to repo root."""
     head = (rel_path or "").replace("\\", "/")
     while head:
         head = os.path.dirname(head)
+        # Standard names first
         for bf in ("pom.xml", "build.gradle", "build.gradle.kts"):
             if os.path.exists(os.path.join(repo_path, head, bf)):
                 return head
+        
+        # Check for any .gradle/.gradle.kts file (often [module-name].gradle in Hibernate ORM)
+        try:
+            full_dir = os.path.join(repo_path, head)
+            if os.path.isdir(full_dir):
+                for f in os.listdir(full_dir):
+                    if (f.endswith(".gradle") or f.endswith(".gradle.kts")) and not f.startswith("settings.gradle"):
+                        return head
+        except Exception:
+            pass
+
     for bf in ("pom.xml", "build.gradle", "build.gradle.kts"):
         if os.path.exists(os.path.join(repo_path, bf)):
             return ""
@@ -244,6 +280,22 @@ def _clear_junit_reports(repo_path: str) -> None:
     ):
         if os.path.isdir(test_results_dir):
             shutil.rmtree(test_results_dir, ignore_errors=True)
+    # Clear target/test-results directories (Hibernate ORM Gradle custom output path
+    # and other projects that redirect Gradle XML output under target/).
+    # Note: Using a more inclusive pattern to ensure nested results are also cleared.
+    for test_results_dir in glob.glob(
+        os.path.join(repo_path, "**", "target", "test-results"), recursive=True
+    ):
+        if os.path.isdir(test_results_dir):
+            shutil.rmtree(test_results_dir, ignore_errors=True)
+    
+    # Also explicitly clear any surefire-reports or failsafe-reports under target/
+    for reports_dir in glob.glob(
+        os.path.join(repo_path, "**", "target", "*-reports"), recursive=True
+    ):
+        if os.path.isdir(reports_dir):
+            shutil.rmtree(reports_dir, ignore_errors=True)
+
     aggregate = os.path.join(repo_path, "build", "all-test-results")
     if os.path.isdir(aggregate):
         shutil.rmtree(aggregate, ignore_errors=True)
@@ -257,8 +309,17 @@ def restore_repo_state(repo_path: str) -> bool:
     """git reset --hard + git clean -fd on the given worktree."""
     print(f"  [build_systems] Restoring repo state in {repo_path}")
     try:
+        # Remove any git lock files that may block reset
+        for lock in ["index.lock", "HEAD.lock", "MERGE_HEAD"]:
+            lock_path = os.path.join(repo_path, ".git", lock)
+            if os.path.exists(lock_path):
+                try:
+                    os.remove(lock_path)
+                except Exception:
+                    pass
+
         subprocess.run(
-            ["git", "reset", "--hard"],
+            ["git", "reset", "--hard", "HEAD"],
             cwd=repo_path,
             capture_output=True,
             check=True,
@@ -430,6 +491,8 @@ def collect_test_results(
     patterns = [
         os.path.join(repo_path, "**", "surefire-reports", "TEST-*.xml"),
         os.path.join(repo_path, "**", "build", "test-results", "**", "TEST-*.xml"),
+        os.path.join(repo_path, "**", "target", "test-results", "**", "TEST-*.xml"),
+        os.path.join(repo_path, "**", "target", "reports", "tests", "**", "TEST-*.xml"),
         os.path.join(repo_path, "build", "all-test-results", "TEST-*.xml"),
         os.path.join(repo_path, "**/target/surefire-reports/*.xml"),
         os.path.join(repo_path, "**/JTwork/**/*.xml"),
@@ -455,7 +518,7 @@ def collect_test_results(
             if tc_set:
                 matched = False
                 for target in tc_set:
-                    if cls == target or cls.endswith("." + target):
+                    if cls == target or cls.endswith("." + target) or cls.startswith(target + "$"):
                         matched = True
                         break
                 if not matched:
@@ -496,29 +559,87 @@ def collect_test_results(
     }
 
 
+def _detect_targets_from_paths(repo_path: str, paths: list[str]) -> tuple[set[str], set[str], set[str]]:
+    """Helper to derive test targets, source modules, and all modules from a list of file paths."""
+    test_targets: set[str] = set()
+    source_modules: set[str] = set()
+    all_modules: set[str] = set()
+    ignored = {"web-console", "distribution", "docs", "examples", "benchmarks", "qa"}
+
+    for rel_path in paths:
+        p = (rel_path or "").replace("\\", "/")
+        if not p:
+            continue
+        module = _find_module_for_path(repo_path, p)
+        top_level = module.split("/")[0] if module else ""
+        if top_level in ignored:
+            continue
+        if module:
+            all_modules.add(module)
+        if p.endswith(".java") and "/src/main/java/" in p and module:
+            source_modules.add(module)
+
+        if not _is_test_file(p):
+            continue
+
+        matched = next((d for d in _TEST_SOURCE_DIRS if d in p), None)
+        if matched:
+            class_part = p.split(matched, 1)[1].replace("/", ".").replace(".java", "")
+            target = f"{module}:{class_part}" if module else class_part
+            test_targets.add(target)
+            
+    return test_targets, source_modules, all_modules
+
+
 def detect_test_targets(
     repo_path: str,
     project: str,
     changed_files: list[str] | None = None,
+    file_entries: list[tuple[str, str]] | None = None,
 ) -> TestTargetInfo:
     """
-    Detect which tests to run based on changed files in the worktree.
+    Detect which tests to run based on test files touched in target.patch.
+
+    When file_entries (status+path pairs from target.patch) are provided, only
+    the test files among them are passed to the helper — production Java and
+    non-Java files are irrelevant for target detection and are filtered out here.
 
     Priority:
-      1) helpers/{project}/get_test_targets.py --worktree (git diff based)
-      2) Infer from changed_files list (path-based heuristic)
+      1) helpers/{project}/get_test_targets.py --files-json <json>
+         Passes only the test-file entries from target.patch directly, skipping
+         the helper's git step.  Guarantees phase 0 and validation use identical
+         targets regardless of worktree state.
+      2) helpers/{project}/get_test_targets.py --worktree
+         Fallback when no file_entries are provided (e.g. ad-hoc calls).
+      3) Internal path-based heuristic (last resort).
     """
     normalized = project.strip().lower()
     print(f"  [build_systems] Detecting test targets for project {normalized}")
+
     helper_script = os.path.join(_helper_dir(normalized), "get_test_targets.py")
 
     if os.path.exists(helper_script):
-        print(f"  [build_systems] Using helper script: {helper_script}")
-        res = _run_cmd(
-            ["python3", helper_script, "--repo", os.path.abspath(repo_path), "--worktree"],
-            cwd=repo_path,
-            timeout=60,
-        )
+        if file_entries is not None:
+            # Pass ALL file entries to the helper — it needs production Java files
+            # to populate source_modules, which is used as a fallback when no
+            # runnable test targets are found (e.g. all touched tests are ITs).
+            files_json = json.dumps(file_entries)
+            print(f"  [build_systems] Using helper script with --files-json "
+                  f"({len(file_entries)} entries): {helper_script}")
+            res = _run_cmd(
+                ["python3", helper_script, "--repo", os.path.abspath(repo_path),
+                 "--files-json", files_json],
+                cwd=repo_path,
+                timeout=60,
+            )
+        else:
+            print(f"  [build_systems] Using helper script with --worktree: {helper_script}")
+            res = _run_cmd(
+                ["python3", helper_script, "--repo", os.path.abspath(repo_path), "--worktree"],
+                cwd=repo_path,
+                timeout=60,
+            )
+
         if res["success"]:
             try:
                 parsed = json.loads(res["output"])
@@ -544,37 +665,12 @@ def detect_test_targets(
                     raw=parsed,
                 )
             except json.JSONDecodeError:
-                print("  [build_systems] Helper returned invalid JSON")
-                pass
+                print("  [build_systems] Helper returned invalid JSON, falling back")
 
     # Path-based fallback
     print("  [build_systems] Using path-based fallback for test target detection")
-    test_targets: set[str] = set()
-    source_modules: set[str] = set()
-    all_modules: set[str] = set()
-    ignored = {"web-console", "distribution", "docs", "examples", "benchmarks", "qa"}
-
-    for rel_path in changed_files or []:
-        p = (rel_path or "").replace("\\", "/")
-        if not p:
-            continue
-        module = _find_module_for_path(repo_path, p)
-        top_level = module.split("/")[0] if module else ""
-        if top_level in ignored:
-            continue
-        if module:
-            all_modules.add(module)
-        if p.endswith(".java") and "/src/main/java/" in p and module:
-            source_modules.add(module)
-
-        if not _is_test_file(p):
-            continue
-
-        matched = next((d for d in _TEST_SOURCE_DIRS if d in p), None)
-        if matched:
-            class_part = p.split(matched, 1)[1].replace("/", ".").replace(".java", "")
-            target = f"{module}:{class_part}" if module else class_part
-            test_targets.add(target)
+    files = changed_files or [path for _, path in (file_entries or [])]
+    test_targets, source_modules, all_modules = _detect_targets_from_paths(repo_path, files)
 
     targets_list = sorted(test_targets)
     if normalized == "elasticsearch" and targets_list:
@@ -585,11 +681,11 @@ def detect_test_targets(
         test_targets=targets_list,
         source_modules=sorted(source_modules),
         all_modules=sorted(all_modules),
-        raw={"source": "changed_files", "changed_files": sorted(set(changed_files or []))},
+        raw={"source": "changed_files", "changed_files": sorted(set(files))},
     )
 
 
-def run_build(repo_path: str, project: str = "") -> BuildResult:
+def run_build(repo_path: str, project: str = "", changed_files: list[str] | None = None) -> BuildResult:
     """
     Compile the project.
 
@@ -609,6 +705,21 @@ def run_build(repo_path: str, project: str = "") -> BuildResult:
             image_tag, err = _ensure_docker_image(normalized, repo_path)
             if image_tag:
                 abs_repo_path = os.path.realpath(repo_path)
+                # Detect source modules to scope the build to only affected modules.
+                # This avoids pulling in unrelated modules with broken SNAPSHOT deps.
+                source_modules_str = ""
+                if changed_files:
+                    try:
+                        # Build file_entries from changed_files (all treated as modified)
+                        file_entries_for_build = [("M", f) for f in changed_files if f]
+                        ti = detect_test_targets(abs_repo_path, normalized,
+                                                 file_entries=file_entries_for_build)
+                        if ti.source_modules:
+                            source_modules_str = ",".join(ti.source_modules)
+                        elif ti.all_modules:
+                            source_modules_str = ",".join(ti.all_modules)
+                    except Exception:
+                        pass
                 env = os.environ.copy()
                 env.update({
                     "PROJECT_NAME": normalized,
@@ -618,6 +729,7 @@ def run_build(repo_path: str, project: str = "") -> BuildResult:
                     "IMAGE_TAG": image_tag,
                     "COMMIT_SHA": _get_current_head(repo_path),
                     "WORKTREE_MODE": "1",
+                    "SOURCE_MODULES": source_modules_str,
                 })
                 res = _run_cmd(["bash", build_sh], cwd=abs_repo_path, env=env, timeout=3600)
                 print(f"  [build_systems] Build {'succeeded' if res['success'] else 'failed'} using {normalized}-helper")
@@ -706,9 +818,7 @@ def run_tests(
             image_tag, err = _ensure_docker_image(normalized, repo_path)
             if image_tag:
                 abs_repo_path = os.path.realpath(repo_path)
-                target_classes_only = [
-                    t.split(":", 1)[1] for t in test_targets if ":" in t
-                ]
+
                 env = os.environ.copy()
                 env.update({
                     "PROJECT_NAME": normalized,
@@ -727,9 +837,11 @@ def run_tests(
                 output = res["output"]
                 is_compile_error = (not res["success"]) and "compilation error" in output.lower()
 
-                # Collect results
+                # Collect results — use bare class names so XML matching works.
+                # Module-level targets (no --tests filter) return "" — filter them
+                # out so collect_test_results uses an empty set (= collect all).
                 target_classes_for_collection = [
-                    t.split(":", 1)[1] if ":" in t else t for t in test_targets
+                    c for c in (_extract_class_name_from_target(t) for t in test_targets) if c
                 ]
                 print(f"  [build_systems] Collecting results for {len(target_classes_for_collection)} classes")
                 test_state = collect_test_results(
@@ -757,10 +869,27 @@ def run_tests(
 
     if _is_gradle_repo(repo_path):
         print("  [build_systems] Using Gradle test runner")
-        cmd = ["./gradlew", "test", "--no-daemon"]
+        # Targets may be in two formats:
+        #   ":module:task --tests ClassName"  (logstash/sql style)
+        #   "module:ClassName"                (elasticsearch/hibernate style)
+        # Build the correct gradlew command for each.
+        cmd = ["./gradlew", "--no-daemon"]
+        has_explicit_tasks = False
         for t in test_targets:
-            cls = t.split(":", 1)[1] if ":" in t else t
-            cmd += ["--tests", cls]
+            if "--tests " in t:
+                # Already a full Gradle task+filter string — append as-is tokens
+                cmd += t.split()
+                has_explicit_tasks = True
+            elif ":" in t:
+                mod, cls = t.split(":", 1)
+                gradle_mod = ":" + mod.replace("/", ":") if mod else ""
+                cmd += [f"{gradle_mod}:test", "--tests", cls]
+                has_explicit_tasks = True
+            else:
+                cmd += ["test", "--tests", t]
+                has_explicit_tasks = True
+        if not has_explicit_tasks:
+            cmd += ["test"]
         mode = "gradle-targeted" if test_targets else "gradle-module"
     else:
         print("  [build_systems] Using Maven test runner")
@@ -799,7 +928,7 @@ def run_tests(
     is_compile_error = (not res["success"]) and "compilation error" in output.lower()
 
     target_classes_for_collection = [
-        t.split(":", 1)[1] if ":" in t else t for t in test_targets
+        c for c in (_extract_class_name_from_target(t) for t in test_targets) if c
     ]
     print(f"  [build_systems] Collecting results for {len(target_classes_for_collection)} classes")
     test_state = collect_test_results(

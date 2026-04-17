@@ -543,6 +543,27 @@ DO NOT copy it blindly. Instead:
   unless old_string already opened it.
 - Apply ALL hunks in the description, including both readValueFrom and writeValueTo
   if both are described — do not skip one.
+
+=== MISSING IMPORT RULE (read this when error says "cannot find symbol") ===
+If the error history contains "cannot find symbol: variable X" or
+"cannot find symbol: class X", that means X is used in the code but its
+import is missing from the file.  You MUST:
+  a) Read the file to confirm X is used but not imported.
+  b) Find the correct fully-qualified import for X (e.g. java.time.ZoneOffset).
+  c) Add an import hunk that inserts "import fully.qualified.X;" in the
+     correct alphabetical position in the import block.
+  d) Do NOT add an import for something already present — check first.
+This is the MOST COMMON cause of repeated build failures. Fix it explicitly.
+
+=== FINAL FIELD ASSIGNMENT RULE (read this when error says "variable X might already be assigned") ===
+If the error history contains "variable X might already be assigned", the
+generated code is assigning a final field (e.g. `this.date = ...`) more than
+once inside a constructor.  This happens when the old assignment was not fully
+replaced.  You MUST:
+  a) Read the file to find ALL assignments to that field in the constructor.
+  b) Ensure your old_string captures the ENTIRE original assignment so it is
+     fully replaced — not just partially overwritten.
+  c) The new_string must assign the field exactly once.
 """
 
 

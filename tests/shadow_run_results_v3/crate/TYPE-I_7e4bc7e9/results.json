@@ -1,14 +1,15 @@
 {
-  "run_timestamp": "2026-04-12T05:06:45.578385",
+  "run_timestamp": "2026-04-15T13:18:46.084726",
   "repo": "crate",
   "patch_type": "TYPE-I",
   "original_commit": "7e4bc7e9a73d300f97e6905fec14412bf3cd15a2",
   "backport_commit": "7bb9c7a1434d39a7d1bead8f1b31d1313ac27e06",
   "description": "master \u2192 6.0",
   "skip_validation": false,
+  "skip_test": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.07,
+      "elapsed_s": 0.03,
       "error": null,
       "java_hunks": 2,
       "aux_hunks": 3,
@@ -34,12 +35,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 3.19,
+      "elapsed_s": 3.45,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_I",
         "confidence": 0.95,
-        "reasoning": "The patch modifies the StreamBucket.java file by replacing the memory accounting method from using size() difference to using ramBytesUsed() difference. The changes are straightforward and localized to a few lines, with exact matches found in the target branch via 'git_exact' with high confidence (1.00). Additionally, the patch adds a new test file and updates release notes, which are additive and do not affect complexity. There are no structural or API changes, renames, or refactorings. Therefore, this patch is classified as TYPE_I (exact match string replacement, trivial backport) with high confidence.",
+        "reasoning": "The patch modifies the StreamBucket.java file by replacing the memory accounting logic from using size() difference to using ramBytesUsed() difference. The changes are localized to a few lines and involve a direct replacement of method calls without structural or API changes. The patch also adds a new test file, but this does not affect the classification of the main patch. The localization evidence shows the hunks were found via 'git_exact' with high confidence, indicating the patch applies cleanly and exactly to the target branch. Therefore, this is a trivial backport classified as TYPE_I with high confidence.",
         "is_auto_generated": false
       }
     },
@@ -95,27 +96,35 @@
       "build_success": true,
       "build_mode": "crate-helper",
       "test_success": true,
-      "test_mode": "skip",
+      "test_mode": "crate-helper",
       "test_state": {
-        "xml_reports": [],
+        "xml_reports": [
+          "/home/kaushal/backport-claw/repos/crate/server/target/surefire-reports/TEST-io.crate.execution.engine.distribution.StreamBucketTest.xml"
+        ],
         "target_classes": [],
-        "test_cases": {},
-        "classes": {},
+        "test_cases": {
+          "io.crate.execution.engine.distribution.StreamBucketTest#test_accounting": "passed"
+        },
+        "classes": {
+          "io.crate.execution.engine.distribution.StreamBucketTest": "passed"
+        },
         "summary": {
-          "passed": 0,
+          "passed": 1,
           "failed": 0,
           "skipped": 0,
-          "total": 0
+          "total": 1
         }
       },
       "test_state_transition": {
-        "valid_backport_signal": false,
+        "valid_backport_signal": true,
         "fail_to_pass": [],
         "pass_to_fail": [],
-        "newly_passing": [],
+        "newly_passing": [
+          "io.crate.execution.engine.distribution.StreamBucketTest#test_accounting"
+        ],
         "baseline_total": 0,
-        "patched_total": 0,
-        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+        "patched_total": 1,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
       },
       "compile_errors": []
     }
@@ -126,7 +135,7 @@
     "phase0_baseline": {
       "mode": "baseline-skip",
       "skipped": false,
-      "cached": false,
+      "cached": true,
       "test_cases_total": 0
     },
     "java_production_hunks": 2,
@@ -161,23 +170,26 @@
     "failed_hunks": [],
     "generated_patch_bytes": 1215,
     "target_patch_bytes": 8278,
+    "patch_exact_match": true,
     "validation_passed": true,
     "validation_failure_category": "",
     "build_success": true,
     "test_success": true,
-    "test_mode": "skip",
+    "test_mode": "crate-helper",
     "test_transition": {
-      "valid_backport_signal": false,
+      "valid_backport_signal": true,
       "fail_to_pass": [],
       "pass_to_fail": [],
-      "newly_passing": [],
+      "newly_passing": [
+        "io.crate.execution.engine.distribution.StreamBucketTest#test_accounting"
+      ],
       "baseline_total": 0,
-      "patched_total": 0,
-      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      "patched_total": 1,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
     },
     "fail_to_pass_count": 0,
-    "newly_passing_count": 0,
+    "newly_passing_count": 1,
     "pass_to_fail_count": 0,
-    "backport_success": false
+    "backport_success": true
   }
 }

@@ -1,0 +1,235 @@
+commit a0bf95e68dff8d64c358da0432528f1cc1e9be7e
+Author: Yanming Zhou <zhouyanming@gmail.com>
+Date:   Mon Sep 9 11:35:38 2024 +0800
+
+    HHH-18581 Introduce `supportsBindingNullSqlTypeForSetNull()` and `supportsBindingNullForSetObject()` for `Dialect` to optimize binding null
+    
+    The method `PreparedStatement.getParameterMetaData().getParameterType(int)` call is expensive for some JDBC driver such as pgJDBC, we should avoid it if the driver supports binding `Types.NULL` for `setNull()` or `null` for `setObject()`.
+
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/Dialect.java b/hibernate-core/src/main/java/org/hibernate/dialect/Dialect.java
+index 1d686d28da..e6d8b3dd6c 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/Dialect.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/Dialect.java
+@@ -5774,4 +5774,26 @@ public FunctionalDependencyAnalysisSupport getFunctionalDependencyAnalysisSuppor
+ 		return FunctionalDependencyAnalysisSupportImpl.NONE;
+ 	}
+ 
++	/**
++	 * Does this dialect support binding {@link Types#NULL} for {@link PreparedStatement#setNull(int, int)}?
++	 * if it does, then call of {@link PreparedStatement#getParameterMetaData()} could be eliminated for better performance.
++	 *
++	 * @return {@code true} indicates it does; {@code false} indicates it does not;
++	 * @see org.hibernate.type.descriptor.jdbc.ObjectNullResolvingJdbcType
++	 */
++	public boolean supportsBindingNullSqlTypeForSetNull() {
++		return false;
++	}
++
++	/**
++	 * Does this dialect support binding {@code null} for {@link PreparedStatement#setObject(int, Object)}?
++	 * if it does, then call of {@link PreparedStatement#getParameterMetaData()} could be eliminated for better performance.
++	 *
++	 * @return {@code true} indicates it does; {@code false} indicates it does not;
++	 * @see org.hibernate.type.descriptor.jdbc.ObjectNullResolvingJdbcType
++	 */
++	public boolean supportsBindingNullForSetObject() {
++		return false;
++	}
++
+ }
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/H2Dialect.java b/hibernate-core/src/main/java/org/hibernate/dialect/H2Dialect.java
+index 6aa5aba572..e9c2995481 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/H2Dialect.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/H2Dialect.java
+@@ -1028,4 +1028,9 @@ public String getDual() {
+ 		return "dual";
+ 	}
+ 
++	@Override
++	public boolean supportsBindingNullSqlTypeForSetNull() {
++		return true;
++	}
++
+ }
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/MySQLDialect.java b/hibernate-core/src/main/java/org/hibernate/dialect/MySQLDialect.java
+index 20ce0f69b5..44102a28ad 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/MySQLDialect.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/MySQLDialect.java
+@@ -1577,4 +1577,9 @@ public boolean supportsFromClauseInUpdate() {
+ 	public String getDual() {
+ 		return "dual";
+ 	}
++
++	@Override
++	public boolean supportsBindingNullSqlTypeForSetNull() {
++		return true;
++	}
+ }
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/PostgreSQLDialect.java b/hibernate-core/src/main/java/org/hibernate/dialect/PostgreSQLDialect.java
+index 404f10609c..1baa19a23e 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/PostgreSQLDialect.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/PostgreSQLDialect.java
+@@ -1609,4 +1609,9 @@ public DmlTargetColumnQualifierSupport getDmlTargetColumnQualifierSupport() {
+ 	public boolean supportsFromClauseInUpdate() {
+ 		return true;
+ 	}
++
++	@Override
++	public boolean supportsBindingNullSqlTypeForSetNull() {
++		return true;
++	}
+ }
+diff --git a/hibernate-core/src/main/java/org/hibernate/dialect/SQLServerDialect.java b/hibernate-core/src/main/java/org/hibernate/dialect/SQLServerDialect.java
+index 1ecf96529d..ec129e43a5 100644
+--- a/hibernate-core/src/main/java/org/hibernate/dialect/SQLServerDialect.java
++++ b/hibernate-core/src/main/java/org/hibernate/dialect/SQLServerDialect.java
+@@ -1202,4 +1202,9 @@ public CallableStatementSupport getCallableStatementSupport() {
+ 		return SQLServerCallableStatementSupport.INSTANCE;
+ 	}
+ 
++
++	@Override
++	public boolean supportsBindingNullForSetObject() {
++		return true;
++	}
+ }
+diff --git a/hibernate-core/src/main/java/org/hibernate/type/descriptor/jdbc/ObjectNullResolvingJdbcType.java b/hibernate-core/src/main/java/org/hibernate/type/descriptor/jdbc/ObjectNullResolvingJdbcType.java
+index 00e6a3f14d..b1fd1bdb01 100644
+--- a/hibernate-core/src/main/java/org/hibernate/type/descriptor/jdbc/ObjectNullResolvingJdbcType.java
++++ b/hibernate-core/src/main/java/org/hibernate/type/descriptor/jdbc/ObjectNullResolvingJdbcType.java
+@@ -42,13 +42,27 @@ public <X> ValueBinder<X> getBinder(JavaType<X> javaType) {
+ 			@Override
+ 			protected void doBindNull(PreparedStatement st, int index, WrapperOptions options)
+ 					throws SQLException {
+-				st.setNull( index, st.getParameterMetaData().getParameterType( index ) );
++				if ( options.getDialect().supportsBindingNullForSetObject() ) {
++					st.setObject( index, null );
++				}
++				else {
++					final int sqlType = options.getDialect().supportsBindingNullSqlTypeForSetNull() ? Types.NULL
++							: st.getParameterMetaData().getParameterType( index );
++					st.setNull( index, sqlType );
++				}
+ 			}
+ 
+ 			@Override
+ 			protected void doBindNull(CallableStatement st, String name, WrapperOptions options)
+ 					throws SQLException {
+-				st.setNull( name, Types.JAVA_OBJECT );
++				if ( options.getDialect().supportsBindingNullForSetObject() ) {
++					st.setObject( name, null );
++				}
++				else {
++					final int sqlType = options.getDialect().supportsBindingNullSqlTypeForSetNull() ? Types.NULL
++							: Types.JAVA_OBJECT;
++					st.setNull( name, sqlType );
++				}
+ 			}
+ 
+ 			@Override
+diff --git a/hibernate-core/src/test/java/org/hibernate/orm/test/typedescriptor/NullTest.java b/hibernate-core/src/test/java/org/hibernate/orm/test/typedescriptor/NullTest.java
+new file mode 100644
+index 0000000000..77aa747e02
+--- /dev/null
++++ b/hibernate-core/src/test/java/org/hibernate/orm/test/typedescriptor/NullTest.java
+@@ -0,0 +1,100 @@
++/*
++ * Hibernate, Relational Persistence for Idiomatic Java
++ *
++ * License: GNU Lesser General Public License (LGPL), version 2.1 or later.
++ * See the lgpl.txt file in the root directory or <http://www.gnu.org/licenses/lgpl-2.1.html>.
++ */
++package org.hibernate.orm.test.typedescriptor;
++
++import org.hibernate.testing.orm.junit.DomainModel;
++import org.hibernate.testing.orm.junit.JiraKey;
++import org.hibernate.testing.orm.junit.SessionFactory;
++import org.hibernate.testing.orm.junit.SessionFactoryScope;
++import org.junit.jupiter.api.AfterEach;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++
++import jakarta.persistence.Entity;
++import jakarta.persistence.GeneratedValue;
++import jakarta.persistence.Id;
++
++import static org.junit.jupiter.api.Assertions.assertNotNull;
++
++/**
++ * @author Yanming Zhou
++ */
++@DomainModel(
++		annotatedClasses = NullTest.SimpleEntity.class
++)
++@SessionFactory
++public class NullTest {
++
++	@BeforeEach
++	public void setUp(SessionFactoryScope scope) {
++		scope.inTransaction(
++				session -> session.persist( new SimpleEntity() )
++		);
++	}
++
++	@AfterEach
++	public void tearDown(SessionFactoryScope scope) {
++		scope.inTransaction(
++				session ->
++						session.createMutationQuery( "delete from SimpleEntity" ).executeUpdate()
++		);
++	}
++
++	@Test
++	@JiraKey("HHH-18581")
++	public void passingNullAsParameterOfNativeQuery(SessionFactoryScope scope) {
++		scope.inTransaction(
++				session -> {
++					SimpleEntity persisted = session.createNativeQuery(
++							"select * from SimpleEntity where name is null or name=:name",
++							SimpleEntity.class
++					).setParameter( "name", null ).uniqueResult();
++
++					assertNotNull( persisted );
++				}
++		);
++	}
++
++	@Test
++	public void passingNullAsParameterOfQuery(SessionFactoryScope scope) {
++		scope.inTransaction(
++				session -> {
++					SimpleEntity persisted = session.createQuery(
++							"from SimpleEntity where name is null or name=:name",
++							SimpleEntity.class
++					).setParameter( "name", null ).uniqueResult();
++
++					assertNotNull( persisted );
++				}
++		);
++	}
++
++	@Entity(name = "SimpleEntity")
++	static class SimpleEntity {
++		@Id
++		@GeneratedValue
++		private Integer id;
++
++		private String name;
++
++		public Integer getId() {
++			return id;
++		}
++
++		public void setId(Integer id) {
++			this.id = id;
++		}
++
++		public String getName() {
++			return name;
++		}
++
++		public void setName(String name) {
++			this.name = name;
++		}
++	}
++}

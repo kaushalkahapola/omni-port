@@ -1,0 +1,194 @@
+commit 480d0bee45121c6564705dacfb06c2ef15686f1d
+Author: qianheng <qianheng@amazon.com>
+Date:   Thu Oct 16 10:31:42 2025 +0800
+
+    Fix sort push down into agg after project already pushed (#4546) (#4574)
+    
+    * Fix sort push down into agg
+    
+    
+    
+    * Change some json files to yaml format
+    
+    
+    
+    ---------
+    
+    
+    
+    (cherry picked from commit 5630119fd143915653de74b02f96d6d524909bbf)
+    
+    Signed-off-by: Heng Qian <qianheng@amazon.com>
+
+diff --git a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteExplainIT.java b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteExplainIT.java
+index 88e9ba392..3ce5f74ee 100644
+--- a/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteExplainIT.java
++++ b/integ-test/src/test/java/org/opensearch/sql/calcite/remote/CalciteExplainIT.java
+@@ -837,8 +837,8 @@ public class CalciteExplainIT extends ExplainIT {
+             "source=opensearch-sql_test_index_account | stats count() by state | head 100 | head 10"
+                 + " from 10 "));
+ 
+-    expected = loadExpectedPlan("explain_limit_agg_pushdown4.json");
+-    assertJsonEqualsIgnoreId(
++    expected = loadExpectedPlan("explain_limit_agg_pushdown4.yaml");
++    assertYamlEqualsJsonIgnoreId(
+         expected,
+         explainQueryToString(
+             "source=opensearch-sql_test_index_account | stats count() by state | sort state | head"
+@@ -1090,4 +1090,20 @@ public class CalciteExplainIT extends ExplainIT {
+             String.format(
+                 "source=%s | fields age, balance | fillnull value=0", TEST_INDEX_ACCOUNT)));
+   }
++
++  @Test
++  public void testJoinWithPushdownSortIntoAgg() throws IOException {
++    enabledOnlyWhenPushdownIsEnabled();
++    // PPL_JOIN_SUBSEARCH_MAXOUT!=0 will add limit before sort and then prevent sort push down.
++    setJoinSubsearchMaxOut(0);
++    String expected = loadExpectedPlan("explain_join_with_agg.yaml");
++    assertYamlEqualsJsonIgnoreId(
++        expected,
++        explainQueryToString(
++            String.format(
++                "source=%s | stats COUNT() by age, gender | join left=L right=R ON L.gender ="
++                    + " R.gender [source=%s | stats COUNT() as overall_cnt by gender]",
++                TEST_INDEX_ACCOUNT, TEST_INDEX_ACCOUNT)));
++    resetJoinSubsearchMaxOut();
++  }
+ }
+diff --git a/integ-test/src/test/resources/expectedOutput/calcite/explain_agg_script_timestamp_push.json b/integ-test/src/test/resources/expectedOutput/calcite/explain_agg_script_timestamp_push.json
+deleted file mode 100644
+index 402eb397c..000000000
+--- a/integ-test/src/test/resources/expectedOutput/calcite/explain_agg_script_timestamp_push.json
++++ /dev/null
+@@ -1 +0,0 @@
+-{"calcite":{"logical":"LogicalSystemLimit(sort0=[$1], dir0=[ASC-nulls-first], fetch=[10000], type=[QUERY_SIZE_LIMIT])\n  LogicalSort(sort0=[$1], dir0=[ASC-nulls-first], fetch=[3])\n    LogicalProject(count()=[$1], t=[$0])\n      LogicalAggregate(group=[{0}], count()=[COUNT()])\n        LogicalProject(t=[UNIX_TIMESTAMP($3)])\n          CalciteLogicalIndexScan(table=[[OpenSearch, opensearch-sql_test_index_bank]])\n","physical":"CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_bank]], PushDownContext=[[AGGREGATION->rel#:LogicalAggregate.NONE.[](input=RelSubset#,group={0},count()=COUNT()), SORT->[0 ASC FIRST], PROJECT->[count(), t], LIMIT->3, LIMIT->10000], OpenSearchRequestBuilder(sourceBuilder={\"from\":0,\"size\":0,\"timeout\":\"1m\",\"aggregations\":{\"composite_buckets\":{\"composite\":{\"size\":3,\"sources\":[{\"t\":{\"terms\":{\"script\":{\"source\":\"{\\\"langType\\\":\\\"calcite\\\",\\\"script\\\":\\\"rO0ABXNyABFqYXZhLnV0aWwuQ29sbFNlcleOq7Y6G6gRAwABSQADdGFneHAAAAADdwQAAAAGdAAHcm93VHlwZXQHrXsKICAiZmllbGRzIjogWwogICAgewogICAgICAidHlwZSI6ICJCSUdJTlQiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAibmFtZSI6ICJhY2NvdW50X251bWJlciIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogImZpcnN0bmFtZSIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogImFkZHJlc3MiCiAgICB9LAogICAgewogICAgICAidWR0IjogIkVYUFJfVElNRVNUQU1QIiwKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAiYmlydGhkYXRlIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAiZ2VuZGVyIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAiY2l0eSIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogImxhc3RuYW1lIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiQklHSU5UIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAiYmFsYW5jZSIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogImVtcGxveWVyIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAic3RhdGUiCiAgICB9LAogICAgewogICAgICAidHlwZSI6ICJJTlRFR0VSIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAiYWdlIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAiZW1haWwiCiAgICB9LAogICAgewogICAgICAidHlwZSI6ICJCT09MRUFOIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAibWFsZSIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogIl9pZCIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogIl9pbmRleCIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlJFQUwiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAibmFtZSI6ICJfc2NvcmUiCiAgICB9LAogICAgewogICAgICAidHlwZSI6ICJSRUFMIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAiX21heHNjb3JlIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiQklHSU5UIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAiX3NvcnQiCiAgICB9LAogICAgewogICAgICAidHlwZSI6ICJWQVJDSEFSIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgInByZWNpc2lvbiI6IC0xLAogICAgICAibmFtZSI6ICJfcm91dGluZyIKICAgIH0KICBdLAogICJudWxsYWJsZSI6IHRydWUKfXQABGV4cHJ0AWd7CiAgIm9wIjogewogICAgIm5hbWUiOiAiVU5JWF9USU1FU1RBTVAiLAogICAgImtpbmQiOiAiT1RIRVJfRlVOQ1RJT04iLAogICAgInN5bnRheCI6ICJGVU5DVElPTiIKICB9LAogICJvcGVyYW5kcyI6IFsKICAgIHsKICAgICAgImlucHV0IjogMywKICAgICAgIm5hbWUiOiAiJDMiCiAgICB9CiAgXSwKICAiY2xhc3MiOiAib3JnLm9wZW5zZWFyY2guc3FsLmV4cHJlc3Npb24uZnVuY3Rpb24uVXNlckRlZmluZWRGdW5jdGlvbkJ1aWxkZXIkMSIsCiAgInR5cGUiOiB7CiAgICAidHlwZSI6ICJET1VCTEUiLAogICAgIm51bGxhYmxlIjogdHJ1ZQogIH0sCiAgImRldGVybWluaXN0aWMiOiB0cnVlLAogICJkeW5hbWljIjogZmFsc2UKfXQACmZpZWxkVHlwZXNzcgARamF2YS51dGlsLkhhc2hNYXAFB9rBwxZg0QMAAkYACmxvYWRGYWN0b3JJAAl0aHJlc2hvbGR4cD9AAAAAAAAYdwgAAAAgAAAAE3QACF9yb3V0aW5nfnIAKW9yZy5vcGVuc2VhcmNoLnNxbC5kYXRhLnR5cGUuRXhwckNvcmVUeXBlAAAAAAAAAAASAAB4cgAOamF2YS5sYW5nLkVudW0AAAAAAAAAABIAAHhwdAAGU1RSSU5HdAAOYWNjb3VudF9udW1iZXJ+cQB+AAp0AARMT05HdAAJZmlyc3RuYW1lcQB+AAx0AAdhZGRyZXNzc3IAOm9yZy5vcGVuc2VhcmNoLnNxbC5vcGVuc2VhcmNoLmRhdGEudHlwZS5PcGVuU2VhcmNoVGV4dFR5cGWtg6OTBOMxRAIAAUwABmZpZWxkc3QAD0xqYXZhL3V0aWwvTWFwO3hyADpvcmcub3BlbnNlYXJjaC5zcWwub3BlbnNlYXJjaC5kYXRhLnR5cGUuT3BlblNlYXJjaERhdGFUeXBlwmO8ygL6BTUCAANMAAxleHByQ29yZVR5cGV0ACtMb3JnL29wZW5zZWFyY2gvc3FsL2RhdGEvdHlwZS9FeHByQ29yZVR5cGU7TAALbWFwcGluZ1R5cGV0AEhMb3JnL29wZW5zZWFyY2gvc3FsL29wZW5zZWFyY2gvZGF0YS90eXBlL09wZW5TZWFyY2hEYXRhVHlwZSRNYXBwaW5nVHlwZTtMAApwcm9wZXJ0aWVzcQB+ABR4cH5xAH4ACnQAB1VOS05PV05+cgBGb3JnLm9wZW5zZWFyY2guc3FsLm9wZW5zZWFyY2guZGF0YS50eXBlLk9wZW5TZWFyY2hEYXRhVHlwZSRNYXBwaW5nVHlwZQAAAAAAAAAAEgAAeHEAfgALdAAEVGV4dHNyADxzaGFkZWQuY29tLmdvb2dsZS5jb21tb24uY29sbGVjdC5JbW11dGFibGVNYXAkU2VyaWFsaXplZEZvcm0AAAAAAAAAAAIAAkwABGtleXN0ABJMamF2YS9sYW5nL09iamVjdDtMAAZ2YWx1ZXNxAH4AH3hwdXIAE1tMamF2YS5sYW5nLk9iamVjdDuQzlifEHMpbAIAAHhwAAAAAHVxAH4AIQAAAABzcQB+AAAAAAADdwQAAAAAeHQACWJpcnRoZGF0ZXNyADpvcmcub3BlbnNlYXJjaC5zcWwub3BlbnNlYXJjaC5kYXRhLnR5cGUuT3BlblNlYXJjaERhdGVUeXBlni1SrhB9yq8CAAFMAAdmb3JtYXRzdAAQTGphdmEvdXRpbC9MaXN0O3hxAH4AFX5xAH4ACnQACVRJTUVTVEFNUH5xAH4AG3QABERhdGVxAH4AIHNxAH4AAAAAAAF3BAAAAAB4dAAGZ2VuZGVyc3EAfgATcQB+ABlxAH4AHHEAfgAgc3EAfgAAAAAAA3cEAAAAAnQAB2tleXdvcmRzcQB+ABVxAH4ADH5xAH4AG3QAB0tleXdvcmRxAH4AIHh0AAZfaW5kZXhxAH4ADHQABGNpdHlxAH4ADHQACV9tYXhzY29yZX5xAH4ACnQABUZMT0FUdAAGX3Njb3JlcQB+ADh0AAVfc29ydHEAfgAPdAAIbGFzdG5hbWVxAH4ADHQAB2JhbGFuY2VxAH4AD3QACGVtcGxveWVyc3EAfgATcQB+ABlxAH4AHHEAfgAgcQB+ACR0AAVzdGF0ZXNxAH4AE3EAfgAZcQB+ABxxAH4AIHNxAH4AAAAAAAN3BAAAAAJxAH4AMXEAfgAyeHQAA19pZHEAfgAMdAADYWdlfnEAfgAKdAAHSU5URUdFUnQABWVtYWlsc3EAfgATcQB+ABlxAH4AHHEAfgAgcQB+ACR0AARtYWxlfnEAfgAKdAAHQk9PTEVBTnh4\\\"}\",\"lang\":\"opensearch_compounded_script\",\"params\":{\"utcTimestamp\":*}},\"missing_bucket\":true,\"missing_order\":\"first\",\"order\":\"asc\"}}}]}}}}, requestedTotalSize=2147483647, pageSize=null, startFrom=0)])\n"}}
+diff --git a/integ-test/src/test/resources/expectedOutput/calcite/explain_agg_script_timestamp_push.yaml b/integ-test/src/test/resources/expectedOutput/calcite/explain_agg_script_timestamp_push.yaml
+new file mode 100644
+index 000000000..f2dfd66ba
+--- /dev/null
++++ b/integ-test/src/test/resources/expectedOutput/calcite/explain_agg_script_timestamp_push.yaml
+@@ -0,0 +1,10 @@
++calcite:
++  logical: |
++    LogicalSystemLimit(sort0=[$1], dir0=[ASC-nulls-first], fetch=[10000], type=[QUERY_SIZE_LIMIT])
++      LogicalSort(sort0=[$1], dir0=[ASC-nulls-first], fetch=[3])
++        LogicalProject(count()=[$1], t=[$0])
++          LogicalAggregate(group=[{0}], count()=[COUNT()])
++            LogicalProject(t=[UNIX_TIMESTAMP($3)])
++              CalciteLogicalIndexScan(table=[[OpenSearch, opensearch-sql_test_index_bank]])
++  physical: |
++    CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_bank]], PushDownContext=[[AGGREGATION->rel#:LogicalAggregate.NONE.[](input=RelSubset#,group={0},count()=COUNT()), PROJECT->[count(), t], SORT->[1 ASC FIRST], LIMIT->3, LIMIT->10000], OpenSearchRequestBuilder(sourceBuilder={"from":0,"size":0,"timeout":"1m","aggregations":{"composite_buckets":{"composite":{"size":3,"sources":[{"t":{"terms":{"script":{"source":"{\"langType\":\"calcite\",\"script\":\"rO0ABXNyABFqYXZhLnV0aWwuQ29sbFNlcleOq7Y6G6gRAwABSQADdGFneHAAAAADdwQAAAAGdAAHcm93VHlwZXQHrXsKICAiZmllbGRzIjogWwogICAgewogICAgICAidHlwZSI6ICJCSUdJTlQiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAibmFtZSI6ICJhY2NvdW50X251bWJlciIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogImZpcnN0bmFtZSIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogImFkZHJlc3MiCiAgICB9LAogICAgewogICAgICAidWR0IjogIkVYUFJfVElNRVNUQU1QIiwKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAiYmlydGhkYXRlIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAiZ2VuZGVyIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAiY2l0eSIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogImxhc3RuYW1lIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiQklHSU5UIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAiYmFsYW5jZSIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogImVtcGxveWVyIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAic3RhdGUiCiAgICB9LAogICAgewogICAgICAidHlwZSI6ICJJTlRFR0VSIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAiYWdlIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiVkFSQ0hBUiIsCiAgICAgICJudWxsYWJsZSI6IHRydWUsCiAgICAgICJwcmVjaXNpb24iOiAtMSwKICAgICAgIm5hbWUiOiAiZW1haWwiCiAgICB9LAogICAgewogICAgICAidHlwZSI6ICJCT09MRUFOIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAibWFsZSIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogIl9pZCIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlZBUkNIQVIiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAicHJlY2lzaW9uIjogLTEsCiAgICAgICJuYW1lIjogIl9pbmRleCIKICAgIH0sCiAgICB7CiAgICAgICJ0eXBlIjogIlJFQUwiLAogICAgICAibnVsbGFibGUiOiB0cnVlLAogICAgICAibmFtZSI6ICJfc2NvcmUiCiAgICB9LAogICAgewogICAgICAidHlwZSI6ICJSRUFMIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAiX21heHNjb3JlIgogICAgfSwKICAgIHsKICAgICAgInR5cGUiOiAiQklHSU5UIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgIm5hbWUiOiAiX3NvcnQiCiAgICB9LAogICAgewogICAgICAidHlwZSI6ICJWQVJDSEFSIiwKICAgICAgIm51bGxhYmxlIjogdHJ1ZSwKICAgICAgInByZWNpc2lvbiI6IC0xLAogICAgICAibmFtZSI6ICJfcm91dGluZyIKICAgIH0KICBdLAogICJudWxsYWJsZSI6IHRydWUKfXQABGV4cHJ0AWd7CiAgIm9wIjogewogICAgIm5hbWUiOiAiVU5JWF9USU1FU1RBTVAiLAogICAgImtpbmQiOiAiT1RIRVJfRlVOQ1RJT04iLAogICAgInN5bnRheCI6ICJGVU5DVElPTiIKICB9LAogICJvcGVyYW5kcyI6IFsKICAgIHsKICAgICAgImlucHV0IjogMywKICAgICAgIm5hbWUiOiAiJDMiCiAgICB9CiAgXSwKICAiY2xhc3MiOiAib3JnLm9wZW5zZWFyY2guc3FsLmV4cHJlc3Npb24uZnVuY3Rpb24uVXNlckRlZmluZWRGdW5jdGlvbkJ1aWxkZXIkMSIsCiAgInR5cGUiOiB7CiAgICAidHlwZSI6ICJET1VCTEUiLAogICAgIm51bGxhYmxlIjogdHJ1ZQogIH0sCiAgImRldGVybWluaXN0aWMiOiB0cnVlLAogICJkeW5hbWljIjogZmFsc2UKfXQACmZpZWxkVHlwZXNzcgARamF2YS51dGlsLkhhc2hNYXAFB9rBwxZg0QMAAkYACmxvYWRGYWN0b3JJAAl0aHJlc2hvbGR4cD9AAAAAAAAYdwgAAAAgAAAAE3QACF9yb3V0aW5nfnIAKW9yZy5vcGVuc2VhcmNoLnNxbC5kYXRhLnR5cGUuRXhwckNvcmVUeXBlAAAAAAAAAAASAAB4cgAOamF2YS5sYW5nLkVudW0AAAAAAAAAABIAAHhwdAAGU1RSSU5HdAAOYWNjb3VudF9udW1iZXJ+cQB+AAp0AARMT05HdAAJZmlyc3RuYW1lcQB+AAx0AAdhZGRyZXNzc3IAOm9yZy5vcGVuc2VhcmNoLnNxbC5vcGVuc2VhcmNoLmRhdGEudHlwZS5PcGVuU2VhcmNoVGV4dFR5cGWtg6OTBOMxRAIAAUwABmZpZWxkc3QAD0xqYXZhL3V0aWwvTWFwO3hyADpvcmcub3BlbnNlYXJjaC5zcWwub3BlbnNlYXJjaC5kYXRhLnR5cGUuT3BlblNlYXJjaERhdGFUeXBlwmO8ygL6BTUCAANMAAxleHByQ29yZVR5cGV0ACtMb3JnL29wZW5zZWFyY2gvc3FsL2RhdGEvdHlwZS9FeHByQ29yZVR5cGU7TAALbWFwcGluZ1R5cGV0AEhMb3JnL29wZW5zZWFyY2gvc3FsL29wZW5zZWFyY2gvZGF0YS90eXBlL09wZW5TZWFyY2hEYXRhVHlwZSRNYXBwaW5nVHlwZTtMAApwcm9wZXJ0aWVzcQB+ABR4cH5xAH4ACnQAB1VOS05PV05+cgBGb3JnLm9wZW5zZWFyY2guc3FsLm9wZW5zZWFyY2guZGF0YS50eXBlLk9wZW5TZWFyY2hEYXRhVHlwZSRNYXBwaW5nVHlwZQAAAAAAAAAAEgAAeHEAfgALdAAEVGV4dHNyADxzaGFkZWQuY29tLmdvb2dsZS5jb21tb24uY29sbGVjdC5JbW11dGFibGVNYXAkU2VyaWFsaXplZEZvcm0AAAAAAAAAAAIAAkwABGtleXN0ABJMamF2YS9sYW5nL09iamVjdDtMAAZ2YWx1ZXNxAH4AH3hwdXIAE1tMamF2YS5sYW5nLk9iamVjdDuQzlifEHMpbAIAAHhwAAAAAHVxAH4AIQAAAABzcQB+AAAAAAADdwQAAAAAeHQACWJpcnRoZGF0ZXNyADpvcmcub3BlbnNlYXJjaC5zcWwub3BlbnNlYXJjaC5kYXRhLnR5cGUuT3BlblNlYXJjaERhdGVUeXBlni1SrhB9yq8CAAFMAAdmb3JtYXRzdAAQTGphdmEvdXRpbC9MaXN0O3hxAH4AFX5xAH4ACnQACVRJTUVTVEFNUH5xAH4AG3QABERhdGVxAH4AIHNxAH4AAAAAAAF3BAAAAAB4dAAGZ2VuZGVyc3EAfgATcQB+ABlxAH4AHHEAfgAgc3EAfgAAAAAAA3cEAAAAAnQAB2tleXdvcmRzcQB+ABVxAH4ADH5xAH4AG3QAB0tleXdvcmRxAH4AIHh0AAZfaW5kZXhxAH4ADHQABGNpdHlxAH4ADHQACV9tYXhzY29yZX5xAH4ACnQABUZMT0FUdAAGX3Njb3JlcQB+ADh0AAVfc29ydHEAfgAPdAAIbGFzdG5hbWVxAH4ADHQAB2JhbGFuY2VxAH4AD3QACGVtcGxveWVyc3EAfgATcQB+ABlxAH4AHHEAfgAgcQB+ACR0AAVzdGF0ZXNxAH4AE3EAfgAZcQB+ABxxAH4AIHNxAH4AAAAAAAN3BAAAAAJxAH4AMXEAfgAyeHQAA19pZHEAfgAMdAADYWdlfnEAfgAKdAAHSU5URUdFUnQABWVtYWlsc3EAfgATcQB+ABlxAH4AHHEAfgAgcQB+ACR0AARtYWxlfnEAfgAKdAAHQk9PTEVBTnh4\"}","lang":"opensearch_compounded_script","params":{"utcTimestamp": 0}},"missing_bucket":true,"missing_order":"first","order":"asc"}}}]}}}}, requestedTotalSize=2147483647, pageSize=null, startFrom=0)])
+diff --git a/integ-test/src/test/resources/expectedOutput/calcite/explain_join_with_agg.yaml b/integ-test/src/test/resources/expectedOutput/calcite/explain_join_with_agg.yaml
+new file mode 100644
+index 000000000..f59f795a3
+--- /dev/null
++++ b/integ-test/src/test/resources/expectedOutput/calcite/explain_join_with_agg.yaml
+@@ -0,0 +1,18 @@
++calcite:
++  logical: |
++    LogicalSystemLimit(fetch=[10000], type=[QUERY_SIZE_LIMIT])
++      LogicalProject(COUNT()=[$0], age=[$1], gender=[$2], overall_cnt=[$3], R.gender=[$4])
++        LogicalJoin(condition=[=($2, $4)], joinType=[inner])
++          LogicalProject(COUNT()=[$2], age=[$0], gender=[$1])
++            LogicalAggregate(group=[{0, 1}], COUNT()=[COUNT()])
++              LogicalProject(age=[$8], gender=[$4])
++                CalciteLogicalIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]])
++          LogicalProject(overall_cnt=[$1], gender=[$0])
++            LogicalAggregate(group=[{0}], overall_cnt=[COUNT()])
++              LogicalProject(gender=[$4])
++                CalciteLogicalIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]])
++  physical: |
++    EnumerableLimit(fetch=[10000])
++      EnumerableMergeJoin(condition=[=($2, $4)], joinType=[inner])
++        CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]], PushDownContext=[[AGGREGATION->rel#:LogicalAggregate.NONE.[](input=RelSubset#,group={0, 1},COUNT()=COUNT()), PROJECT->[COUNT(), age, gender], SORT->[2]], OpenSearchRequestBuilder(sourceBuilder={"from":0,"size":0,"timeout":"1m","aggregations":{"composite_buckets":{"composite":{"size":1000,"sources":[{"gender":{"terms":{"field":"gender.keyword","missing_bucket":true,"missing_order":"last","order":"asc"}}},{"age":{"terms":{"field":"age","missing_bucket":true,"missing_order":"first","order":"asc"}}}]}}}}, requestedTotalSize=2147483647, pageSize=null, startFrom=0)])
++        CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]], PushDownContext=[[AGGREGATION->rel#:LogicalAggregate.NONE.[](input=RelSubset#,group={0},overall_cnt=COUNT()), PROJECT->[overall_cnt, gender], SORT->[1]], OpenSearchRequestBuilder(sourceBuilder={"from":0,"size":0,"timeout":"1m","aggregations":{"composite_buckets":{"composite":{"size":1000,"sources":[{"gender":{"terms":{"field":"gender.keyword","missing_bucket":true,"missing_order":"last","order":"asc"}}}]}}}}, requestedTotalSize=2147483647, pageSize=null, startFrom=0)])
+diff --git a/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown4.json b/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown4.json
+deleted file mode 100644
+index 635a33b5d..000000000
+--- a/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown4.json
++++ /dev/null
+@@ -1,6 +0,0 @@
+-{
+-  "calcite": {
+-    "logical": "LogicalSystemLimit(fetch=[10000], type=[QUERY_SIZE_LIMIT])\n  LogicalSort(offset=[10], fetch=[10])\n    LogicalSort(sort0=[$1], dir0=[ASC-nulls-first], fetch=[100])\n      LogicalProject(count()=[$1], state=[$0])\n        LogicalAggregate(group=[{0}], count()=[COUNT()])\n          LogicalProject(state=[$7])\n            CalciteLogicalIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]])\n",
+-    "physical": "EnumerableLimit(fetch=[10000])\n  EnumerableCalc(expr#0..1=[{inputs}], count()=[$t1], state=[$t0])\n    EnumerableLimit(offset=[10], fetch=[10])\n      CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]], PushDownContext=[[AGGREGATION->rel#:LogicalAggregate.NONE.[](input=RelSubset#,group={0},count()=COUNT()), SORT->[0 ASC FIRST], LIMIT->100, LIMIT->[10 from 10]], OpenSearchRequestBuilder(sourceBuilder={\"from\":0,\"size\":0,\"timeout\":\"1m\",\"aggregations\":{\"composite_buckets\":{\"composite\":{\"size\":20,\"sources\":[{\"state\":{\"terms\":{\"field\":\"state.keyword\",\"missing_bucket\":true,\"missing_order\":\"first\",\"order\":\"asc\"}}}]}}}}, requestedTotalSize=2147483647, pageSize=null, startFrom=0)])\n"
+-  }
+-}
+diff --git a/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown4.yaml b/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown4.yaml
+new file mode 100644
+index 000000000..d13ed6aa8
+--- /dev/null
++++ b/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown4.yaml
+@@ -0,0 +1,13 @@
++calcite:
++  logical: |
++    LogicalSystemLimit(fetch=[10000], type=[QUERY_SIZE_LIMIT])
++      LogicalSort(offset=[10], fetch=[10])
++        LogicalSort(sort0=[$1], dir0=[ASC-nulls-first], fetch=[100])
++          LogicalProject(count()=[$1], state=[$0])
++            LogicalAggregate(group=[{0}], count()=[COUNT()])
++              LogicalProject(state=[$7])
++                CalciteLogicalIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]])
++  physical: |
++    EnumerableLimit(fetch=[10000])
++      EnumerableLimit(offset=[10], fetch=[10])
++        CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]], PushDownContext=[[AGGREGATION->rel#:LogicalAggregate.NONE.[](input=RelSubset#,group={0},count()=COUNT()), PROJECT->[count(), state], SORT->[1 ASC FIRST], LIMIT->100, LIMIT->[10 from 10]], OpenSearchRequestBuilder(sourceBuilder={"from":0,"size":0,"timeout":"1m","aggregations":{"composite_buckets":{"composite":{"size":20,"sources":[{"state":{"terms":{"field":"state.keyword","missing_bucket":true,"missing_order":"first","order":"asc"}}}]}}}}, requestedTotalSize=2147483647, pageSize=null, startFrom=0)])
+diff --git a/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown_bucket_nullable2.yaml b/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown_bucket_nullable2.yaml
+index 78278fe16..46e8cab73 100644
+--- a/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown_bucket_nullable2.yaml
++++ b/integ-test/src/test/resources/expectedOutput/calcite/explain_limit_agg_pushdown_bucket_nullable2.yaml
+@@ -10,6 +10,5 @@ calcite:
+                   CalciteLogicalIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]])
+   physical: |
+     EnumerableLimit(fetch=[10000])
+-      EnumerableCalc(expr#0..1=[{inputs}], count()=[$t1], state=[$t0])
+-        EnumerableLimit(offset=[10], fetch=[10])
+-          CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]], PushDownContext=[[AGGREGATION->rel#:LogicalAggregate.NONE.[](input=RelSubset#,group={0},count()=COUNT()), SORT->[0 ASC FIRST], LIMIT->100, LIMIT->[10 from 10]], OpenSearchRequestBuilder(sourceBuilder={"from":0,"size":0,"timeout":"1m","aggregations":{"composite_buckets":{"composite":{"size":20,"sources":[{"state":{"terms":{"field":"state.keyword","missing_bucket":false,"order":"asc"}}}]}}}}, requestedTotalSize=2147483647, pageSize=null, startFrom=0)])
++      EnumerableLimit(offset=[10], fetch=[10])
++        CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_account]], PushDownContext=[[AGGREGATION->rel#:LogicalAggregate.NONE.[](input=RelSubset#,group={0},count()=COUNT()), PROJECT->[count(), state], SORT->[1 ASC FIRST], LIMIT->100, LIMIT->[10 from 10]], OpenSearchRequestBuilder(sourceBuilder={"from":0,"size":0,"timeout":"1m","aggregations":{"composite_buckets":{"composite":{"size":20,"sources":[{"state":{"terms":{"field":"state.keyword","missing_bucket":false,"order":"asc"}}}]}}}}, requestedTotalSize=2147483647, pageSize=null, startFrom=0)])
+diff --git a/integ-test/src/test/resources/expectedOutput/calcite_no_pushdown/explain_agg_script_timestamp_push.yaml b/integ-test/src/test/resources/expectedOutput/calcite_no_pushdown/explain_agg_script_timestamp_push.yaml
+new file mode 100644
+index 000000000..d1119b4f5
+--- /dev/null
++++ b/integ-test/src/test/resources/expectedOutput/calcite_no_pushdown/explain_agg_script_timestamp_push.yaml
+@@ -0,0 +1,16 @@
++calcite:
++  logical: |
++    LogicalSystemLimit(sort0=[$1], dir0=[ASC-nulls-first], fetch=[10000], type=[QUERY_SIZE_LIMIT])
++      LogicalSort(sort0=[$1], dir0=[ASC-nulls-first], fetch=[3])
++        LogicalProject(count()=[$1], t=[$0])
++          LogicalAggregate(group=[{0}], count()=[COUNT()])
++            LogicalProject(t=[UNIX_TIMESTAMP($3)])
++              CalciteLogicalIndexScan(table=[[OpenSearch, opensearch-sql_test_index_bank]])
++  physical: |
++    EnumerableLimit(fetch=[10000])
++      EnumerableCalc(expr#0..1=[{inputs}], count()=[$t1], t=[$t0])
++        EnumerableLimit(fetch=[3])
++          EnumerableSort(sort0=[$0], dir0=[ASC-nulls-first])
++            EnumerableAggregate(group=[{0}], count()=[COUNT()])
++              EnumerableCalc(expr#0..18=[{inputs}], expr#19=[UNIX_TIMESTAMP($t3)], t=[$t19])
++                CalciteEnumerableIndexScan(table=[[OpenSearch, opensearch-sql_test_index_bank]])
+diff --git a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/scan/PushDownContext.java b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/scan/PushDownContext.java
+index 43dd2e827..0397ffad3 100644
+--- a/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/scan/PushDownContext.java
++++ b/opensearch/src/main/java/org/opensearch/sql/opensearch/storage/scan/PushDownContext.java
+@@ -13,7 +13,6 @@ import java.util.Collections;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+-import java.util.stream.IntStream;
+ import lombok.Getter;
+ import org.apache.calcite.rel.RelFieldCollation;
+ import org.apache.calcite.rel.RelFieldCollation.Direction;
+@@ -310,8 +309,8 @@ class AggPushDownAction implements OSRequestBuilderAction {
+             newBucketNames.add(bucketName);
+             selected.add(bucketName);
+           });
+-      IntStream.range(0, buckets.size())
+-          .mapToObj(fieldNames::get)
++      buckets.stream()
++          .map(CompositeValuesSourceBuilder::name)
+           .filter(name -> !selected.contains(name))
+           .forEach(
+               name -> {

@@ -1,0 +1,120 @@
+commit b484ab116f818129471d3bf19feea2a9df1f2c92
+Author: Brian Clozel <brian.clozel@broadcom.com>
+Date:   Mon Jan 22 11:03:57 2024 +0100
+
+    Record errors thrown by custom handler in RestTemplate observations
+    
+    Prior to this commit, the `RestTemplate` observation instrumentation
+    would only record `RestClientException` and `IOException` as errors in
+    the observation. Other types of errors can be thrown by custom
+    components, such as `ResponseErrorHandler` and in this case they aren't
+    recorded with the observation.
+    Also, the current instrumentation does not create any observation scope
+    around the execution. While this would have a limited benefit as no
+    application code is executed there, developers could set up custom
+    components (such as, again, `ResponseErrorHandler`) that could use
+    contextual logging with trace ids.
+    
+    This commit ensures that all `Throwable` are recorded as errors with the
+    observations and that an observation `Scope` is created around the
+    execution of the client exchange.
+    
+    Fixes gh-32063
+
+diff --git a/spring-web/src/main/java/org/springframework/web/client/RestTemplate.java b/spring-web/src/main/java/org/springframework/web/client/RestTemplate.java
+index 19e42a3039..f88c41b7c1 100644
+--- a/spring-web/src/main/java/org/springframework/web/client/RestTemplate.java
++++ b/spring-web/src/main/java/org/springframework/web/client/RestTemplate.java
+@@ -855,7 +855,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 		Observation observation = ClientHttpObservationDocumentation.HTTP_CLIENT_EXCHANGES.observation(this.observationConvention,
+ 				DEFAULT_OBSERVATION_CONVENTION, () -> observationContext, this.observationRegistry).start();
+ 		ClientHttpResponse response = null;
+-		try {
++		try (Observation.Scope scope = observation.openScope()){
+ 			if (requestCallback != null) {
+ 				requestCallback.doWithRequest(request);
+ 			}
+@@ -869,7 +869,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
+ 			observation.error(exception);
+ 			throw exception;
+ 		}
+-		catch (RestClientException exc) {
++		catch (Throwable exc) {
+ 			observation.error(exc);
+ 			throw exc;
+ 		}
+diff --git a/spring-web/src/test/java/org/springframework/web/client/RestTemplateObservationTests.java b/spring-web/src/test/java/org/springframework/web/client/RestTemplateObservationTests.java
+index 97eb7fc5fe..2080b265ad 100644
+--- a/spring-web/src/test/java/org/springframework/web/client/RestTemplateObservationTests.java
++++ b/spring-web/src/test/java/org/springframework/web/client/RestTemplateObservationTests.java
+@@ -39,9 +39,11 @@ import org.springframework.http.client.ClientHttpRequestFactory;
+ import org.springframework.http.client.ClientHttpResponse;
+ import org.springframework.http.client.observation.ClientRequestObservationContext;
+ import org.springframework.http.converter.HttpMessageConverter;
++import org.springframework.lang.Nullable;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
++import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+ import static org.mockito.ArgumentMatchers.any;
+ import static org.mockito.ArgumentMatchers.eq;
+ import static org.mockito.BDDMockito.given;
+@@ -158,6 +160,31 @@ class RestTemplateObservationTests {
+ 		assertThatHttpObservation().hasLowCardinalityKeyValue("outcome", "UNKNOWN");
+ 	}
+ 
++	@Test // gh-32060
++	void executeShouldRecordErrorsThrownByErrorHandler() throws Exception {
++		mockSentRequest(GET, "https://example.org");
++		mockResponseStatus(HttpStatus.OK);
++		mockResponseBody("Hello World", MediaType.TEXT_PLAIN);
++		given(errorHandler.hasError(any())).willThrow(new IllegalStateException("error handler"));
++
++		assertThatIllegalStateException().isThrownBy(() ->
++				template.execute("https://example.org", GET, null, null));
++
++		assertThatHttpObservation().hasLowCardinalityKeyValue("exception", "IllegalStateException");
++	}
++
++	@Test // gh-32060
++	void executeShouldCreateObservationScope() throws Exception {
++		mockSentRequest(GET, "https://example.org");
++		mockResponseStatus(HttpStatus.OK);
++		mockResponseBody("Hello World", MediaType.TEXT_PLAIN);
++		ObservationErrorHandler observationErrorHandler = new ObservationErrorHandler(observationRegistry);
++		template.setErrorHandler(observationErrorHandler);
++
++		template.execute("https://example.org", GET, null, null);
++		assertThat(observationErrorHandler.currentObservation).isNotNull();
++	}
++
+ 
+ 	private void mockSentRequest(HttpMethod method, String uri) throws Exception {
+ 		mockSentRequest(method, uri, new HttpHeaders());
+@@ -205,4 +232,26 @@ class RestTemplateObservationTests {
+ 		}
+ 	}
+ 
++	static class ObservationErrorHandler implements ResponseErrorHandler {
++
++		final TestObservationRegistry observationRegistry;
++
++		@Nullable
++		Observation currentObservation;
++
++		public ObservationErrorHandler(TestObservationRegistry observationRegistry) {
++			this.observationRegistry = observationRegistry;
++		}
++
++		@Override
++		public boolean hasError(ClientHttpResponse response) throws IOException {
++			return true;
++		}
++
++		@Override
++		public void handleError(ClientHttpResponse response) throws IOException {
++			currentObservation = this.observationRegistry.getCurrentObservation();
++		}
++	}
++
+ }

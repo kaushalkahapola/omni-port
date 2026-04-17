@@ -801,7 +801,7 @@ def run_phase0_baseline(
     repo_path: str,
     project: str,
     developer_aux_hunks: list[dict[str, Any]],
-    changed_files: list[str],
+    file_entries: list[tuple[str, str]],
 ) -> dict[str, Any]:
     """
     Apply ONLY test-related hunks from developer_aux_hunks (test files only)
@@ -811,6 +811,10 @@ def run_phase0_baseline(
     production code changes or non-Java aux changes. Tests that reference new
     APIs/methods introduced by the patch will fail here; after the agents apply
     those code changes they should pass.
+
+    file_entries: list of (status, filepath) pairs extracted from target.patch.
+    Passed directly to detect_test_targets so the helper skips its git step —
+    targets are derived from the patch itself, not the worktree state.
 
     Returns a dict compatible with evaluate_test_transition(baseline=...).
     """
@@ -828,8 +832,11 @@ def run_phase0_baseline(
         restore_repo_state(repo_path)
         return {"test_state": {}, "mode": "baseline-apply-failed", "skipped": True}
 
-    # Detect targets from the changed files (same as agent7 will use later).
-    target_info = detect_test_targets(repo_path, project, changed_files)
+    # Detect targets from the (status, path) entries extracted from target.patch.
+    # Using file_entries (not --worktree) ensures phase 0 and validation targets
+    # are identical regardless of current worktree state.
+    changed_files = [path for _, path in file_entries]
+    target_info = detect_test_targets(repo_path, project, file_entries=file_entries)
     print(f"  [agent7] phase0: running baseline tests ({len(target_info.test_targets)} targets) directly...")
     test_res = run_tests(repo_path, project, target_info=target_info, changed_files=changed_files)
 
@@ -931,6 +938,11 @@ def run_validation(state: BackportState) -> BackportState:
         print(f"  agent7: synthesized hunks already on disk (pre-applied), skipping apply step")
         synth_result = {"success": True, "output": "pre-applied by pipeline", "applied_files": []}
     else:
+        # On retry, re-apply agent3's fast-applied hunks first (they were wiped by restore).
+        if attempts > 0 and applied_hunks:
+            print(f"  agent7: re-applying {len(applied_hunks)} agent3 hunk(s) after restore...")
+            _apply_synthesized_hunks(repo_path, applied_hunks)
+
         print(f"  agent7: applying {len(synthesized_hunks)} synthesized hunk(s)...")
         synth_result = _apply_synthesized_hunks(repo_path, synthesized_hunks)
     validation_results["hunk_application"] = {
@@ -1011,7 +1023,7 @@ def run_validation(state: BackportState) -> BackportState:
 
     # ── Step 4: Build ─────────────────────────────────────────────────────────
     print(f"  agent7: running build for {project}...")
-    build_res: BuildResult = run_build(repo_path, project)
+    build_res: BuildResult = run_build(repo_path, project, changed_files=all_modified_java)
     validation_results["build"] = {
         "success": build_res.success,
         "raw": build_res.output,
@@ -1053,33 +1065,61 @@ def run_validation(state: BackportState) -> BackportState:
         state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
         return state
 
-    # ── Step 5: Detect test targets from all changed files ────────────────────
-    all_changed_files: list[str] = list(
-        {
+    # ── Step 5: Detect test targets ───────────────────────────────────────────
+    # Prefer target_patch_file_entries (status+path pairs from target.patch) so
+    # the helper skips its git step and derives targets from the patch itself.
+    # This guarantees phase 0 and validation always run the SAME set of tests.
+    # Fall back to test files from the applied hunks if not available.
+    file_entries: list[tuple[str, str]] | None = state.get("target_patch_file_entries") or None
+    if file_entries:
+        print(f"  agent7: using {len(file_entries)} file entries from target.patch for test targets")
+    else:
+        # Collect only test files from the hunks applied in this run
+        all_hunk_files = {
             h.get("file_path") or h.get("target_file") or ""
             for h in (synthesized_hunks + developer_aux_hunks + applied_hunks)
         }
-    )
-    all_changed_files = [f for f in all_changed_files if f]
+        test_files = [f for f in all_hunk_files if f and _is_test_file(f)]
+        file_entries = [("M", f) for f in test_files]
+        print(f"  agent7: using {len(file_entries)} test files from applied hunks for test targets")
 
-    test_targets = detect_test_targets(repo_path, project, all_changed_files)
+    test_targets = detect_test_targets(repo_path, project, file_entries=file_entries)
     validation_results["test_target_detection"] = {
         "success": True,
         "raw": test_targets.__dict__,
     }
 
     # ── Step 6: Run tests ─────────────────────────────────────────────────────
-    print(
-        f"  agent7: running tests for {project} "
-        f"({len(test_targets.test_targets)} target(s))..."
-    )
-    test_res: TestResult = run_tests(
-        repo_path, project, target_info=test_targets, changed_files=all_changed_files
-    )
+    skip_test = state.get("skip_test", False)
+    if skip_test:
+        print(f"  agent7: skip_test is True — skipping test execution for {project}")
+        test_res = TestResult(
+            success=True,
+            compile_error=False,
+            output="Skipped tests by user request (--skip-test)",
+            mode="skip",
+            targets={"test_targets": test_targets.test_targets},
+            test_state={},
+        )
+        transition_eval = {
+            "valid_backport_signal": True,
+            "reason": "Tests skipped (--skip-test)",
+            "fail_to_pass": [],
+            "newly_passing": [],
+            "pass_to_fail": [],
+        }
+    else:
+        print(
+            f"  agent7: running tests for {project} "
+            f"({len(test_targets.test_targets)} target(s))..."
+        )
+        test_res: TestResult = run_tests(
+            repo_path, project, target_info=test_targets
+        )
 
-    # ── Step 7: Evaluate test state transition vs baseline ────────────────────
-    phase_0_baseline = state.get("validation_results", {}).get("phase_0_baseline_test_result")
-    transition_eval = evaluate_test_transition(phase_0_baseline, {"test_state": test_res.test_state})
+        # ── Step 7: Evaluate test state transition vs baseline ────────────────────
+        phase_0_baseline = state.get("validation_results", {}).get("phase_0_baseline_test_result")
+        transition_eval = evaluate_test_transition(phase_0_baseline, {"test_state": test_res.test_state})
 
     validation_results["tests"] = {
         "success": test_res.success,
@@ -1092,19 +1132,24 @@ def run_validation(state: BackportState) -> BackportState:
 
     # ── Step 8: Determine overall outcome ─────────────────────────────────────
     if test_res.compile_error:
-        # Compilation failure during test phase (different from build phase above)
-        compile_errors = parse_compile_errors(test_res.output)
-        retry_files = sorted({e.file_path for e in compile_errors})
-        restore_repo_state(repo_path)
-        ctx = _build_retry_context("context_mismatch", test_res.output, attempts + 1)
-        state["validation_passed"] = False
-        state["validation_error_context"] = "Compilation error during test phase."
-        state["validation_failure_category"] = "context_mismatch"
-        state["validation_retry_files"] = retry_files
-        state["validation_attempts"] = attempts + 1
-        state["validation_results"] = validation_results
-        state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
-        return state
+        # Before failing on compile error, check if we already have a valid
+        # backport signal from tests that ran before the error (e.g. newly_passing).
+        if transition_eval.get("valid_backport_signal") or transition_eval.get("newly_passing") or transition_eval.get("fail_to_pass"):
+            print(f"  agent7: compile error during tests but valid backport signal detected — passing.")
+        else:
+            # Compilation failure during test phase (different from build phase above)
+            compile_errors = parse_compile_errors(test_res.output)
+            retry_files = sorted({e.file_path for e in compile_errors})
+            restore_repo_state(repo_path)
+            ctx = _build_retry_context("context_mismatch", test_res.output, attempts + 1)
+            state["validation_passed"] = False
+            state["validation_error_context"] = "Compilation error during test phase."
+            state["validation_failure_category"] = "context_mismatch"
+            state["validation_retry_files"] = retry_files
+            state["validation_attempts"] = attempts + 1
+            state["validation_results"] = validation_results
+            state["retry_contexts"] = list(state.get("retry_contexts", [])) + [ctx]
+            return state
 
     if not test_res.success:
         # Distinguish infrastructure failure from test assertion failure

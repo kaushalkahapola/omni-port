@@ -50,75 +50,72 @@ def extract_test_class(filepath):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True, help="Path to the git repository")
-    parser.add_argument("--commit", required=True, help="Commit hash to analyze")
+    parser.add_argument("--commit", help="Commit hash to analyze")
+    parser.add_argument("--files-json", help="JSON array of [status, filepath] pairs (skips git)")
     args = parser.parse_args()
 
-    # 1. Get list of changed files with status
-    cmd = ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", args.commit]
-    try:
-        output = subprocess.check_output(cmd, cwd=args.repo, text=True)
-    except subprocess.CalledProcessError:
+    if not args.commit and not args.files_json:
         print(json.dumps({"modified": [], "added": []}))
         return
 
     modified_tests = set()
     added_tests = set()
 
-    lines = output.strip().splitlines()
-    
-    # Process ALL files, but only extract test files
-    for line in lines:
-        parts = line.split('\t')
-        if not parts:
-            continue
-            
-        status = parts[0]
-        
-        # Handle Renames (R) and Copies (C) which have 3 parts: status, old_path, new_path
-        if status.startswith('R') or status.startswith('C'):
-            if len(parts) >= 3:
-                filepath = parts[2]
-            else:
+    if args.files_json:
+        try:
+            raw_entries = json.loads(args.files_json)
+            entries: list[tuple[str, str]] = []
+            for item in raw_entries:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    entries.append((str(item[0]), str(item[1])))
+                else:
+                    entries.append(("M", str(item)))
+        except Exception:
+            entries = []
+    else:
+        cmd = ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", args.commit]
+        try:
+            output = subprocess.check_output(cmd, cwd=args.repo, text=True)
+        except subprocess.CalledProcessError:
+            print(json.dumps({"modified": [], "added": []}))
+            return
+
+        entries = []
+        for line in output.strip().splitlines():
+            parts = line.split('\t')
+            if not parts:
                 continue
-        else:
-            if len(parts) >= 2:
-                filepath = parts[1]
+            status = parts[0]
+            if status.startswith('R') or status.startswith('C'):
+                filepath = parts[2] if len(parts) >= 3 else None
             else:
-                continue
-        
+                filepath = parts[1] if len(parts) >= 2 else None
+            if filepath:
+                entries.append((status[0], filepath))
+
+    for status, filepath in entries:
         filename = os.path.basename(filepath)
-        
-        # Only process test files
         is_test_file = (
-            "/src/test/java/" in filepath and 
+            "/src/test/java/" in filepath and
             filepath.endswith(".java") and
-            (filename.startswith("Test") or filename.endswith("Test.java") or 
+            (filename.startswith("Test") or filename.endswith("Test.java") or
              filename.endswith("Tests.java") or filename.endswith("IT.java"))
         )
-        
         if not is_test_file:
             continue
-        
-        # Find module
+
         module = find_module_for_file(args.repo, filepath)
         if not module:
             continue
-        
-        # Extract test class name
+
         class_name = extract_test_class(filepath)
-        if not class_name:
-            # If we can't get the class, just use the module
-            test_target = module
-        else:
-            # Format: module:ClassName
-            test_target = f"{module}:{class_name}"
-        
+        test_target = f"{module}:{class_name}" if class_name else module
+
         if status == 'A':
             added_tests.add(test_target)
         else:
             modified_tests.add(test_target)
 
-    # Output as JSON
     result = {
         "modified": sorted(list(modified_tests)),
         "added": sorted(list(added_tests))

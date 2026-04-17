@@ -1,0 +1,25 @@
+diff --git a/processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java b/processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java
+index 8d961f298c..e66871186c 100644
+--- a/processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java
++++ b/processing/src/main/java/org/apache/druid/frame/allocation/AppendableMemory.java
+@@ -158,12 +158,17 @@ public class AppendableMemory implements Closeable
+ 
+     releaseLastBlockIfEmpty();
+ 
++    final int idx = currentBlockNumber();
++
++    // The request cannot be satisfied by the available bytes in the allocator
+     if (bytes > allocator.available()) {
+-      return false;
++      // Check if the last allocated block has enough memory to satisfy the request
++      if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {
++        // The request cannot be satisfied by the allocator and the last allocated block. Return false
++        return false;
++      }
+     }
+ 
+-    final int idx = currentBlockNumber();
+-
+     if (idx < 0 || bytes + limits.getInt(idx) > blockHolders.get(idx).get().getCapacity()) {
+       // Allocation needed.
+       // Math.max(allocationSize, bytes) in case "bytes" is greater than SOFT_MAXIMUM_ALLOCATION_SIZE.
