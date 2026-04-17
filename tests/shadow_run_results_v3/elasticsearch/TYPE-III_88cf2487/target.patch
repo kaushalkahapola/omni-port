@@ -1,0 +1,85 @@
+commit 223d50f0524d3d3e9a19f18a3b146212ff830042
+Author: Keith Massey <keith.massey@elastic.co>
+Date:   Thu Feb 27 10:23:40 2025 -0600
+
+    Fixing serialization of ScriptStats cache_evictions_history (#123384) (#123612)
+    
+    (cherry picked from commit 88cf2487e7deb38686870e40bf08b2b729b7d848)
+    
+    # Conflicts:
+    #       server/src/main/java/org/elasticsearch/script/ScriptStats.java
+
+diff --git a/docs/changelog/123384.yaml b/docs/changelog/123384.yaml
+new file mode 100644
+index 00000000000..33d42b79c41
+--- /dev/null
++++ b/docs/changelog/123384.yaml
+@@ -0,0 +1,5 @@
++pr: 123384
++summary: Fixing serialization of `ScriptStats` `cache_evictions_history`
++area: Stats
++type: bug
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/script/ScriptStats.java b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
+index f24052ef7e3..e085eb50ffb 100644
+--- a/server/src/main/java/org/elasticsearch/script/ScriptStats.java
++++ b/server/src/main/java/org/elasticsearch/script/ScriptStats.java
+@@ -25,6 +25,7 @@ import java.util.List;
+ import java.util.Map;
+ import java.util.Objects;
+ 
++import static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;
+ import static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;
+ import static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;
+ import static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;
+@@ -199,7 +200,7 @@ public record ScriptStats(
+                 ob.xContentObject(COMPILATIONS_HISTORY, compilationsHistory);
+             }
+             if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {
+-                ob.xContentObject(COMPILATIONS_HISTORY, cacheEvictionsHistory);
++                ob.xContentObject(CACHE_EVICTIONS_HISTORY, cacheEvictionsHistory);
+             }
+             ob.array(CONTEXTS, contextStats.iterator());
+         });
+diff --git a/server/src/test/java/org/elasticsearch/script/ScriptStatsTests.java b/server/src/test/java/org/elasticsearch/script/ScriptStatsTests.java
+index df81e8ebcbb..b60afca0939 100644
+--- a/server/src/test/java/org/elasticsearch/script/ScriptStatsTests.java
++++ b/server/src/test/java/org/elasticsearch/script/ScriptStatsTests.java
+@@ -78,6 +78,37 @@ public class ScriptStatsTests extends ESTestCase {
+         assertThat(Strings.toString(builder), equalTo(expected));
+     }
+ 
++    public void testXContentChunkedHistory() throws Exception {
++        ScriptStats stats = new ScriptStats(5, 6, 7, new TimeSeries(10, 20, 30, 40), new TimeSeries(100, 200, 300, 400));
++        final XContentBuilder builder = XContentFactory.jsonBuilder().prettyPrint();
++
++        builder.startObject();
++        for (var it = stats.toXContentChunked(ToXContent.EMPTY_PARAMS); it.hasNext();) {
++            it.next().toXContent(builder, ToXContent.EMPTY_PARAMS);
++        }
++        builder.endObject();
++        String expected = """
++            {
++              "script" : {
++                "compilations" : 5,
++                "cache_evictions" : 6,
++                "compilation_limit_triggered" : 7,
++                "compilations_history" : {
++                  "5m" : 10,
++                  "15m" : 20,
++                  "24h" : 30
++                },
++                "cache_evictions_history" : {
++                  "5m" : 100,
++                  "15m" : 200,
++                  "24h" : 300
++                },
++                "contexts" : [ ]
++              }
++            }""";
++        assertThat(Strings.toString(builder), equalTo(expected));
++    }
++
+     public void testSerializeEmptyTimeSeries() throws IOException {
+         ScriptContextStats stats = new ScriptContextStats("c", 3333, new TimeSeries(1111), new TimeSeries(2222));
+ 

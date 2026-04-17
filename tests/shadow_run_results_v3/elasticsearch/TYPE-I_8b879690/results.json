@@ -1,0 +1,198 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "8b8796908ac0c7a73566adb4647476b66656119c",
+  "backport_commit": "4be91221508c078764536ab9ab1f3dc633a233c1",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/search/DefaultSearchContext.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 291,
+          "end_line": 297,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.94,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.9,
+        "reasoning": "The patch modifies a conditional check in DefaultSearchContext.java by changing the queue emptiness check to a size comparison against the maximum pool size. This is a minor logic adjustment rather than a structural change. The test file changes add new test cases and refactor existing ones, but the overall structure and method signatures remain the same. The main source file hunk was found via 'git_exact' with high confidence, indicating minimal drift. The test changes involve adding new tests and reorganizing code but do not indicate deep structural refactoring. Therefore, the patch complexity aligns with TYPE_II, involving minor logic and formatting changes requiring fuzzy matching rather than exact string replacement or structural AST changes. The confidence is high but not absolute due to the added test code complexity. The token budget estimate is moderate to cover the test additions and the logic change.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/search/DefaultSearchContext.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.search.DefaultSearchContextTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.search.DefaultSearchContextTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.search.DefaultSearchContextTests#testGetFieldCardinalityNumeric": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testGetFieldCardinalityUnmappedField": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testIsParallelCollectionSupportedForResults": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testNewIdLoader": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testGetFieldCardinalityNoLeaves": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testPreProcess": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testNewIdLoaderWithTsdbAndRoutingPathMatch": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testFieldHasValueWithEmptyFieldInfos": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testDetermineMaximumNumberOfSlicesWithQueue": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testGetFieldCardinality": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testFieldHasValue": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testClearQueryCancellationsOnClose": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testDetermineMaximumNumberOfSlicesEnableQueryPhaseParallelCollection": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testDetermineMaximumNumberOfSlicesSingleSortByField": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testDetermineMaximumNumberOfSlicesNoExecutor": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testDetermineMaximumNumberOfSlicesNotThreadPoolExecutor": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testGetFieldCardinalityRuntimeField": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testNewIdLoaderWithTsdb": "passed",
+          "org.elasticsearch.search.DefaultSearchContextTests#testGetFieldCardinalityNoLeavesNoGlobalOrdinals": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.search.DefaultSearchContextTests": "passed"
+        },
+        "summary": {
+          "passed": 19,
+          "failed": 0,
+          "skipped": 0,
+          "total": 19
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.search.DefaultSearchContextTests#testDetermineMaximumNumberOfSlicesWithQueue"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 19,
+        "patched_total": 19,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 5,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 19
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 861,
+    "target_patch_bytes": 14127,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.search.DefaultSearchContextTests#testDetermineMaximumNumberOfSlicesWithQueue"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 19,
+      "patched_total": 19,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

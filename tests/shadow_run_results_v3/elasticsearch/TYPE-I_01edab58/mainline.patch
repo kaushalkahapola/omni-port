@@ -1,0 +1,319 @@
+commit 01edab58ff2941aa6b80f42a028d27b878313eee
+Author: Pawan Kartik <pawankartik.chitrapu@elastic.co>
+Date:   Mon Jan 27 18:49:13 2025 +0000
+
+    Fix NPE caused by race condition in async search when minimise round trips is true (#117504)
+    
+    * Fix NPE caused by race condition in async search when minimise round trips is true
+    
+    Previously, the `notifyListShards()` initialised and updated the
+    required pre-requisites (`searchResponse` being amongst them) when a
+    search op began. This function takes in arguments that contain
+    shard-specific details amongst others. Because this information is not
+    immediately available when the search begins, it is not immediately
+    called. In some specific cases, there can be a race condition that can
+    cause the pre-requisities (such as `searchResponse`) to be accessed
+    before they're initialised, causing an NPE.
+    
+    This fix addresses the race condition by splitting the initialisation
+    and subsequent updation amongst 2 different methods. This way, the
+    pre-requisities are always initialised and do not lead to an NPE.
+    
+    * Try: call `notifyListShards()` after `notifySearchStart()` when minimize round trips is true
+    
+    * Add removed code comment
+    
+    * Pass `Clusters` to `SearchTask` rather than using progress listener to
+    signify search start.
+    
+    To prevent polluting the progress listener with unnecessary search
+    specific details, we now pass the `Clusters` object to `SearchTask` when
+    a search op begins. This lets `AsyncSearchTask` access it and use it to
+    initialise `MutableSearchResponse` appropriately.
+    
+    * Use appropriate `clusters` object rather than re-building it
+    
+    * Do not double set `mutableSearchResponse`
+    
+    * Move mutable entities such as shard counts out of `MutableSearchResponse`
+    
+    * Address PR review: revert moving out mutable entities from
+    `MutableSearchResponse`
+    
+    * Update docs/changelog/117504.yaml
+    
+    * Get rid of `SetOnce` for `searchResponse`
+    
+    * Drop redundant check around shards count
+    
+    * Add a test that calls `onListShards()` at last and clarify `updateShardsAndClusters()`'s comment
+    
+    * Fix test: ref count
+    
+    * Address review comment: rewrite comment and test
+
+diff --git a/docs/changelog/117504.yaml b/docs/changelog/117504.yaml
+new file mode 100644
+index 00000000000..91a62c61b88
+--- /dev/null
++++ b/docs/changelog/117504.yaml
+@@ -0,0 +1,6 @@
++pr: 117504
++summary: Fix NPE caused by race condition in async search when minimise round trips
++  is true
++area: Search
++type: bug
++issues: []
+diff --git a/x-pack/plugin/async-search/src/main/java/org/elasticsearch/xpack/search/AsyncSearchTask.java b/x-pack/plugin/async-search/src/main/java/org/elasticsearch/xpack/search/AsyncSearchTask.java
+index 5068ac69e46..484683fc6ff 100644
+--- a/x-pack/plugin/async-search/src/main/java/org/elasticsearch/xpack/search/AsyncSearchTask.java
++++ b/x-pack/plugin/async-search/src/main/java/org/elasticsearch/xpack/search/AsyncSearchTask.java
+@@ -7,7 +7,6 @@
+ package org.elasticsearch.xpack.search;
+ 
+ import org.apache.lucene.search.TotalHits;
+-import org.apache.lucene.util.SetOnce;
+ import org.elasticsearch.ElasticsearchException;
+ import org.elasticsearch.ElasticsearchStatusException;
+ import org.elasticsearch.ExceptionsHelper;
+@@ -73,7 +72,7 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+     private volatile long expirationTimeMillis;
+     private final AtomicBoolean isCancelling = new AtomicBoolean(false);
+ 
+-    private final SetOnce<MutableSearchResponse> searchResponse = new SetOnce<>();
++    private final MutableSearchResponse searchResponse;
+ 
+     /**
+      * Creates an instance of {@link AsyncSearchTask}.
+@@ -112,6 +111,7 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+         this.aggReduceContextSupplier = aggReduceContextSupplierFactory.apply(this::isCancelled);
+         this.progressListener = new Listener();
+         setProgressListener(progressListener);
++        searchResponse = new MutableSearchResponse(threadPool.getThreadContext());
+     }
+ 
+     /**
+@@ -340,7 +340,7 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+     }
+ 
+     private AsyncSearchResponse getResponse(boolean restoreResponseHeaders) {
+-        MutableSearchResponse mutableSearchResponse = searchResponse.get();
++        MutableSearchResponse mutableSearchResponse = searchResponse;
+         assert mutableSearchResponse != null;
+         checkCancellation();
+         AsyncSearchResponse asyncSearchResponse;
+@@ -370,7 +370,7 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+      * Returns the status from {@link AsyncSearchTask}
+      */
+     public static AsyncStatusResponse getStatusResponse(AsyncSearchTask asyncTask) {
+-        MutableSearchResponse mutableSearchResponse = asyncTask.searchResponse.get();
++        MutableSearchResponse mutableSearchResponse = asyncTask.searchResponse;
+         assert mutableSearchResponse != null;
+         return mutableSearchResponse.toStatusResponse(
+             asyncTask.searchId.getEncoded(),
+@@ -381,7 +381,7 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+ 
+     @Override
+     public void close() {
+-        Releasables.close(searchResponse.get());
++        Releasables.close(searchResponse);
+     }
+ 
+     class Listener extends SearchProgressActionListener {
+@@ -420,12 +420,11 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+             if (delegate != null) {
+                 delegate.onQueryFailure(shardIndex, shardTarget, exc);
+             }
+-            searchResponse.get()
+-                .addQueryFailure(
+-                    shardIndex,
+-                    // the nodeId is null if all replicas of this shard failed
+-                    new ShardSearchFailure(exc, shardTarget.getNodeId() != null ? shardTarget : null)
+-                );
++            searchResponse.addQueryFailure(
++                shardIndex,
++                // the nodeId is null if all replicas of this shard failed
++                new ShardSearchFailure(exc, shardTarget.getNodeId() != null ? shardTarget : null)
++            );
+         }
+ 
+         @Override
+@@ -467,9 +466,7 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+                 delegate = new CCSSingleCoordinatorSearchProgressListener();
+                 delegate.onListShards(shards, skipped, clusters, fetchPhase, timeProvider);
+             }
+-            searchResponse.set(
+-                new MutableSearchResponse(shards.size() + skipped.size(), skipped.size(), clusters, threadPool.getThreadContext())
+-            );
++            searchResponse.updateShardsAndClusters(shards.size() + skipped.size(), skipped.size(), clusters);
+             executeInitListeners();
+         }
+ 
+@@ -496,7 +493,7 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+                  */
+                 reducedAggs = () -> InternalAggregations.topLevelReduce(singletonList(aggregations), aggReduceContextSupplier.get());
+             }
+-            searchResponse.get().updatePartialResponse(shards.size(), totalHits, reducedAggs, reducePhase);
++            searchResponse.updatePartialResponse(shards.size(), totalHits, reducedAggs, reducePhase);
+         }
+ 
+         /**
+@@ -510,7 +507,7 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+             if (delegate != null) {
+                 delegate.onFinalReduce(shards, totalHits, aggregations, reducePhase);
+             }
+-            searchResponse.get().updatePartialResponse(shards.size(), totalHits, () -> aggregations, reducePhase);
++            searchResponse.updatePartialResponse(shards.size(), totalHits, () -> aggregations, reducePhase);
+         }
+ 
+         /**
+@@ -523,24 +520,20 @@ final class AsyncSearchTask extends SearchTask implements AsyncTask, Releasable
+         @Override
+         public void onClusterResponseMinimizeRoundtrips(String clusterAlias, SearchResponse clusterResponse) {
+             // no need to call the delegate progress listener, since this method is only called for minimize_roundtrips=true
+-            searchResponse.get().updateResponseMinimizeRoundtrips(clusterAlias, clusterResponse);
++            searchResponse.updateResponseMinimizeRoundtrips(clusterAlias, clusterResponse);
+         }
+ 
+         @Override
+         public void onResponse(SearchResponse response) {
+-            searchResponse.get().updateFinalResponse(response, ccsMinimizeRoundtrips);
++            searchResponse.updateFinalResponse(response, ccsMinimizeRoundtrips);
+             executeCompletionListeners();
+         }
+ 
+         @Override
+         public void onFailure(Exception exc) {
+-            // if the failure occurred before calling onListShards
+-            var r = new MutableSearchResponse(-1, -1, null, threadPool.getThreadContext());
+-            if (searchResponse.trySet(r) == false) {
+-                r.close();
+-            }
+-            searchResponse.get()
+-                .updateWithFailure(new ElasticsearchStatusException("error while executing search", ExceptionsHelper.status(exc), exc));
++            searchResponse.updateWithFailure(
++                new ElasticsearchStatusException("error while executing search", ExceptionsHelper.status(exc), exc)
++            );
+             executeInitListeners();
+             executeCompletionListeners();
+         }
+diff --git a/x-pack/plugin/async-search/src/main/java/org/elasticsearch/xpack/search/MutableSearchResponse.java b/x-pack/plugin/async-search/src/main/java/org/elasticsearch/xpack/search/MutableSearchResponse.java
+index b046b5ca46e..11ff4032378 100644
+--- a/x-pack/plugin/async-search/src/main/java/org/elasticsearch/xpack/search/MutableSearchResponse.java
++++ b/x-pack/plugin/async-search/src/main/java/org/elasticsearch/xpack/search/MutableSearchResponse.java
+@@ -39,10 +39,10 @@ import static org.elasticsearch.xpack.core.async.AsyncTaskIndexService.restoreRe
+  * run concurrently to 1 and ensures that we pause the search progress when an {@link AsyncSearchResponse} is built.
+  */
+ class MutableSearchResponse implements Releasable {
+-    private final int totalShards;
+-    private final int skippedShards;
+-    private final Clusters clusters;
+-    private final AtomicArray<ShardSearchFailure> queryFailures;
++    private int totalShards;
++    private int skippedShards;
++    private Clusters clusters;
++    private AtomicArray<ShardSearchFailure> queryFailures;
+     private final ThreadContext threadContext;
+ 
+     private boolean isPartial;
+@@ -82,23 +82,31 @@ class MutableSearchResponse implements Releasable {
+     /**
+      * Creates a new mutable search response.
+      *
+-     * @param totalShards The number of shards that participate in the request, or -1 to indicate a failure.
+-     * @param skippedShards The number of skipped shards, or -1 to indicate a failure.
+-     * @param clusters The remote clusters statistics.
+      * @param threadContext The thread context to retrieve the final response headers.
+      */
+-    MutableSearchResponse(int totalShards, int skippedShards, Clusters clusters, ThreadContext threadContext) {
+-        this.totalShards = totalShards;
+-        this.skippedShards = skippedShards;
+-
+-        this.clusters = clusters;
+-        this.queryFailures = totalShards == -1 ? null : new AtomicArray<>(totalShards - skippedShards);
++    MutableSearchResponse(ThreadContext threadContext) {
+         this.isPartial = true;
+         this.threadContext = threadContext;
+         this.totalHits = Lucene.TOTAL_HITS_GREATER_OR_EQUAL_TO_ZERO;
+         this.localClusterComplete = false;
+     }
+ 
++    /**
++     * Updates the response with the number of total and skipped shards.
++     *
++     * @param totalShards The number of shards that participate in the request.
++     * @param skippedShards The number of shards skipped.
++     * <p>
++     * Shards in this context depend on the value of minimize round trips (MRT):
++     * They are the shards being searched by this coordinator (local only for MRT=true, local + remote otherwise).
++     */
++    synchronized void updateShardsAndClusters(int totalShards, int skippedShards, Clusters clusters) {
++        this.totalShards = totalShards;
++        this.skippedShards = skippedShards;
++        this.queryFailures = new AtomicArray<>(totalShards - skippedShards);
++        this.clusters = clusters;
++    }
++
+     /**
+      * Updates the response with the result of a partial reduction.
+      *
+diff --git a/x-pack/plugin/async-search/src/test/java/org/elasticsearch/xpack/search/AsyncSearchTaskTests.java b/x-pack/plugin/async-search/src/test/java/org/elasticsearch/xpack/search/AsyncSearchTaskTests.java
+index 6083436bd09..cf08cdbf093 100644
+--- a/x-pack/plugin/async-search/src/test/java/org/elasticsearch/xpack/search/AsyncSearchTaskTests.java
++++ b/x-pack/plugin/async-search/src/test/java/org/elasticsearch/xpack/search/AsyncSearchTaskTests.java
+@@ -33,6 +33,7 @@ import org.elasticsearch.test.ESTestCase;
+ import org.elasticsearch.test.client.NoOpClient;
+ import org.elasticsearch.threadpool.TestThreadPool;
+ import org.elasticsearch.threadpool.ThreadPool;
++import org.elasticsearch.transport.RemoteClusterAware;
+ import org.elasticsearch.xpack.core.async.AsyncExecutionId;
+ import org.elasticsearch.xpack.core.search.action.AsyncSearchResponse;
+ import org.junit.After;
+@@ -424,6 +425,47 @@ public class AsyncSearchTaskTests extends ESTestCase {
+         assertThat(failure.get(), instanceOf(RuntimeException.class));
+     }
+ 
++    public void testDelayedOnListShardsShouldNotResultInExceptions() throws InterruptedException {
++        try (AsyncSearchTask task = createAsyncSearchTask()) {
++            int numShards = randomIntBetween(0, 10);
++            List<SearchShard> shards = new ArrayList<>();
++
++            // All local shards.
++            for (int i = 0; i < numShards; i++) {
++                shards.add(new SearchShard(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY, new ShardId("0", "0", 1)));
++            }
++
++            int numSkippedShards = randomIntBetween(0, 10);
++            List<SearchShard> skippedShards = new ArrayList<>();
++            for (int i = 0; i < numSkippedShards; i++) {
++                skippedShards.add(new SearchShard(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY, new ShardId("0", "0", 1)));
++            }
++
++            int totalShards = numShards + numSkippedShards;
++            for (int i = 0; i < numShards; i++) {
++                task.getSearchProgressActionListener()
++                    .onPartialReduce(shards.subList(i, i + 1), new TotalHits(0, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO), null, 0);
++            }
++
++            task.getSearchProgressActionListener()
++                .onFinalReduce(shards, new TotalHits(0, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO), null, 0);
++
++            SearchResponse searchResponse = newSearchResponse(totalShards, totalShards, numSkippedShards);
++            task.getSearchProgressActionListener()
++                .onClusterResponseMinimizeRoundtrips(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY, searchResponse);
++
++            /**
++             * We're calling onListShards() at last. Previously, this delay would have resulted in an NPE for other `onABC()` methods.
++             * Now, we should not see any Exceptions or errors (be it NPE or anything else).
++             */
++            task.getSearchProgressActionListener()
++                .onListShards(shards, skippedShards, SearchResponse.Clusters.EMPTY, false, createTimeProvider());
++
++            ActionListener.respondAndRelease((AsyncSearchTask.Listener) task.getProgressListener(), searchResponse);
++            assertCompletionListeners(task, totalShards, totalShards, numSkippedShards, 0, false, false);
++        }
++    }
++
+     private static SearchResponse newSearchResponse(
+         int totalShards,
+         int successfulShards,

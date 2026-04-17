@@ -1,0 +1,321 @@
+commit 1ad4ae155f6dbe473c7829864ca77974859be6bd
+Author: Benjamin Trent <ben.w.trent@gmail.com>
+Date:   Fri Oct 11 10:26:15 2024 -0400
+
+    Fix dim validation for bit element_type (#114533) (#114609)
+    
+    A silly bug has reared its ugly head. Apparently, our dimension
+    validations are predicated on JSON parsing order, that is not good.
+    
+    So, this commit adjusts the dim validations so that it is an actual
+    validation, instead of something that occurs during parsing.
+    
+    Additionally, I found that our custom formats were not overriding
+    `getMaxDimensions` correctly. Typically, and in production, this isn't
+    that big of a deal, but I have found it useful to do this for other
+    testing purposes (so that we don't have to rely on the perfield codec
+    for more direct and advanced testing).
+    
+    Co-authored-by: Elastic Machine <elasticmachine@users.noreply.github.com>
+
+diff --git a/docs/changelog/114533.yaml b/docs/changelog/114533.yaml
+new file mode 100644
+index 00000000000..f45589e8de9
+--- /dev/null
++++ b/docs/changelog/114533.yaml
+@@ -0,0 +1,5 @@
++pr: 114533
++summary: Fix dim validation for bit `element_type`
++area: Vector Search
++type: bug
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES813FlatVectorFormat.java b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES813FlatVectorFormat.java
+index 7a8d09c02ba..0d7b9feeab5 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES813FlatVectorFormat.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES813FlatVectorFormat.java
+@@ -32,6 +32,8 @@ import org.apache.lucene.util.hnsw.RandomVectorScorer;
+ 
+ import java.io.IOException;
+ 
++import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_DIMS_COUNT;
++
+ public class ES813FlatVectorFormat extends KnnVectorsFormat {
+ 
+     static final String NAME = "ES813FlatVectorFormat";
+@@ -55,6 +57,11 @@ public class ES813FlatVectorFormat extends KnnVectorsFormat {
+         return new ES813FlatVectorReader(format.fieldsReader(state));
+     }
+ 
++    @Override
++    public int getMaxDimensions(String fieldName) {
++        return MAX_DIMS_COUNT;
++    }
++
+     static class ES813FlatVectorWriter extends KnnVectorsWriter {
+ 
+         private final FlatVectorsWriter writer;
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES813Int8FlatVectorFormat.java b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES813Int8FlatVectorFormat.java
+index 248421fb99d..9491598653c 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES813Int8FlatVectorFormat.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES813Int8FlatVectorFormat.java
+@@ -30,6 +30,8 @@ import org.apache.lucene.util.hnsw.RandomVectorScorer;
+ 
+ import java.io.IOException;
+ 
++import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_DIMS_COUNT;
++
+ public class ES813Int8FlatVectorFormat extends KnnVectorsFormat {
+ 
+     static final String NAME = "ES813Int8FlatVectorFormat";
+@@ -58,6 +60,11 @@ public class ES813Int8FlatVectorFormat extends KnnVectorsFormat {
+         return new ES813FlatVectorReader(format.fieldsReader(state));
+     }
+ 
++    @Override
++    public int getMaxDimensions(String fieldName) {
++        return MAX_DIMS_COUNT;
++    }
++
+     @Override
+     public String toString() {
+         return NAME + "(name=" + NAME + ", innerFormat=" + format + ")";
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES814HnswScalarQuantizedVectorsFormat.java b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES814HnswScalarQuantizedVectorsFormat.java
+index d6ce73dd414..6bb32d8e1ef 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES814HnswScalarQuantizedVectorsFormat.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES814HnswScalarQuantizedVectorsFormat.java
+@@ -22,6 +22,7 @@ import java.io.IOException;
+ 
+ import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_BEAM_WIDTH;
+ import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_MAX_CONN;
++import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_DIMS_COUNT;
+ 
+ public final class ES814HnswScalarQuantizedVectorsFormat extends KnnVectorsFormat {
+ 
+@@ -70,7 +71,7 @@ public final class ES814HnswScalarQuantizedVectorsFormat extends KnnVectorsForma
+ 
+     @Override
+     public int getMaxDimensions(String fieldName) {
+-        return 1024;
++        return MAX_DIMS_COUNT;
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES815BitFlatVectorFormat.java b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES815BitFlatVectorFormat.java
+index 2df0757a8b8..34e8ef3c5b9 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES815BitFlatVectorFormat.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES815BitFlatVectorFormat.java
+@@ -18,6 +18,8 @@ import org.apache.lucene.index.SegmentWriteState;
+ 
+ import java.io.IOException;
+ 
++import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_DIMS_COUNT;
++
+ public class ES815BitFlatVectorFormat extends KnnVectorsFormat {
+ 
+     static final String NAME = "ES815BitFlatVectorFormat";
+@@ -45,4 +47,9 @@ public class ES815BitFlatVectorFormat extends KnnVectorsFormat {
+     public String toString() {
+         return NAME;
+     }
++
++    @Override
++    public int getMaxDimensions(String fieldName) {
++        return MAX_DIMS_COUNT;
++    }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES815HnswBitVectorsFormat.java b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES815HnswBitVectorsFormat.java
+index 55271719a45..401d3136ce8 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES815HnswBitVectorsFormat.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES815HnswBitVectorsFormat.java
+@@ -20,6 +20,8 @@ import org.apache.lucene.index.SegmentWriteState;
+ 
+ import java.io.IOException;
+ 
++import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_DIMS_COUNT;
++
+ public class ES815HnswBitVectorsFormat extends KnnVectorsFormat {
+ 
+     static final String NAME = "ES815HnswBitVectorsFormat";
+@@ -72,4 +74,9 @@ public class ES815HnswBitVectorsFormat extends KnnVectorsFormat {
+             + flatVectorsFormat
+             + ")";
+     }
++
++    @Override
++    public int getMaxDimensions(String fieldName) {
++        return MAX_DIMS_COUNT;
++    }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES816BinaryQuantizedVectorsFormat.java b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES816BinaryQuantizedVectorsFormat.java
+index 523d5f6c4a9..e32aea0fb04 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES816BinaryQuantizedVectorsFormat.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES816BinaryQuantizedVectorsFormat.java
+@@ -29,6 +29,8 @@ import org.apache.lucene.index.SegmentWriteState;
+ 
+ import java.io.IOException;
+ 
++import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_DIMS_COUNT;
++
+ /**
+  * Copied from Lucene, replace with Lucene's implementation sometime after Lucene 10
+  */
+@@ -68,6 +70,11 @@ public class ES816BinaryQuantizedVectorsFormat extends FlatVectorsFormat {
+         return new ES816BinaryQuantizedVectorsReader(state, rawVectorFormat.fieldsReader(state), scorer);
+     }
+ 
++    @Override
++    public int getMaxDimensions(String fieldName) {
++        return MAX_DIMS_COUNT;
++    }
++
+     @Override
+     public String toString() {
+         return "ES816BinaryQuantizedVectorsFormat(name=" + NAME + ", flatVectorScorer=" + scorer + ")";
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES816HnswBinaryQuantizedVectorsFormat.java b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES816HnswBinaryQuantizedVectorsFormat.java
+index 989f88e0a78..097cdffff6a 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES816HnswBinaryQuantizedVectorsFormat.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES816HnswBinaryQuantizedVectorsFormat.java
+@@ -39,6 +39,7 @@ import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAUL
+ import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_NUM_MERGE_WORKER;
+ import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.MAXIMUM_BEAM_WIDTH;
+ import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.MAXIMUM_MAX_CONN;
++import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_DIMS_COUNT;
+ 
+ /**
+  * Copied from Lucene, replace with Lucene's implementation sometime after Lucene 10
+@@ -128,7 +129,7 @@ public class ES816HnswBinaryQuantizedVectorsFormat extends KnnVectorsFormat {
+ 
+     @Override
+     public int getMaxDimensions(String fieldName) {
+-        return 1024;
++        return MAX_DIMS_COUNT;
+     }
+ 
+     @Override
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
+index 4adfe619ca4..d7353584706 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
+@@ -139,32 +139,27 @@ public class DenseVectorFieldMapper extends FieldMapper {
+             if (o instanceof Integer == false) {
+                 throw new MapperParsingException("Property [dims] on field [" + n + "] must be an integer but got [" + o + "]");
+             }
+-            int dims = XContentMapValues.nodeIntegerValue(o);
+-            int maxDims = elementType.getValue() == ElementType.BIT ? MAX_DIMS_COUNT_BIT : MAX_DIMS_COUNT;
+-            int minDims = elementType.getValue() == ElementType.BIT ? Byte.SIZE : 1;
+-            if (dims < minDims || dims > maxDims) {
+-                throw new MapperParsingException(
+-                    "The number of dimensions for field ["
+-                        + n
+-                        + "] should be in the range ["
+-                        + minDims
+-                        + ", "
+-                        + maxDims
+-                        + "] but was ["
+-                        + dims
+-                        + "]"
+-                );
+-            }
+-            if (elementType.getValue() == ElementType.BIT) {
+-                if (dims % Byte.SIZE != 0) {
++
++            return XContentMapValues.nodeIntegerValue(o);
++        }, m -> toType(m).fieldType().dims, XContentBuilder::field, Object::toString).setSerializerCheck((id, ic, v) -> v != null)
++            .setMergeValidator((previous, current, c) -> previous == null || Objects.equals(previous, current))
++            .addValidator(dims -> {
++                if (dims == null) {
++                    return;
++                }
++                int maxDims = elementType.getValue() == ElementType.BIT ? MAX_DIMS_COUNT_BIT : MAX_DIMS_COUNT;
++                int minDims = elementType.getValue() == ElementType.BIT ? Byte.SIZE : 1;
++                if (dims < minDims || dims > maxDims) {
+                     throw new MapperParsingException(
+-                        "The number of dimensions for field [" + n + "] should be a multiple of 8 but was [" + dims + "]"
++                        "The number of dimensions should be in the range [" + minDims + ", " + maxDims + "] but was [" + dims + "]"
+                     );
+                 }
+-            }
+-            return dims;
+-        }, m -> toType(m).fieldType().dims, XContentBuilder::field, Object::toString).setSerializerCheck((id, ic, v) -> v != null)
+-            .setMergeValidator((previous, current, c) -> previous == null || Objects.equals(previous, current));
++                if (elementType.getValue() == ElementType.BIT) {
++                    if (dims % Byte.SIZE != 0) {
++                        throw new MapperParsingException("The number of dimensions for should be a multiple of 8 but was [" + dims + "]");
++                    }
++                }
++            });
+         private final Parameter<VectorSimilarity> similarity;
+ 
+         private final Parameter<IndexOptions> indexOptions;
+diff --git a/server/src/test/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapperTests.java b/server/src/test/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapperTests.java
+index d8a945bd54a..c0f73697208 100644
+--- a/server/src/test/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapperTests.java
++++ b/server/src/test/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapperTests.java
+@@ -175,7 +175,7 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
+             ),
+             fieldMapping(
+                 b -> b.field("type", "dense_vector")
+-                    .field("dims", dims)
++                    .field("dims", dims * 8)
+                     .field("index", true)
+                     .field("similarity", "l2_norm")
+                     .field("element_type", "bit")
+@@ -192,7 +192,7 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
+             ),
+             fieldMapping(
+                 b -> b.field("type", "dense_vector")
+-                    .field("dims", dims)
++                    .field("dims", dims * 8)
+                     .field("index", true)
+                     .field("similarity", "l2_norm")
+                     .field("element_type", "bit")
+@@ -891,9 +891,7 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
+             })));
+             assertThat(
+                 e.getMessage(),
+-                equalTo(
+-                    "Failed to parse mapping: " + "The number of dimensions for field [field] should be in the range [1, 4096] but was [0]"
+-                )
++                equalTo("Failed to parse mapping: " + "The number of dimensions should be in the range [1, 4096] but was [0]")
+             );
+         }
+         // test max limit for non-indexed vectors
+@@ -904,10 +902,7 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
+             })));
+             assertThat(
+                 e.getMessage(),
+-                equalTo(
+-                    "Failed to parse mapping: "
+-                        + "The number of dimensions for field [field] should be in the range [1, 4096] but was [5000]"
+-                )
++                equalTo("Failed to parse mapping: " + "The number of dimensions should be in the range [1, 4096] but was [5000]")
+             );
+         }
+         // test max limit for indexed vectors
+@@ -919,10 +914,7 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
+             })));
+             assertThat(
+                 e.getMessage(),
+-                equalTo(
+-                    "Failed to parse mapping: "
+-                        + "The number of dimensions for field [field] should be in the range [1, 4096] but was [5000]"
+-                )
++                equalTo("Failed to parse mapping: " + "The number of dimensions should be in the range [1, 4096] but was [5000]")
+             );
+         }
+     }
+@@ -955,6 +947,14 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
+         );
+     }
+ 
++    public void testLargeDimsBit() throws IOException {
++        createMapperService(fieldMapping(b -> {
++            b.field("type", "dense_vector");
++            b.field("dims", 1024 * Byte.SIZE);
++            b.field("element_type", ElementType.BIT.toString());
++        }));
++    }
++
+     public void testDefaults() throws Exception {
+         DocumentMapper mapper = createDocumentMapper(fieldMapping(b -> b.field("type", "dense_vector").field("dims", 3)));
+ 

@@ -1,0 +1,35 @@
+commit d89628c3c5035d4b8e4221c702492a31fe9303c1
+Author: srkethireddy <73372452+srkethireddy@users.noreply.github.com>
+Date:   Fri Oct 31 08:22:42 2025 -0700
+
+    alts: Override metadata server address with env variable
+    
+    Adding an option to override "metadata.google.internal.:8080" by setting
+    a value for GCE_METADATA_HOST environment variable.
+    
+    b/451639946
+
+diff --git a/alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java b/alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java
+index fa1d4f7fa..f03cc6f8c 100644
+--- a/alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java
++++ b/alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java
+@@ -16,6 +16,7 @@
+ 
+ package io.grpc.alts;
+ 
++import com.google.common.base.MoreObjects;
+ import io.grpc.CallOptions;
+ import io.grpc.Channel;
+ import io.grpc.ClientCall;
+@@ -39,7 +40,10 @@ import java.util.concurrent.TimeUnit;
+ final class HandshakerServiceChannel {
+ 
+   static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =
+-      new ChannelResource("metadata.google.internal.:8080");
++      new ChannelResource(
++          MoreObjects.firstNonNull(
++              System.getenv("GCE_METADATA_HOST"), "metadata.google.internal.:8080"));
++
+ 
+   /** Returns a resource of handshaker service channel for testing only. */
+   static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {

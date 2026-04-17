@@ -1,0 +1,52 @@
+diff --git a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES814ScalarQuantizedVectorsFormat.java b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES814ScalarQuantizedVectorsFormat.java
+index 4313aa40cf1..e6ca1eb014f 100644
+--- a/server/src/main/java/org/elasticsearch/index/codec/vectors/ES814ScalarQuantizedVectorsFormat.java
++++ b/server/src/main/java/org/elasticsearch/index/codec/vectors/ES814ScalarQuantizedVectorsFormat.java
+@@ -41,6 +41,7 @@ import org.elasticsearch.simdvec.VectorSimilarityType;
+ import java.io.IOException;
+ 
+ import static org.apache.lucene.codecs.lucene99.Lucene99ScalarQuantizedVectorsFormat.DYNAMIC_CONFIDENCE_INTERVAL;
++import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_DIMS_COUNT;
+ 
+ public class ES814ScalarQuantizedVectorsFormat extends FlatVectorsFormat {
+ 
+@@ -289,4 +290,9 @@ public class ES814ScalarQuantizedVectorsFormat extends FlatVectorsFormat {
+             return delegate.getRandomVectorScorer(sim, values, query);
+         }
+     }
++
++    @Override
++    public int getMaxDimensions(String fieldName) {
++        return MAX_DIMS_COUNT;
++    }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
+index d7353584706..c3959bd442a 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/vectors/DenseVectorFieldMapper.java
+@@ -2270,7 +2270,7 @@ public class DenseVectorFieldMapper extends FieldMapper {
+             if (indexCreatedVersion.onOrAfter(LITTLE_ENDIAN_FLOAT_STORED_INDEX_VERSION)) {
+                 byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
+             }
+-            int dims = fieldType().dims;
++            int dims = fieldType().elementType == ElementType.BIT ? fieldType().dims / Byte.SIZE : fieldType().dims;
+             for (int dim = 0; dim < dims; dim++) {
+                 fieldType().elementType.readAndWriteValue(byteBuffer, b);
+             }
+diff --git a/server/src/main/java/org/elasticsearch/rest/action/search/SearchCapabilities.java b/server/src/main/java/org/elasticsearch/rest/action/search/SearchCapabilities.java
+index 45fd6afe4fc..7828bb956a1 100644
+--- a/server/src/main/java/org/elasticsearch/rest/action/search/SearchCapabilities.java
++++ b/server/src/main/java/org/elasticsearch/rest/action/search/SearchCapabilities.java
+@@ -20,6 +20,11 @@ public final class SearchCapabilities {
+ 
+     /** Support regex and range match rules in interval queries. */
+     private static final String RANGE_REGEX_INTERVAL_QUERY_CAPABILITY = "range_regexp_interval_queries";
++    /** Support synthetic source with `bit` type in `dense_vector` field when `index` is set to `false`. */
++    private static final String BIT_DENSE_VECTOR_SYNTHETIC_SOURCE_CAPABILITY = "bit_dense_vector_synthetic_source";
+ 
+-    public static final Set<String> CAPABILITIES = Set.of(RANGE_REGEX_INTERVAL_QUERY_CAPABILITY);
++    public static final Set<String> CAPABILITIES = Set.of(
++        RANGE_REGEX_INTERVAL_QUERY_CAPABILITY,
++        BIT_DENSE_VECTOR_SYNTHETIC_SOURCE_CAPABILITY
++    );
+ }

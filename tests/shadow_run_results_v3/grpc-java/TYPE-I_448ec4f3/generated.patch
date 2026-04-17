@@ -1,0 +1,42 @@
+diff --git a/xds/src/main/java/io/grpc/xds/client/ControlPlaneClient.java b/xds/src/main/java/io/grpc/xds/client/ControlPlaneClient.java
+index 761c10ede..3074d1120 100644
+--- a/xds/src/main/java/io/grpc/xds/client/ControlPlaneClient.java
++++ b/xds/src/main/java/io/grpc/xds/client/ControlPlaneClient.java
+@@ -152,8 +152,14 @@ final class ControlPlaneClient {
+       startRpcStream();
+     }
+     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
+-    if (resources != null) {
+-      adsStream.sendDiscoveryRequest(resourceType, resources);
++    if (resources == null) {
++      resources = Collections.emptyList();
++    }
++    adsStream.sendDiscoveryRequest(resourceType, resources);
++    if (resources.isEmpty()) {
++      // The resource type no longer has subscribing resources; clean up references to it
++      versions.remove(resourceType);
++      adsStream.respNonces.remove(resourceType);
+     }
+   }
+ 
+diff --git a/xds/src/main/java/io/grpc/xds/client/XdsClientImpl.java b/xds/src/main/java/io/grpc/xds/client/XdsClientImpl.java
+index 969660bf7..f7e1c5585 100644
+--- a/xds/src/main/java/io/grpc/xds/client/XdsClientImpl.java
++++ b/xds/src/main/java/io/grpc/xds/client/XdsClientImpl.java
+@@ -281,7 +281,7 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
+       @SuppressWarnings("unchecked")
+       public void run() {
+         ResourceSubscriber<T> subscriber =
+-            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);;
++            (ResourceSubscriber<T>) resourceSubscribers.get(type).get(resourceName);
+         subscriber.removeWatcher(watcher);
+         if (!subscriber.isWatched()) {
+           subscriber.cancelResourceWatch();
+@@ -330,7 +330,6 @@ public final class XdsClientImpl extends XdsClient implements XdsResponseHandler
+     return loadCounter;
+   }
+ 
+-
+   @Override
+   public Bootstrapper.BootstrapInfo getBootstrapInfo() {
+     return bootstrapInfo;

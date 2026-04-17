@@ -1,0 +1,194 @@
+diff --git a/graylog2-server/src/main/java/org/graylog2/bindings/providers/DefaultJmteEngineProvider.java b/graylog2-server/src/main/java/org/graylog2/bindings/providers/DefaultJmteEngineProvider.java
+new file mode 100644
+index 0000000000..d1ece21628
+--- /dev/null
++++ b/graylog2-server/src/main/java/org/graylog2/bindings/providers/DefaultJmteEngineProvider.java
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (C) 2020 Graylog, Inc.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the Server Side Public License, version 1,
++ * as published by MongoDB, Inc.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * Server Side Public License for more details.
++ *
++ * You should have received a copy of the Server Side Public License
++ * along with this program. If not, see
++ * <http://www.mongodb.com/licensing/server-side-public-license>.
++ */
++package org.graylog2.bindings.providers;
++
++import com.floreysoft.jmte.Engine;
++import jakarta.inject.Inject;
++import jakarta.inject.Provider;
++import jakarta.inject.Singleton;
++import org.graylog2.jmte.NamedDateRenderer;
++
++@Singleton
++public class DefaultJmteEngineProvider implements Provider<Engine> {
++    private final Engine engine;
++
++    @Inject
++    public DefaultJmteEngineProvider() {
++        engine = Engine.createEngine();
++        engine.registerNamedRenderer(new NamedDateRenderer());
++    }
++
++    @Override
++    public Engine get() {
++        return engine;
++    }
++}
+\ No newline at end of file
+diff --git a/graylog2-server/src/main/java/org/graylog2/bindings/providers/HtmlSafeJmteEngineProvider.java b/graylog2-server/src/main/java/org/graylog2/bindings/providers/HtmlSafeJmteEngineProvider.java
+index 7eaa9525e7..1b2cd5252c 100644
+--- a/graylog2-server/src/main/java/org/graylog2/bindings/providers/HtmlSafeJmteEngineProvider.java
++++ b/graylog2-server/src/main/java/org/graylog2/bindings/providers/HtmlSafeJmteEngineProvider.java
+@@ -19,15 +19,14 @@ package org.graylog2.bindings.providers;
+ import com.floreysoft.jmte.Engine;
+ import com.floreysoft.jmte.Renderer;
+ import com.google.common.html.HtmlEscapers;
+-
+ import jakarta.inject.Inject;
+ import jakarta.inject.Provider;
+ import jakarta.inject.Singleton;
++import org.graylog2.jmte.NamedDateRenderer;
+ 
+ import java.util.Locale;
+ import java.util.Map;
+ 
+-
+ @Singleton
+ public class HtmlSafeJmteEngineProvider implements Provider<Engine> {
+     private final Engine engine;
+@@ -35,6 +34,7 @@ public class HtmlSafeJmteEngineProvider implements Provider<Engine> {
+     @Inject
+     public HtmlSafeJmteEngineProvider() {
+         engine = Engine.createEngine();
++        engine.registerNamedRenderer(new NamedDateRenderer());
+         engine.registerRenderer(String.class, new HtmlSafeRenderer());
+     }
+ 
+diff --git a/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java b/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
+index 9abfbd42d5..2eb5222c1d 100644
+--- a/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
++++ b/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
+@@ -22,6 +22,7 @@ import jakarta.inject.Inject;
+ import jakarta.inject.Provider;
+ import jakarta.inject.Singleton;
+ import org.apache.commons.lang.StringEscapeUtils;
++import org.graylog2.jmte.NamedDateRenderer;
+ 
+ import java.util.Collection;
+ import java.util.Iterator;
+@@ -35,6 +36,7 @@ public class JsonSafeEngineProvider implements Provider<Engine> {
+     @Inject
+     public JsonSafeEngineProvider() {
+         engine = Engine.createEngine();
++        engine.registerNamedRenderer(new NamedDateRenderer());
+         engine.registerRenderer(String.class, new JsonSafeRenderer());
+         engine.registerRenderer(Map.class, new JsonSafeMapRenderer());
+         engine.registerRenderer(Iterable.class, new JsonSafeIterableRenderer());
+diff --git a/graylog2-server/src/main/java/org/graylog2/jmte/NamedDateRenderer.java b/graylog2-server/src/main/java/org/graylog2/jmte/NamedDateRenderer.java
+new file mode 100644
+index 0000000000..014580332a
+--- /dev/null
++++ b/graylog2-server/src/main/java/org/graylog2/jmte/NamedDateRenderer.java
+@@ -0,0 +1,92 @@
++/*
++ * Copyright (C) 2020 Graylog, Inc.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the Server Side Public License, version 1,
++ * as published by MongoDB, Inc.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * Server Side Public License for more details.
++ *
++ * You should have received a copy of the Server Side Public License
++ * along with this program. If not, see
++ * <http://www.mongodb.com/licensing/server-side-public-license>.
++ */
++package org.graylog2.jmte;
++
++import com.floreysoft.jmte.NamedRenderer;
++import com.floreysoft.jmte.RenderFormatInfo;
++import org.joda.time.DateTime;
++import org.joda.time.DateTimeZone;
++import org.joda.time.format.DateTimeFormat;
++import org.joda.time.format.DateTimeFormatter;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import java.text.ParseException;
++import java.util.Locale;
++import java.util.Map;
++
++public class NamedDateRenderer implements NamedRenderer {
++    private static final Logger LOG = LoggerFactory.getLogger(NamedDateRenderer.class);
++    private static final String DEFAULT_PATTERN = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'";
++    private static final String RENDERER_DESCRIPTION = "Use Java date format patterns like yyyy-MM-dd or HH:mm:ss";
++
++    private DateTime convert(Object o) throws ParseException {
++        if (o == null) {
++            return null;
++        }
++
++        if (o instanceof DateTime) {
++            return (DateTime) o;
++        } else if (o instanceof Number) {
++            long longValue = ((Number) o).longValue();
++            return new DateTime(longValue, DateTimeZone.UTC);
++        } else if (o instanceof String) {
++            return DateTime.parse((String) o);
++        }
++        return null;
++    }
++
++    @Override
++    public RenderFormatInfo getFormatInfo() {
++        return new DateRendererFormatInfo(RENDERER_DESCRIPTION, DEFAULT_PATTERN);
++    }
++
++    @Override
++    public String getName() {
++        return "date";
++    }
++
++    @Override
++    public Class<?>[] getSupportedClasses() {
++        return new Class[] { DateTime.class, String.class, Integer.class, Long.class };
++    }
++
++    @Override
++    public String render(Object o, String pattern, Locale locale, Map<String, Object> model) {
++        String formatPattern = pattern != null ? pattern : DEFAULT_PATTERN;
++        try {
++            final DateTime value = convert(o);
++            if (value != null) {
++                final DateTimeFormatter formatter = locale != null
++                        ? DateTimeFormat.forPattern(formatPattern).withLocale(locale)
++                        : DateTimeFormat.forPattern(formatPattern);
++
++                return formatter.print(value);
++            } else {
++                LOG.warn("Failed to convert [{}] to a date object for formatting.", o);
++            }
++        } catch (ParseException pe) {
++            LOG.warn("Failed to convert [{}] to a date object for formatting.", o, pe);
++        } catch (Exception e) {
++            LOG.warn("Failed to format [{}] as a date string with format [{}]", o, formatPattern, e);
++        }
++        return o.toString();
++
++    }
++}
++
++record DateRendererFormatInfo(String description, String defaultFormat) implements RenderFormatInfo {}
+\ No newline at end of file

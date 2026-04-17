@@ -1,0 +1,44 @@
+commit 1f2824c5fccedc71cec1162e95f50eb308119dee
+Author: Dan Rubinstein <daniel.rubinstein@elastic.co>
+Date:   Mon Jan 27 10:31:23 2025 -0500
+
+    Removing default model ID from ElasticsearchInternalService configuration (#120818)
+    
+    * Removing default model ID from ElasticsearchInternalService configuration
+    
+    * Update docs/changelog/120818.yaml
+    
+    * Delete docs/changelog/120818.yaml
+    
+    ---------
+    
+    Co-authored-by: Elastic Machine <elasticmachine@users.noreply.github.com>
+
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
+index c538b9acf13..9807a079140 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
+@@ -1147,8 +1147,9 @@ public class ElasticsearchInternalService extends BaseElasticsearchInternalServi
+ 
+                 configurationMap.put(
+                     MODEL_ID,
+-                    new SettingsConfiguration.Builder(supportedTaskTypes).setDefaultValue(MULTILINGUAL_E5_SMALL_MODEL_ID)
+-                        .setDescription("The name of the model to use for the inference task.")
++                    new SettingsConfiguration.Builder(supportedTaskTypes).setDescription(
++                        "The name of the model to use for the inference task."
++                    )
+                         .setLabel("Model ID")
+                         .setRequired(true)
+                         .setSensitive(false)
+diff --git a/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalServiceTests.java b/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalServiceTests.java
+index 93b884a87fb..3b634f45dc7 100644
+--- a/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalServiceTests.java
++++ b/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalServiceTests.java
+@@ -1578,7 +1578,6 @@ public class ElasticsearchInternalServiceTests extends ESTestCase {
+                                "supported_task_types": ["text_embedding", "sparse_embedding", "rerank"]
+                            },
+                            "model_id": {
+-                               "default_value": ".multilingual-e5-small",
+                                "description": "The name of the model to use for the inference task.",
+                                "label": "Model ID",
+                                "required": true,

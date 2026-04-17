@@ -1,0 +1,13 @@
+diff --git a/server/src/main/java/org/elasticsearch/search/DefaultSearchContext.java b/server/src/main/java/org/elasticsearch/search/DefaultSearchContext.java
+index 1521b17a817..8ac35f7c40c 100644
+--- a/server/src/main/java/org/elasticsearch/search/DefaultSearchContext.java
++++ b/server/src/main/java/org/elasticsearch/search/DefaultSearchContext.java
+@@ -291,7 +291,7 @@ final class DefaultSearchContext extends SearchContext {
+         ToLongFunction<String> fieldCardinality
+     ) {
+         return executor instanceof ThreadPoolExecutor tpe
+-            && tpe.getQueue().isEmpty()
++            && tpe.getQueue().size() <= tpe.getMaximumPoolSize()
+             && isParallelCollectionSupportedForResults(resultsType, request.source(), fieldCardinality, enableQueryPhaseParallelCollection)
+                 ? tpe.getMaximumPoolSize()
+                 : 1;

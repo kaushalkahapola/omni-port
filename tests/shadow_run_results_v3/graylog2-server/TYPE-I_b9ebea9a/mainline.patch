@@ -1,0 +1,136 @@
+commit b9ebea9aa1b309d82b020eb3c54fa36f042edbf5
+Author: Zack King <91903901+kingzacko1@users.noreply.github.com>
+Date:   Mon Feb 3 16:18:37 2025 -0600
+
+    Add escape character handling to key_value pipeline function (#21456)
+    
+    * Add use_escape_char param to key_value
+    
+    * CL and comment clarification
+
+diff --git a/changelog/unreleased/pr-21456.toml b/changelog/unreleased/pr-21456.toml
+new file mode 100644
+index 0000000000..d3276fa24e
+--- /dev/null
++++ b/changelog/unreleased/pr-21456.toml
+@@ -0,0 +1,5 @@
++type = "added"
++message = "Added escape character handling to the key_value pipeline function."
++
++pulls = ["21456"]
++issues = ["graylog-plugin-enterprise#9552"]
+diff --git a/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/KeyValue.java b/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/KeyValue.java
+index c63006db6d..2ba304b9f2 100644
+--- a/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/KeyValue.java
++++ b/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/KeyValue.java
+@@ -51,6 +51,8 @@ public class KeyValue extends AbstractFunction<Map<String, String>> {
+     private final ParameterDescriptor<String, String> duplicateHandlingParam;
+     private final ParameterDescriptor<String, CharMatcher> trimCharactersParam;
+     private final ParameterDescriptor<String, CharMatcher> trimValueCharactersParam;
++    private final ParameterDescriptor<Boolean, Boolean> useEscapeCharacter;
++
+ 
+     public KeyValue() {
+         valueParam = string("value").ruleBuilderVariable().description("The string to extract key/value pairs from").build();
+@@ -70,6 +72,11 @@ public class KeyValue extends AbstractFunction<Map<String, String>> {
+                 .optional()
+                 .description("The characters to trim from values, default is not to trim")
+                 .build();
++        useEscapeCharacter = bool("use_escape_char").
++                optional()
++                .description("Whether to make use of the escape character '\\' or treat it as a normal character, defaults to false treating '\\' as a normal character.")
++                .defaultValue(Optional.of(false))
++                .build();
+     }
+ 
+     @Override
+@@ -81,7 +88,10 @@ public class KeyValue extends AbstractFunction<Map<String, String>> {
+         final CharMatcher kvPairsMatcher = splitParam.optional(args, context).orElse(CharMatcher.whitespace());
+         final CharMatcher kvDelimMatcher = valueSplitParam.optional(args, context).orElse(CharMatcher.anyOf("="));
+ 
+-        Splitter outerSplitter = Splitter.on(DelimiterCharMatcher.withQuoteHandling(kvPairsMatcher))
++        final boolean allowEscaping = useEscapeCharacter.optional(args, context).orElse(false);
++        Splitter outerSplitter = Splitter.on(
++                        allowEscaping ? DelimiterCharMatcher.withQuoteAndEscapeHandling(kvPairsMatcher) : DelimiterCharMatcher.withQuoteHandling(kvPairsMatcher)
++                )
+                 .omitEmptyStrings()
+                 .trimResults();
+ 
+@@ -139,6 +149,20 @@ public class KeyValue extends AbstractFunction<Map<String, String>> {
+                     .and(charMatcher);
+         }
+ 
++        /**
++         * An implementation that doesn't split when the given delimiter char matcher appears in double or single quotes
++         * or after the escape char '\'.
++         *
++         * @param charMatcher the char matcher
++         * @return a char matcher that can handle double, single quotes, and escape characters
++         */
++        static CharMatcher withQuoteAndEscapeHandling(CharMatcher charMatcher) {
++            return new DelimiterCharMatcher('"')
++                    .and(new DelimiterCharMatcher('\''))
++                    .and(new NotEscapedCharMatcher())
++                    .and(charMatcher);
++        }
++
+         private DelimiterCharMatcher(char wrapperChar) {
+             this.wrapperChar = wrapperChar;
+         }
+@@ -152,6 +176,26 @@ public class KeyValue extends AbstractFunction<Map<String, String>> {
+         }
+     }
+ 
++    private static class NotEscapedCharMatcher extends CharMatcher {
++        private char lastChar = '\u0000';
++
++        @Override
++        public boolean matches(char c) {
++            if (lastChar == '\u0000') {
++                lastChar = c;
++                return true;
++            } else {
++                if (lastChar == '\\') {
++                    lastChar = c;
++                    return false;
++                } else {
++                    lastChar = c;
++                    return true;
++                }
++            }
++        }
++    }
++
+     private static class MapSplitter {
+ 
+         private final Splitter outerSplitter;
+diff --git a/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/strings/KeyValueTest.java b/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/strings/KeyValueTest.java
+index 534195acbc..5b82b7bfa6 100644
+--- a/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/strings/KeyValueTest.java
++++ b/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/strings/KeyValueTest.java
+@@ -137,4 +137,25 @@ class KeyValueTest {
+ 
+         assertThat(result).containsExactlyInAnyOrderEntriesOf(expectedResult);
+     }
++
++    @Test
++    void testEscapeHandling() {
++        final Map<String, Expression> arguments = Map.of(
++                "value", new StringExpression(new CommonToken(0), "field1=value1,dn=CN=Network Automation User\\,OU=Service Accounts\\,OU=GR\\,OU=Region\\,DC=company\\,DC=local,field3=value3"),
++                "kv_delimiters", new StringExpression(new CommonToken(0), "="),
++                "delimiters", new StringExpression(new CommonToken(0), ","),
++                "allow_dup_keys", new BooleanExpression(new CommonToken(0), true),
++                "use_escape_char", new BooleanExpression(new CommonToken(0), true),
++                "handle_dup_keys", new StringExpression(new CommonToken(0), ",")
++        );
++
++        Map<String, String> result = classUnderTest.evaluate(new FunctionArgs(classUnderTest, arguments), evaluationContext);
++
++        Map<String, String> expectedResult = new HashMap<>();
++        expectedResult.put("field1", "value1");
++        expectedResult.put("dn", "CN=Network Automation User\\,OU=Service Accounts\\,OU=GR\\,OU=Region\\,DC=company\\,DC=local");
++        expectedResult.put("field3", "value3");
++
++        assertThat(result).containsExactlyInAnyOrderEntriesOf(expectedResult);
++    }
+ }

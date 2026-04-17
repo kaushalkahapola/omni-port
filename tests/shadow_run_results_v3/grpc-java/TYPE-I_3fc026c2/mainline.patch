@@ -1,0 +1,304 @@
+commit 3fc026c29bd09c6ca87b72fd69eff843b88456a3
+Author: adam lazur <laz@canva.com>
+Date:   Thu Nov 13 07:15:10 2025 +0900
+
+    xds: Support deprecated xDS TLS fields for Istio compat (#12435)
+    
+    ## Problem
+    
+    When using xDS with Istio's grpc-agent in proxyless mode, Java gRPC
+    fails with:
+    
+    ```
+    LDS response Listener validation error:
+    tls_certificate_provider_instance is required in downstream-tls-context
+    ```
+    
+    **Root Cause:**
+    
+    Istio sends deprecated certificate provider fields for backward
+    compatibility with older Envoy versions. Java gRPC currently only reads
+    the current fields, causing validation failures.
+    
+    Specifically, Istio uses these deprecated fields:
+    1. **Field 11**: `tls_certificate_certificate_provider_instance`
+    (deprecated) instead of field 14 (`tls_certificate_provider_instance`)
+    2. **Field 4**: `validation_context_certificate_provider_instance` in
+    `CombinedValidationContext` (deprecated) instead of
+    `ca_certificate_provider_instance` in `default_validation_context`
+    
+    ## Fix
+    
+    Istio is adding support for the new fields in
+    https://github.com/istio/istio/pull/58257. Add fallback logic to support
+    deprecated certificate provider fields before that is rolled out:
+    
+    **For identity certificates:**
+    1. Try current field 14 (`tls_certificate_provider_instance`) first
+    2. Fall back to deprecated field 11
+    (`tls_certificate_certificate_provider_instance`)
+    
+    **For validation context in CombinedValidationContext:**
+    1. Try `ca_certificate_provider_instance` in
+    `default_validation_context` first
+    2. Fall back to deprecated field 4
+    (`validation_context_certificate_provider_instance`)
+    
+    This matches the behavior of
+    [grpc-cpp](https://github.com/grpc/grpc/blob/master/src/core/xds/grpc/xds_common_types_parser.cc#L435-L474)
+    and
+    [grpc-go](https://github.com/grpc/grpc-go/blob/master/internal/xds/xdsclient/xdsresource/unmarshal_cds.go#L310-L344)
+    implementations.
+    
+    ## Testing
+    
+    * Added new tests for both deprecated field paths (field 11 and field 4)
+    * All existing tests pass
+    * Manual local testing with Istio in proxyless mode verified the
+    compatibility fix works
+    
+    ---------
+    
+    Co-authored-by: Amp <amp@ampcode.com>
+
+diff --git a/xds/src/main/java/io/grpc/xds/XdsClusterResource.java b/xds/src/main/java/io/grpc/xds/XdsClusterResource.java
+index 593aed4ef..d9848d970 100644
+--- a/xds/src/main/java/io/grpc/xds/XdsClusterResource.java
++++ b/xds/src/main/java/io/grpc/xds/XdsClusterResource.java
+@@ -541,7 +541,12 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
+     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+       return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
+     }
+-    return null;
++    // Fall back to deprecated field (field 11) for backward compatibility with Istio
++    @SuppressWarnings("deprecation")
++    String instanceName = commonTlsContext.hasTlsCertificateCertificateProviderInstance()
++        ? commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName()
++        : null;
++    return instanceName;
+   }
+ 
+   private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
+@@ -559,6 +564,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
+         return combinedCertificateValidationContext.getDefaultValidationContext()
+             .getCaCertificateProviderInstance().getInstanceName();
+       }
++      // Fall back to deprecated field (field 4) in CombinedValidationContext
++      @SuppressWarnings("deprecation")
++      String instanceName = combinedCertificateValidationContext
++          .hasValidationContextCertificateProviderInstance()
++          ? combinedCertificateValidationContext.getValidationContextCertificateProviderInstance()
++              .getInstanceName()
++          : null;
++      if (instanceName != null) {
++        return instanceName;
++      }
+     }
+     return null;
+   }
+diff --git a/xds/src/main/java/io/grpc/xds/internal/security/CommonTlsContextUtil.java b/xds/src/main/java/io/grpc/xds/internal/security/CommonTlsContextUtil.java
+index 50fa18b64..bd8a423e6 100644
+--- a/xds/src/main/java/io/grpc/xds/internal/security/CommonTlsContextUtil.java
++++ b/xds/src/main/java/io/grpc/xds/internal/security/CommonTlsContextUtil.java
+@@ -28,7 +28,10 @@ public final class CommonTlsContextUtil {
+     if (commonTlsContext == null) {
+       return false;
+     }
++    @SuppressWarnings("deprecation")
++    boolean hasDeprecatedField = commonTlsContext.hasTlsCertificateCertificateProviderInstance();
+     return commonTlsContext.hasTlsCertificateProviderInstance()
++        || hasDeprecatedField
+         || hasValidationProviderInstance(commonTlsContext);
+   }
+ 
+@@ -37,9 +40,19 @@ public final class CommonTlsContextUtil {
+         .hasCaCertificateProviderInstance()) {
+       return true;
+     }
+-    return commonTlsContext.hasCombinedValidationContext()
+-        && commonTlsContext.getCombinedValidationContext().getDefaultValidationContext()
+-          .hasCaCertificateProviderInstance();
++    if (commonTlsContext.hasCombinedValidationContext()) {
++      CommonTlsContext.CombinedCertificateValidationContext combined =
++          commonTlsContext.getCombinedValidationContext();
++      if (combined.hasDefaultValidationContext()
++          && combined.getDefaultValidationContext().hasCaCertificateProviderInstance()) {
++        return true;
++      }
++      // Check deprecated field (field 4) in CombinedValidationContext
++      @SuppressWarnings("deprecation")
++      boolean hasDeprecatedField = combined.hasValidationContextCertificateProviderInstance();
++      return hasDeprecatedField;
++    }
++    return false;
+   }
+ 
+   /**
+diff --git a/xds/src/main/java/io/grpc/xds/internal/security/certprovider/CertProviderSslContextProvider.java b/xds/src/main/java/io/grpc/xds/internal/security/certprovider/CertProviderSslContextProvider.java
+index 2570dcb73..cb99ca6ad 100644
+--- a/xds/src/main/java/io/grpc/xds/internal/security/certprovider/CertProviderSslContextProvider.java
++++ b/xds/src/main/java/io/grpc/xds/internal/security/certprovider/CertProviderSslContextProvider.java
+@@ -113,7 +113,13 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider
+     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+       return CommonTlsContextUtil.convert(commonTlsContext.getTlsCertificateProviderInstance());
+     }
+-    return null;
++    // Fall back to deprecated field for backward compatibility with Istio
++    @SuppressWarnings("deprecation")
++    CertificateProviderInstance deprecatedInstance =
++        commonTlsContext.hasTlsCertificateCertificateProviderInstance()
++            ? commonTlsContext.getTlsCertificateCertificateProviderInstance()
++            : null;
++    return deprecatedInstance;
+   }
+ 
+   @Nullable
+diff --git a/xds/src/test/java/io/grpc/xds/GrpcXdsClientImplDataTest.java b/xds/src/test/java/io/grpc/xds/GrpcXdsClientImplDataTest.java
+index 0af647559..975570d82 100644
+--- a/xds/src/test/java/io/grpc/xds/GrpcXdsClientImplDataTest.java
++++ b/xds/src/test/java/io/grpc/xds/GrpcXdsClientImplDataTest.java
+@@ -3134,6 +3134,18 @@ public class GrpcXdsClientImplDataTest {
+         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
+   }
+ 
++  @Test
++  @SuppressWarnings("deprecation")
++  public void validateCommonTlsContext_tlsDeprecatedCertificateProviderInstance()
++      throws ResourceInvalidException {
++    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
++        .setTlsCertificateCertificateProviderInstance(
++            CommonTlsContext.CertificateProviderInstance.newBuilder().setInstanceName("name1"))
++        .build();
++    XdsClusterResource
++        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
++  }
++
+   @Test
+   public void validateCommonTlsContext_tlsCertificateProviderInstance()
+       throws ResourceInvalidException {
+@@ -3218,6 +3230,24 @@ public class GrpcXdsClientImplDataTest {
+         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
+   }
+ 
++  @Test
++  @SuppressWarnings("deprecation")
++  public void validateCommonTlsContext_combinedValidationContextDeprecatedCertProvider()
++      throws ResourceInvalidException {
++    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
++        .setTlsCertificateProviderInstance(
++            CertificateProviderPluginInstance.newBuilder().setInstanceName("cert1"))
++        .setCombinedValidationContext(
++            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
++                .setValidationContextCertificateProviderInstance(
++                    CommonTlsContext.CertificateProviderInstance.newBuilder()
++                        .setInstanceName("root1"))
++                .build())
++        .build();
++    XdsClusterResource
++        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("cert1", "root1"), true);
++  }
++
+   @Test
+   public void validateCommonTlsContext_validationContextSystemRootCerts_envVarNotSet_throws() {
+     XdsClusterResource.enableSystemRootCerts = false;
+diff --git a/xds/src/test/java/io/grpc/xds/internal/security/CommonTlsContextTestsUtil.java b/xds/src/test/java/io/grpc/xds/internal/security/CommonTlsContextTestsUtil.java
+index 80a8083fb..abacd2038 100644
+--- a/xds/src/test/java/io/grpc/xds/internal/security/CommonTlsContextTestsUtil.java
++++ b/xds/src/test/java/io/grpc/xds/internal/security/CommonTlsContextTestsUtil.java
+@@ -232,6 +232,33 @@ public class CommonTlsContextTestsUtil {
+     return builder.build();
+   }
+ 
++  /** Helper method to build CommonTlsContext using deprecated certificate provider field. */
++  @SuppressWarnings("deprecation")
++  public static CommonTlsContext buildCommonTlsContextWithDeprecatedCertProviderInstance(
++      String certInstanceName,
++      String certName,
++      String rootInstanceName,
++      String rootCertName,
++      Iterable<String> alpnProtocols,
++      CertificateValidationContext staticCertValidationContext) {
++    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
++    if (certInstanceName != null) {
++      // Use deprecated field (field 11) instead of current field (field 14)
++      builder =
++              builder.setTlsCertificateCertificateProviderInstance(
++                      CommonTlsContext.CertificateProviderInstance.newBuilder()
++                              .setInstanceName(certInstanceName)
++                              .setCertificateName(certName));
++    }
++    builder =
++        addCertificateValidationContext(
++            builder, rootInstanceName, rootCertName, staticCertValidationContext);
++    if (alpnProtocols != null) {
++      builder.addAllAlpnProtocols(alpnProtocols);
++    }
++    return builder.build();
++  }
++
+   private static CommonTlsContext buildNewCommonTlsContextForCertProviderInstance(
+           String certInstanceName,
+           String certName,
+diff --git a/xds/src/test/java/io/grpc/xds/internal/security/certprovider/CertProviderClientSslContextProviderTest.java b/xds/src/test/java/io/grpc/xds/internal/security/certprovider/CertProviderClientSslContextProviderTest.java
+index 875a57b8f..91f02863c 100644
+--- a/xds/src/test/java/io/grpc/xds/internal/security/certprovider/CertProviderClientSslContextProviderTest.java
++++ b/xds/src/test/java/io/grpc/xds/internal/security/certprovider/CertProviderClientSslContextProviderTest.java
+@@ -470,6 +470,58 @@ public class CertProviderClientSslContextProviderTest {
+             .build(), false);
+   }
+ 
++  @Test
++  public void testProviderForClient_deprecatedCertProviderField() throws Exception {
++    final CertificateProvider.DistributorWatcher[] watcherCaptor =
++        new CertificateProvider.DistributorWatcher[1];
++    TestCertificateProvider.createAndRegisterProviderProvider(
++        certificateProviderRegistry, watcherCaptor, "testca", 0);
++    
++    // Build UpstreamTlsContext using deprecated field
++    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
++        new EnvoyServerProtoData.UpstreamTlsContext(
++            CommonTlsContextTestsUtil.buildCommonTlsContextWithDeprecatedCertProviderInstance(
++                "gcp_id",
++                "cert-default",
++                "gcp_id",
++                "root-default",
++                /* alpnProtocols= */ null,
++                /* staticCertValidationContext= */ null));
++    
++    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
++    CertProviderClientSslContextProvider provider =
++        (CertProviderClientSslContextProvider)
++            certProviderClientSslContextProviderFactory.getProvider(
++                upstreamTlsContext,
++                bootstrapInfo.node().toEnvoyProtoNode(),
++                bootstrapInfo.certProviders());
++
++    assertThat(provider.savedKey).isNull();
++    assertThat(provider.savedCertChain).isNull();
++    assertThat(provider.savedTrustedRoots).isNull();
++    assertThat(provider.getSslContextAndTrustManager()).isNull();
++
++    // Generate cert update
++    watcherCaptor[0].updateCertificate(
++        CommonCertProviderTestUtils.getPrivateKey(CLIENT_KEY_FILE),
++        ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
++    assertThat(provider.savedKey).isNotNull();
++    assertThat(provider.savedCertChain).isNotNull();
++    assertThat(provider.getSslContextAndTrustManager()).isNull();
++
++    // Generate root cert update
++    watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
++    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
++    assertThat(provider.savedKey).isNull();
++    assertThat(provider.savedCertChain).isNull();
++    assertThat(provider.savedTrustedRoots).isNull();
++
++    TestCallback testCallback =
++        CommonTlsContextTestsUtil.getValueThruCallback(provider);
++
++    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
++  }
++
+   static class QueuedExecutor implements Executor {
+     /** A list of Runnables to be run in order. */
+     @VisibleForTesting final Queue<Runnable> runQueue = new ConcurrentLinkedQueue<>();

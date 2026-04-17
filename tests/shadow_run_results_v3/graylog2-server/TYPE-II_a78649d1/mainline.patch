@@ -1,0 +1,132 @@
+commit a78649d109b7695ac4fb77239cb6dc4401c5044d
+Author: Nithin Kasam <nkasam@loginsoft.com>
+Date:   Wed May 14 03:29:41 2025 +0530
+
+    Fix timestamp parsing for Netscaler WAF logs (#22549)
+    
+    * initial draft commit
+    
+    * added test case without priority
+    
+    * Update changelog
+    
+    * Improve test coverage of message fields
+    
+    ---------
+    
+    Co-authored-by: Ryan Carroll <ryan.carroll@graylog.com>
+    Co-authored-by: Dan Torrey <dan.torrey@graylog.com>
+
+diff --git a/changelog/unreleased/issue-8844.toml b/changelog/unreleased/issue-8844.toml
+new file mode 100644
+index 0000000000..f4e2e7a6d2
+--- /dev/null
++++ b/changelog/unreleased/issue-8844.toml
+@@ -0,0 +1,4 @@
++type = "f"
++message = "Handle timestamp parsing for Netscaler WAF logs."
++
++issues = ["Graylog2/graylog-plugin-enterprise#8844"]
+diff --git a/graylog2-server/src/main/java/org/graylog/plugins/cef/codec/CEFCodec.java b/graylog2-server/src/main/java/org/graylog/plugins/cef/codec/CEFCodec.java
+index b172c252a7..5ff3854d67 100644
+--- a/graylog2-server/src/main/java/org/graylog/plugins/cef/codec/CEFCodec.java
++++ b/graylog2-server/src/main/java/org/graylog/plugins/cef/codec/CEFCodec.java
+@@ -64,6 +64,7 @@ public class CEFCodec extends AbstractCodec {
+     private static final Logger LOG = LoggerFactory.getLogger(CEFCodec.class);
+ 
+     private static final Pattern SYSLOG_PREFIX = Pattern.compile("^<(?<pri>\\d+)>(?<msg>.*)$");
++    private static final Pattern CLEAN_PATTERN = Pattern.compile("^\\d+\\s+(\\S.*)");
+ 
+     private static final String CK_TIMEZONE = "timezone";
+     private static final String CK_LOCALE = "locale";
+@@ -132,7 +133,8 @@ public class CEFCodec extends AbstractCodec {
+ 
+     @Nonnull
+     protected Message decodeCEF(@Nonnull RawMessage rawMessage, String s) {
+-        final MappedMessage cef = new MappedMessage(parser.parse(s, timezone.toTimeZone(), locale), useFullNames);
++        String cleanedMsg = cleanMessage(s);
++        final MappedMessage cef = new MappedMessage(parser.parse(cleanedMsg, timezone.toTimeZone(), locale), useFullNames);
+ 
+         // Build standard message.
+         Message result = messageFactory.createMessage(buildMessageSummary(cef), decideSource(cef, rawMessage), new DateTime(cef.timestamp()));
+@@ -151,6 +153,11 @@ public class CEFCodec extends AbstractCodec {
+         return result;
+     }
+ 
++    private String cleanMessage(String message) {
++        Matcher matcher = CLEAN_PATTERN.matcher(message);
++        return matcher.find() ? matcher.group(1) : message;
++    }
++
+     protected String buildMessageSummary(com.github.jcustenborder.cef.Message cef) {
+         return cef.deviceProduct() + ": [" + cef.deviceEventClassId() + ", " + cef.severity() + "] " + cef.name();
+     }
+diff --git a/graylog2-server/src/test/java/org/graylog/plugins/cef/codec/CEFCodecTest.java b/graylog2-server/src/test/java/org/graylog/plugins/cef/codec/CEFCodecTest.java
+index 86f159b543..1e0f199da1 100644
+--- a/graylog2-server/src/test/java/org/graylog/plugins/cef/codec/CEFCodecTest.java
++++ b/graylog2-server/src/test/java/org/graylog/plugins/cef/codec/CEFCodecTest.java
+@@ -17,18 +17,23 @@
+ package org.graylog.plugins.cef.codec;
+ 
+ import org.graylog.plugins.cef.parser.MappedMessage;
++import org.graylog2.plugin.Message;
+ import org.graylog2.plugin.MessageFactory;
+ import org.graylog2.plugin.TestMessageFactory;
+ import org.graylog2.plugin.configuration.Configuration;
+ import org.graylog2.plugin.journal.RawMessage;
++import org.joda.time.DateTime;
++import org.joda.time.DateTimeZone;
+ import org.junit.Before;
+ import org.junit.Test;
+ 
+ import java.net.InetSocketAddress;
++import java.nio.charset.StandardCharsets;
+ import java.util.Collections;
+ 
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertNull;
++import static org.junit.Assert.assertTrue;
+ import static org.mockito.Mockito.mock;
+ import static org.mockito.Mockito.when;
+ 
+@@ -93,8 +98,40 @@ public class CEFCodecTest {
+         assertEquals("128.66.23.42", codec.decideSource(cefMessage, rawMessage));
+     }
+ 
++    @Test
++    public void testIssue8844() {
++        // https://github.com/Graylog2/graylog-plugin-enterprise/issues/8844
++        final RawMessage rawMessage = buildRawMessage("<134>1 2024-09-13T12:23:43.288000+02:00 netscaler-waf appname 1234 msgid - CEF:0|Vendor|Product|Version|EventID|Name|Severity|...\n");
++        final MappedMessage cefMessage = mock(MappedMessage.class);
++        when(cefMessage.mappedExtensions()).thenReturn(Collections.singletonMap("dvc", "128.66.23.42"));
++        final Message message = codec.decodeSafe(rawMessage).get();
++        verifyFields(message);
++    }
++
++    @Test
++    public void testIssue8844WithoutPriority() {
++        // https://github.com/Graylog2/graylog-plugin-enterprise/issues/8844
++        final RawMessage rawMessage = buildRawMessage("<134>2024-09-13T12:23:43.288000+02:00 netscaler-waf appname 1234 msgid - CEF:0|Vendor|Product|Version|EventID|Name|Severity|...\n");
++        final MappedMessage cefMessage = mock(MappedMessage.class);
++        when(cefMessage.mappedExtensions()).thenReturn(Collections.singletonMap("dvc", "128.66.23.42"));
++        final Message message = codec.decodeSafe(rawMessage).get();
++        verifyFields(message);
++    }
++
++    private static void verifyFields(Message message) {
++        assertTrue(message.getMessage().contains("Product: [EventID, Severity] Name"));
++        assertEquals(6, message.getField("level"));
++        assertEquals("Vendor", message.getField("device_vendor"));
++        assertEquals("local0", message.getField("facility"));
++        assertEquals(new DateTime(2024, 9, 13, 10, 28, 31, DateTimeZone.UTC), message.getTimestamp());
++    }
++
+     @Test
+     public void getAggregator() throws Exception {
+         assertNull(codec.getAggregator());
+     }
++
++    private RawMessage buildRawMessage(String message) {
++        return new RawMessage(message.getBytes(StandardCharsets.UTF_8), new InetSocketAddress("127.0.0.1", 5140));
++    }
+ }

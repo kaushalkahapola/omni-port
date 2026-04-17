@@ -1,0 +1,147 @@
+commit e38b1fa2cbf274f932df96fca98db6682159322c
+Author: Patrick Mann <patrickmann@users.noreply.github.com>
+Date:   Tue Aug 13 12:41:45 2024 +0200
+
+    Lookup cache: bubble up error results without modifying (#19670) (#20167)
+    
+    * Lookup cache: bubble up error results without modifying (#19670)
+    
+    * bubble up lookup failures
+    
+    * add unit test
+    
+    * CL
+    
+    ---------
+    
+    Co-authored-by: Tomas Dvorak <tomas.dvorak@graylog.com>
+    (cherry picked from commit ab31c69147f27363fb68e9d134fcb80bba81502a)
+    
+    * update CL
+
+diff --git a/changelog/unreleased/issue-19159.toml b/changelog/unreleased/issue-19159.toml
+new file mode 100644
+index 0000000000..ff41a2047e
+--- /dev/null
++++ b/changelog/unreleased/issue-19159.toml
+@@ -0,0 +1,5 @@
++type="f"
++message="Fixes handling of error results in the lookup cache."
++
++issues=["19159"]
++pulls=["20167", "19670"]
+diff --git a/graylog2-server/src/main/java/org/graylog2/lookup/caches/CaffeineLookupCache.java b/graylog2-server/src/main/java/org/graylog2/lookup/caches/CaffeineLookupCache.java
+index 631f609fde..64779e2cb0 100644
+--- a/graylog2-server/src/main/java/org/graylog2/lookup/caches/CaffeineLookupCache.java
++++ b/graylog2-server/src/main/java/org/graylog2/lookup/caches/CaffeineLookupCache.java
+@@ -159,17 +159,22 @@ public class CaffeineLookupCache extends LookupCache {
+         final Function<LookupCacheKey, LookupResult> mapFunction = unused -> {
+             try {
+                 final LookupResult result = loader.call();
+-                if (ignoreResult(result, config.ignoreNull())) {
+-                    LOG.trace("Ignoring failed lookup for key {}", key);
+-                    return LookupResult.builder()
+-                            .cacheTTL(0L)
+-                            .build();
++                if (result.hasError()) {
++                    // Bubble up errors unaltered
++                    return result;
+                 }
+                 if (isResultEmpty(result)) {
+-                    LOG.trace("Empty lookup for key {} with TTL {}", key, ttlEmptyMillis());
+-                    return LookupResult.builder()
+-                            .cacheTTL(ttlEmptyMillis())
+-                            .build();
++                    if (Boolean.TRUE.equals(config.ignoreNull())) {
++                        LOG.trace("Ignoring empty lookup for key {}", key);
++                        return LookupResult.builder()
++                                .cacheTTL(0L)
++                                .build();
++                    } else {
++                        LOG.trace("Empty lookup for key {} with TTL {}", key, ttlEmptyMillis());
++                        return LookupResult.builder()
++                                .cacheTTL(ttlEmptyMillis())
++                                .build();
++                    }
+                 }
+                 return result;
+             } catch (Exception e) {
+@@ -178,18 +183,12 @@ public class CaffeineLookupCache extends LookupCache {
+                         String.format(Locale.ENGLISH, "Loading value from data adapter failed for key <%s>: %s", key.toString(), e.getMessage()));
+             }
+         };
++
+         try (final Timer.Context ignored = lookupTimer()) {
+             return cache.get(key, mapFunction);
+         }
+     }
+ 
+-    private boolean ignoreResult(LookupResult result, Boolean ignoreNull) {
+-        if (Boolean.TRUE.equals(ignoreNull)) {
+-            return isResultEmpty(result);
+-        }
+-        return false;
+-    }
+-
+     private boolean isResultEmpty(LookupResult result) {
+         return (result == null ||
+                 (result.singleValue() == null && result.multiValue() == null && result.stringListValue() == null));
+diff --git a/graylog2-server/src/main/java/org/graylog2/plugin/lookup/LookupResult.java b/graylog2-server/src/main/java/org/graylog2/plugin/lookup/LookupResult.java
+index d61c743c17..34638a8008 100644
+--- a/graylog2-server/src/main/java/org/graylog2/plugin/lookup/LookupResult.java
++++ b/graylog2-server/src/main/java/org/graylog2/plugin/lookup/LookupResult.java
+@@ -49,11 +49,11 @@ public abstract class LookupResult {
+     // Cache erroneous results with a shorter TTL
+     private static final long ERROR_CACHE_TTL = Duration.ofSeconds(5).toMillis();
+ 
+-    private static final LookupResult EMPTY_LOOKUP_RESULT = builder()
++    public static final LookupResult EMPTY_LOOKUP_RESULT = builder()
+             .cacheTTL(NO_TTL)
+             .build();
+ 
+-    private static final LookupResult DEFAULT_ERROR_LOOKUP_RESULT = builder()
++    public static final LookupResult DEFAULT_ERROR_LOOKUP_RESULT = builder()
+             .cacheTTL(ERROR_CACHE_TTL)
+             .hasError(true)
+             .build();
+diff --git a/graylog2-server/src/test/java/org/graylog2/lookup/CaffeineLookupCacheTest.java b/graylog2-server/src/test/java/org/graylog2/lookup/CaffeineLookupCacheTest.java
+index 3be71afa01..1d87fb412a 100644
+--- a/graylog2-server/src/test/java/org/graylog2/lookup/CaffeineLookupCacheTest.java
++++ b/graylog2-server/src/test/java/org/graylog2/lookup/CaffeineLookupCacheTest.java
+@@ -36,6 +36,8 @@ import org.mockito.junit.MockitoRule;
+ import java.util.concurrent.Callable;
+ import java.util.concurrent.TimeUnit;
+ 
++import static org.graylog2.plugin.lookup.LookupResult.DEFAULT_ERROR_LOOKUP_RESULT;
++import static org.graylog2.plugin.lookup.LookupResult.EMPTY_LOOKUP_RESULT;
+ import static org.mockito.ArgumentMatchers.anyString;
+ import static org.mockito.Mockito.when;
+ 
+@@ -115,6 +117,27 @@ public class CaffeineLookupCacheTest {
+         Assertions.assertThat(value3.singleValue()).isEqualTo("x");
+     }
+ 
++    @Test
++    public void ttlError() throws Exception {
++        LookupCache cache = buildCache(false);
++        LookupResult lr1 = LookupResult.empty();
++        LookupResult lr2 = LookupResult.withError();
++        LookupResult lr3 = LookupResult.withError(999);
++        when(loader.call()).thenReturn(lr1).thenReturn(lr2).thenReturn(lr3);
++
++        LookupResult value1 = cache.get(LookupCacheKey.createFromJSON("x1", "y"), loader);
++        Assertions.assertThat(value1.singleValue()).isNull();
++        Assertions.assertThat(value1.cacheTTL()).isEqualTo(EMPTY_LOOKUP_RESULT.cacheTTL());
++
++        LookupResult value2 = cache.get(LookupCacheKey.createFromJSON("x2", "y"), loader);
++        Assertions.assertThat(value2.singleValue()).isNull();
++        Assertions.assertThat(value2.cacheTTL()).isEqualTo(DEFAULT_ERROR_LOOKUP_RESULT.cacheTTL());
++
++        LookupResult value3 = cache.get(LookupCacheKey.createFromJSON("x3", "y"), loader);
++        Assertions.assertThat(value3.singleValue()).isNull();
++        Assertions.assertThat(value3.cacheTTL()).isEqualTo(999);
++    }
++
+     private LookupCache buildCache(boolean ignoreNull) {
+         when(registry.timer(anyString())).thenReturn(lookupTimer);
+         when(registry.meter(anyString())).thenReturn(meter);

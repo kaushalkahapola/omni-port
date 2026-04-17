@@ -1,0 +1,106 @@
+commit f3cd890f3ea08e40d4cb49482bdea0f6e4afb13a
+Author: Kostas Krikellas <131142368+kkrik-es@users.noreply.github.com>
+Date:   Fri Oct 11 20:58:53 2024 +0300
+
+    Second parsing pass tracks array scopes properly (#114621)
+
+diff --git a/muted-tests.yml b/muted-tests.yml
+index 5d14cabdd46..e5fa7966dcd 100644
+--- a/muted-tests.yml
++++ b/muted-tests.yml
+@@ -372,15 +372,6 @@ tests:
+ - class: org.elasticsearch.backwards.MixedClusterClientYamlTestSuiteIT
+   method: test {p0=synonyms/60_synonym_rule_get/Synonym rule not found}
+   issue: https://github.com/elastic/elasticsearch/issues/114444
+-- class: org.elasticsearch.datastreams.logsdb.qa.LogsDbVersusLogsDbReindexedIntoStandardModeChallengeRestIT
+-  method: testTermsAggregation
+-  issue: https://github.com/elastic/elasticsearch/issues/114554
+-- class: org.elasticsearch.datastreams.logsdb.qa.LogsDbVersusLogsDbReindexedIntoStandardModeChallengeRestIT
+-  method: testTermsQuery
+-  issue: https://github.com/elastic/elasticsearch/issues/114563
+-- class: org.elasticsearch.datastreams.logsdb.qa.LogsDbVersusLogsDbReindexedIntoStandardModeChallengeRestIT
+-  method: testMatchAllQuery
+-  issue: https://github.com/elastic/elasticsearch/issues/114607
+ - class: org.elasticsearch.xpack.esql.optimizer.PhysicalPlanOptimizerTests
+   method: testPushSpatialIntersectsEvalToSource {default}
+   issue: https://github.com/elastic/elasticsearch/issues/114627
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+index 0ff754d9539..bac987a3df9 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+@@ -208,6 +208,7 @@ public final class DocumentParser {
+         XContentParser parser = context.parser();
+         XContentParser.Token currentToken = parser.nextToken();
+         List<String> path = new ArrayList<>();
++        List<Boolean> isObjectInPath = new ArrayList<>();  // Tracks if path components correspond to an object or an array.
+         String fieldName = null;
+         while (currentToken != null) {
+             while (currentToken != XContentParser.Token.FIELD_NAME) {
+@@ -218,11 +219,16 @@ public final class DocumentParser {
+                         parser.skipChildren();
+                     } else {
+                         path.add(fieldName);
++                        isObjectInPath.add(currentToken == XContentParser.Token.START_OBJECT);
+                     }
+                     fieldName = null;
+                 } else if (currentToken == XContentParser.Token.END_OBJECT || currentToken == XContentParser.Token.END_ARRAY) {
+-                    if (currentToken == XContentParser.Token.END_OBJECT && path.isEmpty() == false) {
++                    // Remove the path, if the scope type matches the one when the path was added.
++                    if (isObjectInPath.isEmpty() == false
++                        && (isObjectInPath.getLast() && currentToken == XContentParser.Token.END_OBJECT
++                            || isObjectInPath.getLast() == false && currentToken == XContentParser.Token.END_ARRAY)) {
+                         path.removeLast();
++                        isObjectInPath.removeLast();
+                     }
+                     fieldName = null;
+                 }
+@@ -237,7 +243,6 @@ public final class DocumentParser {
+             if (leaf != null) {
+                 parser.nextToken();  // Advance the parser to the value to be read.
+                 result.add(leaf.cloneWithValue(context.encodeFlattenedToken()));
+-                parser.nextToken();  // Skip the token ending the value.
+                 fieldName = null;
+             }
+             currentToken = parser.nextToken();
+diff --git a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+index 205ff08c397..5eac5acdca2 100644
+--- a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
++++ b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+@@ -901,6 +901,37 @@ public class IgnoredSourceFieldMapperTests extends MapperServiceTestCase {
+         );
+     }
+ 
++    public void testConflictingFieldNameAfterArray() throws IOException {
++        DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
++            b.startObject("path").startObject("properties");
++            {
++                b.startObject("to").startObject("properties");
++                {
++                    b.startObject("id").field("type", "integer").field("synthetic_source_keep", "arrays").endObject();
++                }
++                b.endObject().endObject();
++                b.startObject("id").field("type", "float").endObject();
++            }
++            b.endObject().endObject();
++        })).documentMapper();
++
++        var syntheticSource = syntheticSource(documentMapper, b -> {
++            b.startObject("path");
++            {
++                b.startArray("to");
++                {
++                    b.startObject().array("id", 1, 20, 3).endObject();
++                    b.startObject().field("id", 10).endObject();
++                }
++                b.endArray();
++                b.field("id", "0.1");
++            }
++            b.endObject();
++        });
++        assertEquals("""
++            {"path":{"id":0.1,"to":{"id":[1,20,3,10]}}}""", syntheticSource);
++    }
++
+     public void testArrayWithinArray() throws IOException {
+         DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
+             b.startObject("path");

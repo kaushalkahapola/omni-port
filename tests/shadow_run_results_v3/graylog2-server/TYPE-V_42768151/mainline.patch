@@ -1,0 +1,69 @@
+commit 427681515d45bbe38a63899f10d7297d0a0094a5
+Author: Zack King <91903901+kingzacko1@users.noreply.github.com>
+Date:   Wed Aug 28 08:43:50 2024 -0500
+
+    Fix grok_exists pipeline rule (#20263)
+    
+    * Fix grok_exists rule
+
+diff --git a/changelog/unreleased/pr-20263.toml b/changelog/unreleased/pr-20263.toml
+new file mode 100644
+index 0000000000..1647f57485
+--- /dev/null
++++ b/changelog/unreleased/pr-20263.toml
+@@ -0,0 +1,5 @@
++type = "f"
++message = "Fixed issue where grok_exists pipeline rule would return true for substrings of pattern names."
++
++issues = ["20264"]
++pulls = ["20263"]
+diff --git a/graylog2-server/src/main/java/org/graylog2/grok/GrokPatternRegistry.java b/graylog2-server/src/main/java/org/graylog2/grok/GrokPatternRegistry.java
+index 76cccbcc3c..df8b5abdcd 100644
+--- a/graylog2-server/src/main/java/org/graylog2/grok/GrokPatternRegistry.java
++++ b/graylog2-server/src/main/java/org/graylog2/grok/GrokPatternRegistry.java
+@@ -25,15 +25,13 @@ import com.google.common.eventbus.Subscribe;
+ import com.google.common.util.concurrent.UncheckedExecutionException;
+ import io.krakens.grok.api.Grok;
+ import io.krakens.grok.api.GrokCompiler;
+-import org.slf4j.Logger;
+-import org.slf4j.LoggerFactory;
+-
+-import javax.annotation.Nonnull;
+-
+ import jakarta.inject.Inject;
+ import jakarta.inject.Named;
+ import jakarta.inject.Singleton;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
+ 
++import javax.annotation.Nonnull;
+ import java.util.Collections;
+ import java.util.Set;
+ import java.util.concurrent.ExecutionException;
+@@ -86,7 +84,7 @@ public class GrokPatternRegistry {
+     }
+ 
+     public boolean grokPatternExists(String patternName) {
+-        return patterns.get().stream().anyMatch(pattern -> pattern.name().contains(patternName));
++        return patterns.get().stream().anyMatch(pattern -> pattern.name().equals(patternName));
+     }
+ 
+     public Grok cachedGrokForPattern(String pattern) {
+diff --git a/graylog2-server/src/test/java/org/graylog2/grok/GrokPatternRegistryTest.java b/graylog2-server/src/test/java/org/graylog2/grok/GrokPatternRegistryTest.java
+index 0a2789dd98..950259d510 100644
+--- a/graylog2-server/src/test/java/org/graylog2/grok/GrokPatternRegistryTest.java
++++ b/graylog2-server/src/test/java/org/graylog2/grok/GrokPatternRegistryTest.java
+@@ -110,4 +110,11 @@ public class GrokPatternRegistryTest {
+     public void patterns() {
+         assertThat(grokPatternRegistry.patterns()).isEqualTo(GROK_PATTERNS);
+     }
+-}
+\ No newline at end of file
++
++    @Test
++    public void patternExists() {
++        assertThat(grokPatternRegistry.grokPatternExists("TEST")).isFalse();
++        assertThat(grokPatternRegistry.grokPatternExists("NUM")).isFalse();
++        assertThat(grokPatternRegistry.grokPatternExists("TESTNUM")).isTrue();
++    }
++}

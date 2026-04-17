@@ -1,0 +1,53 @@
+commit 48f87c57d9981af15f559c702459022deb2f2b11
+Author: Oleksandr Kolomiiets <oleksandr.kolomiiets@elastic.co>
+Date:   Tue Sep 10 11:33:27 2024 -0700
+
+    Fix encoding of dynamic arrays in ignored source (#112713)
+
+diff --git a/docs/changelog/112713.yaml b/docs/changelog/112713.yaml
+new file mode 100644
+index 00000000000..1ccf451b13f
+--- /dev/null
++++ b/docs/changelog/112713.yaml
+@@ -0,0 +1,5 @@
++pr: 112713
++summary: Fix encoding of dynamic arrays in ignored source
++area: Logs
++type: bug
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+index 150b2b68cc0..bde583fddd9 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+@@ -646,7 +646,7 @@ public final class DocumentParser {
+                         context.addIgnoredField(
+                             IgnoredSourceFieldMapper.NameValue.fromContext(
+                                 context,
+-                                currentFieldName,
++                                context.path().pathAsText(currentFieldName),
+                                 XContentDataHelper.encodeToken(context.parser())
+                             )
+                         );
+diff --git a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+index 61c4068cedf..a10b47cc06a 100644
+--- a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
++++ b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+@@ -221,6 +221,18 @@ public class IgnoredSourceFieldMapperTests extends MapperServiceTestCase {
+         );
+     }
+ 
++    public void testIgnoredDynamicArrayNestedInObject() throws IOException {
++        int intValue = randomInt();
++
++        String syntheticSource = getSyntheticSourceWithFieldLimit(b -> {
++            b.startObject("bar");
++            b.field("a", List.of(intValue, intValue));
++            b.endObject();
++        });
++        assertEquals(String.format(Locale.ROOT, """
++            {"bar":{"a":[%s,%s]}}""", intValue, intValue), syntheticSource);
++    }
++
+     public void testDisabledRootObjectSingleField() throws IOException {
+         String name = randomAlphaOfLength(20);
+         DocumentMapper documentMapper = createMapperService(topMapping(b -> {

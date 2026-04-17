@@ -1,0 +1,187 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-II",
+  "original_commit": "c27bc086770b12a71c335e5537318f54cce53a65",
+  "backport_commit": "fc701776e2a54f95f7e50a91ccfb604c34320387",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/transport/TransportService.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 1060,
+          "end_line": 1067,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.03,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies a conditional check and changes the behavior of thread dispatching in TransportService.java. The change involves adding a condition to check for 'enableStackOverflowAvoidance' and adjusting the executor returned accordingly. This is a behavioral change but structurally the code remains the same, indicating a whitespace/formatting drift with some logic adjustment. The test changes add new tests and modify existing ones to reflect the new behavior, but no deep structural or API changes are introduced. The patch was found via 'git_exact' for the main hunk, indicating a close match to the target branch code. Therefore, the patch complexity is best classified as TYPE_II with high confidence.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/transport/TransportService.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.1,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.transport.TransportServiceLifecycleTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.transport.TransportServiceLifecycleTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testHandlersCompleteAtShutdown": "passed",
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testInternalSendExceptionWithNonForkingResponseHandlerCompletesListenerInline": "passed",
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testOnConnectionCloseStackOverflowAvoidance": "passed",
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testInternalSendExceptionForcesExecutionOnHandlerExecutor": "passed",
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testInternalSendExceptionCompletesHandlerOnCallingThreadIfTransportServiceClosed": "passed",
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testInternalSendExceptionForksToHandlerExecutor": "passed",
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testOnConnectionClosedUsesHandlerExecutor": "passed",
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testInternalSendExceptionForksToGenericIfHandlerDoesNotForkAndStackOverflowProtectionEnabled": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.transport.TransportServiceLifecycleTests": "passed"
+        },
+        "summary": {
+          "passed": 8,
+          "failed": 0,
+          "skipped": 0,
+          "total": 8
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.transport.TransportServiceLifecycleTests#testInternalSendExceptionWithNonForkingResponseHandlerCompletesListenerInline"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 8,
+        "patched_total": 8,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 8
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1240,
+    "target_patch_bytes": 5298,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.transport.TransportServiceLifecycleTests#testInternalSendExceptionWithNonForkingResponseHandlerCompletesListenerInline"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 8,
+      "patched_total": 8,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

@@ -1,0 +1,292 @@
+commit 181399cfbb4cffbd2b6a352aa5c01b013c0577cf
+Author: Zack King <91903901+kingzacko1@users.noreply.github.com>
+Date:   Thu May 22 09:20:59 2025 -0500
+
+    Support date formatting in jmte templates (#22632)
+    
+    * Add NamedDateRenderer to format dates in JMTE templates
+    
+    * Changelog
+    
+    * fix forbidden API
+
+diff --git a/changelog/unreleased/issue-22296.toml b/changelog/unreleased/issue-22296.toml
+new file mode 100644
+index 0000000000..aa829b79a6
+--- /dev/null
++++ b/changelog/unreleased/issue-22296.toml
+@@ -0,0 +1,5 @@
++type="a"
++message="Add support for date formatting in JMTE templates for custom notification bodies."
++
++pulls = ["22632"]
++issues = ["22296"]
+diff --git a/graylog2-server/src/main/java/org/graylog2/bindings/ServerBindings.java b/graylog2-server/src/main/java/org/graylog2/bindings/ServerBindings.java
+index cc78c332e2..2af078f41a 100644
+--- a/graylog2-server/src/main/java/org/graylog2/bindings/ServerBindings.java
++++ b/graylog2-server/src/main/java/org/graylog2/bindings/ServerBindings.java
+@@ -31,6 +31,7 @@ import org.graylog2.Configuration;
+ import org.graylog2.alerts.AlertSender;
+ import org.graylog2.alerts.EmailRecipients;
+ import org.graylog2.alerts.FormattedEmailAlertSender;
++import org.graylog2.bindings.providers.DefaultJmteEngineProvider;
+ import org.graylog2.bindings.providers.DefaultSecurityManagerProvider;
+ import org.graylog2.bindings.providers.DefaultStreamProvider;
+ import org.graylog2.bindings.providers.HtmlSafeJmteEngineProvider;
+@@ -191,7 +192,7 @@ public class ServerBindings extends Graylog2Module {
+         bind(ClusterStatsModule.class).asEagerSingleton();
+         bind(ClusterConfigService.class).to(ClusterConfigServiceImpl.class).asEagerSingleton();
+         bind(GrokPatternRegistry.class).in(Scopes.SINGLETON);
+-        bind(Engine.class).toInstance(Engine.createEngine());
++        bind(Engine.class).toProvider(DefaultJmteEngineProvider.class).asEagerSingleton();
+         bind(Engine.class).annotatedWith(Names.named("HtmlSafe")).toProvider(HtmlSafeJmteEngineProvider.class).asEagerSingleton();
+         bind(Engine.class).annotatedWith(Names.named("JsonSafe")).toProvider(JsonSafeEngineProvider.class).asEagerSingleton();
+         bind(ErrorPageGenerator.class).to(GraylogErrorPageGenerator.class).asEagerSingleton();
+diff --git a/graylog2-server/src/main/java/org/graylog2/bindings/providers/DefaultJmteEngineProvider.java b/graylog2-server/src/main/java/org/graylog2/bindings/providers/DefaultJmteEngineProvider.java
+new file mode 100644
+index 0000000000..b2c787d3fd
+--- /dev/null
++++ b/graylog2-server/src/main/java/org/graylog2/bindings/providers/DefaultJmteEngineProvider.java
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (C) 2020 Graylog, Inc.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the Server Side Public License, version 1,
++ * as published by MongoDB, Inc.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * Server Side Public License for more details.
++ *
++ * You should have received a copy of the Server Side Public License
++ * along with this program. If not, see
++ * <http://www.mongodb.com/licensing/server-side-public-license>.
++ */
++package org.graylog2.bindings.providers;
++
++import com.floreysoft.jmte.Engine;
++import jakarta.inject.Inject;
++import jakarta.inject.Provider;
++import jakarta.inject.Singleton;
++import org.graylog2.jmte.NamedDateRenderer;
++
++@Singleton
++public class DefaultJmteEngineProvider implements Provider<Engine> {
++    private final Engine engine;
++
++    @Inject
++    public DefaultJmteEngineProvider() {
++        engine = Engine.createEngine();
++        engine.registerNamedRenderer(new NamedDateRenderer());
++    }
++
++    @Override
++    public Engine get() {
++        return engine;
++    }
++}
+diff --git a/graylog2-server/src/main/java/org/graylog2/bindings/providers/HtmlSafeJmteEngineProvider.java b/graylog2-server/src/main/java/org/graylog2/bindings/providers/HtmlSafeJmteEngineProvider.java
+index 7eaa9525e7..a0e1426435 100644
+--- a/graylog2-server/src/main/java/org/graylog2/bindings/providers/HtmlSafeJmteEngineProvider.java
++++ b/graylog2-server/src/main/java/org/graylog2/bindings/providers/HtmlSafeJmteEngineProvider.java
+@@ -19,10 +19,10 @@ package org.graylog2.bindings.providers;
+ import com.floreysoft.jmte.Engine;
+ import com.floreysoft.jmte.Renderer;
+ import com.google.common.html.HtmlEscapers;
+-
+ import jakarta.inject.Inject;
+ import jakarta.inject.Provider;
+ import jakarta.inject.Singleton;
++import org.graylog2.jmte.NamedDateRenderer;
+ 
+ import java.util.Locale;
+ import java.util.Map;
+@@ -35,6 +35,7 @@ public class HtmlSafeJmteEngineProvider implements Provider<Engine> {
+     @Inject
+     public HtmlSafeJmteEngineProvider() {
+         engine = Engine.createEngine();
++        engine.registerNamedRenderer(new NamedDateRenderer());
+         engine.registerRenderer(String.class, new HtmlSafeRenderer());
+     }
+ 
+diff --git a/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java b/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
+index 9abfbd42d5..2eb5222c1d 100644
+--- a/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
++++ b/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
+@@ -22,6 +22,7 @@ import jakarta.inject.Inject;
+ import jakarta.inject.Provider;
+ import jakarta.inject.Singleton;
+ import org.apache.commons.lang.StringEscapeUtils;
++import org.graylog2.jmte.NamedDateRenderer;
+ 
+ import java.util.Collection;
+ import java.util.Iterator;
+@@ -35,6 +36,7 @@ public class JsonSafeEngineProvider implements Provider<Engine> {
+     @Inject
+     public JsonSafeEngineProvider() {
+         engine = Engine.createEngine();
++        engine.registerNamedRenderer(new NamedDateRenderer());
+         engine.registerRenderer(String.class, new JsonSafeRenderer());
+         engine.registerRenderer(Map.class, new JsonSafeMapRenderer());
+         engine.registerRenderer(Iterable.class, new JsonSafeIterableRenderer());
+diff --git a/graylog2-server/src/main/java/org/graylog2/jmte/NamedDateRenderer.java b/graylog2-server/src/main/java/org/graylog2/jmte/NamedDateRenderer.java
+new file mode 100644
+index 0000000000..c9a47923ff
+--- /dev/null
++++ b/graylog2-server/src/main/java/org/graylog2/jmte/NamedDateRenderer.java
+@@ -0,0 +1,92 @@
++/*
++ * Copyright (C) 2020 Graylog, Inc.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the Server Side Public License, version 1,
++ * as published by MongoDB, Inc.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * Server Side Public License for more details.
++ *
++ * You should have received a copy of the Server Side Public License
++ * along with this program. If not, see
++ * <http://www.mongodb.com/licensing/server-side-public-license>.
++ */
++package org.graylog2.jmte;
++
++import com.floreysoft.jmte.NamedRenderer;
++import com.floreysoft.jmte.RenderFormatInfo;
++import org.joda.time.DateTime;
++import org.joda.time.DateTimeZone;
++import org.joda.time.format.DateTimeFormat;
++import org.joda.time.format.DateTimeFormatter;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++import java.text.ParseException;
++import java.util.Locale;
++import java.util.Map;
++
++public class NamedDateRenderer implements NamedRenderer {
++    private static final Logger LOG = LoggerFactory.getLogger(NamedDateRenderer.class);
++    private static final String DEFAULT_PATTERN = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'";
++    private static final String RENDERER_DESCRIPTION = "Use Java date format patterns like yyyy-MM-dd or HH:mm:ss";
++
++    private DateTime convert(Object o) throws ParseException {
++        if (o == null) {
++            return null;
++        }
++
++        if (o instanceof DateTime) {
++            return (DateTime) o;
++        } else if (o instanceof Number) {
++            long longValue = ((Number) o).longValue();
++            return new DateTime(longValue, DateTimeZone.UTC);
++        } else if (o instanceof String) {
++            return DateTime.parse((String) o);
++        }
++        return null;
++    }
++
++    @Override
++    public RenderFormatInfo getFormatInfo() {
++        return new DateRendererFormatInfo(RENDERER_DESCRIPTION, DEFAULT_PATTERN);
++    }
++
++    @Override
++    public String getName() {
++        return "date";
++    }
++
++    @Override
++    public Class<?>[] getSupportedClasses() {
++        return new Class[] { DateTime.class, String.class, Integer.class, Long.class };
++    }
++
++    @Override
++    public String render(Object o, String pattern, Locale locale, Map<String, Object> model) {
++        String formatPattern = pattern != null ? pattern : DEFAULT_PATTERN;
++        try {
++            final DateTime value = convert(o);
++            if (value != null) {
++                final DateTimeFormatter formatter = locale != null
++                        ? DateTimeFormat.forPattern(formatPattern).withLocale(locale)
++                        : DateTimeFormat.forPattern(formatPattern);
++
++                return formatter.print(value);
++            } else {
++                LOG.warn("Failed to convert [{}] to a date object for formatting.", o);
++            }
++        } catch (ParseException pe) {
++            LOG.warn("Failed to convert [{}] to a date object for formatting.", o, pe);
++        } catch (Exception e) {
++            LOG.warn("Failed to format [{}] as a date string with format [{}]", o, formatPattern, e);
++        }
++        return o.toString();
++
++    }
++}
++
++record DateRendererFormatInfo(String description, String defaultFormat) implements RenderFormatInfo {}
+diff --git a/graylog2-server/src/test/java/org/graylog/events/notifications/types/HTTPEventNotificationV2Test.java b/graylog2-server/src/test/java/org/graylog/events/notifications/types/HTTPEventNotificationV2Test.java
+index 241090c937..77808d850a 100644
+--- a/graylog2-server/src/test/java/org/graylog/events/notifications/types/HTTPEventNotificationV2Test.java
++++ b/graylog2-server/src/test/java/org/graylog/events/notifications/types/HTTPEventNotificationV2Test.java
+@@ -16,10 +16,10 @@
+  */
+ package org.graylog.events.notifications.types;
+ 
+-import com.floreysoft.jmte.Engine;
+ import com.google.common.collect.ImmutableList;
+ import org.graylog.events.configuration.EventsConfigurationProvider;
+ import org.graylog.events.notifications.EventNotificationService;
++import org.graylog2.bindings.providers.DefaultJmteEngineProvider;
+ import org.graylog2.bindings.providers.JsonSafeEngineProvider;
+ import org.graylog2.notifications.NotificationService;
+ import org.graylog2.plugin.Message;
+@@ -69,7 +69,7 @@ public class HTTPEventNotificationV2Test {
+     void setUp() {
+         notification = new HTTPEventNotificationV2(notificationCallbackService, objectMapperProvider,
+                 whitelistService, urlWhitelistNotificationService, encryptedValueService, configurationProvider,
+-                new Engine(), new JsonSafeEngineProvider().get(), notificationService, nodeId,
++                new DefaultJmteEngineProvider().get(), new JsonSafeEngineProvider().get(), notificationService, nodeId,
+                 parameterizedHttpClientProvider);
+     }
+ 
+@@ -115,6 +115,27 @@ public class HTTPEventNotificationV2Test {
+         assertThat(body).contains("\\\"list_value1\\\"");
+     }
+ 
++    @Test
++    public void testDateFormatting() {
++        Map<String, Object> model = Map.of(
++                "event_definition_title", "<<Test Event Title>>",
++                "backlog", createBacklog(),
++                "event", createEvent()
++        );
++
++        String bodyTemplate = "formatted date: ${event.event_time;date(yyyy-MM-dd HH:mm:ss)}";
++        String body = notification.transformBody(bodyTemplate, HTTPEventNotificationConfigV2.ContentType.PLAIN_TEXT, model);
++        assertThat(body).isEqualTo("formatted date: 2025-04-02 15:37:46");
++
++        bodyTemplate = "{\"formatted date\": \"${event.event_time;date(HH:mm:ss)}\"}";
++        body = notification.transformBody(bodyTemplate, HTTPEventNotificationConfigV2.ContentType.JSON, model);
++        assertThat(body).isEqualTo("{\"formatted date\": \"15:37:46\"}");
++
++        bodyTemplate = "formatted_date=${event.event_time;date(dd-MM-yyyy)}";
++        body = notification.transformBody(bodyTemplate, HTTPEventNotificationConfigV2.ContentType.FORM_DATA, model);
++        assertThat(body).isEqualTo("formatted_date=02-04-2025");
++    }
++
+     private ImmutableList<MessageSummary> createBacklog() {
+         Message message = new TestMessageFactory().createMessage("Message with \"Double Quotes\"", "Unit Test", DateTime.now(DateTimeZone.UTC));
+         MessageSummary summary = new MessageSummary("index1", message);
+@@ -130,6 +151,7 @@ public class HTTPEventNotificationV2Test {
+         event.put("message", "Event Message & Whatnot");
+         event.put("fields", fields);
+         event.put("list_field", List.of("\"list_value1\"", "\"list_value2\""));
++        event.put("event_time", DateTime.parse("2025-04-02T15:37:46.717Z"));
+         return event;
+     }
+ 

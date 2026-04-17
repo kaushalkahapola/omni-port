@@ -1,0 +1,58 @@
+commit 38d9710e61744f94a78b053d6aaa006d6b60cbf1
+Author: Dan Rubinstein <daniel.rubinstein@elastic.co>
+Date:   Tue Oct 15 11:23:23 2024 -0400
+
+    Set min number of allocations for ElasticSearchInternalService to 0 (#114829)
+    
+    * Set min number of allocations for ElasticSearchInternalService to 0
+    
+    * Updating IT tests with new min allocations value
+    
+    ---------
+    
+    Co-authored-by: Elastic Machine <elasticmachine@users.noreply.github.com>
+
+diff --git a/x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/java/org/elasticsearch/xpack/inference/DefaultEndPointsIT.java b/x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/java/org/elasticsearch/xpack/inference/DefaultEndPointsIT.java
+index 083bad2c916..3a774a7a37d 100644
+--- a/x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/java/org/elasticsearch/xpack/inference/DefaultEndPointsIT.java
++++ b/x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/java/org/elasticsearch/xpack/inference/DefaultEndPointsIT.java
+@@ -64,7 +64,7 @@ public class DefaultEndPointsIT extends InferenceBaseRestTest {
+         assertThat(
+             modelConfig.toString(),
+             adaptiveAllocations,
+-            Matchers.is(Map.of("enabled", true, "min_number_of_allocations", 1, "max_number_of_allocations", 8))
++            Matchers.is(Map.of("enabled", true, "min_number_of_allocations", 0, "max_number_of_allocations", 8))
+         );
+     }
+ 
+@@ -99,7 +99,7 @@ public class DefaultEndPointsIT extends InferenceBaseRestTest {
+         assertThat(
+             modelConfig.toString(),
+             adaptiveAllocations,
+-            Matchers.is(Map.of("enabled", true, "min_number_of_allocations", 1, "max_number_of_allocations", 8))
++            Matchers.is(Map.of("enabled", true, "min_number_of_allocations", 0, "max_number_of_allocations", 8))
+         );
+     }
+ }
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
+index 396c679bf32..8f7b9b79c28 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/ElasticsearchInternalService.java
+@@ -854,7 +854,7 @@ public class ElasticsearchInternalService extends BaseElasticsearchInternalServi
+                 null,
+                 1,
+                 useLinuxOptimizedModel ? ELSER_V2_MODEL_LINUX_X86 : ELSER_V2_MODEL,
+-                new AdaptiveAllocationsSettings(Boolean.TRUE, 1, 8)
++                new AdaptiveAllocationsSettings(Boolean.TRUE, 0, 8)
+             ),
+             ElserMlNodeTaskSettings.DEFAULT,
+             null // default chunking settings
+@@ -867,7 +867,7 @@ public class ElasticsearchInternalService extends BaseElasticsearchInternalServi
+                 null,
+                 1,
+                 useLinuxOptimizedModel ? MULTILINGUAL_E5_SMALL_MODEL_ID_LINUX_X86 : MULTILINGUAL_E5_SMALL_MODEL_ID,
+-                new AdaptiveAllocationsSettings(Boolean.TRUE, 1, 8)
++                new AdaptiveAllocationsSettings(Boolean.TRUE, 0, 8)
+             ),
+             null // default chunking settings
+         );

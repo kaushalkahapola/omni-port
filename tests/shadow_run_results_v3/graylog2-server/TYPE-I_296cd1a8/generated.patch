@@ -1,0 +1,21 @@
+diff --git a/graylog2-server/src/main/java/org/graylog2/inputs/codecs/SyslogCodec.java b/graylog2-server/src/main/java/org/graylog2/inputs/codecs/SyslogCodec.java
+index 143ec30a96..3139124633 100644
+--- a/graylog2-server/src/main/java/org/graylog2/inputs/codecs/SyslogCodec.java
++++ b/graylog2-server/src/main/java/org/graylog2/inputs/codecs/SyslogCodec.java
+@@ -137,7 +137,7 @@ public class SyslogCodec extends AbstractCodec {
+         } else if (CISCO_WITH_SEQUENCE_NUMBERS_PATTERN.matcher(msg).matches()) {
+             e = new CiscoSyslogServerEvent(msg, remoteAddress, defaultTimeZone);
+         } else if (FORTIGATE_PATTERN.matcher(msg).matches()) {
+-            e = new FortiGateSyslogEvent(msg, defaultTimeZone);
++            e = new FortiGateSyslogEvent(msg.trim(), defaultTimeZone);
+         } else {
+             e = new SyslogServerEvent(msg, remoteAddress, defaultTimeZone);
+         }
+@@ -173,7 +173,6 @@ public class SyslogCodec extends AbstractCodec {
+             m.addField("full_message", new String(e.getRaw(), charset));
+         }
+ 
+-
+         final boolean expandStructuredData = configuration.getBoolean(CK_EXPAND_STRUCTURED_DATA);
+         m.addFields(parseAdditionalData(e, expandStructuredData));
+ 

@@ -1,0 +1,62 @@
+commit e93c0d2503596ef4837d64e01d1c9c2b2b639dfb
+Author: Christoph Büscher <christophbuescher@posteo.de>
+Date:   Mon Sep 16 15:41:54 2024 +0200
+
+    Fix error using _terms_enum on ip field (#112872)
+    
+    When using an ipv6 prefix with shortened "0" entries like "23ec::", we
+    erroneously also matched any IP4 address. This change fixes that problem.
+    
+    Closes #94378
+
+diff --git a/docs/changelog/112872.yaml b/docs/changelog/112872.yaml
+new file mode 100644
+index 00000000000..5a6f3af0396
+--- /dev/null
++++ b/docs/changelog/112872.yaml
+@@ -0,0 +1,6 @@
++pr: 112872
++summary: Fix parsing error in `_terms_enum` API
++area: Search
++type: bug
++issues:
++ - 94378
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/IpPrefixAutomatonUtil.java b/server/src/main/java/org/elasticsearch/index/mapper/IpPrefixAutomatonUtil.java
+index 7818b1f5053..6900dcd7739 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/IpPrefixAutomatonUtil.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/IpPrefixAutomatonUtil.java
+@@ -108,7 +108,7 @@ public class IpPrefixAutomatonUtil {
+                 } else {
+                     // potentially partial block
+                     if (groupsAdded == 0 && ONLY_ZEROS.matcher(group).matches()) {
+-                        // here we have a leading group with only "0" characters. If we would allow this to match
++                        // here we have a leading group with only "0" characters. If we allowed this to match
+                         // ipv6 addresses, this would include things like 0000::127.0.0.1 (and all other ipv4 addresses).
+                         // Allowing this would be counterintuitive, so "0*" prefixes should only expand
+                         // to ipv4 addresses like "0.1.2.3" and we return with an automaton not matching anything here
+@@ -129,7 +129,7 @@ public class IpPrefixAutomatonUtil {
+ 
+     static Automaton automatonFromIPv6Group(String ipv6Group) {
+         assert ipv6Group.length() > 0 && ipv6Group.length() <= 4 : "expected a full ipv6 group or prefix";
+-        Automaton result = Automata.makeString("");
++        Automaton result = Automata.makeEmpty();
+         for (int leadingZeros = 0; leadingZeros <= 4 - ipv6Group.length(); leadingZeros++) {
+             int bytesAdded = 0;
+             String padded = padWithZeros(ipv6Group, leadingZeros);
+diff --git a/server/src/test/java/org/elasticsearch/index/mapper/IpPrefixAutomatonUtilTests.java b/server/src/test/java/org/elasticsearch/index/mapper/IpPrefixAutomatonUtilTests.java
+index e86c1313126..4170adf0a85 100644
+--- a/server/src/test/java/org/elasticsearch/index/mapper/IpPrefixAutomatonUtilTests.java
++++ b/server/src/test/java/org/elasticsearch/index/mapper/IpPrefixAutomatonUtilTests.java
+@@ -174,6 +174,12 @@ public class IpPrefixAutomatonUtilTests extends ESTestCase {
+             assertTrue(accepts(a, "255.27.240.24"));
+             assertTrue(accepts(a, "255:a360::25bb:828f:ffff:ffff"));
+         }
++        {
++            CompiledAutomaton a = buildIpPrefixAutomaton("23c9::");
++            assertTrue(accepts(a, "23c9::6063:7ac9:ffff:ffff"));
++            assertFalse(accepts(a, "0.0.0.0"));
++            assertFalse(accepts(a, "249.43.32.175"));
++        }
+     }
+ 
+     private static boolean accepts(CompiledAutomaton compiledAutomaton, String address) throws UnknownHostException {

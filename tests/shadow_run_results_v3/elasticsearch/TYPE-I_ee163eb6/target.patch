@@ -1,0 +1,552 @@
+commit da55d6c2709ecb448d1bf9b53f53bdbd2f2a40fc
+Author: John Wagster <john.wagster@elastic.co>
+Date:   Thu Dec 19 11:54:49 2024 -0600
+
+    Epoch Millis Rounding Down and Not Up (#118353) (#119104)
+    
+    fixed an issue where epoch millis were not being rounded up but instead were rounded down causing gt behavior to fail when off by 1 millisecond
+
+diff --git a/docs/changelog/118353.yaml b/docs/changelog/118353.yaml
+new file mode 100644
+index 00000000000..7be62a4a60c
+--- /dev/null
++++ b/docs/changelog/118353.yaml
+@@ -0,0 +1,5 @@
++pr: 118353
++summary: Epoch Millis Rounding Down and Not Up 2
++area: Infra/Core
++type: bug
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/common/time/EpochTime.java b/server/src/main/java/org/elasticsearch/common/time/EpochTime.java
+index c53c9d0c03d..51b28fd97e2 100644
+--- a/server/src/main/java/org/elasticsearch/common/time/EpochTime.java
++++ b/server/src/main/java/org/elasticsearch/common/time/EpochTime.java
+@@ -35,6 +35,25 @@ class EpochTime {
+ 
+     private static final ValueRange POSITIVE_LONG_INTEGER_RANGE = ValueRange.of(0, Long.MAX_VALUE);
+ 
++    // TemporalField is only present in the presence of a rounded timestamp
++    private static final long ROUNDED_SIGN_PLACEHOLDER = -2;
++    private static final EpochField ROUNDED_SIGN_FIELD = new EpochField(
++        ChronoUnit.FOREVER,
++        ChronoUnit.FOREVER,
++        ValueRange.of(ROUNDED_SIGN_PLACEHOLDER, ROUNDED_SIGN_PLACEHOLDER)
++    ) {
++        // FIXME: what should this be?
++        @Override
++        public boolean isSupportedBy(TemporalAccessor temporal) {
++            return temporal.isSupported(ChronoField.INSTANT_SECONDS) && temporal.getLong(ChronoField.INSTANT_SECONDS) < 0;
++        }
++
++        @Override
++        public long getFrom(TemporalAccessor temporal) {
++            return ROUNDED_SIGN_PLACEHOLDER;
++        }
++    };
++
+     // TemporalField is only present in the presence of a negative (potentially fractional) timestamp.
+     private static final long NEGATIVE_SIGN_PLACEHOLDER = -1;
+     private static final EpochField NEGATIVE_SIGN_FIELD = new EpochField(
+@@ -161,6 +180,10 @@ class EpochTime {
+             Long nanosOfMilli = fieldValues.remove(NANOS_OF_MILLI);
+             long secondsAndMillis = fieldValues.remove(this);
+ 
++            // this flag indicates whether we were asked to round up and we defaulted to 999_999 nanos or nanos were given by the users
++            // specifically we do not wnat to confuse defaulted 999_999 nanos with user supplied 999_999 nanos
++            boolean roundUp = fieldValues.remove(ROUNDED_SIGN_FIELD) != null;
++
+             long seconds;
+             long nanos;
+             if (isNegative != null) {
+@@ -169,10 +192,18 @@ class EpochTime {
+                 nanos = secondsAndMillis % 1000 * 1_000_000;
+                 // `secondsAndMillis < 0` implies negative timestamp; so `nanos < 0`
+                 if (nanosOfMilli != null) {
+-                    // aggregate fractional part of the input; subtract b/c `nanos < 0`
+-                    nanos -= nanosOfMilli;
++                    if (roundUp) {
++                        // these are not the nanos you think they are; these are "round up nanos" not the fractional part of the input
++                        // this is the case where we defaulted the value to 999_999 and the intention for rounding is that the value
++                        // moves closer to positive infinity
++                        nanos += nanosOfMilli;
++                    } else {
++                        // aggregate fractional part of the input; subtract b/c `nanos < 0`
++                        // this is the case where the user has supplied a nanos value and we'll want to shift toward negative infinity
++                        nanos -= nanosOfMilli;
++                    }
+                 }
+-                if (nanos != 0) {
++                if (nanos < 0) {
+                     // nanos must be positive. B/c the timestamp is represented by the
+                     // (seconds, nanos) tuple, seconds moves 1s toward negative-infinity
+                     // and nanos moves 1s toward positive-infinity
+@@ -235,38 +266,70 @@ class EpochTime {
+         .appendLiteral('.')
+         .toFormatter(Locale.ROOT);
+ 
+-    // this supports milliseconds
+-    public static final DateTimeFormatter MILLISECONDS_FORMATTER1 = new DateTimeFormatterBuilder().optionalStart()
++    static final DateFormatter SECONDS_FORMATTER = new JavaDateFormatter(
++        "epoch_second",
++        new JavaTimeDateTimePrinter(SECONDS_FORMATTER1),
++        JavaTimeDateTimeParser.createRoundUpParserGenerator(builder -> builder.parseDefaulting(ChronoField.NANO_OF_SECOND, 999_999_999L)),
++        new JavaTimeDateTimeParser(SECONDS_FORMATTER1),
++        new JavaTimeDateTimeParser(SECONDS_FORMATTER2)
++    );
++
++    public static final DateTimeFormatter MILLISECONDS_FORMATTER_BASE = new DateTimeFormatterBuilder().optionalStart()
+         .appendText(NEGATIVE_SIGN_FIELD, Map.of(-1L, "-")) // field is only created in the presence of a '-' char.
+         .optionalEnd()
+         .appendValue(UNSIGNED_MILLIS, 1, 19, SignStyle.NOT_NEGATIVE)
++        .toFormatter(Locale.ROOT);
++
++    // FIXME: clean these up and append one to the other
++    // this supports milliseconds
++    public static final DateTimeFormatter MILLISECONDS_FORMATTER = new DateTimeFormatterBuilder().append(MILLISECONDS_FORMATTER_BASE)
+         .optionalStart()
+         .appendFraction(NANOS_OF_MILLI, 0, 6, true)
+         .optionalEnd()
+         .toFormatter(Locale.ROOT);
+ 
+-    // this supports milliseconds ending in dot
+-    private static final DateTimeFormatter MILLISECONDS_FORMATTER2 = new DateTimeFormatterBuilder().optionalStart()
+-        .appendText(NEGATIVE_SIGN_FIELD, Map.of(-1L, "-")) // field is only created in the presence of a '-' char.
+-        .optionalEnd()
+-        .appendValue(UNSIGNED_MILLIS, 1, 19, SignStyle.NOT_NEGATIVE)
+-        .appendLiteral('.')
++    // this supports milliseconds
++    public static final DateTimeFormatter MILLISECONDS_PARSER_W_NANOS = new DateTimeFormatterBuilder().append(MILLISECONDS_FORMATTER_BASE)
++        .appendFraction(NANOS_OF_MILLI, 0, 6, true)
+         .toFormatter(Locale.ROOT);
+ 
+-    static final DateFormatter SECONDS_FORMATTER = new JavaDateFormatter(
+-        "epoch_second",
+-        new JavaTimeDateTimePrinter(SECONDS_FORMATTER1),
+-        JavaTimeDateTimeParser.createRoundUpParserGenerator(builder -> builder.parseDefaulting(ChronoField.NANO_OF_SECOND, 999_999_999L)),
+-        new JavaTimeDateTimeParser(SECONDS_FORMATTER1),
+-        new JavaTimeDateTimeParser(SECONDS_FORMATTER2)
+-    );
++    // we need an additional parser to detect the difference between user provided nanos and defaulted ones because of the necessity
++    // to parse the two differently in the round up case
++    public static final DateTimeFormatter MILLISECONDS_PARSER_WO_NANOS = new DateTimeFormatterBuilder().append(MILLISECONDS_FORMATTER_BASE)
++        .toFormatter(Locale.ROOT);
+ 
++    // we need an additional parser to detect the difference between user provided nanos and defaulted ones because of the necessity
++    // to parse the two differently in the round up case
++    public static final DateTimeFormatter MILLISECONDS_PARSER_WO_NANOS_ROUNDING = new DateTimeFormatterBuilder().append(
++        MILLISECONDS_FORMATTER_BASE
++    ).parseDefaulting(EpochTime.ROUNDED_SIGN_FIELD, -2L).parseDefaulting(EpochTime.NANOS_OF_MILLI, 999_999L).toFormatter(Locale.ROOT);
++
++    // this supports milliseconds ending in dot
++    private static final DateTimeFormatter MILLISECONDS_PARSER_ENDING_IN_PERIOD = new DateTimeFormatterBuilder().append(
++        MILLISECONDS_FORMATTER_BASE
++    ).appendLiteral('.').toFormatter(Locale.ROOT);
++
++    /*
++    We separately handle the rounded and non-rounded uses cases here with different parsers.  The reason is because of how we store and
++    handle negative milliseconds since the epoch.  If a user supplies nanoseconds as part of a negative millisecond since epoch value
++    then we need to round toward negative infinity.  However, in the case where nanos are not supplied, and we are requested to
++    round up we will default the value of nanos to 999_999 and need to delineate that this rounding was intended to push the value
++    toward positive infinity not negative infinity.  Differentiating these two cases during parsing requires a flag called out above
++    the ROUNDED_SIGN_FIELD flag.  In addition to this flag we need to know that we are in the "rounding up" state.  So any time we are
++    asked to round up we will force setting the ROUNDED_SIGN_FIELD flag and be able to detect that when parsing and
++    storing the time information and be able to make the correct decision to round toward positive infinity.
++     */
+     static final DateFormatter MILLIS_FORMATTER = new JavaDateFormatter(
+         "epoch_millis",
+-        new JavaTimeDateTimePrinter(MILLISECONDS_FORMATTER1),
+-        JavaTimeDateTimeParser.createRoundUpParserGenerator(builder -> builder.parseDefaulting(EpochTime.NANOS_OF_MILLI, 999_999L)),
+-        new JavaTimeDateTimeParser(MILLISECONDS_FORMATTER1),
+-        new JavaTimeDateTimeParser(MILLISECONDS_FORMATTER2)
++        new JavaTimeDateTimePrinter(MILLISECONDS_FORMATTER),
++        new JavaTimeDateTimeParser[] {
++            new JavaTimeDateTimeParser(MILLISECONDS_PARSER_WO_NANOS_ROUNDING),
++            new JavaTimeDateTimeParser(MILLISECONDS_PARSER_W_NANOS),
++            new JavaTimeDateTimeParser(MILLISECONDS_PARSER_ENDING_IN_PERIOD) },
++        new JavaTimeDateTimeParser[] {
++            new JavaTimeDateTimeParser(MILLISECONDS_PARSER_WO_NANOS),
++            new JavaTimeDateTimeParser(MILLISECONDS_PARSER_W_NANOS),
++            new JavaTimeDateTimeParser(MILLISECONDS_PARSER_ENDING_IN_PERIOD) }
+     );
+ 
+     private abstract static class EpochField implements TemporalField {
+diff --git a/server/src/main/java/org/elasticsearch/common/time/JavaDateFormatter.java b/server/src/main/java/org/elasticsearch/common/time/JavaDateFormatter.java
+index ae484569573..434db8254e0 100644
+--- a/server/src/main/java/org/elasticsearch/common/time/JavaDateFormatter.java
++++ b/server/src/main/java/org/elasticsearch/common/time/JavaDateFormatter.java
+@@ -165,11 +165,40 @@ class JavaDateFormatter implements DateFormatter {
+             input,
+             printer,
+             roundUpParsers.stream().flatMap(Arrays::stream).toArray(DateTimeParser[]::new),
+-            parsers.stream().flatMap(Arrays::stream).toArray(DateTimeParser[]::new)
++            parsers.stream().flatMap(Arrays::stream).toArray(DateTimeParser[]::new),
++            false
+         );
+     }
+ 
+-    private JavaDateFormatter(String format, DateTimePrinter printer, DateTimeParser[] roundupParsers, DateTimeParser[] parsers) {
++    JavaDateFormatter(String format, DateTimePrinter printer, DateTimeParser[] roundupParsers, DateTimeParser[] parsers) {
++        this(
++            format,
++            printer,
++            Arrays.copyOf(roundupParsers, roundupParsers.length, DateTimeParser[].class),
++            Arrays.copyOf(parsers, parsers.length, DateTimeParser[].class),
++            true
++        );
++    }
++
++    private JavaDateFormatter(
++        String format,
++        DateTimePrinter printer,
++        DateTimeParser[] roundupParsers,
++        DateTimeParser[] parsers,
++        boolean doValidate
++    ) {
++        if (doValidate) {
++            if (format.contains("||")) {
++                throw new IllegalArgumentException("This class cannot handle multiple format specifiers");
++            }
++            if (printer == null) {
++                throw new IllegalArgumentException("printer may not be null");
++            }
++            if (parsers.length == 0) {
++                throw new IllegalArgumentException("parsers need to be specified");
++            }
++            verifyPrinterParsers(printer, parsers);
++        }
+         this.format = format;
+         this.printer = printer;
+         this.roundupParsers = roundupParsers;
+@@ -247,7 +276,8 @@ class JavaDateFormatter implements DateFormatter {
+             format,
+             printerMapping.apply(printer),
+             mapParsers(parserMapping, this.roundupParsers),
+-            mapParsers(parserMapping, this.parsers)
++            mapParsers(parserMapping, this.parsers),
++            false
+         );
+     }
+ 
+diff --git a/server/src/test/java/org/elasticsearch/common/time/DateFormattersTests.java b/server/src/test/java/org/elasticsearch/common/time/DateFormattersTests.java
+index ca1ef6cba91..b320d194959 100644
+--- a/server/src/test/java/org/elasticsearch/common/time/DateFormattersTests.java
++++ b/server/src/test/java/org/elasticsearch/common/time/DateFormattersTests.java
+@@ -253,6 +253,21 @@ public class DateFormattersTests extends ESTestCase {
+             IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> formatter.parse("12345.0."));
+             assertThat(e.getMessage(), is("failed to parse date field [12345.0.] with format [epoch_millis]"));
+         }
++        {
++            Instant instant = Instant.from(formatter.parse("-86400000"));
++            assertThat(instant.getEpochSecond(), is(-86400L));
++            assertThat(instant.getNano(), is(0));
++            assertThat(formatter.format(instant), is("-86400000"));
++            assertThat(Instant.from(formatter.parse(formatter.format(instant))), is(instant));
++        }
++        {
++            Instant instant = Instant.from(formatter.parse("-86400000.999999"));
++            assertThat(instant.getEpochSecond(), is(-86401L));
++            assertThat(instant.getNano(), is(999000001));
++            assertThat(formatter.format(instant), is("-86400000.999999"));
++            assertThat(Instant.from(formatter.parse(formatter.format(instant))), is(instant));
++        }
++
+     }
+ 
+     /**
+diff --git a/server/src/test/java/org/elasticsearch/common/time/EpochTimeTests.java b/server/src/test/java/org/elasticsearch/common/time/EpochTimeTests.java
+new file mode 100644
+index 00000000000..59bf3958a3b
+--- /dev/null
++++ b/server/src/test/java/org/elasticsearch/common/time/EpochTimeTests.java
+@@ -0,0 +1,291 @@
++/*
++ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
++ * or more contributor license agreements. Licensed under the "Elastic License
++ * 2.0", the "GNU Affero General Public License v3.0 only", and the "Server Side
++ * Public License v 1"; you may not use this file except in compliance with, at
++ * your election, the "Elastic License 2.0", the "GNU Affero General Public
++ * License v3.0 only", or the "Server Side Public License, v 1".
++ */
++
++package org.elasticsearch.common.time;
++
++import org.elasticsearch.ElasticsearchParseException;
++import org.elasticsearch.test.ESTestCase;
++
++import java.time.Instant;
++import java.time.ZoneId;
++import java.util.function.LongSupplier;
++
++import static org.elasticsearch.common.time.EpochTime.MILLIS_FORMATTER;
++import static org.hamcrest.Matchers.is;
++
++public class EpochTimeTests extends ESTestCase {
++
++    public void testNegativeEpochMillis() {
++        DateFormatter formatter = MILLIS_FORMATTER;
++
++        // validate that negative epoch millis around rounded appropriately by the parser
++        LongSupplier supplier = () -> 0L;
++        {
++            Instant instant = formatter.toDateMathParser().parse("0", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("0", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("1", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.001999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-1", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("1", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.001Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-1", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("0.999999", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0.999999", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999000001Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("0.999999", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0.999999", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999000001Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("6250000430768", supplier, true, ZoneId.of("UTC"));
++            assertEquals("2168-01-20T23:13:50.768999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-6250000430768", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1771-12-12T00:46:09.232999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("6250000430768", supplier, false, ZoneId.of("UTC"));
++            assertEquals("2168-01-20T23:13:50.768Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-6250000430768", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1771-12-12T00:46:09.232Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("0.123450", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000123450Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0.123450", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999876550Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("0.123450", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000123450Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0.123450", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999876550Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("0.123456", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000123456Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0.123456", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999876544Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("0.123456", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000123456Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0.123456", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999876544Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("86400000", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-02T00:00:00.000999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-86400000", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T00:00:00.000999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("86400000", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-02T00:00:00Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-86400000", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T00:00:00Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("86400000.999999", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-02T00:00:00.000999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-86400000.999999", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-30T23:59:59.999000001Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("86400000.999999", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-02T00:00:00.000999999Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-86400000.999999", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-30T23:59:59.999000001Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("200.89", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.200890Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-200.89", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.799110Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("200.89", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.200890Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-200.89", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.799110Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("200.", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.200Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-200.", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.800Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("200.", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.200Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-200.", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.800Z", instant.toString());
++        }
++
++        {
++            Instant instant = formatter.toDateMathParser().parse("0.200", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000200Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0.200", supplier, true, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999800Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("0.200", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1970-01-01T00:00:00.000200Z", instant.toString());
++        }
++        {
++            Instant instant = formatter.toDateMathParser().parse("-0.200", supplier, false, ZoneId.of("UTC"));
++            assertEquals("1969-12-31T23:59:59.999800Z", instant.toString());
++        }
++
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse(".200", supplier, true, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [.200] with format [epoch_millis]"));
++        }
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse("-.200", supplier, true, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [-.200] with format [epoch_millis]"));
++        }
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse(".200", supplier, false, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [.200] with format [epoch_millis]"));
++        }
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse("-.200", supplier, false, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [-.200] with format [epoch_millis]"));
++        }
++
++        // tilda was included in the parsers at one point for delineating negative and positive infinity rounding and we want to
++        // ensure it doesn't show up unexpectedly in the parser with its original "~" value
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse("~-0.200", supplier, false, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [~-0.200] with format [epoch_millis]"));
++        }
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse("~0.200", supplier, false, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [~0.200] with format [epoch_millis]"));
++        }
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse("~-1", supplier, false, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [~-1] with format [epoch_millis]"));
++        }
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse("~1", supplier, false, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [~1] with format [epoch_millis]"));
++        }
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse("~-1.", supplier, false, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [~-1.] with format [epoch_millis]"));
++        }
++        {
++            ElasticsearchParseException e = expectThrows(
++                ElasticsearchParseException.class,
++                () -> formatter.toDateMathParser().parse("~1.", supplier, false, ZoneId.of("UTC"))
++            );
++            assertThat(e.getMessage().split(":")[0], is("failed to parse date field [~1.] with format [epoch_millis]"));
++        }
++    }
++
++}

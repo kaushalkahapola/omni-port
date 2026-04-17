@@ -1,0 +1,19 @@
+diff --git a/x-pack/plugin/esql-core/src/main/java/org/elasticsearch/xpack/esql/core/type/InvalidMappedField.java b/x-pack/plugin/esql-core/src/main/java/org/elasticsearch/xpack/esql/core/type/InvalidMappedField.java
+index 9b3d7950c2a..8b15893f8a0 100644
+--- a/x-pack/plugin/esql-core/src/main/java/org/elasticsearch/xpack/esql/core/type/InvalidMappedField.java
++++ b/x-pack/plugin/esql-core/src/main/java/org/elasticsearch/xpack/esql/core/type/InvalidMappedField.java
+@@ -130,7 +130,13 @@ public class InvalidMappedField extends EsField {
+             errorMessage.append("[");
+             errorMessage.append(e.getKey());
+             errorMessage.append("] in ");
+-            errorMessage.append(e.getValue());
++            if (e.getValue().size() <= 3) {
++                errorMessage.append(e.getValue());
++            } else {
++                errorMessage.append(e.getValue().stream().sorted().limit(3).collect(Collectors.toList()));
++                errorMessage.append(" and [" + (e.getValue().size() - 3) + "] other ");
++                errorMessage.append(e.getValue().size() == 4 ? "index" : "indices");
++            }
+         }
+         return errorMessage.toString();
+     }

@@ -1,0 +1,45 @@
+diff --git a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java
+index 84091a40fb2..5380e23c462 100644
+--- a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java
++++ b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/deprecation/DeprecatedIndexPredicate.java
+@@ -49,10 +49,15 @@ public class DeprecatedIndexPredicate {
+      */
+     public static boolean reindexRequired(IndexMetadata indexMetadata, boolean filterToBlockedStatus) {
+         return creationVersionBeforeMinimumWritableVersion(indexMetadata)
++            && isNotSystem(indexMetadata)
+             && isNotSearchableSnapshot(indexMetadata)
+             && matchBlockedStatus(indexMetadata, filterToBlockedStatus);
+     }
+ 
++    private static boolean isNotSystem(IndexMetadata indexMetadata) {
++        return indexMetadata.isSystem() == false;
++    }
++
+     private static boolean isNotSearchableSnapshot(IndexMetadata indexMetadata) {
+         return indexMetadata.isSearchableSnapshot() == false;
+     }
+diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecker.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecker.java
+index a67d8960e78..7f7c4d98584 100644
+--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecker.java
++++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DataStreamDeprecationChecker.java
+@@ -72,12 +72,14 @@ public class DataStreamDeprecationChecker implements ResourceDeprecationChecker
+         Map<String, List<DeprecationIssue>> dataStreamIssues = new HashMap<>();
+         for (String dataStreamName : dataStreamNames) {
+             DataStream dataStream = clusterState.metadata().dataStreams().get(dataStreamName);
+-            List<DeprecationIssue> issuesForSingleDataStream = DATA_STREAM_CHECKS.stream()
+-                .map(c -> c.apply(dataStream, clusterState))
+-                .filter(Objects::nonNull)
+-                .toList();
+-            if (issuesForSingleDataStream.isEmpty() == false) {
+-                dataStreamIssues.put(dataStreamName, issuesForSingleDataStream);
++            if (dataStream.isSystem() == false) {
++                List<DeprecationIssue> issuesForSingleDataStream = DATA_STREAM_CHECKS.stream()
++                    .map(c -> c.apply(dataStream, clusterState))
++                    .filter(Objects::nonNull)
++                    .toList();
++                if (issuesForSingleDataStream.isEmpty() == false) {
++                    dataStreamIssues.put(dataStreamName, issuesForSingleDataStream);
++                }
+             }
+         }
+         return dataStreamIssues.isEmpty() ? Map.of() : dataStreamIssues;

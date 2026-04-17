@@ -1,0 +1,79 @@
+commit 8fa2c2c3c1454d411b1b029f8e83debf02c9bf11
+Author: Kim Sumin <ksoomin25@gmail.com>
+Date:   Wed Nov 12 14:55:35 2025 +0900
+
+    okhttp: Fix bidirectional keep-alive causing spurious GO_AWAY
+    
+    When bidirectional keep-alive is enabled (both client and server
+    sending keep-alive pings), the server incorrectly validates ping
+    acknowledgments (ACKs) sent in response to server-initiated pings.
+    This causes the KeepAliveEnforcer strike counter to increment for
+    legitimate protocol responses, eventually triggering a GO_AWAY with
+    ENHANCE_YOUR_CALM.
+    
+    Move the keepAliveEnforcer.pingAcceptable() check inside the !ack
+    conditional block, so only client-initiated ping requests are
+    validated. Ping ACKs now bypass enforcement entirely, enabling
+    bidirectional keep-alive to work correctly.
+    
+    Fixes #12417
+
+diff --git a/okhttp/src/main/java/io/grpc/okhttp/OkHttpServerTransport.java b/okhttp/src/main/java/io/grpc/okhttp/OkHttpServerTransport.java
+index b744bca31..7d192b169 100644
+--- a/okhttp/src/main/java/io/grpc/okhttp/OkHttpServerTransport.java
++++ b/okhttp/src/main/java/io/grpc/okhttp/OkHttpServerTransport.java
+@@ -951,13 +951,13 @@ final class OkHttpServerTransport implements ServerTransport,
+ 
+     @Override
+     public void ping(boolean ack, int payload1, int payload2) {
+-      if (!keepAliveEnforcer.pingAcceptable()) {
+-        abruptShutdown(ErrorCode.ENHANCE_YOUR_CALM, "too_many_pings",
+-            Status.RESOURCE_EXHAUSTED.withDescription("Too many pings from client"), false);
+-        return;
+-      }
+       long payload = (((long) payload1) << 32) | (payload2 & 0xffffffffL);
+       if (!ack) {
++        if (!keepAliveEnforcer.pingAcceptable()) {
++          abruptShutdown(ErrorCode.ENHANCE_YOUR_CALM, "too_many_pings",
++              Status.RESOURCE_EXHAUSTED.withDescription("Too many pings from client"), false);
++          return;
++        }
+         frameLogger.logPing(OkHttpFrameLogger.Direction.INBOUND, payload);
+         synchronized (lock) {
+           frameWriter.ping(true, payload1, payload2);
+diff --git a/okhttp/src/test/java/io/grpc/okhttp/OkHttpServerTransportTest.java b/okhttp/src/test/java/io/grpc/okhttp/OkHttpServerTransportTest.java
+index 4d2744dc9..00db6e1d3 100644
+--- a/okhttp/src/test/java/io/grpc/okhttp/OkHttpServerTransportTest.java
++++ b/okhttp/src/test/java/io/grpc/okhttp/OkHttpServerTransportTest.java
+@@ -1268,6 +1268,31 @@ public class OkHttpServerTransportTest {
+         eq(ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII)));
+   }
+ 
++  @Test
++  public void keepAliveEnforcer_doesNotEnforcePingAcks() throws Exception {
++    serverBuilder.permitKeepAliveTime(1, TimeUnit.HOURS)
++        .permitKeepAliveWithoutCalls(true);
++    initTransport();
++    handshake();
++
++    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES + 2; i++) {
++      int serverPingId = 0xDEAD + i;
++      clientFrameWriter.ping(true, serverPingId, 0);
++      clientFrameWriter.flush();
++    }
++
++    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES; i++) {
++      pingPong();
++    }
++
++    pingPongId++;
++    clientFrameWriter.ping(false, pingPongId, 0);
++    clientFrameWriter.flush();
++    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
++    verify(clientFramesRead).goAway(0, ErrorCode.ENHANCE_YOUR_CALM,
++        ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII));
++  }
++
+   @Test
+   public void maxConcurrentCallsPerConnection_failsWithRst() throws Exception {
+     int maxConcurrentCallsPerConnection = 1;

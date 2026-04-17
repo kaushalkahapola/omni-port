@@ -1,0 +1,231 @@
+commit 3b1c857199ad1b3aa1c0af674dc146f8fc328fc1
+Author: Joe Gallo <joe.gallo@elastic.co>
+Date:   Fri Feb 21 11:59:02 2025 -0500
+
+    Fix geoip databases index access after system feature migration (again) (#122938) (#123162)
+
+diff --git a/docs/changelog/122938.yaml b/docs/changelog/122938.yaml
+new file mode 100644
+index 00000000000..cfb6e319c6c
+--- /dev/null
++++ b/docs/changelog/122938.yaml
+@@ -0,0 +1,5 @@
++pr: 122938
++summary: Fix geoip databases index access after system feature migration (again)
++area: Ingest Node
++type: bug
++issues: []
+diff --git a/modules/ingest-geoip/qa/full-cluster-restart/src/javaRestTest/java/org/elasticsearch/ingest/geoip/FullClusterRestartIT.java b/modules/ingest-geoip/qa/full-cluster-restart/src/javaRestTest/java/org/elasticsearch/ingest/geoip/FullClusterRestartIT.java
+index 958f20f7981..fe11ee8691f 100644
+--- a/modules/ingest-geoip/qa/full-cluster-restart/src/javaRestTest/java/org/elasticsearch/ingest/geoip/FullClusterRestartIT.java
++++ b/modules/ingest-geoip/qa/full-cluster-restart/src/javaRestTest/java/org/elasticsearch/ingest/geoip/FullClusterRestartIT.java
+@@ -121,6 +121,9 @@ public class FullClusterRestartIT extends ParameterizedFullClusterRestartTestCas
+ 
+             // as should a normal get *
+             assertBusy(() -> testGetStar(List.of("my-index-00001"), List.of()));
++
++            // and getting data streams
++            assertBusy(() -> testGetDatastreams());
+         } else {
+             // after the upgrade, but before the migration, Kibana should work
+             assertBusy(() -> testGetStarAsKibana(List.of("my-index-00001"), maybeSecurityIndex));
+@@ -128,6 +131,9 @@ public class FullClusterRestartIT extends ParameterizedFullClusterRestartTestCas
+             // as should a normal get *
+             assertBusy(() -> testGetStar(List.of("my-index-00001"), maybeSecurityIndex));
+ 
++            // and getting data streams
++            assertBusy(() -> testGetDatastreams());
++
+             // migrate the system features and give the cluster a moment to settle
+             Request migrateSystemFeatures = new Request("POST", "/_migration/system_features");
+             assertOK(client().performRequest(migrateSystemFeatures));
+@@ -142,6 +148,9 @@ public class FullClusterRestartIT extends ParameterizedFullClusterRestartTestCas
+             // as should a normal get *
+             assertBusy(() -> testGetStar(List.of("my-index-00001"), maybeSecurityIndex));
+ 
++            // and getting data streams
++            assertBusy(() -> testGetDatastreams());
++
+             Request disableDownloader = new Request("PUT", "/_cluster/settings");
+             disableDownloader.setJsonEntity("""
+                 {"persistent": {"ingest.geoip.downloader.enabled": false}}
+@@ -255,4 +264,15 @@ public class FullClusterRestartIT extends ParameterizedFullClusterRestartTestCas
+         Map<String, Object> map = responseAsMap(response);
+         assertThat(map.keySet(), is(new HashSet<>(indexNames)));
+     }
++
++    private void testGetDatastreams() throws IOException {
++        Request getStar = new Request("GET", "_data_stream");
++        getStar.setOptions(
++            RequestOptions.DEFAULT.toBuilder().setWarningsHandler(WarningsHandler.PERMISSIVE) // we don't care about warnings, just errors
++        );
++        Response response = client().performRequest(getStar);
++        assertOK(response);
++
++        // note: we don't actually care about the response, just that there was one and that it didn't error out on us
++    }
+ }
+diff --git a/server/src/main/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolver.java b/server/src/main/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolver.java
+index fe7199f8332..562d2363905 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolver.java
++++ b/server/src/main/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolver.java
+@@ -14,6 +14,7 @@ import org.elasticsearch.action.support.IndicesOptions;
+ import org.elasticsearch.common.regex.Regex;
+ import org.elasticsearch.core.Nullable;
+ import org.elasticsearch.core.Tuple;
++import org.elasticsearch.index.Index;
+ import org.elasticsearch.index.IndexNotFoundException;
+ import org.elasticsearch.indices.SystemIndices.SystemIndexAccessLevel;
+ 
+@@ -158,7 +159,26 @@ public class IndexAbstractionResolver {
+             if (indexAbstraction.isSystem()) {
+                 // check if it is net new
+                 if (resolver.getNetNewSystemIndexPredicate().test(indexAbstraction.getName())) {
+-                    return isSystemIndexVisible(resolver, indexAbstraction);
++                    // don't give this code any particular credit for being *correct*. it's just trying to resolve a combination of
++                    // issues in a way that happens to *work*. there's probably a better way of writing things such that this won't
++                    // be necessary, but for the moment, it happens to be expedient to write things this way.
++
++                    // unwrap the alias and re-run the function on the write index of the alias -- that is, the alias is visible if
++                    // the concrete index that it refers to is visible
++                    Index writeIndex = indexAbstraction.getWriteIndex();
++                    if (writeIndex == null) {
++                        return false;
++                    } else {
++                        return isIndexVisible(
++                            expression,
++                            selectorString,
++                            writeIndex.getName(),
++                            indicesOptions,
++                            metadata,
++                            resolver,
++                            includeDataStreams
++                        );
++                    }
+                 }
+             }
+ 
+diff --git a/server/src/test/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolverTests.java b/server/src/test/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolverTests.java
+index de18fc32216..0f346ff0b23 100644
+--- a/server/src/test/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolverTests.java
++++ b/server/src/test/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolverTests.java
+@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
+ import java.util.function.Supplier;
+ 
+ import static org.elasticsearch.index.mapper.MapperService.SINGLE_MAPPING_NAME;
++import static org.elasticsearch.indices.SystemIndices.EXTERNAL_SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY;
+ import static org.elasticsearch.indices.SystemIndices.SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY;
+ import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
+ import static org.hamcrest.Matchers.contains;
+@@ -218,18 +219,6 @@ public class IndexAbstractionResolverTests extends ESTestCase {
+         assertThat(isIndexVisible("data-stream1", "failures"), is(true));
+     }
+ 
+-    private boolean isIndexVisible(String index, String selector) {
+-        return IndexAbstractionResolver.isIndexVisible(
+-            "*",
+-            selector,
+-            index,
+-            IndicesOptions.strictExpandHidden(),
+-            metadata,
+-            indexNameExpressionResolver,
+-            true
+-        );
+-    }
+-
+     public void testIsNetNewSystemIndexVisible() {
+         final Settings settings = Settings.builder()
+             .put("index.number_of_replicas", 0)
+@@ -271,16 +260,71 @@ public class IndexAbstractionResolverTests extends ESTestCase {
+             List.of(new SystemIndices.Feature("name", "description", List.of(fooDescriptor, barDescriptor)))
+         );
+ 
+-        final ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
+-        threadContext.putHeader(SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY, "false");
+-        indexNameExpressionResolver = new IndexNameExpressionResolver(threadContext, systemIndices);
+-        indexAbstractionResolver = new IndexAbstractionResolver(indexNameExpressionResolver);
+-
+         metadata = Metadata.builder().put(foo, true).put(barReindexed, true).put(other, true).build();
+ 
+-        assertThat(isIndexVisible("other", "*"), is(true));
+-        assertThat(isIndexVisible(".foo", "*"), is(false));
+-        assertThat(isIndexVisible(".bar", "*"), is(false));
++        // these indices options are for the GET _data_streams case
++        final IndicesOptions noHiddenNoAliases = IndicesOptions.builder()
++            .wildcardOptions(
++                IndicesOptions.WildcardOptions.builder()
++                    .matchOpen(true)
++                    .matchClosed(true)
++                    .includeHidden(false)
++                    .resolveAliases(false)
++                    .build()
++            )
++            .build();
++
++        {
++            final ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
++            threadContext.putHeader(SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY, "true");
++            indexNameExpressionResolver = new IndexNameExpressionResolver(threadContext, systemIndices);
++            indexAbstractionResolver = new IndexAbstractionResolver(indexNameExpressionResolver);
++
++            // this covers the GET * case -- with system access, you can see everything
++            assertThat(isIndexVisible("other", "*"), is(true));
++            assertThat(isIndexVisible(".foo", "*"), is(true));
++            assertThat(isIndexVisible(".bar", "*"), is(true));
++
++            // but if you don't ask for hidden and aliases, you won't see hidden indices or aliases, naturally
++            assertThat(isIndexVisible("other", "*", noHiddenNoAliases), is(true));
++            assertThat(isIndexVisible(".foo", "*", noHiddenNoAliases), is(false));
++            assertThat(isIndexVisible(".bar", "*", noHiddenNoAliases), is(false));
++        }
++
++        {
++            final ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
++            threadContext.putHeader(SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY, "false");
++            indexNameExpressionResolver = new IndexNameExpressionResolver(threadContext, systemIndices);
++            indexAbstractionResolver = new IndexAbstractionResolver(indexNameExpressionResolver);
++
++            // this covers the GET * case -- without system access, you can't see everything
++            assertThat(isIndexVisible("other", "*"), is(true));
++            assertThat(isIndexVisible(".foo", "*"), is(false));
++            assertThat(isIndexVisible(".bar", "*"), is(false));
++
++            // no difference here in the datastream case, you can't see these then, either
++            assertThat(isIndexVisible("other", "*", noHiddenNoAliases), is(true));
++            assertThat(isIndexVisible(".foo", "*", noHiddenNoAliases), is(false));
++            assertThat(isIndexVisible(".bar", "*", noHiddenNoAliases), is(false));
++        }
++
++        {
++            final ThreadContext threadContext = new ThreadContext(Settings.EMPTY);
++            threadContext.putHeader(SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY, "true");
++            threadContext.putHeader(EXTERNAL_SYSTEM_INDEX_ACCESS_CONTROL_HEADER_KEY, "some-elastic-product");
++            indexNameExpressionResolver = new IndexNameExpressionResolver(threadContext, systemIndices);
++            indexAbstractionResolver = new IndexAbstractionResolver(indexNameExpressionResolver);
++
++            // this covers the GET * case -- with product (only) access, you can't see everything
++            assertThat(isIndexVisible("other", "*"), is(true));
++            assertThat(isIndexVisible(".foo", "*"), is(false));
++            assertThat(isIndexVisible(".bar", "*"), is(false));
++
++            // no difference here in the datastream case, you can't see these then, either
++            assertThat(isIndexVisible("other", "*", noHiddenNoAliases), is(true));
++            assertThat(isIndexVisible(".foo", "*", noHiddenNoAliases), is(false));
++            assertThat(isIndexVisible(".bar", "*", noHiddenNoAliases), is(false));
++        }
+     }
+ 
+     private static XContentBuilder mappings() {
+@@ -308,4 +352,12 @@ public class IndexAbstractionResolverTests extends ESTestCase {
+     private List<String> resolveAbstractions(List<String> expressions, IndicesOptions indicesOptions, Supplier<Set<String>> mask) {
+         return indexAbstractionResolver.resolveIndexAbstractions(expressions, indicesOptions, metadata, mask, (idx) -> true, true);
+     }
++
++    private boolean isIndexVisible(String index, String selector) {
++        return isIndexVisible(index, selector, IndicesOptions.strictExpandHidden());
++    }
++
++    private boolean isIndexVisible(String index, String selector, IndicesOptions indicesOptions) {
++        return IndexAbstractionResolver.isIndexVisible("*", selector, index, indicesOptions, metadata, indexNameExpressionResolver, true);
++    }
+ }

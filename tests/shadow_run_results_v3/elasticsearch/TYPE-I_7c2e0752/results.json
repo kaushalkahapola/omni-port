@@ -1,0 +1,200 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "7c2e0752df1833808ed496a865f3f13b75ef150d",
+  "backport_commit": "3038a43e40f4e96f5533570a4e6f8d368fe252f5",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/openai/OpenAiStreamingProcessor.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 110,
+          "end_line": 117,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/openai/OpenAiStreamingProcessor.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 162,
+          "end_line": 182,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 12.72,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies the OpenAiStreamingProcessor.java file by changing the parsing logic to better handle unknown fields in the SSE stream. The changes involve adding a loop to skip unknown fields and adjusting the parsing flow, which is a structural change but not a deep refactor or redesign. The localization evidence shows the hunks were found via 'git_exact' with high confidence, indicating the patch applies closely to the target branch. The addition of a new test method is straightforward. Overall, the patch involves some structural adjustments and handling of new cases but no major API or design changes, fitting a TYPE_II classification (whitespace/formatting drift and minor structural changes requiring fuzzy matching).",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/openai/OpenAiStreamingProcessor.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/openai/OpenAiStreamingProcessor.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/x-pack/plugin/inference/build/test-results/test/TEST-org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests#testParseOpenAiResponse": "passed",
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests#testDoneMessageIsIgnored": "passed",
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests#testInitialLlamaResponseIsIgnored": "passed",
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests#testParseWithFinish": "passed",
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests#testEmptyResultsRequestsMoreData": "passed",
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests#testParseErrorCallsOnError": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests": "passed"
+        },
+        "summary": {
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0,
+          "total": 6
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests#testInitialLlamaResponseIsIgnored"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 6,
+        "patched_total": 6,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 6
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 3206,
+    "target_patch_bytes": 5979,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.xpack.inference.external.openai.OpenAiStreamingProcessorTests#testInitialLlamaResponseIsIgnored"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 6,
+      "patched_total": 6,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

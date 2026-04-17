@@ -1,0 +1,750 @@
+commit aba25c628a52161a1d2c73c1868a437ad5dac6a2
+Author: Parker Timmins <parker.timmins@elastic.co>
+Date:   Thu Feb 13 19:14:30 2025 -0600
+
+    Add action to copy index metadata when reindexing data stream indices (#122535)
+    
+    When reindexing data stream indices, parts of the index metadata needs to be copied from the source index to destination index, so that ILM and data stream lifecycle function properly. This adds a new CopyLifecycleIndexMetadataTransportAction which copies the following metadata from a source index to a destination index:
+    - creation date setting
+    - rollover info
+    - ILM custom metadata
+
+diff --git a/server/src/main/java/org/elasticsearch/cluster/metadata/IndexMetadata.java b/server/src/main/java/org/elasticsearch/cluster/metadata/IndexMetadata.java
+index 04f9448a936..9cfc29c5217 100644
+--- a/server/src/main/java/org/elasticsearch/cluster/metadata/IndexMetadata.java
++++ b/server/src/main/java/org/elasticsearch/cluster/metadata/IndexMetadata.java
+@@ -2077,6 +2077,12 @@ public class IndexMetadata implements Diffable<IndexMetadata>, ToXContentFragmen
+             return this;
+         }
+ 
++        public Builder putRolloverInfos(Map<String, RolloverInfo> rolloverInfos) {
++            this.rolloverInfos.clear();
++            this.rolloverInfos.putAllFromMap(rolloverInfos);
++            return this;
++        }
++
+         public long version() {
+             return this.version;
+         }
+diff --git a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/user/InternalUsers.java b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/user/InternalUsers.java
+index a704b350dba..9a0b17b2236 100644
+--- a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/user/InternalUsers.java
++++ b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/user/InternalUsers.java
+@@ -207,6 +207,7 @@ public class InternalUsers {
+                         TransportDeleteIndexAction.TYPE.name(),
+                         "indices:admin/data_stream/index/reindex",
+                         "indices:admin/index/create_from_source",
++                        "indices:admin/index/copy_lifecycle_index_metadata",
+                         TransportAddIndexBlockAction.TYPE.name(),
+                         OpenIndexAction.NAME,
+                         TransportCloseIndexAction.NAME,
+diff --git a/x-pack/plugin/migrate/build.gradle b/x-pack/plugin/migrate/build.gradle
+index f179a311e0f..79626384685 100644
+--- a/x-pack/plugin/migrate/build.gradle
++++ b/x-pack/plugin/migrate/build.gradle
+@@ -17,6 +17,7 @@ dependencies {
+   compileOnly project(path: xpackModule('core'))
+   testImplementation(testArtifact(project(xpackModule('core'))))
+   testImplementation project(xpackModule('ccr'))
++  testImplementation project(xpackModule('ilm'))
+   testImplementation project(':modules:data-streams')
+   testImplementation project(path: ':modules:reindex')
+   testImplementation project(path: ':modules:ingest-common')
+diff --git a/x-pack/plugin/migrate/src/internalClusterTest/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataTransportActionIT.java b/x-pack/plugin/migrate/src/internalClusterTest/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataTransportActionIT.java
+new file mode 100644
+index 00000000000..f104b66b0e4
+--- /dev/null
++++ b/x-pack/plugin/migrate/src/internalClusterTest/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataTransportActionIT.java
+@@ -0,0 +1,290 @@
++/*
++ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
++ * or more contributor license agreements. Licensed under the Elastic License
++ * 2.0; you may not use this file except in compliance with the Elastic License
++ * 2.0.
++ */
++
++package org.elasticsearch.xpack.migrate.action;
++
++import org.elasticsearch.action.DocWriteRequest;
++import org.elasticsearch.action.admin.cluster.state.ClusterStateRequest;
++import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
++import org.elasticsearch.action.admin.indices.get.GetIndexRequest;
++import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
++import org.elasticsearch.action.admin.indices.rollover.RolloverRequest;
++import org.elasticsearch.action.admin.indices.settings.get.GetSettingsRequest;
++import org.elasticsearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
++import org.elasticsearch.action.datastreams.CreateDataStreamAction;
++import org.elasticsearch.action.index.IndexRequest;
++import org.elasticsearch.action.support.IndicesOptions;
++import org.elasticsearch.action.support.master.AcknowledgedRequest;
++import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
++import org.elasticsearch.cluster.metadata.LifecycleExecutionState;
++import org.elasticsearch.cluster.metadata.Metadata;
++import org.elasticsearch.cluster.metadata.Template;
++import org.elasticsearch.common.compress.CompressedXContent;
++import org.elasticsearch.common.settings.Settings;
++import org.elasticsearch.core.TimeValue;
++import org.elasticsearch.datastreams.DataStreamsPlugin;
++import org.elasticsearch.ingest.common.IngestCommonPlugin;
++import org.elasticsearch.plugins.Plugin;
++import org.elasticsearch.test.ESIntegTestCase;
++import org.elasticsearch.xcontent.json.JsonXContent;
++import org.elasticsearch.xpack.core.LocalStateCompositeXPackPlugin;
++import org.elasticsearch.xpack.core.ilm.LifecyclePolicy;
++import org.elasticsearch.xpack.core.ilm.LifecycleSettings;
++import org.elasticsearch.xpack.core.ilm.OperationMode;
++import org.elasticsearch.xpack.core.ilm.Phase;
++import org.elasticsearch.xpack.core.ilm.StartILMRequest;
++import org.elasticsearch.xpack.core.ilm.StopILMRequest;
++import org.elasticsearch.xpack.core.ilm.action.GetStatusAction;
++import org.elasticsearch.xpack.core.ilm.action.ILMActions;
++import org.elasticsearch.xpack.core.ilm.action.PutLifecycleRequest;
++import org.elasticsearch.xpack.ilm.IndexLifecycle;
++import org.elasticsearch.xpack.migrate.MigratePlugin;
++
++import java.util.Collection;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++import java.util.concurrent.TimeUnit;
++
++import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
++
++public class CopyLifecycleIndexMetadataTransportActionIT extends ESIntegTestCase {
++
++    @Override
++    protected Collection<Class<? extends Plugin>> nodePlugins() {
++        return List.of(
++            LocalStateCompositeXPackPlugin.class,
++            MigratePlugin.class,
++            DataStreamsPlugin.class,
++            IngestCommonPlugin.class,
++            IndexLifecycle.class
++        );
++    }
++
++    @Override
++    protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
++        return Settings.builder()
++            .put(super.nodeSettings(nodeOrdinal, otherSettings))
++            .put(LifecycleSettings.LIFECYCLE_POLL_INTERVAL, "1s")
++            // This just generates less churn and makes it easier to read the log file if needed
++            .put(LifecycleSettings.LIFECYCLE_HISTORY_INDEX_ENABLED, false)
++            .build();
++    }
++
++    public void testCreationDate() {
++        var sourceIndex = randomAlphaOfLength(20).toLowerCase(Locale.ROOT);
++        safeGet(indicesAdmin().create(new CreateIndexRequest(sourceIndex)));
++
++        // so creation date is different
++        safeSleep(2);
++
++        var destIndex = randomAlphaOfLength(20).toLowerCase(Locale.ROOT);
++        safeGet(indicesAdmin().create(new CreateIndexRequest(destIndex)));
++
++        // verify source and dest date are actually different before copying
++        var settingsResponse = indicesAdmin().getSettings(new GetSettingsRequest().indices(sourceIndex, destIndex)).actionGet();
++        var indexToSettings = settingsResponse.getIndexToSettings();
++        var sourceDate = indexToSettings.get(sourceIndex).getAsLong(IndexMetadata.SETTING_CREATION_DATE, 0L);
++        {
++            var destDate = indexToSettings.get(destIndex).getAsLong(IndexMetadata.SETTING_CREATION_DATE, 0L);
++            assertTrue(sourceDate > 0);
++            assertTrue(destDate > 0);
++            assertNotEquals(sourceDate, destDate);
++        }
++
++        // copy over the metadata
++        copyMetadata(sourceIndex, destIndex);
++
++        var destDate = indicesAdmin().getSettings(new GetSettingsRequest().indices(sourceIndex, destIndex))
++            .actionGet()
++            .getIndexToSettings()
++            .get(destIndex)
++            .getAsLong(IndexMetadata.SETTING_CREATION_DATE, 0L);
++        assertEquals(sourceDate, destDate);
++    }
++
++    public void testILMState() throws Exception {
++
++        Map<String, Phase> phases = Map.of(
++            "hot",
++            new Phase(
++                "hot",
++                TimeValue.ZERO,
++                Map.of(
++                    "rollover",
++                    new org.elasticsearch.xpack.core.ilm.RolloverAction(null, null, null, 1L, null, null, null, null, null, null)
++                )
++            )
++        );
++
++        var policyName = "my-policy";
++        LifecyclePolicy policy = new LifecyclePolicy(policyName, phases);
++        PutLifecycleRequest putLifecycleRequest = new PutLifecycleRequest(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, policy);
++        assertAcked(client().execute(ILMActions.PUT, putLifecycleRequest).actionGet());
++
++        // create data stream with a document and wait for ILM to roll it over
++        var dataStream = createDataStream(policyName);
++        createDocument(dataStream);
++        assertAcked(safeGet(client().execute(ILMActions.START, new StartILMRequest(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT))));
++        assertBusy(() -> {
++            var getIndexResponse = safeGet(indicesAdmin().getIndex(new GetIndexRequest(TEST_REQUEST_TIMEOUT).indices(dataStream)));
++            assertTrue(getIndexResponse.indices().length > 1);
++        });
++        // stop ILM so source does not change after copying metadata
++        assertAcked(safeGet(client().execute(ILMActions.STOP, new StopILMRequest(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT))));
++        assertBusy(() -> {
++            var statusResponse = safeGet(
++                client().execute(GetStatusAction.INSTANCE, new AcknowledgedRequest.Plain(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT))
++            );
++            assertEquals(OperationMode.STOPPED, statusResponse.getMode());
++        });
++
++        var getIndexResponse = safeGet(indicesAdmin().getIndex(new GetIndexRequest(TEST_REQUEST_TIMEOUT).indices(dataStream)));
++        for (var backingIndex : getIndexResponse.indices()) {
++            var destIndex = randomAlphaOfLength(20).toLowerCase(Locale.ROOT);
++            safeGet(indicesAdmin().create(new CreateIndexRequest(destIndex)));
++
++            IndexMetadata destBefore = getClusterMetadata(destIndex).index(destIndex);
++            assertNull(destBefore.getCustomData(LifecycleExecutionState.ILM_CUSTOM_METADATA_KEY));
++
++            // copy over the metadata
++            copyMetadata(backingIndex, destIndex);
++
++            var metadataAfter = getClusterMetadata(backingIndex, destIndex);
++            IndexMetadata sourceAfter = metadataAfter.index(backingIndex);
++            IndexMetadata destAfter = metadataAfter.index(destIndex);
++            assertNotNull(destAfter.getCustomData(LifecycleExecutionState.ILM_CUSTOM_METADATA_KEY));
++            assertEquals(
++                sourceAfter.getCustomData(LifecycleExecutionState.ILM_CUSTOM_METADATA_KEY),
++                destAfter.getCustomData(LifecycleExecutionState.ILM_CUSTOM_METADATA_KEY)
++            );
++
++        }
++    }
++
++    public void testRolloverInfos() throws Exception {
++        var dataStream = createDataStream(null);
++
++        // rollover a few times
++        createDocument(dataStream);
++        rollover(dataStream);
++        createDocument(dataStream);
++        rollover(dataStream);
++        createDocument(dataStream);
++        var writeIndex = rollover(dataStream);
++
++        var getIndexResponse = safeGet(indicesAdmin().getIndex(new GetIndexRequest(TEST_REQUEST_TIMEOUT).indices(dataStream)));
++        for (var backingIndex : getIndexResponse.indices()) {
++
++            var destIndex = randomAlphaOfLength(20).toLowerCase(Locale.ROOT);
++            safeGet(indicesAdmin().create(new CreateIndexRequest(destIndex)));
++
++            var metadataBefore = getClusterMetadata(backingIndex, destIndex);
++            IndexMetadata source = metadataBefore.index(backingIndex);
++            IndexMetadata destBefore = metadataBefore.index(destIndex);
++
++            // sanity check not equal before the copy
++            if (backingIndex.equals(writeIndex)) {
++                assertTrue(source.getRolloverInfos().isEmpty());
++                assertTrue(destBefore.getRolloverInfos().isEmpty());
++            } else {
++                assertNotEquals(source.getRolloverInfos(), destBefore.getRolloverInfos());
++            }
++
++            // copy over the metadata
++            copyMetadata(backingIndex, destIndex);
++
++            // now rollover info should be equal
++            IndexMetadata destAfter = getClusterMetadata(destIndex).index(destIndex);
++            assertEquals(source.getRolloverInfos(), destAfter.getRolloverInfos());
++        }
++    }
++
++    private String createDataStream(String ilmPolicy) throws Exception {
++        String dataStreamName = randomAlphaOfLength(10).toLowerCase(Locale.getDefault());
++
++        Settings settings = ilmPolicy != null ? Settings.builder().put(IndexMetadata.LIFECYCLE_NAME, ilmPolicy).build() : null;
++
++        String mapping = """
++                {
++                    "properties": {
++                        "@timestamp": {
++                            "type":"date"
++                        },
++                        "data":{
++                            "type":"keyword"
++                        }
++                    }
++                }
++            """;
++        Template idxTemplate = new Template(settings, new CompressedXContent(mapping), null);
++
++        ComposableIndexTemplate template = ComposableIndexTemplate.builder()
++            .indexPatterns(List.of(dataStreamName + "*"))
++            .template(idxTemplate)
++            .dataStreamTemplate(new ComposableIndexTemplate.DataStreamTemplate(false, false))
++            .build();
++
++        assertAcked(
++            client().execute(
++                TransportPutComposableIndexTemplateAction.TYPE,
++                new TransportPutComposableIndexTemplateAction.Request(dataStreamName + "_template").indexTemplate(template)
++            )
++        );
++        assertAcked(
++            client().execute(
++                CreateDataStreamAction.INSTANCE,
++                new CreateDataStreamAction.Request(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, dataStreamName)
++            )
++        );
++        return dataStreamName;
++    }
++
++    private long createDocument(String dataStreamName) throws Exception {
++        // Get some randomized but reasonable timestamps on the data since not all of it is guaranteed to arrive in order.
++        long timeSeed = System.currentTimeMillis();
++        long timestamp = randomLongBetween(timeSeed - TimeUnit.HOURS.toMillis(5), timeSeed);
++        safeGet(
++            client().index(
++                new IndexRequest(dataStreamName).opType(DocWriteRequest.OpType.CREATE)
++                    .source(
++                        JsonXContent.contentBuilder()
++                            .startObject()
++                            .field("@timestamp", timestamp)
++                            .field("data", randomAlphaOfLength(25))
++                            .endObject()
++                    )
++            )
++        );
++        safeGet(
++            indicesAdmin().refresh(
++                new RefreshRequest(".ds-" + dataStreamName + "*").indicesOptions(IndicesOptions.lenientExpandOpenHidden())
++            )
++        );
++        return timestamp;
++    }
++
++    private void copyMetadata(String sourceIndex, String destIndex) {
++        assertAcked(
++            client().execute(
++                CopyLifecycleIndexMetadataAction.INSTANCE,
++                new CopyLifecycleIndexMetadataAction.Request(TEST_REQUEST_TIMEOUT, sourceIndex, destIndex)
++            )
++        );
++    }
++
++    private String rollover(String dataStream) {
++        var rolloverResponse = safeGet(indicesAdmin().rolloverIndex(new RolloverRequest(dataStream, null)));
++        assertTrue(rolloverResponse.isAcknowledged());
++        return rolloverResponse.getNewIndex();
++    }
++
++    private Metadata getClusterMetadata(String... indices) {
++        return safeGet(clusterAdmin().state(new ClusterStateRequest(TEST_REQUEST_TIMEOUT).indices(indices))).getState().metadata();
++    }
++}
+diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/MigratePlugin.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/MigratePlugin.java
+index 7811e84ac9f..0c2f7e56129 100644
+--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/MigratePlugin.java
++++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/MigratePlugin.java
+@@ -36,6 +36,8 @@ import org.elasticsearch.xcontent.NamedXContentRegistry;
+ import org.elasticsearch.xcontent.ParseField;
+ import org.elasticsearch.xpack.migrate.action.CancelReindexDataStreamAction;
+ import org.elasticsearch.xpack.migrate.action.CancelReindexDataStreamTransportAction;
++import org.elasticsearch.xpack.migrate.action.CopyLifecycleIndexMetadataAction;
++import org.elasticsearch.xpack.migrate.action.CopyLifecycleIndexMetadataTransportAction;
+ import org.elasticsearch.xpack.migrate.action.CreateIndexFromSourceAction;
+ import org.elasticsearch.xpack.migrate.action.CreateIndexFromSourceTransportAction;
+ import org.elasticsearch.xpack.migrate.action.GetMigrationReindexStatusAction;
+@@ -106,6 +108,7 @@ public class MigratePlugin extends Plugin implements ActionPlugin, PersistentTas
+         actions.add(new ActionHandler<>(CancelReindexDataStreamAction.INSTANCE, CancelReindexDataStreamTransportAction.class));
+         actions.add(new ActionHandler<>(ReindexDataStreamIndexAction.INSTANCE, ReindexDataStreamIndexTransportAction.class));
+         actions.add(new ActionHandler<>(CreateIndexFromSourceAction.INSTANCE, CreateIndexFromSourceTransportAction.class));
++        actions.add(new ActionHandler<>(CopyLifecycleIndexMetadataAction.INSTANCE, CopyLifecycleIndexMetadataTransportAction.class));
+         return actions;
+     }
+ 
+diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataAction.java
+new file mode 100644
+index 00000000000..d2acca1484b
+--- /dev/null
++++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataAction.java
+@@ -0,0 +1,105 @@
++/*
++ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
++ * or more contributor license agreements. Licensed under the Elastic License
++ * 2.0; you may not use this file except in compliance with the Elastic License
++ * 2.0.
++ */
++package org.elasticsearch.xpack.migrate.action;
++
++import org.elasticsearch.action.ActionRequestValidationException;
++import org.elasticsearch.action.ActionType;
++import org.elasticsearch.action.IndicesRequest;
++import org.elasticsearch.action.support.IndicesOptions;
++import org.elasticsearch.action.support.master.AcknowledgedRequest;
++import org.elasticsearch.action.support.master.AcknowledgedResponse;
++import org.elasticsearch.common.io.stream.StreamInput;
++import org.elasticsearch.common.io.stream.StreamOutput;
++import org.elasticsearch.core.TimeValue;
++import org.elasticsearch.tasks.CancellableTask;
++import org.elasticsearch.tasks.Task;
++import org.elasticsearch.tasks.TaskId;
++
++import java.io.IOException;
++import java.util.Map;
++import java.util.Objects;
++
++public class CopyLifecycleIndexMetadataAction extends ActionType<AcknowledgedResponse> {
++
++    public static final String NAME = "indices:admin/index/copy_lifecycle_index_metadata";
++
++    public static final ActionType<AcknowledgedResponse> INSTANCE = new CopyLifecycleIndexMetadataAction();
++
++    private CopyLifecycleIndexMetadataAction() {
++        super(NAME);
++    }
++
++    public static class Request extends AcknowledgedRequest<Request> implements IndicesRequest {
++        private final String sourceIndex;
++        private final String destIndex;
++
++        public Request(TimeValue masterNodeTimeout, String sourceIndex, String destIndex) {
++            super(masterNodeTimeout, DEFAULT_ACK_TIMEOUT);
++            this.sourceIndex = sourceIndex;
++            this.destIndex = destIndex;
++        }
++
++        public Request(StreamInput in) throws IOException {
++            super(in);
++            this.sourceIndex = in.readString();
++            this.destIndex = in.readString();
++        }
++
++        @Override
++        public void writeTo(StreamOutput out) throws IOException {
++            super.writeTo(out);
++            out.writeString(sourceIndex);
++            out.writeString(destIndex);
++        }
++
++        @Override
++        public ActionRequestValidationException validate() {
++            return null;
++        }
++
++        public String sourceIndex() {
++            return sourceIndex;
++        }
++
++        public String destIndex() {
++            return destIndex;
++        }
++
++        @Override
++        public boolean equals(Object o) {
++            if (this == o) return true;
++            if (o == null || getClass() != o.getClass()) return false;
++            Request request = (Request) o;
++            return Objects.equals(sourceIndex, request.sourceIndex) && Objects.equals(destIndex, request.destIndex);
++        }
++
++        @Override
++        public int hashCode() {
++            return Objects.hash(sourceIndex, destIndex);
++        }
++
++        @Override
++        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
++            return new CancellableTask(id, type, action, getDescription(), parentTaskId, headers);
++        }
++
++        @Override
++        public String getDescription() {
++            return "copying lifecycle metadata for index " + sourceIndex;
++        }
++
++        @Override
++        public String[] indices() {
++            return new String[] { sourceIndex, destIndex };
++        }
++
++        @Override
++        public IndicesOptions indicesOptions() {
++            return IndicesOptions.strictSingleIndexNoExpandForbidClosed();
++        }
++    }
++}
+diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataTransportAction.java
+new file mode 100644
+index 00000000000..ef263fdda2d
+--- /dev/null
++++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/CopyLifecycleIndexMetadataTransportAction.java
+@@ -0,0 +1,133 @@
++/*
++ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
++ * or more contributor license agreements. Licensed under the Elastic License
++ * 2.0; you may not use this file except in compliance with the Elastic License
++ * 2.0.
++ */
++
++package org.elasticsearch.xpack.migrate.action;
++
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.elasticsearch.action.ActionListener;
++import org.elasticsearch.action.support.ActionFilters;
++import org.elasticsearch.action.support.master.AcknowledgedResponse;
++import org.elasticsearch.action.support.master.TransportMasterNodeAction;
++import org.elasticsearch.cluster.AckedBatchedClusterStateUpdateTask;
++import org.elasticsearch.cluster.ClusterState;
++import org.elasticsearch.cluster.ClusterStateAckListener;
++import org.elasticsearch.cluster.ClusterStateTaskExecutor;
++import org.elasticsearch.cluster.SimpleBatchedAckListenerTaskExecutor;
++import org.elasticsearch.cluster.block.ClusterBlockException;
++import org.elasticsearch.cluster.block.ClusterBlockLevel;
++import org.elasticsearch.cluster.metadata.IndexMetadata;
++import org.elasticsearch.cluster.metadata.LifecycleExecutionState;
++import org.elasticsearch.cluster.metadata.Metadata;
++import org.elasticsearch.cluster.service.ClusterService;
++import org.elasticsearch.cluster.service.MasterServiceTaskQueue;
++import org.elasticsearch.common.Priority;
++import org.elasticsearch.common.util.concurrent.EsExecutors;
++import org.elasticsearch.core.TimeValue;
++import org.elasticsearch.core.Tuple;
++import org.elasticsearch.index.IndexNotFoundException;
++import org.elasticsearch.injection.guice.Inject;
++import org.elasticsearch.tasks.Task;
++import org.elasticsearch.threadpool.ThreadPool;
++import org.elasticsearch.transport.TransportService;
++
++import java.util.HashMap;
++
++public class CopyLifecycleIndexMetadataTransportAction extends TransportMasterNodeAction<
++    CopyLifecycleIndexMetadataAction.Request,
++    AcknowledgedResponse> {
++    private static final Logger logger = LogManager.getLogger(CopyLifecycleIndexMetadataTransportAction.class);
++    private final ClusterStateTaskExecutor<UpdateIndexMetadataTask> executor;
++    private final MasterServiceTaskQueue<UpdateIndexMetadataTask> taskQueue;
++
++    @Inject
++    public CopyLifecycleIndexMetadataTransportAction(
++        TransportService transportService,
++        ClusterService clusterService,
++        ThreadPool threadPool,
++        ActionFilters actionFilters
++    ) {
++        super(
++            CopyLifecycleIndexMetadataAction.NAME,
++            transportService,
++            clusterService,
++            threadPool,
++            actionFilters,
++            CopyLifecycleIndexMetadataAction.Request::new,
++            AcknowledgedResponse::readFrom,
++            EsExecutors.DIRECT_EXECUTOR_SERVICE
++        );
++        this.executor = new SimpleBatchedAckListenerTaskExecutor<>() {
++            @Override
++            public Tuple<ClusterState, ClusterStateAckListener> executeTask(UpdateIndexMetadataTask task, ClusterState clusterState) {
++                return new Tuple<>(applyUpdate(clusterState, task), task);
++            }
++        };
++        this.taskQueue = clusterService.createTaskQueue("migrate-copy-index-metadata", Priority.NORMAL, this.executor);
++    }
++
++    @Override
++    protected void masterOperation(
++        Task task,
++        CopyLifecycleIndexMetadataAction.Request request,
++        ClusterState state,
++        ActionListener<AcknowledgedResponse> listener
++    ) {
++        taskQueue.submitTask(
++            "migrate-copy-index-metadata",
++            new UpdateIndexMetadataTask(request.sourceIndex(), request.destIndex(), request.ackTimeout(), listener),
++            request.masterNodeTimeout()
++        );
++    }
++
++    @Override
++    protected ClusterBlockException checkBlock(CopyLifecycleIndexMetadataAction.Request request, ClusterState state) {
++        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
++    }
++
++    private static ClusterState applyUpdate(ClusterState state, UpdateIndexMetadataTask updateTask) {
++
++        IndexMetadata sourceMetadata = state.metadata().index(updateTask.sourceIndex);
++        if (sourceMetadata == null) {
++            throw new IndexNotFoundException(updateTask.sourceIndex);
++        }
++        IndexMetadata destMetadata = state.metadata().index(updateTask.destIndex);
++        if (destMetadata == null) {
++            throw new IndexNotFoundException(updateTask.destIndex);
++        }
++
++        IndexMetadata.Builder newDestMetadata = IndexMetadata.builder(destMetadata);
++
++        var sourceILM = sourceMetadata.getCustomData(LifecycleExecutionState.ILM_CUSTOM_METADATA_KEY);
++        if (sourceILM != null) {
++            newDestMetadata.putCustom(LifecycleExecutionState.ILM_CUSTOM_METADATA_KEY, sourceILM);
++        }
++
++        newDestMetadata.putRolloverInfos(sourceMetadata.getRolloverInfos())
++            // creation date is required for ILM to function
++            .creationDate(sourceMetadata.getCreationDate())
++            // creation date updates settings so must increment settings version
++            .settingsVersion(destMetadata.getSettingsVersion() + 1);
++
++        var indices = new HashMap<>(state.metadata().indices());
++        indices.put(updateTask.destIndex, newDestMetadata.build());
++
++        Metadata newMetadata = Metadata.builder(state.metadata()).indices(indices).build();
++        return ClusterState.builder(state).metadata(newMetadata).build();
++    }
++
++    static class UpdateIndexMetadataTask extends AckedBatchedClusterStateUpdateTask {
++        private final String sourceIndex;
++        private final String destIndex;
++
++        UpdateIndexMetadataTask(String sourceIndex, String destIndex, TimeValue ackTimeout, ActionListener<AcknowledgedResponse> listener) {
++            super(ackTimeout, listener);
++            this.sourceIndex = sourceIndex;
++            this.destIndex = destIndex;
++        }
++    }
++}
+diff --git a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
+index 792ec4ec2b6..31fdcbe074c 100644
+--- a/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
++++ b/x-pack/plugin/migrate/src/main/java/org/elasticsearch/xpack/migrate/action/ReindexDataStreamIndexTransportAction.java
+@@ -163,6 +163,7 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+             .<AcknowledgedResponse>andThen(l -> createIndex(sourceIndex, destIndexName, l, taskId))
+             .<BulkByScrollResponse>andThen(l -> reindex(sourceIndexName, destIndexName, l, taskId))
+             .<AcknowledgedResponse>andThen(l -> copyOldSourceSettingsToDest(settingsBefore, destIndexName, l, taskId))
++            .<AcknowledgedResponse>andThen(l -> copyIndexMetadataToDest(sourceIndexName, destIndexName, l, taskId))
+             .<AcknowledgedResponse>andThen(l -> sanityCheck(sourceIndexName, destIndexName, l, taskId))
+             .<CloseIndexResponse>andThen(l -> closeIndexIfWasClosed(destIndexName, wasClosed, l, taskId))
+             .andThenApply(ignored -> new ReindexDataStreamIndexAction.Response(destIndexName))
+@@ -334,6 +335,24 @@ public class ReindexDataStreamIndexTransportAction extends HandledTransportActio
+         updateSettings(destIndexName, settings, listener, parentTaskId);
+     }
+ 
++    private void copyIndexMetadataToDest(
++        String sourceIndexName,
++        String destIndexName,
++        ActionListener<AcknowledgedResponse> listener,
++        TaskId parentTaskId
++    ) {
++        logger.debug("Copying index metadata to destination index [{}] from source index [{}]", destIndexName, sourceIndexName);
++        var request = new CopyLifecycleIndexMetadataAction.Request(TimeValue.MAX_VALUE, sourceIndexName, destIndexName);
++        request.setParentTask(parentTaskId);
++        var errorMessage = String.format(
++            Locale.ROOT,
++            "Failed to acknowledge copying index metadata from source [%s] to dest [%s]",
++            sourceIndexName,
++            destIndexName
++        );
++        client.execute(CopyLifecycleIndexMetadataAction.INSTANCE, request, failIfNotAcknowledged(listener, errorMessage));
++    }
++
+     private static void copySettingOrUnset(Settings settingsBefore, Settings.Builder builder, String setting) {
+         // if setting was explicitly added to the source index
+         if (settingsBefore.get(setting) != null) {
+diff --git a/x-pack/plugin/security/qa/operator-privileges-tests/src/javaRestTest/java/org/elasticsearch/xpack/security/operator/Constants.java b/x-pack/plugin/security/qa/operator-privileges-tests/src/javaRestTest/java/org/elasticsearch/xpack/security/operator/Constants.java
+index 7e571b6db2f..6ea522a4276 100644
+--- a/x-pack/plugin/security/qa/operator-privileges-tests/src/javaRestTest/java/org/elasticsearch/xpack/security/operator/Constants.java
++++ b/x-pack/plugin/security/qa/operator-privileges-tests/src/javaRestTest/java/org/elasticsearch/xpack/security/operator/Constants.java
+@@ -8,7 +8,6 @@
+ package org.elasticsearch.xpack.security.operator;
+ 
+ import org.elasticsearch.cluster.metadata.DataStream;
+-import org.elasticsearch.common.util.FeatureFlag;
+ 
+ import java.util.Objects;
+ import java.util.Set;
+@@ -638,11 +637,12 @@ public class Constants {
+         "internal:gateway/local/started_shards",
+         "internal:admin/indices/prevalidate_shard_path",
+         "internal:index/metadata/migration_version/update",
+-        new FeatureFlag("reindex_data_stream").isEnabled() ? "indices:admin/migration/reindex_status" : null,
+-        new FeatureFlag("reindex_data_stream").isEnabled() ? "indices:admin/data_stream/index/reindex" : null,
+-        new FeatureFlag("reindex_data_stream").isEnabled() ? "indices:admin/data_stream/reindex" : null,
+-        new FeatureFlag("reindex_data_stream").isEnabled() ? "indices:admin/data_stream/reindex_cancel" : null,
+-        new FeatureFlag("reindex_data_stream").isEnabled() ? "indices:admin/index/create_from_source" : null,
++        "indices:admin/migration/reindex_status",
++        "indices:admin/data_stream/index/reindex",
++        "indices:admin/data_stream/reindex",
++        "indices:admin/data_stream/reindex_cancel",
++        "indices:admin/index/create_from_source",
++        "indices:admin/index/copy_lifecycle_index_metadata",
+         "internal:admin/repository/verify",
+         "internal:admin/repository/verify/coordinate"
+     ).filter(Objects::nonNull).collect(Collectors.toUnmodifiableSet());
+diff --git a/x-pack/qa/rolling-upgrade/src/test/java/org/elasticsearch/upgrades/DataStreamsUpgradeIT.java b/x-pack/qa/rolling-upgrade/src/test/java/org/elasticsearch/upgrades/DataStreamsUpgradeIT.java
+index ca5fdf94e28..a156e571b6c 100644
+--- a/x-pack/qa/rolling-upgrade/src/test/java/org/elasticsearch/upgrades/DataStreamsUpgradeIT.java
++++ b/x-pack/qa/rolling-upgrade/src/test/java/org/elasticsearch/upgrades/DataStreamsUpgradeIT.java
+@@ -209,6 +209,7 @@ public class DataStreamsUpgradeIT extends AbstractUpgradeTestCase {
+         Map<String, Map<String, Object>> oldIndicesMetadata,
+         Map<String, Map<String, Object>> upgradedIndicesMetadata
+     ) {
++        String oldWriteIndex = getWriteIndexFromDataStreamIndexMetadata(oldIndicesMetadata);
+         for (Map.Entry<String, Map<String, Object>> upgradedIndexEntry : upgradedIndicesMetadata.entrySet()) {
+             String upgradedIndexName = upgradedIndexEntry.getKey();
+             if (upgradedIndexName.startsWith(".migrated-")) {
+@@ -217,18 +218,35 @@ public class DataStreamsUpgradeIT extends AbstractUpgradeTestCase {
+                 Map<String, Object> upgradedIndexMetadata = upgradedIndexEntry.getValue();
+                 compareSettings(oldIndexMetadata, upgradedIndexMetadata);
+                 assertThat("Mappings did not match", upgradedIndexMetadata.get("mappings"), equalTo(oldIndexMetadata.get("mappings")));
+-                // TODO: Uncomment the following two checks once we are correctly copying this state over:
+-                // assertThat("ILM states did not match", upgradedIndexMetadata.get("ilm"), equalTo(oldIndexMetadata.get("ilm")));
+-                // assertThat(
+-                // "Rollover info did not match",
+-                // upgradedIndexMetadata.get("rollover_info"),
+-                // equalTo(oldIndexMetadata.get("rollover_info"))
+-                // );
++                assertThat("ILM states did not match", upgradedIndexMetadata.get("ilm"), equalTo(oldIndexMetadata.get("ilm")));
++                if (oldIndexName.equals(oldWriteIndex) == false) { // the old write index will have been rolled over by upgrade
++                    assertThat(
++                        "Rollover info did not match",
++                        upgradedIndexMetadata.get("rollover_info"),
++                        equalTo(oldIndexMetadata.get("rollover_info"))
++                    );
++                }
+                 assertThat(upgradedIndexMetadata.get("system"), equalTo(oldIndexMetadata.get("system")));
+             }
+         }
+     }
+ 
++    private String getWriteIndexFromDataStreamIndexMetadata(Map<String, Map<String, Object>> indexMetadataForDataStream) {
++        return indexMetadataForDataStream.entrySet()
++            .stream()
++            .sorted((o1, o2) -> Long.compare(getCreationDate(o2.getValue()), getCreationDate(o1.getValue())))
++            .map(Map.Entry::getKey)
++            .findFirst()
++            .get();
++    }
++
++    @SuppressWarnings("unchecked")
++    long getCreationDate(Map<String, Object> indexMetadata) {
++        return Long.parseLong(
++            (String) ((Map<String, Map<String, Object>>) indexMetadata.get("settings")).get("index").get("creation_date")
++        );
++    }
++
+     private void compareSettings(Map<String, Object> oldIndexMetadata, Map<String, Object> upgradedIndexMetadata) {
+         Map<String, Object> oldIndexSettings = getIndexSettingsFromIndexMetadata(oldIndexMetadata);
+         Map<String, Object> upgradedIndexSettings = getIndexSettingsFromIndexMetadata(upgradedIndexMetadata);
+@@ -238,7 +256,7 @@ public class DataStreamsUpgradeIT extends AbstractUpgradeTestCase {
+             "routing",
+             "hidden",
+             "number_of_shards",
+-            // "creation_date", TODO: Uncomment this once we are correctly copying over this setting
++            "creation_date",
+             "number_of_replicas"
+         );
+         for (String setting : SETTINGS_TO_CHECK) {

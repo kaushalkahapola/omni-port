@@ -1,0 +1,1036 @@
+diff --git a/xds/src/main/java/io/grpc/xds/FaultFilter.java b/xds/src/main/java/io/grpc/xds/FaultFilter.java
+index c66861a9f..2012fd36b 100644
+--- a/xds/src/main/java/io/grpc/xds/FaultFilter.java
++++ b/xds/src/main/java/io/grpc/xds/FaultFilter.java
+@@ -45,7 +45,6 @@ import io.grpc.internal.DelayedClientCall;
+ import io.grpc.internal.GrpcUtil;
+ import io.grpc.xds.FaultConfig.FaultAbort;
+ import io.grpc.xds.FaultConfig.FaultDelay;
+-import io.grpc.xds.Filter.ClientInterceptorBuilder;
+ import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
+ import java.util.Locale;
+ import java.util.concurrent.Executor;
+@@ -56,10 +55,11 @@ import java.util.concurrent.atomic.AtomicLong;
+ import javax.annotation.Nullable;
+ 
+ /** HttpFault filter implementation. */
+-final class FaultFilter implements Filter, ClientInterceptorBuilder {
++final class FaultFilter implements Filter {
+ 
+-  static final FaultFilter INSTANCE =
++  private static final FaultFilter INSTANCE =
+       new FaultFilter(ThreadSafeRandomImpl.instance, new AtomicLong());
++
+   @VisibleForTesting
+   static final Metadata.Key<String> HEADER_DELAY_KEY =
+       Metadata.Key.of("x-envoy-fault-delay-request", Metadata.ASCII_STRING_MARSHALLER);
+@@ -87,96 +87,108 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
+     this.activeFaultCounter = activeFaultCounter;
+   }
+ 
+-  @Override
+-  public String[] typeUrls() {
+-    return new String[] { TYPE_URL };
+-  }
+-
+-  @Override
+-  public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
+-    HTTPFault httpFaultProto;
+-    if (!(rawProtoMessage instanceof Any)) {
+-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
++  static final class Provider implements Filter.Provider {
++    @Override
++    public String[] typeUrls() {
++      return new String[]{TYPE_URL};
+     }
+-    Any anyMessage = (Any) rawProtoMessage;
+-    try {
+-      httpFaultProto = anyMessage.unpack(HTTPFault.class);
+-    } catch (InvalidProtocolBufferException e) {
+-      return ConfigOrError.fromError("Invalid proto: " + e);
++
++    @Override
++    public boolean isClientFilter() {
++      return true;
+     }
+-    return parseHttpFault(httpFaultProto);
+-  }
+ 
+-  private static ConfigOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
+-    FaultDelay faultDelay = null;
+-    FaultAbort faultAbort = null;
+-    if (httpFault.hasDelay()) {
+-      faultDelay = parseFaultDelay(httpFault.getDelay());
++    @Override
++    public FaultFilter newInstance() {
++      return INSTANCE;
+     }
+-    if (httpFault.hasAbort()) {
+-      ConfigOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
+-      if (faultAbortOrError.errorDetail != null) {
+-        return ConfigOrError.fromError(
+-            "HttpFault contains invalid FaultAbort: " + faultAbortOrError.errorDetail);
++
++    @Override
++    public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
++      HTTPFault httpFaultProto;
++      if (!(rawProtoMessage instanceof Any)) {
++        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+       }
+-      faultAbort = faultAbortOrError.config;
+-    }
+-    Integer maxActiveFaults = null;
+-    if (httpFault.hasMaxActiveFaults()) {
+-      maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
+-      if (maxActiveFaults < 0) {
+-        maxActiveFaults = Integer.MAX_VALUE;
++      Any anyMessage = (Any) rawProtoMessage;
++      try {
++        httpFaultProto = anyMessage.unpack(HTTPFault.class);
++      } catch (InvalidProtocolBufferException e) {
++        return ConfigOrError.fromError("Invalid proto: " + e);
+       }
++      return parseHttpFault(httpFaultProto);
+     }
+-    return ConfigOrError.fromConfig(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
+-  }
+ 
+-  private static FaultDelay parseFaultDelay(
+-      io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
+-    FaultConfig.FractionalPercent percent = parsePercent(faultDelay.getPercentage());
+-    if (faultDelay.hasHeaderDelay()) {
+-      return FaultDelay.forHeader(percent);
++    @Override
++    public ConfigOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
++      return parseFilterConfig(rawProtoMessage);
+     }
+-    return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), percent);
+-  }
+ 
+-  @VisibleForTesting
+-  static ConfigOrError<FaultAbort> parseFaultAbort(
+-      io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
+-    FaultConfig.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
+-    switch (faultAbort.getErrorTypeCase()) {
+-      case HEADER_ABORT:
+-        return ConfigOrError.fromConfig(FaultAbort.forHeader(percent));
+-      case HTTP_STATUS:
+-        return ConfigOrError.fromConfig(FaultAbort.forStatus(
+-            GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
+-      case GRPC_STATUS:
+-        return ConfigOrError.fromConfig(FaultAbort.forStatus(
+-            Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
+-      case ERRORTYPE_NOT_SET:
+-      default:
+-        return ConfigOrError.fromError(
+-            "Unknown error type case: " + faultAbort.getErrorTypeCase());
++    private static ConfigOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
++      FaultDelay faultDelay = null;
++      FaultAbort faultAbort = null;
++      if (httpFault.hasDelay()) {
++        faultDelay = parseFaultDelay(httpFault.getDelay());
++      }
++      if (httpFault.hasAbort()) {
++        ConfigOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
++        if (faultAbortOrError.errorDetail != null) {
++          return ConfigOrError.fromError(
++              "HttpFault contains invalid FaultAbort: " + faultAbortOrError.errorDetail);
++        }
++        faultAbort = faultAbortOrError.config;
++      }
++      Integer maxActiveFaults = null;
++      if (httpFault.hasMaxActiveFaults()) {
++        maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
++        if (maxActiveFaults < 0) {
++          maxActiveFaults = Integer.MAX_VALUE;
++        }
++      }
++      return ConfigOrError.fromConfig(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
+     }
+-  }
+ 
+-  private static FaultConfig.FractionalPercent parsePercent(FractionalPercent proto) {
+-    switch (proto.getDenominator()) {
+-      case HUNDRED:
+-        return FaultConfig.FractionalPercent.perHundred(proto.getNumerator());
+-      case TEN_THOUSAND:
+-        return FaultConfig.FractionalPercent.perTenThousand(proto.getNumerator());
+-      case MILLION:
+-        return FaultConfig.FractionalPercent.perMillion(proto.getNumerator());
+-      case UNRECOGNIZED:
+-      default:
+-        throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
++    private static FaultDelay parseFaultDelay(
++        io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
++      FaultConfig.FractionalPercent percent = parsePercent(faultDelay.getPercentage());
++      if (faultDelay.hasHeaderDelay()) {
++        return FaultDelay.forHeader(percent);
++      }
++      return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), percent);
+     }
+-  }
+ 
+-  @Override
+-  public ConfigOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+-    return parseFilterConfig(rawProtoMessage);
++    @VisibleForTesting
++    static ConfigOrError<FaultAbort> parseFaultAbort(
++        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
++      FaultConfig.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
++      switch (faultAbort.getErrorTypeCase()) {
++        case HEADER_ABORT:
++          return ConfigOrError.fromConfig(FaultAbort.forHeader(percent));
++        case HTTP_STATUS:
++          return ConfigOrError.fromConfig(FaultAbort.forStatus(
++              GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
++        case GRPC_STATUS:
++          return ConfigOrError.fromConfig(FaultAbort.forStatus(
++              Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
++        case ERRORTYPE_NOT_SET:
++        default:
++          return ConfigOrError.fromError(
++              "Unknown error type case: " + faultAbort.getErrorTypeCase());
++      }
++    }
++
++    private static FaultConfig.FractionalPercent parsePercent(FractionalPercent proto) {
++      switch (proto.getDenominator()) {
++        case HUNDRED:
++          return FaultConfig.FractionalPercent.perHundred(proto.getNumerator());
++        case TEN_THOUSAND:
++          return FaultConfig.FractionalPercent.perTenThousand(proto.getNumerator());
++        case MILLION:
++          return FaultConfig.FractionalPercent.perMillion(proto.getNumerator());
++        case UNRECOGNIZED:
++        default:
++          throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
++      }
++    }
+   }
+ 
+   @Nullable
+diff --git a/xds/src/main/java/io/grpc/xds/Filter.java b/xds/src/main/java/io/grpc/xds/Filter.java
+index 29f8cc4e3..ab61ba2b5 100644
+--- a/xds/src/main/java/io/grpc/xds/Filter.java
++++ b/xds/src/main/java/io/grpc/xds/Filter.java
+@@ -25,48 +25,82 @@ import java.util.concurrent.ScheduledExecutorService;
+ import javax.annotation.Nullable;
+ 
+ /**
+- * Defines the parsing functionality of an HTTP filter. A Filter may optionally implement either
+- * {@link ClientInterceptorBuilder} or {@link ServerInterceptorBuilder} or both, indicating it is
+- * capable of working on the client side or server side or both, respectively.
++ * Defines the parsing functionality of an HTTP filter.
++ *
++ * <p>A Filter may optionally implement either {@link Filter#buildClientInterceptor} or
++ * {@link Filter#buildServerInterceptor} or both, and return true from corresponding
++ * {@link Provider#isClientFilter()}, {@link Provider#isServerFilter()} to indicate that the filter
++ * is capable of working on the client side or server side or both, respectively.
+  */
+ interface Filter {
+ 
+-  /**
+-   * The proto message types supported by this filter. A filter will be registered by each of its
+-   * supported message types.
+-   */
+-  String[] typeUrls();
++  /** Represents an opaque data structure holding configuration for a filter. */
++  interface FilterConfig {
++    String typeUrl();
++  }
+ 
+   /**
+-   * Parses the top-level filter config from raw proto message. The message may be either a {@link
+-   * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
++   * Common interface for filter providers.
+    */
+-  ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
++  interface Provider {
++    /**
++     * The proto message types supported by this filter. A filter will be registered by each of its
++     * supported message types.
++     */
++    String[] typeUrls();
+ 
+-  /**
+-   * Parses the per-filter override filter config from raw proto message. The message may be either
+-   * a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
+-   */
+-  ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
++    /**
++     * Whether the filter can be installed on the client side.
++     *
++     * <p>Returns true if the filter implements {@link Filter#buildClientInterceptor}.
++     */
++    default boolean isClientFilter() {
++      return false;
++    }
+ 
+-  /** Represents an opaque data structure holding configuration for a filter. */
+-  interface FilterConfig {
+-    String typeUrl();
++    /**
++     * Whether the filter can be installed into xDS-enabled servers.
++     *
++     * <p>Returns true if the filter implements {@link Filter#buildServerInterceptor}.
++     */
++    default boolean isServerFilter() {
++      return false;
++    }
++
++    /**
++     * Creates a new instance of the filter.
++     *
++     * <p>Returns a filter instance registered with the same typeUrls as the provider,
++     * capable of working with the same FilterConfig type returned by provider's parse functions.
++     */
++    Filter newInstance();
++
++    /**
++     * Parses the top-level filter config from raw proto message. The message may be either a {@link
++     * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
++     */
++    ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
++
++    /**
++     * Parses the per-filter override filter config from raw proto message. The message may be
++     * either a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
++     */
++    ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
+   }
+ 
+   /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for clients. */
+-  interface ClientInterceptorBuilder {
+-    @Nullable
+-    ClientInterceptor buildClientInterceptor(
+-        FilterConfig config, @Nullable FilterConfig overrideConfig,
+-        ScheduledExecutorService scheduler);
++  @Nullable
++  default ClientInterceptor buildClientInterceptor(
++      FilterConfig config, @Nullable FilterConfig overrideConfig,
++      ScheduledExecutorService scheduler) {
++    return null;
+   }
+ 
+   /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for the server. */
+-  interface ServerInterceptorBuilder {
+-    @Nullable
+-    ServerInterceptor buildServerInterceptor(
+-        FilterConfig config, @Nullable FilterConfig overrideConfig);
++  @Nullable
++  default ServerInterceptor buildServerInterceptor(
++      FilterConfig config, @Nullable FilterConfig overrideConfig) {
++    return null;
+   }
+ 
+   /** Filter config with instance name. */
+diff --git a/xds/src/main/java/io/grpc/xds/FilterRegistry.java b/xds/src/main/java/io/grpc/xds/FilterRegistry.java
+index 7f1fe82c6..426c6d1b3 100644
+--- a/xds/src/main/java/io/grpc/xds/FilterRegistry.java
++++ b/xds/src/main/java/io/grpc/xds/FilterRegistry.java
+@@ -23,21 +23,21 @@ import javax.annotation.Nullable;
+ 
+ /**
+  * A registry for all supported {@link Filter}s. Filters can be queried from the registry
+- * by any of the {@link Filter#typeUrls() type URLs}.
++ * by any of the {@link Filter.Provider#typeUrls() type URLs}.
+  */
+ final class FilterRegistry {
+   private static FilterRegistry instance;
+ 
+-  private final Map<String, Filter> supportedFilters = new HashMap<>();
++  private final Map<String, Filter.Provider> supportedFilters = new HashMap<>();
+ 
+   private FilterRegistry() {}
+ 
+   static synchronized FilterRegistry getDefaultRegistry() {
+     if (instance == null) {
+       instance = newRegistry().register(
+-              FaultFilter.INSTANCE,
+-              RouterFilter.INSTANCE,
+-              RbacFilter.INSTANCE);
++              new FaultFilter.Provider(),
++              new RouterFilter.Provider(),
++              new RbacFilter.Provider());
+     }
+     return instance;
+   }
+@@ -48,8 +48,8 @@ final class FilterRegistry {
+   }
+ 
+   @VisibleForTesting
+-  FilterRegistry register(Filter... filters) {
+-    for (Filter filter : filters) {
++  FilterRegistry register(Filter.Provider... filters) {
++    for (Filter.Provider filter : filters) {
+       for (String typeUrl : filter.typeUrls()) {
+         supportedFilters.put(typeUrl, filter);
+       }
+@@ -58,7 +58,7 @@ final class FilterRegistry {
+   }
+ 
+   @Nullable
+-  Filter get(String typeUrl) {
++  Filter.Provider get(String typeUrl) {
+     return supportedFilters.get(typeUrl);
+   }
+ }
+diff --git a/xds/src/main/java/io/grpc/xds/GcpAuthenticationFilter.java b/xds/src/main/java/io/grpc/xds/GcpAuthenticationFilter.java
+index f73494d74..7ed617c98 100644
+--- a/xds/src/main/java/io/grpc/xds/GcpAuthenticationFilter.java
++++ b/xds/src/main/java/io/grpc/xds/GcpAuthenticationFilter.java
+@@ -35,7 +35,6 @@ import io.grpc.Metadata;
+ import io.grpc.MethodDescriptor;
+ import io.grpc.Status;
+ import io.grpc.auth.MoreCallCredentials;
+-import io.grpc.xds.Filter.ClientInterceptorBuilder;
+ import io.grpc.xds.MetadataRegistry.MetadataValueParser;
+ import java.util.LinkedHashMap;
+ import java.util.Map;
+@@ -47,50 +46,63 @@ import javax.annotation.Nullable;
+  * A {@link Filter} that injects a {@link CallCredentials} to handle
+  * authentication for xDS credentials.
+  */
+-final class GcpAuthenticationFilter implements Filter, ClientInterceptorBuilder {
++final class GcpAuthenticationFilter implements Filter {
+ 
+   static final String TYPE_URL =
+       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
+ 
+-  @Override
+-  public String[] typeUrls() {
+-    return new String[] { TYPE_URL };
+-  }
++  static final class Provider implements Filter.Provider {
++    @Override
++    public String[] typeUrls() {
++      return new String[]{TYPE_URL};
++    }
+ 
+-  @Override
+-  public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
+-    GcpAuthnFilterConfig gcpAuthnProto;
+-    if (!(rawProtoMessage instanceof Any)) {
+-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
++    @Override
++    public boolean isClientFilter() {
++      return true;
+     }
+-    Any anyMessage = (Any) rawProtoMessage;
+ 
+-    try {
+-      gcpAuthnProto = anyMessage.unpack(GcpAuthnFilterConfig.class);
+-    } catch (InvalidProtocolBufferException e) {
+-      return ConfigOrError.fromError("Invalid proto: " + e);
++    @Override
++    public GcpAuthenticationFilter newInstance() {
++      return new GcpAuthenticationFilter();
+     }
+ 
+-    long cacheSize = 10;
+-    // Validate cache_config
+-    if (gcpAuthnProto.hasCacheConfig()) {
+-      TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
+-      cacheSize = cacheConfig.getCacheSize().getValue();
+-      if (cacheSize == 0) {
+-        return ConfigOrError.fromError(
+-            "cache_config.cache_size must be greater than zero");
++    @Override
++    public ConfigOrError<GcpAuthenticationConfig> parseFilterConfig(Message rawProtoMessage) {
++      GcpAuthnFilterConfig gcpAuthnProto;
++      if (!(rawProtoMessage instanceof Any)) {
++        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+       }
+-      // LruCache's size is an int and briefly exceeds its maximum size before evicting entries
+-      cacheSize = UnsignedLongs.min(cacheSize, Integer.MAX_VALUE - 1);
+-    }
++      Any anyMessage = (Any) rawProtoMessage;
+ 
+-    GcpAuthenticationConfig config = new GcpAuthenticationConfig((int) cacheSize);
+-    return ConfigOrError.fromConfig(config);
+-  }
++      try {
++        gcpAuthnProto = anyMessage.unpack(GcpAuthnFilterConfig.class);
++      } catch (InvalidProtocolBufferException e) {
++        return ConfigOrError.fromError("Invalid proto: " + e);
++      }
+ 
+-  @Override
+-  public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+-    return parseFilterConfig(rawProtoMessage);
++      long cacheSize = 10;
++      // Validate cache_config
++      if (gcpAuthnProto.hasCacheConfig()) {
++        TokenCacheConfig cacheConfig = gcpAuthnProto.getCacheConfig();
++        cacheSize = cacheConfig.getCacheSize().getValue();
++        if (cacheSize == 0) {
++          return ConfigOrError.fromError(
++              "cache_config.cache_size must be greater than zero");
++        }
++        // LruCache's size is an int and briefly exceeds its maximum size before evicting entries
++        cacheSize = UnsignedLongs.min(cacheSize, Integer.MAX_VALUE - 1);
++      }
++
++      GcpAuthenticationConfig config = new GcpAuthenticationConfig((int) cacheSize);
++      return ConfigOrError.fromConfig(config);
++    }
++
++    @Override
++    public ConfigOrError<GcpAuthenticationConfig> parseFilterConfigOverride(
++        Message rawProtoMessage) {
++      return parseFilterConfig(rawProtoMessage);
++    }
+   }
+ 
+   @Nullable
+diff --git a/xds/src/main/java/io/grpc/xds/InternalRbacFilter.java b/xds/src/main/java/io/grpc/xds/InternalRbacFilter.java
+index 54e6c748c..cedb3f4c8 100644
+--- a/xds/src/main/java/io/grpc/xds/InternalRbacFilter.java
++++ b/xds/src/main/java/io/grpc/xds/InternalRbacFilter.java
+@@ -19,8 +19,6 @@ package io.grpc.xds;
+ import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
+ import io.grpc.Internal;
+ import io.grpc.ServerInterceptor;
+-import io.grpc.xds.RbacConfig;
+-import io.grpc.xds.RbacFilter;
+ 
+ /** This class exposes some functionality in RbacFilter to other packages. */
+ @Internal
+@@ -30,11 +28,12 @@ public final class InternalRbacFilter {
+ 
+   /** Parses RBAC filter config and creates AuthorizationServerInterceptor. */
+   public static ServerInterceptor createInterceptor(RBAC rbac) {
+-    ConfigOrError<RbacConfig> filterConfig = RbacFilter.parseRbacConfig(rbac);
++    ConfigOrError<RbacConfig> filterConfig = RbacFilter.Provider.parseRbacConfig(rbac);
+     if (filterConfig.errorDetail != null) {
+       throw new IllegalArgumentException(
+         String.format("Failed to parse Rbac policy: %s", filterConfig.errorDetail));
+     }
+-    return new RbacFilter().buildServerInterceptor(filterConfig.config, null);
++    return new RbacFilter.Provider().newInstance()
++        .buildServerInterceptor(filterConfig.config, null);
+   }
+ }
+diff --git a/xds/src/main/java/io/grpc/xds/RbacFilter.java b/xds/src/main/java/io/grpc/xds/RbacFilter.java
+index 6a55f7f19..2bc4eeb84 100644
+--- a/xds/src/main/java/io/grpc/xds/RbacFilter.java
++++ b/xds/src/main/java/io/grpc/xds/RbacFilter.java
+@@ -18,7 +18,6 @@ package io.grpc.xds;
+ 
+ import static com.google.common.base.Preconditions.checkNotNull;
+ 
+-import com.google.common.annotations.VisibleForTesting;
+ import com.google.protobuf.Any;
+ import com.google.protobuf.InvalidProtocolBufferException;
+ import com.google.protobuf.Message;
+@@ -34,7 +33,6 @@ import io.grpc.ServerCall;
+ import io.grpc.ServerCallHandler;
+ import io.grpc.ServerInterceptor;
+ import io.grpc.Status;
+-import io.grpc.xds.Filter.ServerInterceptorBuilder;
+ import io.grpc.xds.internal.MatcherParser;
+ import io.grpc.xds.internal.Matchers;
+ import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine;
+@@ -66,10 +64,10 @@ import java.util.stream.Collectors;
+ import javax.annotation.Nullable;
+ 
+ /** RBAC Http filter implementation. */
+-final class RbacFilter implements Filter, ServerInterceptorBuilder {
++final class RbacFilter implements Filter {
+   private static final Logger logger = Logger.getLogger(RbacFilter.class.getName());
+ 
+-  static final RbacFilter INSTANCE = new RbacFilter();
++  private static final RbacFilter INSTANCE = new RbacFilter();
+ 
+   static final String TYPE_URL =
+           "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC";
+@@ -77,87 +75,99 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
+   private static final String TYPE_URL_OVERRIDE_CONFIG =
+           "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute";
+ 
+-  RbacFilter() {}
++  private RbacFilter() {}
+ 
+-  @Override
+-  public String[] typeUrls() {
+-    return new String[] { TYPE_URL, TYPE_URL_OVERRIDE_CONFIG };
+-  }
++  static final class Provider implements Filter.Provider {
++    @Override
++    public String[] typeUrls() {
++      return new String[] {TYPE_URL, TYPE_URL_OVERRIDE_CONFIG};
++    }
+ 
+-  @Override
+-  public ConfigOrError<RbacConfig> parseFilterConfig(Message rawProtoMessage) {
+-    RBAC rbacProto;
+-    if (!(rawProtoMessage instanceof Any)) {
+-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
++    @Override
++    public boolean isServerFilter() {
++      return true;
+     }
+-    Any anyMessage = (Any) rawProtoMessage;
+-    try {
+-      rbacProto = anyMessage.unpack(RBAC.class);
+-    } catch (InvalidProtocolBufferException e) {
+-      return ConfigOrError.fromError("Invalid proto: " + e);
++
++    @Override
++    public RbacFilter newInstance() {
++      return INSTANCE;
+     }
+-    return parseRbacConfig(rbacProto);
+-  }
+ 
+-  @VisibleForTesting
+-  static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
+-    if (!rbac.hasRules()) {
+-      return ConfigOrError.fromConfig(RbacConfig.create(null));
++    @Override
++    public ConfigOrError<RbacConfig> parseFilterConfig(Message rawProtoMessage) {
++      RBAC rbacProto;
++      if (!(rawProtoMessage instanceof Any)) {
++        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
++      }
++      Any anyMessage = (Any) rawProtoMessage;
++      try {
++        rbacProto = anyMessage.unpack(RBAC.class);
++      } catch (InvalidProtocolBufferException e) {
++        return ConfigOrError.fromError("Invalid proto: " + e);
++      }
++      return parseRbacConfig(rbacProto);
+     }
+-    io.envoyproxy.envoy.config.rbac.v3.RBAC rbacConfig = rbac.getRules();
+-    GrpcAuthorizationEngine.Action authAction;
+-    switch (rbacConfig.getAction()) {
+-      case ALLOW:
+-        authAction = GrpcAuthorizationEngine.Action.ALLOW;
+-        break;
+-      case DENY:
+-        authAction = GrpcAuthorizationEngine.Action.DENY;
+-        break;
+-      case LOG:
++
++    @Override
++    public ConfigOrError<RbacConfig> parseFilterConfigOverride(Message rawProtoMessage) {
++      RBACPerRoute rbacPerRoute;
++      if (!(rawProtoMessage instanceof Any)) {
++        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
++      }
++      Any anyMessage = (Any) rawProtoMessage;
++      try {
++        rbacPerRoute = anyMessage.unpack(RBACPerRoute.class);
++      } catch (InvalidProtocolBufferException e) {
++        return ConfigOrError.fromError("Invalid proto: " + e);
++      }
++      if (rbacPerRoute.hasRbac()) {
++        return parseRbacConfig(rbacPerRoute.getRbac());
++      } else {
+         return ConfigOrError.fromConfig(RbacConfig.create(null));
+-      case UNRECOGNIZED:
+-      default:
+-        return ConfigOrError.fromError("Unknown rbacConfig action type: " + rbacConfig.getAction());
++      }
+     }
+-    List<GrpcAuthorizationEngine.PolicyMatcher> policyMatchers = new ArrayList<>();
+-    List<Entry<String, Policy>> sortedPolicyEntries = rbacConfig.getPoliciesMap().entrySet()
+-        .stream()
+-        .sorted((a,b) -> a.getKey().compareTo(b.getKey()))
+-        .collect(Collectors.toList());
+-    for (Map.Entry<String, Policy> entry: sortedPolicyEntries) {
+-      try {
+-        Policy policy = entry.getValue();
+-        if (policy.hasCondition() || policy.hasCheckedCondition()) {
++
++    static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
++      if (!rbac.hasRules()) {
++        return ConfigOrError.fromConfig(RbacConfig.create(null));
++      }
++      io.envoyproxy.envoy.config.rbac.v3.RBAC rbacConfig = rbac.getRules();
++      GrpcAuthorizationEngine.Action authAction;
++      switch (rbacConfig.getAction()) {
++        case ALLOW:
++          authAction = GrpcAuthorizationEngine.Action.ALLOW;
++          break;
++        case DENY:
++          authAction = GrpcAuthorizationEngine.Action.DENY;
++          break;
++        case LOG:
++          return ConfigOrError.fromConfig(RbacConfig.create(null));
++        case UNRECOGNIZED:
++        default:
+           return ConfigOrError.fromError(
+-                  "Policy.condition and Policy.checked_condition must not set: " + entry.getKey());
++              "Unknown rbacConfig action type: " + rbacConfig.getAction());
++      }
++      List<GrpcAuthorizationEngine.PolicyMatcher> policyMatchers = new ArrayList<>();
++      List<Entry<String, Policy>> sortedPolicyEntries = rbacConfig.getPoliciesMap().entrySet()
++          .stream()
++          .sorted((a,b) -> a.getKey().compareTo(b.getKey()))
++          .collect(Collectors.toList());
++      for (Map.Entry<String, Policy> entry: sortedPolicyEntries) {
++        try {
++          Policy policy = entry.getValue();
++          if (policy.hasCondition() || policy.hasCheckedCondition()) {
++            return ConfigOrError.fromError(
++                "Policy.condition and Policy.checked_condition must not set: " + entry.getKey());
++          }
++          policyMatchers.add(PolicyMatcher.create(entry.getKey(),
++              parsePermissionList(policy.getPermissionsList()),
++              parsePrincipalList(policy.getPrincipalsList())));
++        } catch (Exception e) {
++          return ConfigOrError.fromError("Encountered error parsing policy: " + e);
+         }
+-        policyMatchers.add(PolicyMatcher.create(entry.getKey(),
+-                parsePermissionList(policy.getPermissionsList()),
+-                parsePrincipalList(policy.getPrincipalsList())));
+-      } catch (Exception e) {
+-        return ConfigOrError.fromError("Encountered error parsing policy: " + e);
+       }
+-    }
+-    return ConfigOrError.fromConfig(RbacConfig.create(
+-        AuthConfig.create(policyMatchers, authAction)));
+-  }
+-
+-  @Override
+-  public ConfigOrError<RbacConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+-    RBACPerRoute rbacPerRoute;
+-    if (!(rawProtoMessage instanceof Any)) {
+-      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+-    }
+-    Any anyMessage = (Any) rawProtoMessage;
+-    try {
+-      rbacPerRoute = anyMessage.unpack(RBACPerRoute.class);
+-    } catch (InvalidProtocolBufferException e) {
+-      return ConfigOrError.fromError("Invalid proto: " + e);
+-    }
+-    if (rbacPerRoute.hasRbac()) {
+-      return parseRbacConfig(rbacPerRoute.getRbac());
+-    } else {
+-      return ConfigOrError.fromConfig(RbacConfig.create(null));
++      return ConfigOrError.fromConfig(RbacConfig.create(
++          AuthConfig.create(policyMatchers, authAction)));
+     }
+   }
+ 
+diff --git a/xds/src/main/java/io/grpc/xds/RouterFilter.java b/xds/src/main/java/io/grpc/xds/RouterFilter.java
+index 8038c1b98..939bd0b12 100644
+--- a/xds/src/main/java/io/grpc/xds/RouterFilter.java
++++ b/xds/src/main/java/io/grpc/xds/RouterFilter.java
+@@ -17,18 +17,12 @@
+ package io.grpc.xds;
+ 
+ import com.google.protobuf.Message;
+-import io.grpc.ClientInterceptor;
+-import io.grpc.ServerInterceptor;
+-import io.grpc.xds.Filter.ClientInterceptorBuilder;
+-import io.grpc.xds.Filter.ServerInterceptorBuilder;
+-import java.util.concurrent.ScheduledExecutorService;
+-import javax.annotation.Nullable;
+ 
+ /**
+  * Router filter implementation. Currently this filter does not parse any field in the config.
+  */
+-enum RouterFilter implements Filter, ClientInterceptorBuilder, ServerInterceptorBuilder {
+-  INSTANCE;
++final class RouterFilter implements Filter {
++  private static final RouterFilter INSTANCE = new RouterFilter();
+ 
+   static final String TYPE_URL =
+       "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router";
+@@ -36,7 +30,7 @@ enum RouterFilter implements Filter, ClientInterceptorBuilder, ServerInterceptor
+   static final FilterConfig ROUTER_CONFIG = new FilterConfig() {
+     @Override
+     public String typeUrl() {
+-      return RouterFilter.TYPE_URL;
++      return TYPE_URL;
+     }
+ 
+     @Override
+@@ -45,33 +39,38 @@ enum RouterFilter implements Filter, ClientInterceptorBuilder, ServerInterceptor
+     }
+   };
+ 
+-  @Override
+-  public String[] typeUrls() {
+-    return new String[] { TYPE_URL };
+-  }
++  static final class Provider implements Filter.Provider {
++    @Override
++    public String[] typeUrls() {
++      return new String[]{TYPE_URL};
++    }
+ 
+-  @Override
+-  public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
+-    return ConfigOrError.fromConfig(ROUTER_CONFIG);
+-  }
++    @Override
++    public boolean isClientFilter() {
++      return true;
++    }
+ 
+-  @Override
+-  public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+-    return ConfigOrError.fromError("Router Filter should not have override config");
+-  }
++    @Override
++    public boolean isServerFilter() {
++      return true;
++    }
+ 
+-  @Nullable
+-  @Override
+-  public ClientInterceptor buildClientInterceptor(
+-      FilterConfig config, @Nullable FilterConfig overrideConfig,
+-      ScheduledExecutorService scheduler) {
+-    return null;
+-  }
++    @Override
++    public RouterFilter newInstance() {
++      return INSTANCE;
++    }
+ 
+-  @Nullable
+-  @Override
+-  public ServerInterceptor buildServerInterceptor(
+-      FilterConfig config, @Nullable Filter.FilterConfig overrideConfig) {
+-    return null;
++    @Override
++    public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
++      return ConfigOrError.fromConfig(ROUTER_CONFIG);
++    }
++
++    @Override
++    public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
++        Message rawProtoMessage) {
++      return ConfigOrError.fromError("Router Filter should not have override config");
++    }
+   }
++
++  private RouterFilter() {}
+ }
+diff --git a/xds/src/main/java/io/grpc/xds/XdsListenerResource.java b/xds/src/main/java/io/grpc/xds/XdsListenerResource.java
+index a18b093e3..4b554be17 100644
+--- a/xds/src/main/java/io/grpc/xds/XdsListenerResource.java
++++ b/xds/src/main/java/io/grpc/xds/XdsListenerResource.java
+@@ -575,12 +575,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
+     String filterName = httpFilter.getName();
+     boolean isOptional = httpFilter.getIsOptional();
+     if (!httpFilter.hasTypedConfig()) {
+-      if (isOptional) {
+-        return null;
+-      } else {
+-        return StructOrError.fromError(
+-            "HttpFilter [" + filterName + "] is not optional and has no typed config");
+-      }
++      return isOptional ? null : StructOrError.fromError(
++          "HttpFilter [" + filterName + "] is not optional and has no typed config");
+     }
+     Message rawConfig = httpFilter.getTypedConfig();
+     String typeUrl = httpFilter.getTypedConfig().getTypeUrl();
+@@ -600,18 +596,17 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
+       return StructOrError.fromError(
+           "HttpFilter [" + filterName + "] contains invalid proto: " + e);
+     }
+-    Filter filter = filterRegistry.get(typeUrl);
+-    if ((isForClient && !(filter instanceof Filter.ClientInterceptorBuilder))
+-        || (!isForClient && !(filter instanceof Filter.ServerInterceptorBuilder))) {
+-      if (isOptional) {
+-        return null;
+-      } else {
+-        return StructOrError.fromError(
+-            "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for "
+-                + (isForClient ? "client" : "server"));
+-      }
++
++    Filter.Provider provider = filterRegistry.get(typeUrl);
++    if (provider == null
++        || (isForClient && !provider.isClientFilter())
++        || (!isForClient && !provider.isServerFilter())) {
++      // Filter type not supported.
++      return isOptional ? null : StructOrError.fromError(
++          "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for " + (
++              isForClient ? "client" : "server"));
+     }
+-    ConfigOrError<? extends FilterConfig> filterConfig = filter.parseFilterConfig(rawConfig);
++    ConfigOrError<? extends FilterConfig> filterConfig = provider.parseFilterConfig(rawConfig);
+     if (filterConfig.errorDetail != null) {
+       return StructOrError.fromError(
+           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
+diff --git a/xds/src/main/java/io/grpc/xds/XdsNameResolver.java b/xds/src/main/java/io/grpc/xds/XdsNameResolver.java
+index 21f5d5efc..b7b1ed0bd 100644
+--- a/xds/src/main/java/io/grpc/xds/XdsNameResolver.java
++++ b/xds/src/main/java/io/grpc/xds/XdsNameResolver.java
+@@ -49,7 +49,6 @@ import io.grpc.SynchronizationContext;
+ import io.grpc.internal.GrpcUtil;
+ import io.grpc.internal.ObjectPool;
+ import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
+-import io.grpc.xds.Filter.ClientInterceptorBuilder;
+ import io.grpc.xds.Filter.FilterConfig;
+ import io.grpc.xds.Filter.NamedFilterConfig;
+ import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
+@@ -827,26 +826,36 @@ final class XdsNameResolver extends NameResolver {
+       if (filterConfigs == null) {
+         return new PassthroughClientInterceptor();
+       }
++
+       Map<String, FilterConfig> selectedOverrideConfigs =
+           new HashMap<>(virtualHost.filterConfigOverrides());
+       selectedOverrideConfigs.putAll(route.filterConfigOverrides());
+       if (weightedCluster != null) {
+         selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
+       }
++
+       ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
+       for (NamedFilterConfig namedFilter : filterConfigs) {
+-        FilterConfig filterConfig = namedFilter.filterConfig;
+-        Filter filter = filterRegistry.get(filterConfig.typeUrl());
+-        if (filter instanceof ClientInterceptorBuilder) {
+-          ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
+-              .buildClientInterceptor(
+-                  filterConfig, selectedOverrideConfigs.get(namedFilter.name),
+-                  scheduler);
+-          if (interceptor != null) {
+-            filterInterceptors.add(interceptor);
+-          }
++        FilterConfig config = namedFilter.filterConfig;
++        String name = namedFilter.name;
++        String typeUrl = config.typeUrl();
++
++        Filter.Provider provider = filterRegistry.get(typeUrl);
++        if (provider == null || !provider.isClientFilter()) {
++          continue;
++        }
++
++        Filter filter = provider.newInstance();
++
++        ClientInterceptor interceptor =
++            filter.buildClientInterceptor(config, selectedOverrideConfigs.get(name), scheduler);
++        if (interceptor != null) {
++          filterInterceptors.add(interceptor);
+         }
+       }
++
++      // Combine interceptors produced by different filters into a single one that executes
++      // them sequentially. The order is preserved.
+       return combineInterceptors(filterInterceptors.build());
+     }
+ 
+diff --git a/xds/src/main/java/io/grpc/xds/XdsRouteConfigureResource.java b/xds/src/main/java/io/grpc/xds/XdsRouteConfigureResource.java
+index c5ca8d45c..80a77cbb1 100644
+--- a/xds/src/main/java/io/grpc/xds/XdsRouteConfigureResource.java
++++ b/xds/src/main/java/io/grpc/xds/XdsRouteConfigureResource.java
+@@ -245,8 +245,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
+         return StructOrError.fromError(
+             "FilterConfig [" + name + "] contains invalid proto: " + e);
+       }
+-      Filter filter = filterRegistry.get(typeUrl);
+-      if (filter == null) {
++      Filter.Provider provider = filterRegistry.get(typeUrl);
++      if (provider == null) {
+         if (isOptional) {
+           continue;
+         }
+@@ -254,7 +254,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
+             "HttpFilter [" + name + "](" + typeUrl + ") is required but unsupported");
+       }
+       ConfigOrError<? extends Filter.FilterConfig> filterConfig =
+-          filter.parseFilterConfigOverride(rawConfig);
++          provider.parseFilterConfigOverride(rawConfig);
+       if (filterConfig.errorDetail != null) {
+         return StructOrError.fromError(
+             "Invalid filter config for HttpFilter [" + name + "]: " + filterConfig.errorDetail);
+diff --git a/xds/src/main/java/io/grpc/xds/XdsServerWrapper.java b/xds/src/main/java/io/grpc/xds/XdsServerWrapper.java
+index 3a9b98ee3..bbb17d9b6 100644
+--- a/xds/src/main/java/io/grpc/xds/XdsServerWrapper.java
++++ b/xds/src/main/java/io/grpc/xds/XdsServerWrapper.java
+@@ -47,7 +47,6 @@ import io.grpc.internal.SharedResourceHolder;
+ import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+ import io.grpc.xds.Filter.FilterConfig;
+ import io.grpc.xds.Filter.NamedFilterConfig;
+-import io.grpc.xds.Filter.ServerInterceptorBuilder;
+ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
+ import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
+ import io.grpc.xds.VirtualHost.Route;
+@@ -524,37 +523,56 @@ final class XdsServerWrapper extends Server {
+     }
+ 
+     private ImmutableMap<Route, ServerInterceptor> generatePerRouteInterceptors(
+-        List<NamedFilterConfig> namedFilterConfigs, List<VirtualHost> virtualHosts) {
++        @Nullable List<NamedFilterConfig> filterConfigs, List<VirtualHost> virtualHosts) {
++      // This should always be called from the sync context.
++      // Ideally we'd want to throw otherwise, but this breaks the tests now.
++      // syncContext.throwIfNotInThisSynchronizationContext();
++
+       ImmutableMap.Builder<Route, ServerInterceptor> perRouteInterceptors =
+           new ImmutableMap.Builder<>();
++
+       for (VirtualHost virtualHost : virtualHosts) {
+         for (Route route : virtualHost.routes()) {
+-          List<ServerInterceptor> filterInterceptors = new ArrayList<>();
+-          Map<String, FilterConfig> selectedOverrideConfigs =
+-              new HashMap<>(virtualHost.filterConfigOverrides());
+-          selectedOverrideConfigs.putAll(route.filterConfigOverrides());
+-          if (namedFilterConfigs != null) {
+-            for (NamedFilterConfig namedFilterConfig : namedFilterConfigs) {
+-              FilterConfig filterConfig = namedFilterConfig.filterConfig;
+-              Filter filter = filterRegistry.get(filterConfig.typeUrl());
+-              if (filter instanceof ServerInterceptorBuilder) {
+-                ServerInterceptor interceptor =
+-                    ((ServerInterceptorBuilder) filter).buildServerInterceptor(
+-                        filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
+-                if (interceptor != null) {
+-                  filterInterceptors.add(interceptor);
+-                }
+-              } else {
+-                logger.log(Level.WARNING, "HttpFilterConfig(type URL: "
+-                    + filterConfig.typeUrl() + ") is not supported on server-side. "
+-                    + "Probably a bug at ClientXdsClient verification.");
+-              }
++          // Short circuit.
++          if (filterConfigs == null) {
++            perRouteInterceptors.put(route, noopInterceptor);
++            continue;
++          }
++
++          // Override vhost filter configs with more specific per-route configs.
++          Map<String, FilterConfig> perRouteOverrides = ImmutableMap.<String, FilterConfig>builder()
++              .putAll(virtualHost.filterConfigOverrides())
++              .putAll(route.filterConfigOverrides())
++              .buildKeepingLast();
++
++          // Interceptors for this vhost/route combo.
++          List<ServerInterceptor> interceptors = new ArrayList<>(filterConfigs.size());
++
++          for (NamedFilterConfig namedFilter : filterConfigs) {
++            FilterConfig config = namedFilter.filterConfig;
++            String name = namedFilter.name;
++            String typeUrl = config.typeUrl();
++
++            Filter.Provider provider = filterRegistry.get(typeUrl);
++            if (provider == null || !provider.isServerFilter()) {
++              logger.warning("HttpFilter[" + name + "]: not supported on server-side: " + typeUrl);
++              continue;
++            }
++
++            Filter filter = provider.newInstance();
++            ServerInterceptor interceptor =
++                filter.buildServerInterceptor(config, perRouteOverrides.get(name));
++            if (interceptor != null) {
++              interceptors.add(interceptor);
+             }
+           }
+-          ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
+-          perRouteInterceptors.put(route, interceptor);
++
++          // Combine interceptors produced by different filters into a single one that executes
++          // them sequentially. The order is preserved.
++          perRouteInterceptors.put(route, combineInterceptors(interceptors));
+         }
+       }
++
+       return perRouteInterceptors.buildOrThrow();
+     }
+ 

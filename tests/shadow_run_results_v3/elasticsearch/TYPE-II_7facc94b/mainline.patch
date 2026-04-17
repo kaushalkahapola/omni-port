@@ -1,0 +1,395 @@
+commit 7facc94be6871804322a00a8e5b232cac958d788
+Author: Oleksandr Kolomiiets <oleksandr.kolomiiets@elastic.co>
+Date:   Thu Oct 3 13:13:19 2024 -0700
+
+    Do not expand dots when storing objects in ignored source (#113910)
+
+diff --git a/docs/changelog/113910.yaml b/docs/changelog/113910.yaml
+new file mode 100644
+index 00000000000..aa9d3b61fe7
+--- /dev/null
++++ b/docs/changelog/113910.yaml
+@@ -0,0 +1,5 @@
++pr: 113910
++summary: Do not expand dots when storing objects in ignored source
++area: Logs
++type: bug
++issues: []
+diff --git a/rest-api-spec/build.gradle b/rest-api-spec/build.gradle
+index 05ed09e40f6..a57757aa8fb 100644
+--- a/rest-api-spec/build.gradle
++++ b/rest-api-spec/build.gradle
+@@ -58,4 +58,8 @@ tasks.named("yamlRestCompatTestTransform").configure({task ->
+     task.skipTest("indices.sort/10_basic/Index Sort", "warning does not exist for compatibility")
+     task.skipTest("search/330_fetch_fields/Test search rewrite", "warning does not exist for compatibility")
+     task.skipTest("indices.create/21_synthetic_source_stored/object param - nested object with stored array", "skip test to submit #113690")
++    task.skipTest("indices.create/20_synthetic_source/disabled object", "temporary until backported")
++    task.skipTest("indices.create/20_synthetic_source/disabled object contains array", "temporary until backported")
++    task.skipTest("indices.create/20_synthetic_source/object with dynamic override", "temporary until backported")
++    task.skipTest("indices.create/20_synthetic_source/disabled root object", "temporary until backported")
+ })
+diff --git a/rest-api-spec/src/yamlRestTest/resources/rest-api-spec/test/indices.create/20_synthetic_source.yml b/rest-api-spec/src/yamlRestTest/resources/rest-api-spec/test/indices.create/20_synthetic_source.yml
+index 62a248cae6b..1c3c96a9445 100644
+--- a/rest-api-spec/src/yamlRestTest/resources/rest-api-spec/test/indices.create/20_synthetic_source.yml
++++ b/rest-api-spec/src/yamlRestTest/resources/rest-api-spec/test/indices.create/20_synthetic_source.yml
+@@ -197,7 +197,7 @@ empty object with unmapped fields:
+ ---
+ disabled root object:
+   - requires:
+-      cluster_features: ["mapper.track_ignored_source"]
++      cluster_features: ["mapper.ignored_source.dont_expand_dots"]
+       reason: requires tracking ignored source
+ 
+   - do:
+@@ -222,17 +222,19 @@ disabled root object:
+         index: test
+ 
+   - match: { hits.total.value: 1 }
+-  - match: { hits.hits.0._source.name: aaaa }
+-  - match: { hits.hits.0._source.some_string: AaAa }
+-  - match: { hits.hits.0._source.some_int: 1000 }
+-  - match: { hits.hits.0._source.some_double: 123.456789 }
+-  - match: { hits.hits.0._source.a.very.deeply.nested.field: AAAA }
+-
++  - match:
++      hits.hits.0._source:
++        name: aaaa
++        some_string: AaAa
++        some_int: 1000
++        some_double: 123.456789
++        some_bool: true
++        a.very.deeply.nested.field: AAAA
+ 
+ ---
+ disabled object:
+   - requires:
+-      cluster_features: ["mapper.track_ignored_source"]
++      cluster_features: ["mapper.ignored_source.dont_expand_dots"]
+       reason: requires tracking ignored source
+ 
+   - do:
+@@ -261,14 +263,15 @@ disabled object:
+ 
+   - match: { hits.total.value: 1 }
+   - match: { hits.hits.0._source.name: aaaa }
+-  - match: { hits.hits.0._source.path.some_int: 1000 }
+-  - match: { hits.hits.0._source.path.to.a.very.deeply.nested.field: AAAA }
+-
++  - match:
++      hits.hits.0._source.path:
++        some_int: 1000
++        to.a.very.deeply.nested.field: AAAA
+ 
+ ---
+ disabled object contains array:
+   - requires:
+-      cluster_features: ["mapper.track_ignored_source"]
++      cluster_features: ["mapper.ignored_source.dont_expand_dots"]
+       reason: requires tracking ignored source
+ 
+   - do:
+@@ -297,10 +300,12 @@ disabled object contains array:
+ 
+   - match: { hits.total.value: 1 }
+   - match: { hits.hits.0._source.name: aaaa }
+-  - match: { hits.hits.0._source.path.0.some_int: 1000 }
+-  - match: { hits.hits.0._source.path.0.to.a.very.deeply.nested.field: AAAA }
+-  - match: { hits.hits.0._source.path.1.some_double: 10.0 }
+-  - match: { hits.hits.0._source.path.1.some_bool: true }
++  - match:
++      hits.hits.0._source.path:
++        - some_int: 1000
++          to.a.very.deeply.nested.field: AAAA
++        - some_double: 10.0
++          some_bool: true
+ 
+ 
+ ---
+@@ -429,7 +434,7 @@ mixed disabled and enabled objects:
+ ---
+ object with dynamic override:
+   - requires:
+-      cluster_features: ["mapper.track_ignored_source"]
++      cluster_features: ["mapper.ignored_source.dont_expand_dots"]
+       reason: requires tracking ignored source
+ 
+   - do:
+@@ -467,7 +472,7 @@ object with dynamic override:
+   - match: { hits.hits.0._source.name: a }
+   - match: { hits.hits.0._source.path_no.name: foo }
+   - match: { hits.hits.0._source.path_no.some_int: 10 }
+-  - match: { hits.hits.0._source.path_no.to.a.very.deeply.nested.field: A }
++  - match: { hits.hits.0._source.path_no.to: { a.very.deeply.nested.field: A } }
+   - match: { hits.hits.0._source.path_runtime.name: bar }
+   - match: { hits.hits.0._source.path_runtime.some_int: 20 }
+   - match: { hits.hits.0._source.path_runtime.to.a.very.deeply.nested.field: B }
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+index 91477590b6c..19bd4f9980b 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+@@ -135,7 +135,7 @@ public final class DocumentParser {
+                         new IgnoredSourceFieldMapper.NameValue(
+                             MapperService.SINGLE_MAPPING_NAME,
+                             0,
+-                            XContentDataHelper.encodeToken(context.parser()),
++                            context.encodeFlattenedToken(),
+                             context.doc()
+                         )
+                     );
+@@ -236,7 +236,7 @@ public final class DocumentParser {
+             var leaf = fields.get(fullName);  // There may be multiple matches for array elements, don't use #remove.
+             if (leaf != null) {
+                 parser.nextToken();  // Advance the parser to the value to be read.
+-                result.add(leaf.cloneWithValue(XContentDataHelper.encodeToken(parser)));
++                result.add(leaf.cloneWithValue(context.encodeFlattenedToken()));
+                 parser.nextToken();  // Skip the token ending the value.
+                 fieldName = null;
+             }
+@@ -402,7 +402,7 @@ public final class DocumentParser {
+                     new IgnoredSourceFieldMapper.NameValue(
+                         context.parent().fullPath(),
+                         context.parent().fullPath().lastIndexOf(context.parent().leafName()),
+-                        XContentDataHelper.encodeToken(parser),
++                        context.encodeFlattenedToken(),
+                         context.doc()
+                     )
+                 );
+@@ -652,12 +652,11 @@ public final class DocumentParser {
+         if (context.dynamic() == ObjectMapper.Dynamic.FALSE) {
+             failIfMatchesRoutingPath(context, currentFieldName);
+             if (context.canAddIgnoredField()) {
+-                // read everything up to end object and store it
+                 context.addIgnoredField(
+                     IgnoredSourceFieldMapper.NameValue.fromContext(
+                         context,
+                         context.path().pathAsText(currentFieldName),
+-                        XContentDataHelper.encodeToken(context.parser())
++                        context.encodeFlattenedToken()
+                     )
+                 );
+             } else {
+@@ -743,7 +742,7 @@ public final class DocumentParser {
+                     IgnoredSourceFieldMapper.NameValue.fromContext(
+                         context,
+                         context.path().pathAsText(currentFieldName),
+-                        XContentDataHelper.encodeToken(context.parser())
++                        context.encodeFlattenedToken()
+                     )
+                 );
+             } else {
+@@ -761,7 +760,7 @@ public final class DocumentParser {
+                             IgnoredSourceFieldMapper.NameValue.fromContext(
+                                 context,
+                                 context.path().pathAsText(currentFieldName),
+-                                XContentDataHelper.encodeToken(context.parser())
++                                context.encodeFlattenedToken()
+                             )
+                         );
+                     } catch (IOException e) {
+@@ -818,9 +817,7 @@ public final class DocumentParser {
+             } else if (mapper instanceof ObjectMapper objectMapper && (objectMapper.isEnabled() == false)) {
+                 // No need to call #addIgnoredFieldFromContext as both singleton and array instances of this object
+                 // get tracked through ignored source.
+-                context.addIgnoredField(
+-                    IgnoredSourceFieldMapper.NameValue.fromContext(context, fullPath, XContentDataHelper.encodeToken(context.parser()))
+-                );
++                context.addIgnoredField(IgnoredSourceFieldMapper.NameValue.fromContext(context, fullPath, context.encodeFlattenedToken()));
+                 return;
+             }
+         }
+@@ -934,7 +931,7 @@ public final class DocumentParser {
+                     IgnoredSourceFieldMapper.NameValue.fromContext(
+                         context,
+                         context.path().pathAsText(currentFieldName),
+-                        XContentDataHelper.encodeToken(context.parser())
++                        context.encodeFlattenedToken()
+                     )
+                 );
+             }
+@@ -945,7 +942,7 @@ public final class DocumentParser {
+                 IgnoredSourceFieldMapper.NameValue.fromContext(
+                     context,
+                     context.path().pathAsText(currentFieldName),
+-                    XContentDataHelper.encodeToken(context.parser())
++                    context.encodeFlattenedToken()
+                 )
+             );
+         }
+@@ -1044,7 +1041,7 @@ public final class DocumentParser {
+                 if (context.dynamic() == ObjectMapper.Dynamic.RUNTIME && context.canAddIgnoredField()) {
+                     try {
+                         context.addIgnoredField(
+-                            IgnoredSourceFieldMapper.NameValue.fromContext(context, path, XContentDataHelper.encodeToken(context.parser()))
++                            IgnoredSourceFieldMapper.NameValue.fromContext(context, path, context.encodeFlattenedToken())
+                         );
+                     } catch (IOException e) {
+                         throw new IllegalArgumentException(
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParserContext.java b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParserContext.java
+index 000c4118e9b..eebe95e260d 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParserContext.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParserContext.java
+@@ -12,6 +12,7 @@ package org.elasticsearch.index.mapper;
+ import org.apache.lucene.document.Field;
+ import org.apache.lucene.document.StringField;
+ import org.apache.lucene.index.IndexableField;
++import org.apache.lucene.util.BytesRef;
+ import org.elasticsearch.common.time.DateFormatter;
+ import org.elasticsearch.core.Tuple;
+ import org.elasticsearch.index.IndexMode;
+@@ -338,6 +339,20 @@ public abstract class DocumentParserContext {
+         return this;
+     }
+ 
++    /**
++     * Wraps {@link XContentDataHelper#encodeToken}, disabling dot expansion from {@link DotExpandingXContentParser}.
++     * This helps avoid producing duplicate names in the same scope, due to expanding dots to objects.
++     * For instance: { "a.b": "b", "a.c": "c" } => { "a": { "b": "b" }, "a": { "c": "c" } }
++     * This can happen when storing parts of document source that are not indexed (e.g. disabled objects).
++     */
++    BytesRef encodeFlattenedToken() throws IOException {
++        boolean old = path().isWithinLeafObject();
++        path().setWithinLeafObject(true);
++        BytesRef encoded = XContentDataHelper.encodeToken(parser());
++        path().setWithinLeafObject(old);
++        return encoded;
++    }
++
+     /**
+      * Return the collection of fields that are missing their source values.
+      */
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapper.java
+index d57edb757ba..296c2c5311d 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapper.java
+@@ -57,6 +57,7 @@ public class IgnoredSourceFieldMapper extends MetadataFieldMapper {
+     public static final TypeParser PARSER = new FixedTypeParser(context -> new IgnoredSourceFieldMapper(context.getIndexSettings()));
+ 
+     static final NodeFeature TRACK_IGNORED_SOURCE = new NodeFeature("mapper.track_ignored_source");
++    static final NodeFeature DONT_EXPAND_DOTS_IN_IGNORED_SOURCE = new NodeFeature("mapper.ignored_source.dont_expand_dots");
+ 
+     /*
+         Setting to disable encoding and writing values for this field.
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/MapperFeatures.java b/server/src/main/java/org/elasticsearch/index/mapper/MapperFeatures.java
+index a8fbb0e0ae9..4f90bd6e6f2 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/MapperFeatures.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/MapperFeatures.java
+@@ -58,6 +58,6 @@ public class MapperFeatures implements FeatureSpecification {
+ 
+     @Override
+     public Set<NodeFeature> getTestFeatures() {
+-        return Set.of(RangeFieldMapper.DATE_RANGE_INDEXING_FIX);
++        return Set.of(RangeFieldMapper.DATE_RANGE_INDEXING_FIX, IgnoredSourceFieldMapper.DONT_EXPAND_DOTS_IN_IGNORED_SOURCE);
+     }
+ }
+diff --git a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+index d79815fa98e..8c65424fb85 100644
+--- a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
++++ b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+@@ -1793,6 +1793,107 @@ public class IgnoredSourceFieldMapperTests extends MapperServiceTestCase {
+         assertEquals("{\"path\":{\"at\":\"A\"}}", syntheticSource);
+     }
+ 
++    public void testDynamicIgnoredObjectWithFlatFields() throws IOException {
++        DocumentMapper documentMapper = createMapperService(topMapping(b -> {
++            b.startObject("_source").field("mode", "synthetic").endObject();
++            b.field("dynamic", false);
++        })).documentMapper();
++
++        CheckedConsumer<XContentBuilder, IOException> document = b -> {
++            b.startObject("top");
++            b.field("file.name", "A");
++            b.field("file.line", 10);
++            b.endObject();
++        };
++
++        var syntheticSource = syntheticSource(documentMapper, document);
++        assertEquals("{\"top\":{\"file.name\":\"A\",\"file.line\":10}}", syntheticSource);
++
++        CheckedConsumer<XContentBuilder, IOException> documentWithArray = b -> {
++            b.startArray("top");
++            b.startObject();
++            b.field("file.name", "A");
++            b.field("file.line", 10);
++            b.endObject();
++            b.startObject();
++            b.field("file.name", "B");
++            b.field("file.line", 20);
++            b.endObject();
++            b.endArray();
++        };
++
++        var syntheticSourceWithArray = syntheticSource(documentMapper, documentWithArray);
++        assertEquals("""
++            {"top":[{"file.name":"A","file.line":10},{"file.name":"B","file.line":20}]}""", syntheticSourceWithArray);
++    }
++
++    public void testDisabledRootObjectWithFlatFields() throws IOException {
++        DocumentMapper documentMapper = createMapperService(topMapping(b -> {
++            b.startObject("_source").field("mode", "synthetic").endObject();
++            b.field("enabled", false);
++        })).documentMapper();
++
++        CheckedConsumer<XContentBuilder, IOException> document = b -> {
++            b.startObject("top");
++            b.field("file.name", "A");
++            b.field("file.line", 10);
++            b.endObject();
++        };
++
++        var syntheticSource = syntheticSource(documentMapper, document);
++        assertEquals("{\"top\":{\"file.name\":\"A\",\"file.line\":10}}", syntheticSource);
++
++        CheckedConsumer<XContentBuilder, IOException> documentWithArray = b -> {
++            b.startArray("top");
++            b.startObject();
++            b.field("file.name", "A");
++            b.field("file.line", 10);
++            b.endObject();
++            b.startObject();
++            b.field("file.name", "B");
++            b.field("file.line", 20);
++            b.endObject();
++            b.endArray();
++        };
++
++        var syntheticSourceWithArray = syntheticSource(documentMapper, documentWithArray);
++        assertEquals("""
++            {"top":[{"file.name":"A","file.line":10},{"file.name":"B","file.line":20}]}""", syntheticSourceWithArray);
++    }
++
++    public void testDisabledObjectWithFlatFields() throws IOException {
++        DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
++            b.startObject("top").field("type", "object").field("enabled", false).endObject();
++        })).documentMapper();
++
++        CheckedConsumer<XContentBuilder, IOException> document = b -> {
++            b.startObject("top");
++            b.field("file.name", "A");
++            b.field("file.line", 10);
++            b.endObject();
++        };
++
++        var syntheticSource = syntheticSource(documentMapper, document);
++        assertEquals("{\"top\":{\"file.name\":\"A\",\"file.line\":10}}", syntheticSource);
++
++        CheckedConsumer<XContentBuilder, IOException> documentWithArray = b -> {
++            b.startArray("top");
++            b.startObject();
++            b.field("file.name", "A");
++            b.field("file.line", 10);
++            b.endObject();
++            b.startObject();
++            b.field("file.name", "B");
++            b.field("file.line", 20);
++            b.endObject();
++            b.endArray();
++        };
++
++        var syntheticSourceWithArray = syntheticSource(documentMapper, documentWithArray);
++        assertEquals("""
++            {"top":[{"file.name":"A","file.line":10},{"file.name":"B","file.line":20}]}""", syntheticSourceWithArray);
++    }
++
+     protected void validateRoundTripReader(String syntheticSource, DirectoryReader reader, DirectoryReader roundTripReader)
+         throws IOException {
+         // We exclude ignored source field since in some cases it contains an exact copy of a part of document source.

@@ -1,0 +1,288 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "43e3e24d075332ed8c697113236ee4126fd56603",
+  "backport_commit": "ddd0ffa8a14d27839a2497d6595c46c84cf70099",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 3.98,
+      "error": null,
+      "java_hunks": 5,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpAggregator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 11,
+          "end_line": 23,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpAggregator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 27,
+          "end_line": 44,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpAggregator.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 51,
+          "end_line": 84,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpContentSizeHandler.java",
+          "method_used": "new_file",
+          "confidence": 1.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpServerTransport.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 381,
+          "end_line": 387,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.43,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_IV",
+        "confidence": 0.95,
+        "reasoning": "The patch introduces a new class Netty4HttpContentSizeHandler with complex logic for HTTP content size handling, including handling of 'Expect: 100-continue' headers, oversized content, and connection management. It modifies existing classes to integrate this new handler, replacing previous simpler logic. The changes involve deep structural refactoring of HTTP request handling and content aggregation, including changes to test classes and internal cluster tests. The patch is not a trivial string replacement or whitespace fix, nor is it a simple structural rename; it represents a significant API and behavior change in the HTTP transport layer, thus classified as TYPE_IV. The confidence is high due to exact localization of all hunks and the nature of the changes. The token budget estimate is relatively high due to the complexity and size of the patch.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "applied_count": 4,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpAggregator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpAggregator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpAggregator.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpServerTransport.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.08,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 2.44,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpContentSizeHandler.java",
+          "old_string": "",
+          "new_string": "/*\n * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n * or more contributor license agreements. Licensed under the \"Elastic License\n * 2.0\", the \"GNU Affero General Public License v3.0 only\", and the \"Server Side\n * Public License v 1\"; you may not use this file except in compliance with, at\n * your election, the \"Elastic License 2.0\", the \"GNU Affero General Public\n * License v3.0 only\", or the \"Server Side Public License, v 1\".\n */\n\npackage org.elasticsearch.http.netty4;\n\nimport io.netty.buffer.Unpooled;\nimport io.netty.channel.ChannelFutureListener;\nimport io.netty.channel.ChannelHandlerContext;\nimport io.netty.channel.ChannelInboundHandlerAdapter;\nimport io.netty.handler.codec.http.DefaultFullHttpResponse;\nimport io.netty.handler.codec.http.DefaultHttpHeaders;\nimport io.netty.handler.codec.http.EmptyHttpHeaders;\nimport io.netty.handler.codec.http.FullHttpResponse;\nimport io.netty.handler.codec.http.HttpContent;\nimport io.netty.handler.codec.http.HttpHeaderNames;\nimport io.netty.handler.codec.http.HttpHeaderValues;\nimport io.netty.handler.codec.http.HttpObject;\nimport io.netty.handler.codec.http.HttpRequest;\nimport io.netty.handler.codec.http.HttpRequestDecoder;\nimport io.netty.handler.codec.http.HttpResponseStatus;\nimport io.netty.handler.codec.http.HttpUtil;\nimport io.netty.handler.codec.http.HttpVersion;\nimport io.netty.handler.codec.http.LastHttpContent;\n\nimport org.elasticsearch.core.SuppressForbidden;\n\nimport static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;\nimport static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;\n\n/**\n * Provides handling for 'Expect' header and content size. Implements HTTP1.1 spec.\n * Allows {@code Expect: 100-continue} header only. Other 'Expect' headers will be rejected with\n * {@code 417 Expectation Failed} reason.\n * <br>\n * Replies {@code 100 Continue} to requests with allowed maxContentLength.\n * <br>\n * Replies {@code 413 Request Entity Too Large} when content size exceeds maxContentLength.\n *\n * Channel can be reused for requests with \"Expect:100-Continue\" header that exceed allowed content length,\n * as long as request does not include content. If oversized request already contains content then\n * we cannot safely proceed and connection will be closed.\n * <br><br>\n * TODO: move to RestController to allow content limits per RestHandler.\n *  Ideally we should be able to handle Continue and oversized request in the RestController.\n * <ul>\n *     <li>\n *         100 Continue is interim response, means RestChannel will send 2 responses for a single request. See\n *         <a href=\"https://www.rfc-editor.org/rfc/rfc9110.html#status.100\">rfc9110.html#status.100</a>\n *     </li>\n *     <li>\n *         RestChannel should be able to close underlying HTTP channel connection.\n *     </li>\n * </ul>\n */\n@SuppressForbidden(reason = \"use of default ChannelFutureListener's CLOSE and CLOSE_ON_FAILURE\")\npublic class Netty4HttpContentSizeHandler extends ChannelInboundHandlerAdapter {\n\n    // copied from netty's HttpObjectAggregator\n    static final FullHttpResponse CONTINUE = new DefaultFullHttpResponse(\n        HttpVersion.HTTP_1_1,\n        HttpResponseStatus.CONTINUE,\n        Unpooled.EMPTY_BUFFER\n    );\n    static final FullHttpResponse EXPECTATION_FAILED_CLOSE = new DefaultFullHttpResponse(\n        HttpVersion.HTTP_1_1,\n        HttpResponseStatus.EXPECTATION_FAILED,\n        Unpooled.EMPTY_BUFFER,\n        new DefaultHttpHeaders().add(CONTENT_LENGTH, 0).add(CONNECTION, HttpHeaderValues.CLOSE),\n        EmptyHttpHeaders.INSTANCE\n    );\n    static final FullHttpResponse TOO_LARGE_CLOSE = new DefaultFullHttpResponse(\n        HttpVersion.HTTP_1_1,\n        HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE,\n        Unpooled.EMPTY_BUFFER,\n        new DefaultHttpHeaders().add(CONTENT_LENGTH, 0).add(CONNECTION, HttpHeaderValues.CLOSE),\n        EmptyHttpHeaders.INSTANCE\n    );\n    static final FullHttpResponse TOO_LARGE = new DefaultFullHttpResponse(\n        HttpVersion.HTTP_1_1,\n        HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE,\n        Unpooled.EMPTY_BUFFER,\n        new DefaultHttpHeaders().add(CONTENT_LENGTH, 0),\n        EmptyHttpHeaders.INSTANCE\n    );\n\n    private final int maxContentLength;\n    private final HttpRequestDecoder decoder; // need to reset decoder after sending 413\n    private int currentContentLength; // chunked encoding does not provide content length, need to track actual length\n    private boolean contentExpected;\n\n    public Netty4HttpContentSizeHandler(HttpRequestDecoder decoder, int maxContentLength) {\n        this.maxContentLength = maxContentLength;\n        this.decoder = decoder;\n    }\n\n    @Override\n    public void channelRead(ChannelHandlerContext ctx, Object msg) {\n        assert msg instanceof HttpObject;\n        if (msg instanceof HttpRequest request) {\n            handleRequest(ctx, request);\n        } else {\n            handleContent(ctx, (HttpContent) msg);\n        }\n    }\n\n    private void handleRequest(ChannelHandlerContext ctx, HttpRequest request) {\n        contentExpected = false;\n        if (request.decoderResult().isFailure()) {\n            ctx.fireChannelRead(request);\n            return;\n        }\n\n        final var expectValue = request.headers().get(HttpHeaderNames.EXPECT);\n        boolean isContinueExpected = false;\n        // Only \"Expect: 100-Continue\" header is supported\n        if (expectValue != null) {\n            if (HttpHeaderValues.CONTINUE.toString().equalsIgnoreCase(expectValue)) {\n                isContinueExpected = true;\n            } else {\n                ctx.writeAndFlush(EXPECTATION_FAILED_CLOSE.retainedDuplicate()).addListener(ChannelFutureListener.CLOSE);\n                return;\n            }\n        }\n\n        boolean isOversized = HttpUtil.getContentLength(request, -1) > maxContentLength;\n        if (isOversized) {\n            if (isContinueExpected) {\n                // Client is allowed to send content without waiting for Continue.\n                // See https://www.rfc-editor.org/rfc/rfc9110.html#section-10.1.1-11.3\n                // this content will result in HttpRequestDecoder failure and send downstream\n                decoder.reset();\n                ctx.writeAndFlush(TOO_LARGE.retainedDuplicate()).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);\n            } else {\n                // Client is sending oversized content, we cannot safely take it. Closing channel.\n                ctx.writeAndFlush(TOO_LARGE_CLOSE.retainedDuplicate()).addListener(ChannelFutureListener.CLOSE);\n            }\n        } else {\n            contentExpected = true;\n            currentContentLength = 0;\n            if (isContinueExpected) {\n                ctx.writeAndFlush(CONTINUE.retainedDuplicate());\n                HttpUtil.set100ContinueExpected(request, false);\n            }\n            ctx.fireChannelRead(request);\n        }\n    }\n\n    private void handleContent(ChannelHandlerContext ctx, HttpContent msg) {\n        if (contentExpected) {\n            currentContentLength += msg.content().readableBytes();\n            if (currentContentLength > maxContentLength) {\n                msg.release();\n                ctx.writeAndFlush(TOO_LARGE_CLOSE.retainedDuplicate()).addListener(ChannelFutureListener.CLOSE);\n            } else {\n                ctx.fireChannelRead(msg);\n            }\n        } else {\n            msg.release();\n            if (msg != LastHttpContent.EMPTY_LAST_CONTENT) {\n                ctx.close(); // there is no reliable recovery from unexpected content, closing channel\n            }\n        }\n    }\n\n}",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.6,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "modules/transport-netty4/src/main/java/org/elasticsearch/http/netty4/Netty4HttpContentSizeHandler.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/modules/transport-netty4/build/test-results/internalClusterTest/TEST-org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT"
+        ],
+        "test_cases": {
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testClientConnectionCloseMidStream": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpBodyLogging": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testServerCloseConnectionMidStream": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testOversizedChunkedEncoding": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testServerExceptionMidStream": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpBodyLoggingChannelClose": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpClientStats": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testClientBackpressure": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#test100Continue": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testEmptyContent": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testBadRequestReleaseQueuedChunks": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testReceiveAllChunks": "passed",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#test413TooLargeOnExpect100Continue": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT": "passed"
+        },
+        "summary": {
+          "passed": 13,
+          "failed": 0,
+          "skipped": 0,
+          "total": 13
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#test100Continue",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#test413TooLargeOnExpect100Continue",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testBadRequestReleaseQueuedChunks",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testClientBackpressure",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testClientConnectionCloseMidStream",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testEmptyContent",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpBodyLogging",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpBodyLoggingChannelClose",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpClientStats",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testOversizedChunkedEncoding",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testReceiveAllChunks",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testServerCloseConnectionMidStream",
+          "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testServerExceptionMidStream"
+        ],
+        "baseline_total": 0,
+        "patched_total": 13,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 17,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 5,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      4
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 4,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 13282,
+    "target_patch_bytes": 34650,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#test100Continue",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#test413TooLargeOnExpect100Continue",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testBadRequestReleaseQueuedChunks",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testClientBackpressure",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testClientConnectionCloseMidStream",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testEmptyContent",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpBodyLogging",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpBodyLoggingChannelClose",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testHttpClientStats",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testOversizedChunkedEncoding",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testReceiveAllChunks",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testServerCloseConnectionMidStream",
+        "org.elasticsearch.http.netty4.Netty4IncrementalRequestHandlingIT#testServerExceptionMidStream"
+      ],
+      "baseline_total": 0,
+      "patched_total": 13,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 13,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

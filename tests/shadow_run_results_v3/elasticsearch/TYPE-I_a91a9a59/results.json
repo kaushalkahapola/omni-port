@@ -1,0 +1,200 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "a91a9a59685057eeb2f2ad5f264cc23525255e09",
+  "backport_commit": "2b01c3b95f3df9d416c415d3313ca516bf85adb9",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/index/cache/bitset/BitsetFilterCache.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 58,
+          "end_line": 65,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/index/cache/bitset/BitsetFilterCache.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 105,
+          "end_line": 113,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.56,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies a conditional expression by removing a check on INDEX_FAST_REFRESH_SETTING and simplifies the logic in BitsetFilterCache.shouldLoadRandomAccessFiltersEagerly. The localization evidence shows both hunks were found via 'git_exact' with confidence 1.00, indicating the patch applies as an exact match string replacement. The changes are straightforward and do not involve structural or API changes, so this is a trivial backport classified as TYPE_I. The confidence is slightly reduced from 1.0 to 0.95 due to minor test code adjustments, but overall the patch is simple and direct.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/index/cache/bitset/BitsetFilterCache.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/index/cache/bitset/BitsetFilterCache.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests#testShouldLoadRandomAccessFiltersEagerly": "passed",
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests#testInvalidateEntries": "passed",
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests#testSetNullListener": "passed",
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests#testStats": "passed",
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests#testListener": "passed",
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests#testRejectOtherIndex": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests": "passed"
+        },
+        "summary": {
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0,
+          "total": 6
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests#testShouldLoadRandomAccessFiltersEagerly"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 6,
+        "patched_total": 6,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 6
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 1444,
+    "target_patch_bytes": 5388,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.index.cache.bitset.BitSetFilterCacheTests#testShouldLoadRandomAccessFiltersEagerly"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 6,
+      "patched_total": 6,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

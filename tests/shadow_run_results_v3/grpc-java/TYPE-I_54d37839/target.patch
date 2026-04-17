@@ -1,0 +1,86 @@
+commit a6e1c1f09c6c7ff8e54405d6782bb1ff553ffb29
+Author: Eric Anderson <ejona@google.com>
+Date:   Tue Apr 8 03:30:58 2025 -0700
+
+    stub: trailersFromThrowable() metadata should be copied (#11979) (#12008)
+    
+    If the same exception is passed to multiple RPCs, then the results will race, which this fix addresses.
+    
+    Fixes #11973
+    
+    Co-authored-by: jiangyuan <joe469391363@gmail.com>
+
+diff --git a/stub/src/main/java/io/grpc/stub/ServerCalls.java b/stub/src/main/java/io/grpc/stub/ServerCalls.java
+index 7990a5b34..9f0063713 100644
+--- a/stub/src/main/java/io/grpc/stub/ServerCalls.java
++++ b/stub/src/main/java/io/grpc/stub/ServerCalls.java
+@@ -382,9 +382,10 @@ public final class ServerCalls {
+ 
+     @Override
+     public void onError(Throwable t) {
+-      Metadata metadata = Status.trailersFromThrowable(t);
+-      if (metadata == null) {
+-        metadata = new Metadata();
++      Metadata metadata = new Metadata();
++      Metadata trailers = Status.trailersFromThrowable(t);
++      if (trailers != null) {
++        metadata.merge(trailers);
+       }
+       call.close(Status.fromThrowable(t), metadata);
+       aborted = true;
+diff --git a/stub/src/test/java/io/grpc/stub/ServerCallsTest.java b/stub/src/test/java/io/grpc/stub/ServerCallsTest.java
+index 1e51ac101..6f458facc 100644
+--- a/stub/src/test/java/io/grpc/stub/ServerCallsTest.java
++++ b/stub/src/test/java/io/grpc/stub/ServerCallsTest.java
+@@ -555,6 +555,35 @@ public class ServerCallsTest {
+     listener.onHalfClose();
+   }
+ 
++  @Test
++  public void clientSendsOne_serverOnErrorWithTrailers_serverStreaming() {
++    Metadata trailers = new Metadata();
++    Metadata.Key<String> key = Metadata.Key.of("trailers-test-key1",
++            Metadata.ASCII_STRING_MARSHALLER);
++    trailers.put(key, "trailers-test-value1");
++
++    ServerCallRecorder serverCall = new ServerCallRecorder(SERVER_STREAMING_METHOD);
++    ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncServerStreamingCall(
++        new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
++          @Override
++          public void invoke(Integer req, StreamObserver<Integer> responseObserver) {
++            responseObserver.onError(
++                    Status.fromCode(Status.Code.INTERNAL)
++                            .asRuntimeException(trailers)
++            );
++          }
++        });
++    ServerCall.Listener<Integer> listener = callHandler.startCall(serverCall, new Metadata());
++    serverCall.isReady = true;
++    serverCall.isCancelled = false;
++    listener.onReady();
++    listener.onMessage(1);
++    listener.onHalfClose();
++    // verify trailers key is set
++    assertTrue(serverCall.trailers.containsKey(key));
++    assertTrue(serverCall.status.equals(Status.INTERNAL));
++  }
++
+   @Test
+   public void inprocessTransportManualFlow() throws Exception {
+     final Semaphore semaphore = new Semaphore(1);
+@@ -652,6 +681,7 @@ public class ServerCallsTest {
+     private boolean isCancelled;
+     private boolean isReady;
+     private int onReadyThreshold;
++    private Metadata trailers;
+ 
+     public ServerCallRecorder(MethodDescriptor<Integer, Integer> methodDescriptor) {
+       this.methodDescriptor = methodDescriptor;
+@@ -674,6 +704,7 @@ public class ServerCallsTest {
+     @Override
+     public void close(Status status, Metadata trailers) {
+       this.status = status;
++      this.trailers = trailers;
+     }
+ 
+     @Override

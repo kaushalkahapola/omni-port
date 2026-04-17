@@ -1,0 +1,313 @@
+commit 64f661702a8c6e8656b8585dd0d67bc77fc71496
+Author: Alexander Spies <alexander.spies@elastic.co>
+Date:   Fri Oct 11 14:48:08 2024 +0200
+
+    ESQL: Push down filters even in case of renames in Evals (#114411)
+    
+    Optimize queries like
+    ... | EVAL b = a, c = b | WHERE c > 2
+    to
+    ... | WHERE a > 2 | EVAL b = a, c = b
+
+diff --git a/docs/changelog/114411.yaml b/docs/changelog/114411.yaml
+new file mode 100644
+index 00000000000..23bff3c8e25
+--- /dev/null
++++ b/docs/changelog/114411.yaml
+@@ -0,0 +1,5 @@
++pr: 114411
++summary: "ESQL: Push down filters even in case of renames in Evals"
++area: ES|QL
++type: enhancement
++issues: []
+diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PushDownAndCombineFilters.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PushDownAndCombineFilters.java
+index e39b590228d..ed09d0bc167 100644
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PushDownAndCombineFilters.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PushDownAndCombineFilters.java
+@@ -7,10 +7,13 @@
+ 
+ package org.elasticsearch.xpack.esql.optimizer.rules.logical;
+ 
++import org.elasticsearch.xpack.esql.core.expression.Alias;
+ import org.elasticsearch.xpack.esql.core.expression.Attribute;
++import org.elasticsearch.xpack.esql.core.expression.AttributeMap;
+ import org.elasticsearch.xpack.esql.core.expression.AttributeSet;
+ import org.elasticsearch.xpack.esql.core.expression.Expression;
+ import org.elasticsearch.xpack.esql.core.expression.Expressions;
++import org.elasticsearch.xpack.esql.core.expression.ReferenceAttribute;
+ import org.elasticsearch.xpack.esql.core.expression.predicate.Predicates;
+ import org.elasticsearch.xpack.esql.expression.function.aggregate.AggregateFunction;
+ import org.elasticsearch.xpack.esql.plan.logical.Aggregate;
+@@ -25,6 +28,7 @@ import org.elasticsearch.xpack.esql.plan.logical.UnaryPlan;
+ 
+ import java.util.ArrayList;
+ import java.util.List;
++import java.util.function.Function;
+ import java.util.function.Predicate;
+ 
+ public final class PushDownAndCombineFilters extends OptimizerRules.OptimizerRule<Filter> {
+@@ -43,20 +47,37 @@ public final class PushDownAndCombineFilters extends OptimizerRules.OptimizerRul
+                 filter,
+                 agg,
+                 e -> e instanceof Attribute && agg.output().contains(e) && agg.groupings().contains(e) == false
+-                    || e instanceof AggregateFunction
++                    || e instanceof AggregateFunction,
++                NO_OP
+             );
+         } else if (child instanceof Eval eval) {
+-            // Don't push if Filter (still) contains references of Eval's fields.
+-            var attributes = new AttributeSet(Expressions.asAttributes(eval.fields()));
+-            plan = maybePushDownPastUnary(filter, eval, attributes::contains);
++            // Don't push if Filter (still) contains references to Eval's fields.
++            // Account for simple aliases in the Eval, though - these shouldn't stop us.
++            AttributeMap.Builder<Expression> aliasesBuilder = AttributeMap.builder();
++            for (Alias alias : eval.fields()) {
++                aliasesBuilder.put(alias.toAttribute(), alias.child());
++            }
++            AttributeMap<Expression> evalAliases = aliasesBuilder.build();
++
++            Function<Expression, Expression> resolveRenames = expr -> expr.transformDown(ReferenceAttribute.class, r -> {
++                Expression resolved = evalAliases.resolve(r, null);
++                // Avoid resolving to an intermediate attribute that only lives inside the Eval - only replace if the attribute existed
++                // before the Eval.
++                if (resolved instanceof Attribute && eval.inputSet().contains(resolved)) {
++                    return resolved;
++                }
++                return r;
++            });
++
++            plan = maybePushDownPastUnary(filter, eval, evalAliases::containsKey, resolveRenames);
+         } else if (child instanceof RegexExtract re) {
+             // Push down filters that do not rely on attributes created by RegexExtract
+             var attributes = new AttributeSet(Expressions.asAttributes(re.extractedFields()));
+-            plan = maybePushDownPastUnary(filter, re, attributes::contains);
++            plan = maybePushDownPastUnary(filter, re, attributes::contains, NO_OP);
+         } else if (child instanceof Enrich enrich) {
+             // Push down filters that do not rely on attributes created by Enrich
+             var attributes = new AttributeSet(Expressions.asAttributes(enrich.enrichFields()));
+-            plan = maybePushDownPastUnary(filter, enrich, attributes::contains);
++            plan = maybePushDownPastUnary(filter, enrich, attributes::contains, NO_OP);
+         } else if (child instanceof Project) {
+             return PushDownUtils.pushDownPastProject(filter);
+         } else if (child instanceof OrderBy orderBy) {
+@@ -67,21 +88,35 @@ public final class PushDownAndCombineFilters extends OptimizerRules.OptimizerRul
+         return plan;
+     }
+ 
+-    private static LogicalPlan maybePushDownPastUnary(Filter filter, UnaryPlan unary, Predicate<Expression> cannotPush) {
++    private static Function<Expression, Expression> NO_OP = expression -> expression;
++
++    private static LogicalPlan maybePushDownPastUnary(
++        Filter filter,
++        UnaryPlan unary,
++        Predicate<Expression> cannotPush,
++        Function<Expression, Expression> resolveRenames
++    ) {
+         LogicalPlan plan;
+         List<Expression> pushable = new ArrayList<>();
+         List<Expression> nonPushable = new ArrayList<>();
+         for (Expression exp : Predicates.splitAnd(filter.condition())) {
+-            (exp.anyMatch(cannotPush) ? nonPushable : pushable).add(exp);
++            Expression resolvedExp = resolveRenames.apply(exp);
++            if (resolvedExp.anyMatch(cannotPush)) {
++                // Add the original expression to the non-pushables.
++                nonPushable.add(exp);
++            } else {
++                // When we can push down, we use the resolved expression.
++                pushable.add(resolvedExp);
++            }
+         }
+         // Push the filter down even if it might not be pushable all the way to ES eventually: eval'ing it closer to the source,
+         // potentially still in the Exec Engine, distributes the computation.
+-        if (pushable.size() > 0) {
+-            if (nonPushable.size() > 0) {
+-                Filter pushed = new Filter(filter.source(), unary.child(), Predicates.combineAnd(pushable));
++        if (pushable.isEmpty() == false) {
++            Filter pushed = filter.with(unary.child(), Predicates.combineAnd(pushable));
++            if (nonPushable.isEmpty() == false) {
+                 plan = filter.with(unary.replaceChild(pushed), Predicates.combineAnd(nonPushable));
+             } else {
+-                plan = unary.replaceChild(filter.with(unary.child(), filter.condition()));
++                plan = unary.replaceChild(pushed);
+             }
+         } else {
+             plan = filter;
+diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PushDownAndCombineFiltersTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PushDownAndCombineFiltersTests.java
+index 121c0ef3378..49a738f4f4f 100644
+--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PushDownAndCombineFiltersTests.java
++++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PushDownAndCombineFiltersTests.java
+@@ -9,9 +9,14 @@ package org.elasticsearch.xpack.esql.optimizer.rules.logical;
+ 
+ import org.elasticsearch.index.IndexMode;
+ import org.elasticsearch.test.ESTestCase;
++import org.elasticsearch.xpack.esql.core.expression.Alias;
++import org.elasticsearch.xpack.esql.core.expression.Attribute;
++import org.elasticsearch.xpack.esql.core.expression.Expression;
+ import org.elasticsearch.xpack.esql.core.expression.FieldAttribute;
++import org.elasticsearch.xpack.esql.core.expression.predicate.Predicates;
+ import org.elasticsearch.xpack.esql.core.expression.predicate.logical.And;
+ import org.elasticsearch.xpack.esql.expression.function.aggregate.Count;
++import org.elasticsearch.xpack.esql.expression.function.scalar.math.Pow;
+ import org.elasticsearch.xpack.esql.expression.function.scalar.string.RLike;
+ import org.elasticsearch.xpack.esql.expression.function.scalar.string.WildcardLike;
+ import org.elasticsearch.xpack.esql.expression.predicate.operator.comparison.GreaterThan;
+@@ -20,17 +25,23 @@ import org.elasticsearch.xpack.esql.expression.predicate.operator.comparison.Les
+ import org.elasticsearch.xpack.esql.index.EsIndex;
+ import org.elasticsearch.xpack.esql.plan.logical.Aggregate;
+ import org.elasticsearch.xpack.esql.plan.logical.EsRelation;
++import org.elasticsearch.xpack.esql.plan.logical.Eval;
+ import org.elasticsearch.xpack.esql.plan.logical.Filter;
++import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
++import org.elasticsearch.xpack.esql.plan.logical.Project;
+ import org.elasticsearch.xpack.esql.plan.logical.local.EsqlProject;
+ 
++import java.util.ArrayList;
+ import java.util.List;
+ 
+ import static java.util.Collections.emptyList;
+ import static java.util.Collections.emptyMap;
+ import static java.util.Collections.singletonList;
++import static org.elasticsearch.xpack.esql.EsqlTestUtils.FOUR;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.ONE;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.THREE;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.TWO;
++import static org.elasticsearch.xpack.esql.EsqlTestUtils.as;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.getFieldAttribute;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.greaterThanOf;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.greaterThanOrEqualOf;
+@@ -77,6 +88,115 @@ public class PushDownAndCombineFiltersTests extends ESTestCase {
+         assertEquals(new EsqlProject(EMPTY, combinedFilter, projections), new PushDownAndCombineFilters().apply(fb));
+     }
+ 
++    public void testPushDownFilterPastRenamingProject() {
++        FieldAttribute a = getFieldAttribute("a");
++        FieldAttribute b = getFieldAttribute("b");
++        EsRelation relation = relation(List.of(a, b));
++
++        Alias aRenamed = new Alias(EMPTY, "a_renamed", a);
++        Alias aRenamedTwice = new Alias(EMPTY, "a_renamed_twice", aRenamed.toAttribute());
++        Alias bRenamed = new Alias(EMPTY, "b_renamed", b);
++
++        Project project = new Project(EMPTY, relation, List.of(aRenamed, aRenamedTwice, bRenamed));
++
++        GreaterThan aRenamedTwiceGreaterThanOne = greaterThanOf(aRenamedTwice.toAttribute(), ONE);
++        LessThan bRenamedLessThanTwo = lessThanOf(bRenamed.toAttribute(), TWO);
++        Filter filter = new Filter(EMPTY, project, Predicates.combineAnd(List.of(aRenamedTwiceGreaterThanOne, bRenamedLessThanTwo)));
++
++        LogicalPlan optimized = new PushDownAndCombineFilters().apply(filter);
++
++        Project optimizedProject = as(optimized, Project.class);
++        assertEquals(optimizedProject.projections(), project.projections());
++        Filter optimizedFilter = as(optimizedProject.child(), Filter.class);
++        assertEquals(optimizedFilter.condition(), Predicates.combineAnd(List.of(greaterThanOf(a, ONE), lessThanOf(b, TWO))));
++        EsRelation optimizedRelation = as(optimizedFilter.child(), EsRelation.class);
++        assertEquals(optimizedRelation, relation);
++    }
++
++    // ... | eval a_renamed = a, a_renamed_twice = a_renamed, a_squared = pow(a, 2)
++    // | where a_renamed > 1 and a_renamed_twice < 2 and a_squared < 4
++    // ->
++    // ... | where a > 1 and a < 2 | eval a_renamed = a, a_renamed_twice = a_renamed, non_pushable = pow(a, 2) | where a_squared < 4
++    public void testPushDownFilterOnAliasInEval() {
++        FieldAttribute a = getFieldAttribute("a");
++        FieldAttribute b = getFieldAttribute("b");
++        EsRelation relation = relation(List.of(a, b));
++
++        Alias aRenamed = new Alias(EMPTY, "a_renamed", a);
++        Alias aRenamedTwice = new Alias(EMPTY, "a_renamed_twice", aRenamed.toAttribute());
++        Alias bRenamed = new Alias(EMPTY, "b_renamed", b);
++        Alias aSquared = new Alias(EMPTY, "a_squared", new Pow(EMPTY, a, TWO));
++        Eval eval = new Eval(EMPTY, relation, List.of(aRenamed, aRenamedTwice, aSquared, bRenamed));
++
++        // We'll construct a Filter after the Eval that has conditions that can or cannot be pushed before the Eval.
++        List<Expression> pushableConditionsBefore = List.of(
++            greaterThanOf(a.toAttribute(), TWO),
++            greaterThanOf(aRenamed.toAttribute(), ONE),
++            lessThanOf(aRenamedTwice.toAttribute(), TWO),
++            lessThanOf(aRenamedTwice.toAttribute(), bRenamed.toAttribute())
++        );
++        List<Expression> pushableConditionsAfter = List.of(
++            greaterThanOf(a.toAttribute(), TWO),
++            greaterThanOf(a.toAttribute(), ONE),
++            lessThanOf(a.toAttribute(), TWO),
++            lessThanOf(a.toAttribute(), b.toAttribute())
++        );
++        List<Expression> nonPushableConditions = List.of(
++            lessThanOf(aSquared.toAttribute(), FOUR),
++            greaterThanOf(aRenamedTwice.toAttribute(), aSquared.toAttribute())
++        );
++
++        // Try different combinations of pushable and non-pushable conditions in the filter while also randomizing their order a bit.
++        for (int numPushable = 0; numPushable <= pushableConditionsBefore.size(); numPushable++) {
++            for (int numNonPushable = 0; numNonPushable <= nonPushableConditions.size(); numNonPushable++) {
++                if (numPushable == 0 && numNonPushable == 0) {
++                    continue;
++                }
++
++                List<Expression> conditions = new ArrayList<>();
++
++                int pushableIndex = 0, nonPushableIndex = 0;
++                // Loop and add either a pushable or non-pushable condition to the filter.
++                boolean addPushable;
++                while (pushableIndex < numPushable || nonPushableIndex < numNonPushable) {
++                    if (pushableIndex == numPushable) {
++                        addPushable = false;
++                    } else if (nonPushableIndex == numNonPushable) {
++                        addPushable = true;
++                    } else {
++                        addPushable = randomBoolean();
++                    }
++
++                    if (addPushable) {
++                        conditions.add(pushableConditionsBefore.get(pushableIndex++));
++                    } else {
++                        conditions.add(nonPushableConditions.get(nonPushableIndex++));
++                    }
++                }
++
++                Filter filter = new Filter(EMPTY, eval, Predicates.combineAnd(conditions));
++
++                LogicalPlan plan = new PushDownAndCombineFilters().apply(filter);
++
++                if (numNonPushable > 0) {
++                    Filter optimizedFilter = as(plan, Filter.class);
++                    assertEquals(optimizedFilter.condition(), Predicates.combineAnd(nonPushableConditions.subList(0, numNonPushable)));
++                    plan = optimizedFilter.child();
++                }
++                Eval optimizedEval = as(plan, Eval.class);
++                assertEquals(optimizedEval.fields(), eval.fields());
++                plan = optimizedEval.child();
++                if (numPushable > 0) {
++                    Filter pushedFilter = as(plan, Filter.class);
++                    assertEquals(pushedFilter.condition(), Predicates.combineAnd(pushableConditionsAfter.subList(0, numPushable)));
++                    plan = pushedFilter.child();
++                }
++                EsRelation optimizedRelation = as(plan, EsRelation.class);
++                assertEquals(optimizedRelation, relation);
++            }
++        }
++    }
++
+     public void testPushDownLikeRlikeFilter() {
+         EsRelation relation = relation();
+         org.elasticsearch.xpack.esql.core.expression.predicate.regex.RLike conditionA = rlike(getFieldAttribute("a"), "foo");
+@@ -125,7 +245,17 @@ public class PushDownAndCombineFiltersTests extends ESTestCase {
+         assertEquals(expected, new PushDownAndCombineFilters().apply(fb));
+     }
+ 
+-    private EsRelation relation() {
+-        return new EsRelation(EMPTY, new EsIndex(randomAlphaOfLength(8), emptyMap()), randomFrom(IndexMode.values()), randomBoolean());
++    private static EsRelation relation() {
++        return relation(List.of());
++    }
++
++    private static EsRelation relation(List<Attribute> fieldAttributes) {
++        return new EsRelation(
++            EMPTY,
++            new EsIndex(randomAlphaOfLength(8), emptyMap()),
++            fieldAttributes,
++            randomFrom(IndexMode.values()),
++            randomBoolean()
++        );
+     }
+ }

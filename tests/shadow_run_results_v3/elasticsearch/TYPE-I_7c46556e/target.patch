@@ -1,0 +1,261 @@
+commit b5f8da18337a5f3e795d9f6594c22aa6309da0f2
+Author: Patrick Doyle <810052+prdoyle@users.noreply.github.com>
+Date:   Mon Dec 30 13:48:32 2024 -0500
+
+    Grant all entitlements to system modules (#119168) (#119364)
+    
+    * Grant all entitlements to system modules
+    
+    * [CI] Auto commit changes from spotless
+    
+    * Make NO_ENTITLEMENTS_MODULE non-null
+    
+    * Initialize NO_ENTITLEMENTS_MODULE with @BeforeClass.
+    
+    Looks like @WithoutSecurityManager doesn't work with static initializers.
+    
+    * Move check to public method
+    
+    * Logging adjustments
+    
+    ---------
+    
+    Co-authored-by: elasticsearchmachine <infra-root+elasticsearchmachine@elastic.co>
+
+diff --git a/libs/entitlement/bridge/src/main/java/org/elasticsearch/entitlement/bridge/EntitlementChecker.java b/libs/entitlement/bridge/src/main/java/org/elasticsearch/entitlement/bridge/EntitlementChecker.java
+index 25f4e97bd12..d549c0d8906 100644
+--- a/libs/entitlement/bridge/src/main/java/org/elasticsearch/entitlement/bridge/EntitlementChecker.java
++++ b/libs/entitlement/bridge/src/main/java/org/elasticsearch/entitlement/bridge/EntitlementChecker.java
+@@ -32,7 +32,7 @@ public interface EntitlementChecker {
+     void check$java_net_URLClassLoader$(Class<?> callerClass, String name, URL[] urls, ClassLoader parent, URLStreamHandlerFactory factory);
+ 
+     // Process creation
+-    void check$$start(Class<?> callerClass, ProcessBuilder that, ProcessBuilder.Redirect[] redirects);
++    void check$$start(Class<?> callerClass, ProcessBuilder that);
+ 
+     void check$java_lang_ProcessBuilder$startPipeline(Class<?> callerClass, List<ProcessBuilder> builders);
+ 
+diff --git a/libs/entitlement/qa/src/javaRestTest/java/org/elasticsearch/entitlement/qa/EntitlementsDeniedIT.java b/libs/entitlement/qa/src/javaRestTest/java/org/elasticsearch/entitlement/qa/EntitlementsDeniedIT.java
+index 9f55a7c9e89..7f2bf792ac0 100644
+--- a/libs/entitlement/qa/src/javaRestTest/java/org/elasticsearch/entitlement/qa/EntitlementsDeniedIT.java
++++ b/libs/entitlement/qa/src/javaRestTest/java/org/elasticsearch/entitlement/qa/EntitlementsDeniedIT.java
+@@ -31,6 +31,8 @@ public class EntitlementsDeniedIT extends ESRestTestCase {
+         .plugin("entitlement-denied-nonmodular")
+         .systemProperty("es.entitlements.enabled", "true")
+         .setting("xpack.security.enabled", "false")
++        // Logs in libs/entitlement/qa/build/test-results/javaRestTest/TEST-org.elasticsearch.entitlement.qa.EntitlementsDeniedIT.xml
++        // .setting("logger.org.elasticsearch.entitlement", "TRACE")
+         .build();
+ 
+     @Override
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/api/ElasticsearchEntitlementChecker.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/api/ElasticsearchEntitlementChecker.java
+index 75365fbb74d..7c72e0335a3 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/api/ElasticsearchEntitlementChecker.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/api/ElasticsearchEntitlementChecker.java
+@@ -70,7 +70,7 @@ public class ElasticsearchEntitlementChecker implements EntitlementChecker {
+     }
+ 
+     @Override
+-    public void check$$start(Class<?> callerClass, ProcessBuilder processBuilder, ProcessBuilder.Redirect[] redirects) {
++    public void check$$start(Class<?> callerClass, ProcessBuilder processBuilder) {
+         policyManager.checkStartProcess(callerClass);
+     }
+ 
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java
+index e06f7768eb8..527a9472a7c 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java
+@@ -10,7 +10,6 @@
+ package org.elasticsearch.entitlement.runtime.policy;
+ 
+ import org.elasticsearch.core.Strings;
+-import org.elasticsearch.entitlement.runtime.api.ElasticsearchEntitlementChecker;
+ import org.elasticsearch.entitlement.runtime.api.NotEntitledException;
+ import org.elasticsearch.logging.LogManager;
+ import org.elasticsearch.logging.Logger;
+@@ -32,10 +31,9 @@ import java.util.stream.Stream;
+ 
+ import static java.lang.StackWalker.Option.RETAIN_CLASS_REFERENCE;
+ import static java.util.Objects.requireNonNull;
+-import static java.util.function.Predicate.not;
+ 
+ public class PolicyManager {
+-    private static final Logger logger = LogManager.getLogger(ElasticsearchEntitlementChecker.class);
++    private static final Logger logger = LogManager.getLogger(PolicyManager.class);
+ 
+     static class ModuleEntitlements {
+         public static final ModuleEntitlements NONE = new ModuleEntitlements(List.of());
+@@ -68,18 +66,12 @@ public class PolicyManager {
+ 
+     private static final Set<Module> systemModules = findSystemModules();
+ 
+-    /**
+-     * Frames originating from this module are ignored in the permission logic.
+-     */
+-    private final Module entitlementsModule;
+-
+     private static Set<Module> findSystemModules() {
+         var systemModulesDescriptors = ModuleFinder.ofSystem()
+             .findAll()
+             .stream()
+             .map(ModuleReference::descriptor)
+             .collect(Collectors.toUnmodifiableSet());
+-
+         return ModuleLayer.boot()
+             .modules()
+             .stream()
+@@ -87,6 +79,11 @@ public class PolicyManager {
+             .collect(Collectors.toUnmodifiableSet());
+     }
+ 
++    /**
++     * Frames originating from this module are ignored in the permission logic.
++     */
++    private final Module entitlementsModule;
++
+     public PolicyManager(
+         Policy defaultPolicy,
+         Map<String, Policy> pluginPolicies,
+@@ -227,12 +224,12 @@ public class PolicyManager {
+      *                    this is a fast-path check that can avoid the stack walk
+      *                    in cases where the caller class is available.
+      * @return the requesting module, or {@code null} if the entire call stack
+-     * comes from modules that are trusted.
++     * comes from the entitlement library itself.
+      */
+     Module requestingModule(Class<?> callerClass) {
+         if (callerClass != null) {
+-            Module callerModule = callerClass.getModule();
+-            if (systemModules.contains(callerModule) == false) {
++            var callerModule = callerClass.getModule();
++            if (callerModule != null && entitlementsModule.equals(callerModule) == false) {
+                 // fast path
+                 return callerModule;
+             }
+@@ -251,8 +248,8 @@ public class PolicyManager {
+     Optional<Module> findRequestingModule(Stream<Class<?>> classes) {
+         return classes.map(Objects::requireNonNull)
+             .map(PolicyManager::moduleOf)
+-            .filter(m -> m != entitlementsModule)  // Ignore the entitlements library itself
+-            .filter(not(systemModules::contains))  // Skip trusted JDK modules
++            .filter(m -> m != entitlementsModule)  // Ignore the entitlements library itself entirely
++            .skip(1)                            // Skip the sensitive method itself
+             .findFirst();
+     }
+ 
+@@ -266,8 +263,15 @@ public class PolicyManager {
+     }
+ 
+     private static boolean isTriviallyAllowed(Module requestingModule) {
++        if (logger.isTraceEnabled()) {
++            logger.trace("Stack trace for upcoming trivially-allowed check", new Exception());
++        }
+         if (requestingModule == null) {
+-            logger.debug("Entitlement trivially allowed: entire call stack is in composed of classes in system modules");
++            logger.debug("Entitlement trivially allowed: no caller frames outside the entitlement library");
++            return true;
++        }
++        if (systemModules.contains(requestingModule)) {
++            logger.debug("Entitlement trivially allowed from system module [{}]", requestingModule.getName());
+             return true;
+         }
+         logger.trace("Entitlement not trivially allowed");
+diff --git a/libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyManagerTests.java b/libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyManagerTests.java
+index 0789fcc8dc7..31e3e62f56b 100644
+--- a/libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyManagerTests.java
++++ b/libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyManagerTests.java
+@@ -13,6 +13,7 @@ import org.elasticsearch.entitlement.runtime.api.NotEntitledException;
+ import org.elasticsearch.test.ESTestCase;
+ import org.elasticsearch.test.compiler.InMemoryJavaCompiler;
+ import org.elasticsearch.test.jar.JarUtils;
++import org.junit.BeforeClass;
+ 
+ import java.io.IOException;
+ import java.lang.module.Configuration;
+@@ -37,8 +38,22 @@ import static org.hamcrest.Matchers.sameInstance;
+ 
+ @ESTestCase.WithoutSecurityManager
+ public class PolicyManagerTests extends ESTestCase {
++    /**
++     * A module you can use for test cases that don't actually care about the
++     * entitlements module.
++     */
++    private static Module NO_ENTITLEMENTS_MODULE;
++
++    @BeforeClass
++    public static void beforeClass() {
++        try {
++            // Any old module will do for tests using NO_ENTITLEMENTS_MODULE
++            NO_ENTITLEMENTS_MODULE = makeClassInItsOwnModule().getModule();
++        } catch (Exception e) {
++            throw new IllegalStateException(e);
++        }
+ 
+-    private static final Module NO_ENTITLEMENTS_MODULE = null;
++    }
+ 
+     public void testGetEntitlementsThrowsOnMissingPluginUnnamedModule() {
+         var policyManager = new PolicyManager(
+@@ -210,53 +225,31 @@ public class PolicyManagerTests extends ESTestCase {
+     }
+ 
+     public void testRequestingModuleWithStackWalk() throws IOException, ClassNotFoundException {
+-        var requestingClass = makeClassInItsOwnModule();
+-        var runtimeClass = makeClassInItsOwnModule(); // A class in the entitlements library itself
++        var entitlementsClass = makeClassInItsOwnModule();    // A class in the entitlements library itself
++        var requestingClass = makeClassInItsOwnModule();      // This guy is always the right answer
++        var instrumentedClass = makeClassInItsOwnModule();    // The class that called the check method
+         var ignorableClass = makeClassInItsOwnModule();
+-        var systemClass = Object.class;
+ 
+-        var policyManager = policyManagerWithEntitlementsModule(runtimeClass.getModule());
++        var policyManager = policyManagerWithEntitlementsModule(entitlementsClass.getModule());
+ 
+         var requestingModule = requestingClass.getModule();
+ 
+         assertEquals(
+-            "Skip one system frame",
+-            requestingModule,
+-            policyManager.findRequestingModule(Stream.of(systemClass, requestingClass, ignorableClass)).orElse(null)
+-        );
+-        assertEquals(
+-            "Skip multiple system frames",
+-            requestingModule,
+-            policyManager.findRequestingModule(Stream.of(systemClass, systemClass, systemClass, requestingClass, ignorableClass))
+-                .orElse(null)
+-        );
+-        assertEquals(
+-            "Skip system frame between runtime frames",
++            "Skip entitlement library and the instrumented method",
+             requestingModule,
+-            policyManager.findRequestingModule(Stream.of(runtimeClass, systemClass, runtimeClass, requestingClass, ignorableClass))
++            policyManager.findRequestingModule(Stream.of(entitlementsClass, instrumentedClass, requestingClass, ignorableClass))
+                 .orElse(null)
+         );
+         assertEquals(
+-            "Skip runtime frame between system frames",
+-            requestingModule,
+-            policyManager.findRequestingModule(Stream.of(systemClass, runtimeClass, systemClass, requestingClass, ignorableClass))
+-                .orElse(null)
+-        );
+-        assertEquals(
+-            "No system frames",
+-            requestingModule,
+-            policyManager.findRequestingModule(Stream.of(requestingClass, ignorableClass)).orElse(null)
+-        );
+-        assertEquals(
+-            "Skip runtime frames up to the first system frame",
++            "Skip multiple library frames",
+             requestingModule,
+-            policyManager.findRequestingModule(Stream.of(runtimeClass, runtimeClass, systemClass, requestingClass, ignorableClass))
++            policyManager.findRequestingModule(Stream.of(entitlementsClass, entitlementsClass, instrumentedClass, requestingClass))
+                 .orElse(null)
+         );
+         assertThrows(
+             "Non-modular caller frames are not supported",
+             NullPointerException.class,
+-            () -> policyManager.findRequestingModule(Stream.of(systemClass, null))
++            () -> policyManager.findRequestingModule(Stream.of(entitlementsClass, null))
+         );
+     }
+ 

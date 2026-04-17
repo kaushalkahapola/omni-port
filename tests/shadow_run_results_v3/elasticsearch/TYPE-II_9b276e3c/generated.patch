@@ -1,0 +1,64 @@
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/alibabacloudsearch/AlibabaCloudSearchService.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/alibabacloudsearch/AlibabaCloudSearchService.java
+index 0c48c99b4b8..2888713358a 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/alibabacloudsearch/AlibabaCloudSearchService.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/alibabacloudsearch/AlibabaCloudSearchService.java
+@@ -24,6 +24,7 @@ import org.elasticsearch.inference.ModelSecrets;
+ import org.elasticsearch.inference.SimilarityMeasure;
+ import org.elasticsearch.inference.TaskType;
+ import org.elasticsearch.rest.RestStatus;
++import org.elasticsearch.xpack.inference.chunking.EmbeddingRequestChunker;
+ import org.elasticsearch.xpack.inference.external.action.alibabacloudsearch.AlibabaCloudSearchActionCreator;
+ import org.elasticsearch.xpack.inference.external.http.sender.DocumentsOnlyInput;
+ import org.elasticsearch.xpack.inference.external.http.sender.HttpRequestSender;
+@@ -48,6 +49,7 @@ import static org.elasticsearch.xpack.inference.services.ServiceUtils.parsePersi
+ import static org.elasticsearch.xpack.inference.services.ServiceUtils.removeFromMapOrDefaultEmpty;
+ import static org.elasticsearch.xpack.inference.services.ServiceUtils.removeFromMapOrThrowIfNull;
+ import static org.elasticsearch.xpack.inference.services.ServiceUtils.throwIfNotEmptyMap;
++import static org.elasticsearch.xpack.inference.services.alibabacloudsearch.AlibabaCloudSearchServiceFields.EMBEDDING_MAX_BATCH_SIZE;
+ 
+ public class AlibabaCloudSearchService extends SenderService {
+     public static final String NAME = AlibabaCloudSearchUtils.SERVICE_NAME;
+@@ -243,7 +245,20 @@ public class AlibabaCloudSearchService extends SenderService {
+         TimeValue timeout,
+         ActionListener<List<ChunkedInferenceServiceResults>> listener
+     ) {
+-        listener.onFailure(new ElasticsearchStatusException("Chunking not supported by the {} service", RestStatus.BAD_REQUEST, NAME));
++        if (model instanceof AlibabaCloudSearchModel == false) {
++            listener.onFailure(createInvalidModelException(model));
++            return;
++        }
++
++        AlibabaCloudSearchModel alibabaCloudSearchModel = (AlibabaCloudSearchModel) model;
++        var actionCreator = new AlibabaCloudSearchActionCreator(getSender(), getServiceComponents());
++
++        var batchedRequests = new EmbeddingRequestChunker(input, EMBEDDING_MAX_BATCH_SIZE, EmbeddingRequestChunker.EmbeddingType.FLOAT)
++            .batchRequestsWithListeners(listener);
++        for (var request : batchedRequests) {
++            var action = alibabaCloudSearchModel.accept(actionCreator, taskSettings, inputType);
++            action.execute(new DocumentsOnlyInput(request.batch().inputs()), timeout, request.listener());
++        }
+     }
+ 
+     /**
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/alibabacloudsearch/AlibabaCloudSearchServiceFields.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/alibabacloudsearch/AlibabaCloudSearchServiceFields.java
+new file mode 100644
+index 00000000000..68fc4664a3a
+--- /dev/null
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/alibabacloudsearch/AlibabaCloudSearchServiceFields.java
+@@ -0,0 +1,15 @@
++/*
++ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
++ * or more contributor license agreements. Licensed under the Elastic License
++ * 2.0; you may not use this file except in compliance with the Elastic License
++ * 2.0.
++ */
++
++package org.elasticsearch.xpack.inference.services.alibabacloudsearch;
++
++public class AlibabaCloudSearchServiceFields {
++    /**
++     * Taken from https://help.aliyun.com/zh/open-search/search-platform/developer-reference/text-embedding-api-details
++     */
++    static final int EMBEDDING_MAX_BATCH_SIZE = 32;
++}
+\ No newline at end of file

@@ -1,0 +1,66 @@
+diff --git a/graylog2-server/src/main/java/org/graylog2/shared/journal/LocalKafkaJournal.java b/graylog2-server/src/main/java/org/graylog2/shared/journal/LocalKafkaJournal.java
+index f0d94a679d..f990ecec4d 100644
+--- a/graylog2-server/src/main/java/org/graylog2/shared/journal/LocalKafkaJournal.java
++++ b/graylog2-server/src/main/java/org/graylog2/shared/journal/LocalKafkaJournal.java
+@@ -22,6 +22,7 @@ import com.codahale.metrics.MetricFilter;
+ import com.codahale.metrics.MetricRegistry;
+ import com.codahale.metrics.Timer;
+ import com.github.joschi.jadconfig.util.Size;
++import com.google.common.annotations.VisibleForTesting;
+ import com.google.common.collect.ImmutableMap;
+ import com.google.common.collect.Iterables;
+ import com.google.common.collect.Sets;
+@@ -487,7 +488,6 @@ public class LocalKafkaJournal extends AbstractIdleService implements Journal {
+         return journalOldestSegmentMetricName;
+     }
+ 
+-
+     /**
+      * Creates an opaque object which can be passed to {@link #write(java.util.List)} for a bulk journal write.
+      *
+@@ -621,7 +621,7 @@ public class LocalKafkaJournal extends AbstractIdleService implements Journal {
+ 
+         List<JournalReadEntry> messages = read(startOffset, requestedMaximumCount);
+ 
+-        if (messages.isEmpty()) {
++        if (messages.isEmpty() && !shuttingDown) {
+             // If we got an empty result BUT we know that there are more messages in the log, we bump the readOffset
+             // by 1 and try to read again. We continue until we either get an non-empty result or we reached the
+             // end of the log.
+@@ -841,7 +841,6 @@ public class LocalKafkaJournal extends AbstractIdleService implements Journal {
+                 logManager.flushCheckpointMs(),
+                 MILLISECONDS);
+ 
+-
+         // custom log retention cleaner
+         logRetentionFuture = scheduler.scheduleAtFixedRate(logRetentionCleaner,
+                 SECONDS.toMillis(30),
+@@ -855,7 +854,7 @@ public class LocalKafkaJournal extends AbstractIdleService implements Journal {
+     @Override
+     protected void shutDown() throws Exception {
+         LOG.debug("Shutting down journal!");
+-        shuttingDown = true;
++        triggerShutDown();
+ 
+         offsetFlusherFuture.cancel(false);
+         logRetentionFuture.cancel(false);
+@@ -871,6 +870,11 @@ public class LocalKafkaJournal extends AbstractIdleService implements Journal {
+         teardownLogMetrics();
+     }
+ 
++    @VisibleForTesting
++    void triggerShutDown() {
++        shuttingDown = true;
++    }
++
+     /**
+      * Executes the retention policy on the journal by invoking the {@code logRetentionCleaner}.
+      * This method handles the following tasks:
+@@ -974,7 +978,6 @@ public class LocalKafkaJournal extends AbstractIdleService implements Journal {
+         throttleState.set(state);
+     }
+ 
+-
+     public class OffsetFileFlusher implements Runnable {
+         @Override
+         public void run() {

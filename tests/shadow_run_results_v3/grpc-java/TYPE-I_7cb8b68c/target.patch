@@ -1,0 +1,646 @@
+commit 155308db2db2abcf612cc13c8360d5277753008f
+Author: Abhishek Agrawal <81427947+AgraVator@users.noreply.github.com>
+Date:   Fri Nov 7 16:30:23 2025 +0300
+
+    opentelemetry: propagate baggage to metrics for custom attributes, helps with b/406058193 (#12389)
+
+diff --git a/opentelemetry/build.gradle b/opentelemetry/build.gradle
+index b729f393e..c856ad8dc 100644
+--- a/opentelemetry/build.gradle
++++ b/opentelemetry/build.gradle
+@@ -15,6 +15,7 @@ dependencies {
+             libraries.auto.value.annotations
+ 
+     testImplementation project(':grpc-testing'),
++            project(':grpc-testing-proto'),
+             project(':grpc-inprocess'),
+             testFixtures(project(':grpc-core')),
+             testFixtures(project(':grpc-api')),
+diff --git a/opentelemetry/src/main/java/io/grpc/opentelemetry/GrpcOpenTelemetry.java b/opentelemetry/src/main/java/io/grpc/opentelemetry/GrpcOpenTelemetry.java
+index e0af0f80e..4341b27da 100644
+--- a/opentelemetry/src/main/java/io/grpc/opentelemetry/GrpcOpenTelemetry.java
++++ b/opentelemetry/src/main/java/io/grpc/opentelemetry/GrpcOpenTelemetry.java
+@@ -179,12 +179,14 @@ public final class GrpcOpenTelemetry {
+    * @param serverBuilder the server builder to configure
+    */
+   public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
+-    serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
++    /* To ensure baggage propagation to metrics, we need the tracing
++    tracers to be initialised before metrics */
+     if (ENABLE_OTEL_TRACING) {
+       serverBuilder.addStreamTracerFactory(
+           openTelemetryTracingModule.getServerTracerFactory());
+       serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
+     }
++    serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
+   }
+ 
+   @VisibleForTesting
+diff --git a/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryMetricsModule.java b/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryMetricsModule.java
+index 1d77f9ee3..3e5137e00 100644
+--- a/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryMetricsModule.java
++++ b/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryMetricsModule.java
+@@ -18,6 +18,7 @@ package io.grpc.opentelemetry;
+ 
+ import static com.google.common.base.Preconditions.checkNotNull;
+ import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BACKEND_SERVICE_KEY;
++import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
+ import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
+ import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
+ import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
+@@ -44,7 +45,9 @@ import io.grpc.ServerStreamTracer;
+ import io.grpc.Status;
+ import io.grpc.Status.Code;
+ import io.grpc.StreamTracer;
++import io.opentelemetry.api.baggage.Baggage;
+ import io.opentelemetry.api.common.AttributesBuilder;
++import io.opentelemetry.context.Context;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.Collections;
+@@ -94,8 +97,8 @@ final class OpenTelemetryMetricsModule {
+   private final ImmutableList<OpenTelemetryPlugin> plugins;
+ 
+   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
+-      OpenTelemetryMetricsResource resource, Collection<String> optionalLabels,
+-      List<OpenTelemetryPlugin> plugins) {
++                             OpenTelemetryMetricsResource resource,
++                             Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins) {
+     this.resource = checkNotNull(resource, "resource");
+     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+     this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
+@@ -128,6 +131,14 @@ final class OpenTelemetryMetricsModule {
+     return isGeneratedMethod ? fullMethodName : "other";
+   }
+ 
++  private static Context otelContextWithBaggage() {
++    Baggage baggage = BAGGAGE_KEY.get();
++    if (baggage == null) {
++      return Context.current();
++    }
++    return Context.current().with(baggage);
++  }
++
+   private static final class ClientTracer extends ClientStreamTracer {
+     @Nullable private static final AtomicLongFieldUpdater<ClientTracer> outboundWireSizeUpdater;
+     @Nullable private static final AtomicLongFieldUpdater<ClientTracer> inboundWireSizeUpdater;
+@@ -243,6 +254,7 @@ final class OpenTelemetryMetricsModule {
+     }
+ 
+     void recordFinishedAttempt() {
++      Context otelContext = otelContextWithBaggage();
+       AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+           .put(METHOD_KEY, fullMethodName)
+           .put(TARGET_KEY, target)
+@@ -268,15 +280,15 @@ final class OpenTelemetryMetricsModule {
+ 
+       if (module.resource.clientAttemptDurationCounter() != null ) {
+         module.resource.clientAttemptDurationCounter()
+-            .record(attemptNanos * SECONDS_PER_NANO, attribute);
++            .record(attemptNanos * SECONDS_PER_NANO, attribute, otelContext);
+       }
+       if (module.resource.clientTotalSentCompressedMessageSizeCounter() != null) {
+         module.resource.clientTotalSentCompressedMessageSizeCounter()
+-            .record(outboundWireSize, attribute);
++            .record(outboundWireSize, attribute, otelContext);
+       }
+       if (module.resource.clientTotalReceivedCompressedMessageSizeCounter() != null) {
+         module.resource.clientTotalReceivedCompressedMessageSizeCounter()
+-            .record(inboundWireSize, attribute);
++            .record(inboundWireSize, attribute, otelContext);
+       }
+     }
+   }
+@@ -408,6 +420,7 @@ final class OpenTelemetryMetricsModule {
+     }
+ 
+     void recordFinishedCall() {
++      Context otelContext = otelContextWithBaggage();
+       if (attemptsPerCall.get() == 0) {
+         ClientTracer tracer = newClientTracer(null);
+         tracer.attemptNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
+@@ -429,7 +442,8 @@ final class OpenTelemetryMetricsModule {
+             callLatencyNanos * SECONDS_PER_NANO,
+             baseAttributes.toBuilder()
+                 .put(STATUS_KEY, status.getCode().toString())
+-                .build()
++                .build(),
++            otelContext
+         );
+       }
+ 
+@@ -437,7 +451,8 @@ final class OpenTelemetryMetricsModule {
+       if (module.resource.clientCallRetriesCounter() != null) {
+         long retriesPerCall = Math.max(attemptsPerCall.get() - 1, 0);
+         if (retriesPerCall > 0) {
+-          module.resource.clientCallRetriesCounter().record(retriesPerCall, baseAttributes);
++          module.resource.clientCallRetriesCounter()
++              .record(retriesPerCall, baseAttributes, otelContext);
+         }
+       }
+ 
+@@ -446,7 +461,7 @@ final class OpenTelemetryMetricsModule {
+         long hedges = hedgedAttemptsPerCall.get();
+         if (hedges > 0) {
+           module.resource.clientCallHedgesCounter()
+-              .record(hedges, baseAttributes);
++              .record(hedges, baseAttributes, otelContext);
+         }
+       }
+ 
+@@ -454,8 +469,8 @@ final class OpenTelemetryMetricsModule {
+       if (module.resource.clientCallTransparentRetriesCounter() != null) {
+         long transparentRetries = transparentRetriesPerCall.get();
+         if (transparentRetries > 0) {
+-          module.resource.clientCallTransparentRetriesCounter().record(
+-              transparentRetries, baseAttributes);
++          module.resource.clientCallTransparentRetriesCounter()
++              .record(transparentRetries, baseAttributes, otelContext);
+         }
+       }
+ 
+@@ -463,7 +478,8 @@ final class OpenTelemetryMetricsModule {
+       if (module.resource.clientCallRetryDelayCounter() != null) {
+         module.resource.clientCallRetryDelayCounter().record(
+             retryDelayNanos * SECONDS_PER_NANO,
+-            baseAttributes
++            baseAttributes,
++            otelContext
+         );
+       }
+     }
+@@ -562,6 +578,7 @@ final class OpenTelemetryMetricsModule {
+      */
+     @Override
+     public void streamClosed(Status status) {
++      Context otelContext = otelContextWithBaggage();
+       if (streamClosedUpdater != null) {
+         if (streamClosedUpdater.getAndSet(this, 1) != 0) {
+           return;
+@@ -584,15 +601,15 @@ final class OpenTelemetryMetricsModule {
+ 
+       if (module.resource.serverCallDurationCounter() != null) {
+         module.resource.serverCallDurationCounter()
+-            .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes);
++            .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes, otelContext);
+       }
+       if (module.resource.serverTotalSentCompressedMessageSizeCounter() != null) {
+         module.resource.serverTotalSentCompressedMessageSizeCounter()
+-            .record(outboundWireSize, attributes);
++            .record(outboundWireSize, attributes, otelContext);
+       }
+       if (module.resource.serverTotalReceivedCompressedMessageSizeCounter() != null) {
+         module.resource.serverTotalReceivedCompressedMessageSizeCounter()
+-            .record(inboundWireSize, attributes);
++            .record(inboundWireSize, attributes, otelContext);
+       }
+     }
+   }
+diff --git a/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryTracingModule.java b/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryTracingModule.java
+index 4fa4f802d..d214e99bd 100644
+--- a/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryTracingModule.java
++++ b/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryTracingModule.java
+@@ -19,6 +19,7 @@ package io.grpc.opentelemetry;
+ import static com.google.common.base.Preconditions.checkNotNull;
+ import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+ import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
++import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
+ 
+ import com.google.common.annotations.VisibleForTesting;
+ import io.grpc.Attributes;
+@@ -39,6 +40,7 @@ import io.grpc.ServerStreamTracer;
+ import io.grpc.internal.GrpcUtil;
+ import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
+ import io.opentelemetry.api.OpenTelemetry;
++import io.opentelemetry.api.baggage.Baggage;
+ import io.opentelemetry.api.common.AttributesBuilder;
+ import io.opentelemetry.api.trace.Span;
+ import io.opentelemetry.api.trace.StatusCode;
+@@ -59,6 +61,7 @@ final class OpenTelemetryTracingModule {
+ 
+   @VisibleForTesting
+   final io.grpc.Context.Key<Span> otelSpan = io.grpc.Context.key("opentelemetry-span-key");
++
+   @Nullable
+   private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
+   @Nullable
+@@ -243,13 +246,15 @@ final class OpenTelemetryTracingModule {
+     private final Span span;
+     volatile int streamClosed;
+     private int seqNo;
++    private Baggage baggage;
+ 
+-    ServerTracer(String fullMethodName, @Nullable Span remoteSpan) {
++    ServerTracer(String fullMethodName, @Nullable Span remoteSpan, Baggage baggage) {
+       checkNotNull(fullMethodName, "fullMethodName");
+       this.span =
+           otelTracer.spanBuilder(generateTraceSpanName(true, fullMethodName))
+               .setParent(remoteSpan == null ? null : Context.current().with(remoteSpan))
+               .startSpan();
++      this.baggage = baggage;
+     }
+ 
+     /**
+@@ -275,7 +280,9 @@ final class OpenTelemetryTracingModule {
+ 
+     @Override
+     public io.grpc.Context filterContext(io.grpc.Context context) {
+-      return context.withValue(otelSpan, span);
++      return context
++          .withValue(otelSpan, span)
++          .withValue(BAGGAGE_KEY, baggage);
+     }
+ 
+     @Override
+@@ -315,7 +322,8 @@ final class OpenTelemetryTracingModule {
+       if (remoteSpan == Span.getInvalid()) {
+         remoteSpan = null;
+       }
+-      return new ServerTracer(fullMethodName, remoteSpan);
++      Baggage baggage = Baggage.fromContext(context);
++      return new ServerTracer(fullMethodName, remoteSpan, baggage);
+     }
+   }
+ 
+@@ -330,7 +338,15 @@ final class OpenTelemetryTracingModule {
+             + "tracing must be set.");
+         return next.startCall(call, headers);
+       }
+-      Context serverCallContext = Context.current().with(span);
++      Context serverCallContext = Context.current();
++      serverCallContext = serverCallContext.with(span);
++      Baggage baggage = BAGGAGE_KEY.get();
++      if (baggage != null) {
++        serverCallContext = serverCallContext.with(baggage);
++      } else {
++        logger.log(Level.WARNING, "Server baggage not found which is unexpected, "
++            + "as it is being added unconditionally in filterContext().");
++      }
+       try (Scope scope = serverCallContext.makeCurrent()) {
+         return new ContextServerCallListener<>(next.startCall(call, headers), serverCallContext);
+       }
+diff --git a/opentelemetry/src/main/java/io/grpc/opentelemetry/internal/OpenTelemetryConstants.java b/opentelemetry/src/main/java/io/grpc/opentelemetry/internal/OpenTelemetryConstants.java
+index ff2b88acb..2c7123198 100644
+--- a/opentelemetry/src/main/java/io/grpc/opentelemetry/internal/OpenTelemetryConstants.java
++++ b/opentelemetry/src/main/java/io/grpc/opentelemetry/internal/OpenTelemetryConstants.java
+@@ -16,7 +16,9 @@
+ 
+ package io.grpc.opentelemetry.internal;
+ 
++import com.google.common.annotations.VisibleForTesting;
+ import com.google.common.collect.ImmutableList;
++import io.opentelemetry.api.baggage.Baggage;
+ import io.opentelemetry.api.common.AttributeKey;
+ import java.util.List;
+ 
+@@ -42,6 +44,10 @@ public final class OpenTelemetryConstants {
+   public static final AttributeKey<String> SECURITY_LEVEL_KEY =
+       AttributeKey.stringKey("grpc.security_level");
+ 
++  @VisibleForTesting
++  public static final io.grpc.Context.Key<Baggage> BAGGAGE_KEY =
++      io.grpc.Context.key("opentelemetry-baggage-key");
++
+   public static final List<Double> LATENCY_BUCKETS =
+       ImmutableList.of(
+           0d,     0.00001d, 0.00005d, 0.0001d, 0.0003d, 0.0006d, 0.0008d, 0.001d, 0.002d,
+diff --git a/opentelemetry/src/test/java/io/grpc/opentelemetry/OpenTelemetryMetricsModuleTest.java b/opentelemetry/src/test/java/io/grpc/opentelemetry/OpenTelemetryMetricsModuleTest.java
+index 6d1234497..58759294f 100644
+--- a/opentelemetry/src/test/java/io/grpc/opentelemetry/OpenTelemetryMetricsModuleTest.java
++++ b/opentelemetry/src/test/java/io/grpc/opentelemetry/OpenTelemetryMetricsModuleTest.java
+@@ -27,6 +27,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertTrue;
+ import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.ArgumentMatchers.anyDouble;
+ import static org.mockito.Mockito.verify;
+ 
+ import com.google.common.collect.ImmutableMap;
+@@ -47,11 +48,21 @@ import io.grpc.ServerStreamTracer;
+ import io.grpc.ServerStreamTracer.ServerCallInfo;
+ import io.grpc.Status;
+ import io.grpc.Status.Code;
++import io.grpc.inprocess.InProcessChannelBuilder;
++import io.grpc.inprocess.InProcessServerBuilder;
+ import io.grpc.internal.FakeClock;
+ import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
+ import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
++import io.grpc.stub.MetadataUtils;
++import io.grpc.stub.StreamObserver;
+ import io.grpc.testing.GrpcServerRule;
++import io.grpc.testing.protobuf.SimpleRequest;
++import io.grpc.testing.protobuf.SimpleResponse;
++import io.grpc.testing.protobuf.SimpleServiceGrpc;
++import io.opentelemetry.api.OpenTelemetry;
++import io.opentelemetry.api.baggage.Baggage;
+ import io.opentelemetry.api.common.AttributeKey;
++import io.opentelemetry.api.metrics.DoubleHistogram;
+ import io.opentelemetry.api.metrics.Meter;
+ import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
+ import io.opentelemetry.sdk.metrics.data.MetricData;
+@@ -65,6 +76,7 @@ import java.util.Optional;
+ import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.atomic.AtomicReference;
+ import javax.annotation.Nullable;
++import org.junit.After;
+ import org.junit.Before;
+ import org.junit.Rule;
+ import org.junit.Test;
+@@ -161,6 +173,14 @@ public class OpenTelemetryMetricsModuleTest {
+   private ServerCall.Listener<String> mockServerCallListener;
+   @Captor
+   private ArgumentCaptor<Status> statusCaptor;
++  @Mock
++  private DoubleHistogram mockServerCallDurationHistogram;
++  @Captor
++  private ArgumentCaptor<io.opentelemetry.context.Context> contextCaptor;
++  private io.grpc.Server server;
++  private io.grpc.ManagedChannel channel;
++  private OpenTelemetryMetricsResource resource;
++  private final String serverName = "E2ETestServer-" + Math.random();
+ 
+   private final FakeClock fakeClock = new FakeClock();
+   private final MethodDescriptor<String, String> method =
+@@ -180,6 +200,19 @@ public class OpenTelemetryMetricsModuleTest {
+   public void setUp() throws Exception {
+     testMeter = openTelemetryTesting.getOpenTelemetry()
+         .getMeter(OpenTelemetryConstants.INSTRUMENTATION_SCOPE);
++    resource = OpenTelemetryMetricsResource.builder()
++        .serverCallDurationCounter(mockServerCallDurationHistogram)
++        .build();
++  }
++
++  @After
++  public void tearDown() {
++    if (channel != null) {
++      channel.shutdownNow();
++    }
++    if (server != null) {
++      server.shutdownNow();
++    }
+   }
+ 
+   @Test
+@@ -1595,6 +1628,45 @@ public class OpenTelemetryMetricsModuleTest {
+ 
+   }
+ 
++  @Test
++  public void serverBaggagePropagationToMetrics() {
++    // 1. Create module and tracer factory using the mock resource
++    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
++        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
++    ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
++    ServerStreamTracer tracer =
++        tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
++
++    // 2. Define the test baggage and gRPC context
++    Baggage testBaggage = Baggage.builder()
++        .put("user-id", "67")
++        .build();
++
++    // This simulates the context that the Tracing module would have created
++    io.grpc.Context grpcContext = io.grpc.Context.current()
++        .withValue(OpenTelemetryConstants.BAGGAGE_KEY, testBaggage);
++
++    // 3. Attach the gRPC context, trigger metric recording, and detach
++    io.grpc.Context previousContext = grpcContext.attach();
++    try {
++      tracer.streamClosed(Status.OK);
++    } finally {
++      grpcContext.detach(previousContext);
++    }
++
++    // 4. Verify the record call and capture the OTel Context
++    verify(mockServerCallDurationHistogram).record(
++        anyDouble(),
++        any(io.opentelemetry.api.common.Attributes.class),
++        contextCaptor.capture());
++
++    // 5. Assert on the captured OTel Context
++    io.opentelemetry.context.Context capturedOtelContext = contextCaptor.getValue();
++    Baggage capturedBaggage = Baggage.fromContext(capturedOtelContext);
++
++    assertEquals("67", capturedBaggage.getEntryValue("user-id"));
++  }
++
+   private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
+       OpenTelemetryMetricsResource resource) {
+     return new OpenTelemetryMetricsModule(
+@@ -1631,4 +1703,64 @@ public class OpenTelemetryMetricsModuleTest {
+       return authority;
+     }
+   }
++
++  @Test
++  public void serverBaggagePropagation_EndToEnd() throws Exception {
++    // 1. Create Both Modules
++    OpenTelemetry otel = openTelemetryTesting.getOpenTelemetry();
++    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(otel);
++    OpenTelemetryMetricsModule metricsModule = new OpenTelemetryMetricsModule(
++        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
++
++    // 2. Create Server with *both* tracer factories
++    server = InProcessServerBuilder.forName(serverName)
++        .addService(new SimpleServiceImpl()) // <-- Uses the helper class below
++        .addStreamTracerFactory(tracingModule.getServerTracerFactory())
++        .addStreamTracerFactory(metricsModule.getServerTracerFactory())
++        .build()
++        .start();
++
++    // 3. Create Client Channel
++    channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
++
++    // 4. Manually create baggage headers
++    Metadata headers = new Metadata();
++    headers.put(Metadata.Key.of("baggage", Metadata.ASCII_STRING_MARSHALLER),
++        "choice=red_pill_or_blue_pill");
++
++    // 5. Make the gRPC call with these headers
++    ClientInterceptor headerAttachingInterceptor =
++        MetadataUtils.newAttachHeadersInterceptor(headers);
++
++    // Now, create the stub and apply that interceptor
++    SimpleServiceGrpc.SimpleServiceBlockingStub stub =
++        SimpleServiceGrpc.newBlockingStub(channel)
++            .withInterceptors(headerAttachingInterceptor);
++
++    // Use the imported SimpleRequest
++    stub.unaryRpc(SimpleRequest.getDefaultInstance());
++
++    // 6. Verify the Mock
++    verify(mockServerCallDurationHistogram).record(
++        anyDouble(),
++        any(io.opentelemetry.api.common.Attributes.class),
++        contextCaptor.capture());
++
++    // 7. Assert on the captured Context
++    io.opentelemetry.context.Context capturedOtelContext = contextCaptor.getValue();
++    Baggage capturedBaggage = Baggage.fromContext(capturedOtelContext);
++
++    assertEquals("red_pill_or_blue_pill", capturedBaggage.getEntryValue("choice"));
++  }
++
++  /**
++   * A simple service implementation for the E2E test.
++   */
++  private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
++    @Override
++    public void unaryRpc(SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
++      responseObserver.onNext(SimpleResponse.getDefaultInstance());
++      responseObserver.onCompleted();
++    }
++  }
+ }
+diff --git a/opentelemetry/src/test/java/io/grpc/opentelemetry/OpenTelemetryTracingModuleTest.java b/opentelemetry/src/test/java/io/grpc/opentelemetry/OpenTelemetryTracingModuleTest.java
+index bca6be94b..e6759aadb 100644
+--- a/opentelemetry/src/test/java/io/grpc/opentelemetry/OpenTelemetryTracingModuleTest.java
++++ b/opentelemetry/src/test/java/io/grpc/opentelemetry/OpenTelemetryTracingModuleTest.java
+@@ -17,12 +17,15 @@
+ package io.grpc.opentelemetry;
+ 
+ import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
++import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
+ import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertNotNull;
+ import static org.junit.Assert.assertSame;
+ import static org.junit.Assert.assertTrue;
+ import static org.mockito.ArgumentMatchers.any;
+ import static org.mockito.ArgumentMatchers.eq;
+ import static org.mockito.ArgumentMatchers.same;
++import static org.mockito.Mockito.doAnswer;
+ import static org.mockito.Mockito.inOrder;
+ import static org.mockito.Mockito.mock;
+ import static org.mockito.Mockito.never;
+@@ -59,11 +62,15 @@ import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
+ import io.grpc.testing.GrpcCleanupRule;
+ import io.grpc.testing.GrpcServerRule;
+ import io.opentelemetry.api.OpenTelemetry;
++import io.opentelemetry.api.baggage.Baggage;
+ import io.opentelemetry.api.trace.Span;
+ import io.opentelemetry.api.trace.SpanBuilder;
++import io.opentelemetry.api.trace.SpanContext;
+ import io.opentelemetry.api.trace.SpanId;
+ import io.opentelemetry.api.trace.StatusCode;
++import io.opentelemetry.api.trace.TraceFlags;
+ import io.opentelemetry.api.trace.TraceId;
++import io.opentelemetry.api.trace.TraceState;
+ import io.opentelemetry.api.trace.Tracer;
+ import io.opentelemetry.api.trace.TracerBuilder;
+ import io.opentelemetry.api.trace.TracerProvider;
+@@ -750,6 +757,115 @@ public class OpenTelemetryTracingModuleTest {
+     }
+   }
+ 
++  /**
++   * Tests that baggage from the initial context is propagated
++   * to the context active during the next handler's execution.
++   */
++  @Test
++  public void testBaggageIsPropagatedToHandlerContext() {
++    // 1. ARRANGE
++    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
++        openTelemetryRule.getOpenTelemetry());
++    ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
++
++    // Create mocks for the gRPC call chain
++    @SuppressWarnings("unchecked")
++    ServerCallHandler<String, String> mockHandler = mock(ServerCallHandler.class);
++    @SuppressWarnings("unchecked")
++    ServerCall.Listener<String> mockListener = mock(ServerCall.Listener.class);
++    ServerCall<String, String> mockCall = new NoopServerCall<>();
++    Metadata mockHeaders = new Metadata();
++
++    // Create a non-null Span (required to pass the first 'if' check)
++    Span testSpan = Span.wrap(
++        SpanContext.create("time-period", "star-wars",
++            TraceFlags.getSampled(), TraceState.getDefault()));
++
++    // Create the test Baggage
++    Baggage testBaggage = Baggage.builder().put("best-bot", "R2D2").build();
++
++    // Create the initial gRPC context that the interceptor will read from
++    io.grpc.Context initialGrpcContext = io.grpc.Context.current()
++        .withValue(tracingModule.otelSpan, testSpan)
++        .withValue(BAGGAGE_KEY, testBaggage);
++
++    // This AtomicReference will capture the Baggage from *within* the handler
++    final AtomicReference<Baggage> capturedBaggage = new AtomicReference<>();
++
++    // Stub the handler to capture the *current* context when it's called
++    doAnswer(invocation -> {
++      // Baggage.current() gets baggage from io.opentelemetry.context.Context.current()
++      capturedBaggage.set(Baggage.current());
++      return mockListener;
++    }).when(mockHandler).startCall(any(), any());
++
++    // 2. ACT
++    // Run the interceptCall method within the prepared context
++    io.grpc.Context previous = initialGrpcContext.attach();
++    try {
++      interceptor.interceptCall(mockCall, mockHeaders, mockHandler);
++    } finally {
++      initialGrpcContext.detach(previous);
++    }
++
++    // 3. ASSERT
++    // Verify the next handler was called
++    verify(mockHandler).startCall(same(mockCall), same(mockHeaders));
++
++    // Check the baggage that was captured
++    assertNotNull("Baggage should not be null in handler context", capturedBaggage.get());
++    assertEquals("Baggage was not correctly propagated to the handler's context",
++        "R2D2", capturedBaggage.get().getEntryValue("best-bot"));
++  }
++
++  /**
++   * Tests that the interceptor proceeds correctly if baggage is null or empty.
++   */
++  @Test
++  public void testNullBaggageIsHandledGracefully() {
++    // 1. ARRANGE
++    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
++        openTelemetryRule.getOpenTelemetry());
++    ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
++
++    @SuppressWarnings("unchecked")
++    ServerCallHandler<String, String> mockHandler = mock(ServerCallHandler.class);
++    @SuppressWarnings("unchecked")
++    ServerCall.Listener<String> mockListener = mock(ServerCall.Listener.class);
++    ServerCall<String, String> mockCall = new NoopServerCall<>();
++    Metadata mockHeaders = new Metadata();
++
++    Span testSpan = Span.getInvalid(); // A non-null span
++
++    // No baggage is set in the context
++    io.grpc.Context initialGrpcContext = io.grpc.Context.current()
++        .withValue(tracingModule.otelSpan, testSpan);
++
++    final AtomicReference<Baggage> capturedBaggage = new AtomicReference<>();
++
++    // Stub the handler to capture the *current* context when it's called
++    doAnswer(invocation -> {
++      // Baggage.current() gets baggage from io.opentelemetry.context.Context.current()
++      capturedBaggage.set(Baggage.current());
++      return mockListener;
++    }).when(mockHandler).startCall(any(), any());
++
++    // 2. ACT
++    io.grpc.Context previous = initialGrpcContext.attach();
++    try {
++      interceptor.interceptCall(mockCall, mockHeaders, mockHandler);
++    } finally {
++      initialGrpcContext.detach(previous);
++    }
++
++    // 3. ASSERT
++    verify(mockHandler).startCall(same(mockCall), same(mockHeaders));
++
++    // Baggage should be null in the downstream context
++    assertEquals("Baggage should be empty when not provided",
++        Baggage.empty(), capturedBaggage.get());
++  }
++
+   @Test
+   public void generateTraceSpanName() {
+     assertEquals(

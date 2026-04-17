@@ -1,0 +1,228 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "45e80f55be1b5db352cccdd047a44ae106462942",
+  "backport_commit": "dd5f141df01149645cf939e5a0bffc03a1c09afd",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.34,
+      "error": null,
+      "java_hunks": 3,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/NetworkEntitlement.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 47,
+          "end_line": 56,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserException.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 86,
+          "end_line": 92,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyValidationException.java",
+          "method_used": "new_file",
+          "confidence": 1.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.29,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch introduces a new exception class (PolicyValidationException) and replaces existing IllegalArgumentException throws with this new exception in NetworkEntitlement.java. It also updates PolicyParser.java and PolicyParserException.java to handle and wrap this new exception type with improved error messaging. The changes are straightforward additions and exact replacements without structural or API changes. The localization evidence shows all hunks were found via 'git_exact' or 'new_file' with high confidence, indicating minimal divergence from the target branch. Therefore, this patch is a trivial backport classified as TYPE_I with high confidence.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/NetworkEntitlement.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserException.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyValidationException.java",
+          "old_string": "",
+          "new_string": "/*\n * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one\n * or more contributor license agreements. Licensed under the \"Elastic License\n * 2.0\", the \"GNU Affero General Public License v3.0 only\", and the \"Server Side\n * Public License v 1\"; you may not use this file except in compliance with, at\n * your election, the \"Elastic License 2.0\", the \"GNU Affero General Public\n * License v3.0 only\", or the \"Server Side Public License, v 1\".\n */\n\npackage org.elasticsearch.entitlement.runtime.policy;\n\n/**\n * This exception is used to track validation errors thrown during the construction\n * of entitlements. By using this instead of other exception types the policy\n * parser is able to wrap this exception with a line/character number for\n * additional useful error information.\n */\nclass PolicyValidationException extends RuntimeException {\n\n    PolicyValidationException(String message) {\n        super(message);\n    }\n\n    PolicyValidationException(String message, Throwable cause) {\n        super(message, cause);\n    }\n}",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.11,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyValidationException.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/libs/entitlement/build/test-results/test/TEST-org.elasticsearch.entitlement.runtime.policy.PolicyParserTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testParseNetworkIllegalAction": "passed",
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testPolicyBuilder": "passed",
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testGetEntitlementTypeName": "passed",
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testParseCreateClassloader": "passed",
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testPolicyBuilderOnExternalPlugin": "passed",
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testParseSetHttpsConnectionProperties": "passed",
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testParseNetwork": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests": "passed"
+        },
+        "summary": {
+          "passed": 7,
+          "failed": 0,
+          "skipped": 0,
+          "total": 7
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testParseNetworkIllegalAction"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 7,
+        "patched_total": 7,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 8,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 7
+    },
+    "java_production_hunks": 3,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 4377,
+    "target_patch_bytes": 8547,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.entitlement.runtime.policy.PolicyParserTests#testParseNetworkIllegalAction"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 7,
+      "patched_total": 7,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

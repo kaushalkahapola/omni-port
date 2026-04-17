@@ -1,0 +1,21 @@
+diff --git a/modules/data-streams/src/main/java/org/elasticsearch/datastreams/action/DataStreamsStatsTransportAction.java b/modules/data-streams/src/main/java/org/elasticsearch/datastreams/action/DataStreamsStatsTransportAction.java
+index 4d6eead07b9..3e207ab30ed 100644
+--- a/modules/data-streams/src/main/java/org/elasticsearch/datastreams/action/DataStreamsStatsTransportAction.java
++++ b/modules/data-streams/src/main/java/org/elasticsearch/datastreams/action/DataStreamsStatsTransportAction.java
+@@ -132,6 +132,16 @@ public class DataStreamsStatsTransportAction extends TransportBroadcastByNodeAct
+         });
+     }
+ 
++    @Override
++    protected String[] resolveConcreteIndexNames(ClusterState clusterState, DataStreamsStatsAction.Request request) {
++        return DataStreamsActionUtil.resolveConcreteIndexNames(
++            indexNameExpressionResolver,
++            clusterState,
++            request.indices(),
++            request.indicesOptions()
++        ).toArray(String[]::new);
++    }
++
+     @Override
+     protected DataStreamsStatsAction.DataStreamShardStats readShardResult(StreamInput in) throws IOException {
+         return new DataStreamsStatsAction.DataStreamShardStats(in);

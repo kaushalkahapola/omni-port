@@ -1,0 +1,198 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "a8958755a7e76a25bd9fef74f385083edf7dd705",
+  "backport_commit": "3b1c857199ad1b3aa1c0af674dc146f8fc328fc1",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.17,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 14,
+          "end_line": 19,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolver.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 158,
+          "end_line": 164,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.73,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.9,
+        "reasoning": "The patch modifies Java source code with structural changes, including adding new logic to handle system index visibility by unwrapping aliases and recursively checking write indices. It also adds new test cases and methods to the test suite, indicating non-trivial structural additions. The changes are not simple string replacements or whitespace fixes, but involve understanding and modifying the code's logic and structure. The patch was found via 'git_exact' for the main source file, indicating the code context is similar, but the complexity of the logic changes and test additions suggests a TYPE_III classification. The confidence is high but not absolute due to the moderate complexity and the presence of multiple related changes. The estimated token budget is moderate to high due to the size and complexity of the patch and the need to understand the new logic and tests for backporting.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolver.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/cluster/metadata/IndexAbstractionResolver.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.12,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.cluster.metadata.IndexAbstractionResolverTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.cluster.metadata.IndexAbstractionResolverTests",
+          "org.elasticsearch.ingest.geoip.FullClusterRestartIT"
+        ],
+        "test_cases": {
+          "org.elasticsearch.cluster.metadata.IndexAbstractionResolverTests#testResolveIndexAbstractions": "passed",
+          "org.elasticsearch.cluster.metadata.IndexAbstractionResolverTests#testIsIndexVisible": "passed",
+          "org.elasticsearch.cluster.metadata.IndexAbstractionResolverTests#testIsNetNewSystemIndexVisible": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.cluster.metadata.IndexAbstractionResolverTests": "passed"
+        },
+        "summary": {
+          "passed": 3,
+          "failed": 0,
+          "skipped": 0,
+          "total": 3
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.cluster.metadata.IndexAbstractionResolverTests#testIsNetNewSystemIndexVisible"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 3,
+        "patched_total": 3,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 11,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 3
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 2322,
+    "target_patch_bytes": 12819,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.cluster.metadata.IndexAbstractionResolverTests#testIsNetNewSystemIndexVisible"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 3,
+      "patched_total": 3,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

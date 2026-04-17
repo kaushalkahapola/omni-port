@@ -1,0 +1,163 @@
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/initialization/EntitlementInitialization.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/initialization/EntitlementInitialization.java
+index 21fb7c3d3dc..ba5ccbafa70 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/initialization/EntitlementInitialization.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/initialization/EntitlementInitialization.java
+@@ -128,13 +128,13 @@ public class EntitlementInitialization {
+         final Policy policy = parsePolicyIfExists(pluginName, policyFile, isExternalPlugin);
+ 
+         // TODO: should this check actually be part of the parser?
+-        for (Scope scope : policy.scopes) {
+-            if (moduleNames.contains(scope.moduleName) == false) {
++        for (Scope scope : policy.scopes()) {
++            if (moduleNames.contains(scope.moduleName()) == false) {
+                 throw new IllegalStateException(
+                     Strings.format(
+                         "Invalid module name in policy: plugin [%s] does not have module [%s]; available modules [%s]; policy file [%s]",
+                         pluginName,
+-                        scope.moduleName,
++                        scope.moduleName(),
+                         String.join(", ", moduleNames),
+                         policyFile
+                     )
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/CreateClassLoaderEntitlement.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/CreateClassLoaderEntitlement.java
+index 138515be9ff..55e4b665956 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/CreateClassLoaderEntitlement.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/CreateClassLoaderEntitlement.java
+@@ -9,7 +9,7 @@
+ 
+ package org.elasticsearch.entitlement.runtime.policy;
+ 
+-public class CreateClassLoaderEntitlement implements Entitlement {
++public record CreateClassLoaderEntitlement() implements Entitlement {
+     @ExternalEntitlement
+-    public CreateClassLoaderEntitlement() {}
++    public CreateClassLoaderEntitlement {}
+ }
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/ExitVMEntitlement.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/ExitVMEntitlement.java
+index c4a8fc68335..e5c836ea22b 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/ExitVMEntitlement.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/ExitVMEntitlement.java
+@@ -12,4 +12,4 @@ package org.elasticsearch.entitlement.runtime.policy;
+ /**
+  * Internal policy type (not-parseable -- not available to plugins).
+  */
+-public class ExitVMEntitlement implements Entitlement {}
++public record ExitVMEntitlement() implements Entitlement {}
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/Policy.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/Policy.java
+index e8bd7a3fff3..3546472f485 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/Policy.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/Policy.java
+@@ -9,38 +9,15 @@
+ 
+ package org.elasticsearch.entitlement.runtime.policy;
+ 
+-import java.util.Collections;
+ import java.util.List;
+ import java.util.Objects;
+ 
+ /**
+  * A holder for scoped entitlements.
+  */
+-public class Policy {
+-
+-    public final String name;
+-    public final List<Scope> scopes;
+-
++public record Policy(String name, List<Scope> scopes) {
+     public Policy(String name, List<Scope> scopes) {
+         this.name = Objects.requireNonNull(name);
+-        this.scopes = Collections.unmodifiableList(Objects.requireNonNull(scopes));
+-    }
+-
+-    @Override
+-    public boolean equals(Object o) {
+-        if (this == o) return true;
+-        if (o == null || getClass() != o.getClass()) return false;
+-        Policy policy = (Policy) o;
+-        return Objects.equals(name, policy.name) && Objects.equals(scopes, policy.scopes);
+-    }
+-
+-    @Override
+-    public int hashCode() {
+-        return Objects.hash(name, scopes);
+-    }
+-
+-    @Override
+-    public String toString() {
+-        return "Policy{" + "name='" + name + '\'' + ", scopes=" + scopes + '}';
++        this.scopes = List.copyOf(scopes);
+     }
+ }
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java
+index a0e13bb3ac9..188ce1d747d 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyManager.java
+@@ -99,7 +99,7 @@ public class PolicyManager {
+     }
+ 
+     private static Map<String, List<Entitlement>> buildScopeEntitlementsMap(Policy policy) {
+-        return policy.scopes.stream().collect(Collectors.toUnmodifiableMap(scope -> scope.moduleName, scope -> scope.entitlements));
++        return policy.scopes().stream().collect(Collectors.toUnmodifiableMap(scope -> scope.moduleName(), scope -> scope.entitlements()));
+     }
+ 
+     public void checkStartProcess(Class<?> callerClass) {
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/Scope.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/Scope.java
+index a75192936e4..55e257797d6 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/Scope.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/Scope.java
+@@ -9,38 +9,17 @@
+ 
+ package org.elasticsearch.entitlement.runtime.policy;
+ 
+-import java.util.Collections;
+ import java.util.List;
+ import java.util.Objects;
+ 
+ /**
+  * A holder for entitlements within a single scope.
+  */
+-public class Scope {
+-
+-    public final String moduleName;
+-    public final List<Entitlement> entitlements;
++public record Scope(String moduleName, List<Entitlement> entitlements) {
+ 
+     public Scope(String moduleName, List<Entitlement> entitlements) {
+-        this.moduleName = moduleName;
+-        this.entitlements = Collections.unmodifiableList(Objects.requireNonNull(entitlements));
+-    }
+-
+-    @Override
+-    public boolean equals(Object o) {
+-        if (this == o) return true;
+-        if (o == null || getClass() != o.getClass()) return false;
+-        Scope scope = (Scope) o;
+-        return Objects.equals(moduleName, scope.moduleName) && Objects.equals(entitlements, scope.entitlements);
++        this.moduleName = Objects.requireNonNull(moduleName);
++        this.entitlements = List.copyOf(entitlements);
+     }
+ 
+-    @Override
+-    public int hashCode() {
+-        return Objects.hash(moduleName, entitlements);
+-    }
+-
+-    @Override
+-    public String toString() {
+-        return "Scope{" + "name='" + moduleName + '\'' + ", entitlements=" + entitlements + '}';
+-    }
+ }
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/SetHttpsConnectionPropertiesEntitlement.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/SetHttpsConnectionPropertiesEntitlement.java
+index 6f165f27b31..bb2f65def9e 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/SetHttpsConnectionPropertiesEntitlement.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/SetHttpsConnectionPropertiesEntitlement.java
+@@ -12,7 +12,7 @@ package org.elasticsearch.entitlement.runtime.policy;
+ /**
+  * An Entitlement to allow setting properties to a single Https connection after this has been created
+  */
+-public class SetHttpsConnectionPropertiesEntitlement implements Entitlement {
++public record SetHttpsConnectionPropertiesEntitlement() implements Entitlement {
+     @ExternalEntitlement(esModulesOnly = false)
+-    public SetHttpsConnectionPropertiesEntitlement() {}
++    public SetHttpsConnectionPropertiesEntitlement {}
+ }

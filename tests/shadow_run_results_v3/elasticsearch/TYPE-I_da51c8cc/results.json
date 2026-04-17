@@ -1,14 +1,14 @@
 {
-  "run_timestamp": "2026-04-12T03:19:24.474235",
+  "run_timestamp": "2026-04-12T08:11:37.449139",
   "repo": "elasticsearch",
   "patch_type": "TYPE-I",
   "original_commit": "da51c8ccbf0171abefb2978810efd6db0f6f743e",
   "backport_commit": "b25542fd147164cd0e89a803bbe49f865972abdb",
-  "description": "Simple transport protocol refactor - high confidence git match",
+  "description": "main \u2192 8.19",
   "skip_validation": false,
   "agents": {
     "agent1_localizer": {
-      "elapsed_s": 0.31,
+      "elapsed_s": 9.8,
       "error": null,
       "java_hunks": 13,
       "aux_hunks": 2,
@@ -133,12 +133,12 @@
       ]
     },
     "agent2_classifier": {
-      "elapsed_s": 4.07,
+      "elapsed_s": 4.92,
       "error": null,
       "classification": {
         "patch_type": "PatchType.TYPE_III",
         "confidence": 0.95,
-        "reasoning": "The patch involves multiple non-trivial changes across several Java classes related to the transport pipeline, including changes in method signatures, control flow restructuring, resource management (ref-counting), and class inheritance changes (e.g., changing NettyByteBufSizer from MessageToMessageDecoder to ChannelInboundHandlerAdapter). These are structural changes that go beyond simple string replacements or whitespace fixes. The patch also modifies internal logic for handling byte buffers and decoding, indicating structural refactoring but not a complete redesign or fundamentally different implementation. The localization evidence shows exact matches for all hunks, indicating the patch applies cleanly but requires understanding of structural changes. Therefore, the patch is best classified as TYPE_III with high confidence. The token budget estimate is moderate due to the complexity and number of files involved.",
+        "reasoning": "The patch involves multiple non-trivial changes across several Java classes related to transport and inbound pipeline handling. It includes removal of redundant reference counting, changes in method signatures (e.g., changing Consumer to CheckedConsumer), restructuring of method logic (e.g., InboundPipeline's handleBytes and doHandleBytes methods), and replacement of some classes and methods (e.g., NettyByteBufSizer changing from MessageToMessageDecoder to ChannelInboundHandlerAdapter). These changes indicate structural modifications rather than simple string replacements or formatting fixes. The patch is localized exactly in the target branch files, which increases confidence. The complexity is beyond simple or whitespace changes but does not reach deep refactoring or complete redesign, so TYPE_III is appropriate. The token budget estimate is moderate due to the size and complexity of the patch.",
         "is_auto_generated": false
       }
     },
@@ -220,7 +220,7 @@
       "adapted_count": 0
     },
     "agent5_structural": {
-      "elapsed_s": 0.03,
+      "elapsed_s": 0.09,
       "error": null,
       "refactored_count": 0
     },
@@ -252,15 +252,15 @@
       "test_mode": "elasticsearch-helper",
       "test_state": {
         "xml_reports": [
-          "/home/kaushal/backport-claw/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.transport.InboundPipelineTests.xml"
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.transport.InboundPipelineTests.xml"
         ],
         "target_classes": [
           "org.elasticsearch.transport.InboundDecoderTests",
           "org.elasticsearch.transport.InboundPipelineTests"
         ],
         "test_cases": {
-          "org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling": "passed",
           "org.elasticsearch.transport.InboundPipelineTests#testEnsureBodyIsNotPrematurelyReleased": "passed",
+          "org.elasticsearch.transport.InboundPipelineTests#testPipelineHandling": "passed",
           "org.elasticsearch.transport.InboundPipelineTests#testDecodeExceptionIsPropagated": "passed"
         },
         "classes": {

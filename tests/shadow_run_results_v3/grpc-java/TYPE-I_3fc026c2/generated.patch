@@ -1,0 +1,92 @@
+diff --git a/xds/src/main/java/io/grpc/xds/XdsClusterResource.java b/xds/src/main/java/io/grpc/xds/XdsClusterResource.java
+index 593aed4ef..d9848d970 100644
+--- a/xds/src/main/java/io/grpc/xds/XdsClusterResource.java
++++ b/xds/src/main/java/io/grpc/xds/XdsClusterResource.java
+@@ -541,7 +541,12 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
+     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+       return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
+     }
+-    return null;
++    // Fall back to deprecated field (field 11) for backward compatibility with Istio
++    @SuppressWarnings("deprecation")
++    String instanceName = commonTlsContext.hasTlsCertificateCertificateProviderInstance()
++        ? commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName()
++        : null;
++    return instanceName;
+   }
+ 
+   private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
+@@ -559,6 +564,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
+         return combinedCertificateValidationContext.getDefaultValidationContext()
+             .getCaCertificateProviderInstance().getInstanceName();
+       }
++      // Fall back to deprecated field (field 4) in CombinedValidationContext
++      @SuppressWarnings("deprecation")
++      String instanceName = combinedCertificateValidationContext
++          .hasValidationContextCertificateProviderInstance()
++          ? combinedCertificateValidationContext.getValidationContextCertificateProviderInstance()
++              .getInstanceName()
++          : null;
++      if (instanceName != null) {
++        return instanceName;
++      }
+     }
+     return null;
+   }
+diff --git a/xds/src/main/java/io/grpc/xds/internal/security/CommonTlsContextUtil.java b/xds/src/main/java/io/grpc/xds/internal/security/CommonTlsContextUtil.java
+index 50fa18b64..bd8a423e6 100644
+--- a/xds/src/main/java/io/grpc/xds/internal/security/CommonTlsContextUtil.java
++++ b/xds/src/main/java/io/grpc/xds/internal/security/CommonTlsContextUtil.java
+@@ -28,7 +28,10 @@ public final class CommonTlsContextUtil {
+     if (commonTlsContext == null) {
+       return false;
+     }
++    @SuppressWarnings("deprecation")
++    boolean hasDeprecatedField = commonTlsContext.hasTlsCertificateCertificateProviderInstance();
+     return commonTlsContext.hasTlsCertificateProviderInstance()
++        || hasDeprecatedField
+         || hasValidationProviderInstance(commonTlsContext);
+   }
+ 
+@@ -37,9 +40,19 @@ public final class CommonTlsContextUtil {
+         .hasCaCertificateProviderInstance()) {
+       return true;
+     }
+-    return commonTlsContext.hasCombinedValidationContext()
+-        && commonTlsContext.getCombinedValidationContext().getDefaultValidationContext()
+-          .hasCaCertificateProviderInstance();
++    if (commonTlsContext.hasCombinedValidationContext()) {
++      CommonTlsContext.CombinedCertificateValidationContext combined =
++          commonTlsContext.getCombinedValidationContext();
++      if (combined.hasDefaultValidationContext()
++          && combined.getDefaultValidationContext().hasCaCertificateProviderInstance()) {
++        return true;
++      }
++      // Check deprecated field (field 4) in CombinedValidationContext
++      @SuppressWarnings("deprecation")
++      boolean hasDeprecatedField = combined.hasValidationContextCertificateProviderInstance();
++      return hasDeprecatedField;
++    }
++    return false;
+   }
+ 
+   /**
+diff --git a/xds/src/main/java/io/grpc/xds/internal/security/certprovider/CertProviderSslContextProvider.java b/xds/src/main/java/io/grpc/xds/internal/security/certprovider/CertProviderSslContextProvider.java
+index 2570dcb73..cb99ca6ad 100644
+--- a/xds/src/main/java/io/grpc/xds/internal/security/certprovider/CertProviderSslContextProvider.java
++++ b/xds/src/main/java/io/grpc/xds/internal/security/certprovider/CertProviderSslContextProvider.java
+@@ -113,7 +113,13 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider
+     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+       return CommonTlsContextUtil.convert(commonTlsContext.getTlsCertificateProviderInstance());
+     }
+-    return null;
++    // Fall back to deprecated field for backward compatibility with Istio
++    @SuppressWarnings("deprecation")
++    CertificateProviderInstance deprecatedInstance =
++        commonTlsContext.hasTlsCertificateCertificateProviderInstance()
++            ? commonTlsContext.getTlsCertificateCertificateProviderInstance()
++            : null;
++    return deprecatedInstance;
+   }
+ 
+   @Nullable

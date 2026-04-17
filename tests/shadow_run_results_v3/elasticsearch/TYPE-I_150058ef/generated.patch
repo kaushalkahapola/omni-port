@@ -1,0 +1,102 @@
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/http/HttpClient.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/http/HttpClient.java
+index 6b04b66cb7c..f0102d01b37 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/http/HttpClient.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/http/HttpClient.java
+@@ -153,44 +153,31 @@ public class HttpClient implements Closeable {
+         // The caller must call start() first before attempting to send a request
+         assert status.get() == Status.STARTED : "call start() before attempting to send a request";
+ 
+-        // apache can sometimes send us the same error in the consumer and the callback
+-        // sometimes it sends us an error just on the callback
+-        // notifyOnce will dedupe for us
+-        var callOnceListener = ActionListener.notifyOnce(listener);
+-
+-        SocketAccess.doPrivileged(
+-            () -> client.execute(
+-                request.requestProducer(),
+-                new StreamingHttpResultPublisher(threadPool, settings, callOnceListener),
+-                context,
+-                new FutureCallback<>() {
+-                    @Override
+-                    public void completed(HttpResponse response) {
+-                        // StreamingHttpResultPublisher will publish results to the Flow.Publisher returned in the ActionListener
+-                    }
+-
+-                    @Override
+-                    public void failed(Exception ex) {
+-                        throttlerManager.warn(
+-                            logger,
+-                            format("Request from inference entity id [%s] failed", request.inferenceEntityId()),
+-                            ex
+-                        );
+-                        failUsingUtilityThread(ex, callOnceListener);
+-                    }
+-
+-                    @Override
+-                    public void cancelled() {
+-                        failUsingUtilityThread(
++        var streamingProcessor = new StreamingHttpResultPublisher(threadPool, settings, listener);
++
++        SocketAccess.doPrivileged(() -> client.execute(request.requestProducer(), streamingProcessor, context, new FutureCallback<>() {
++            @Override
++            public void completed(HttpResponse response) {
++                streamingProcessor.close();
++            }
++
++            @Override
++            public void failed(Exception ex) {
++                threadPool.executor(UTILITY_THREAD_POOL_NAME).execute(() -> streamingProcessor.failed(ex));
++            }
++
++            @Override
++            public void cancelled() {
++                threadPool.executor(UTILITY_THREAD_POOL_NAME)
++                    .execute(
++                        () -> streamingProcessor.failed(
+                             new CancellationException(
+                                 format("Request from inference entity id [%s] was cancelled", request.inferenceEntityId())
+-                            ),
+-                            callOnceListener
+-                        );
+-                    }
+-                }
+-            )
+-        );
++                            )
++                        )
++                    );
++            }
++        }));
+     }
+ 
+     @Override
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/http/StreamingHttpResultPublisher.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/http/StreamingHttpResultPublisher.java
+index 3fd5d02ef46..bf74ca86a96 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/http/StreamingHttpResultPublisher.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/external/http/StreamingHttpResultPublisher.java
+@@ -65,7 +65,7 @@ class StreamingHttpResultPublisher implements HttpAsyncResponseConsumer<HttpResp
+ 
+     StreamingHttpResultPublisher(ThreadPool threadPool, HttpSettings settings, ActionListener<Flow.Publisher<HttpResult>> listener) {
+         this.settings = Objects.requireNonNull(settings);
+-        this.listener = Objects.requireNonNull(listener);
++        this.listener = ActionListener.notifyOnce(Objects.requireNonNull(listener));
+ 
+         this.taskRunner = new RequestBasedTaskRunner(new OffloadThread(), threadPool, UTILITY_THREAD_POOL_NAME);
+     }
+@@ -152,9 +152,13 @@ class StreamingHttpResultPublisher implements HttpAsyncResponseConsumer<HttpResp
+     @Override
+     public void failed(Exception e) {
+         if (this.isDone.compareAndSet(false, true)) {
+-            ex = e;
+-            queue.offer(() -> subscriber.onError(e));
+-            taskRunner.requestNextRun();
++            if (listenerCalled.compareAndSet(false, true)) {
++                listener.onFailure(e);
++            } else {
++                ex = e;
++                queue.offer(() -> subscriber.onError(e));
++                taskRunner.requestNextRun();
++            }
+         }
+     }
+ 
