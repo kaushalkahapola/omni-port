@@ -1,0 +1,257 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-V",
+  "original_commit": "d1644b37ca64f3a646032895895d5900eee805af",
+  "backport_commit": "74f523d4ccb6d26dc65c99138ccad1d43d6cdaaf",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 27.16,
+      "error": null,
+      "java_hunks": 3,
+      "aux_hunks": 4,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java",
+          "method_used": "fuzzy",
+          "confidence": 0.913,
+          "start_line": 10,
+          "end_line": 16,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 17,
+          "end_line": 24,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java",
+          "method_used": "failed",
+          "confidence": 0.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.42,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.9,
+        "reasoning": "The patch modifies the SpanTermQueryBuilder.java file by changing the doToQuery method to return a SpanMatchNoDocsQuery when the field is unmapped, instead of creating a SpanTermQuery with a term. This involves some restructuring of the method, but the overall logic and structure remain similar. The patch also updates related test files to reflect this behavior. The localization evidence shows high confidence for the main hunk and exact match for the changelog addition. The changes are mostly about handling a special case and adjusting tests accordingly, which is more than trivial string replacement but does not involve deep structural refactoring or redesign. Therefore, the patch complexity fits TYPE_II (whitespace/formatting drift and minor structural changes requiring fuzzy matching). The confidence is high but not absolute due to some restructuring and the failed localization of one hunk, so 0.9 is appropriate. The token budget estimate is moderate, reflecting the need to carefully adapt the logic and tests.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 1.48,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.12,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 71.6,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 2,
+      "synthesis_status": "failed",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": false,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.index.query.SpanTermQueryBuilderTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.index.query.FieldMaskingSpanQueryBuilderTests",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testValidOutput": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testWithBoost": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testMaxNestedDepth": "skipped",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testQueryWrappedInArray": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testNegativeBoosts": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testEqualsAndHashcode": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testMustRewrite": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testUnknownField": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testToQuery": "failed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testFieldWithoutPositions": "failed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testFromXContent": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testSerialization": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testCacheability": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testUnknownObjectException": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testFromJson": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testIllegalArguments": "passed",
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests#testParseFailsWithMultipleFields": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.index.query.SpanTermQueryBuilderTests": "failed"
+        },
+        "summary": {
+          "passed": 14,
+          "failed": 2,
+          "skipped": 1,
+          "total": 17
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 17,
+        "patched_total": 17,
+        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 9,
+    "developer_aux_hunks_from_target": 4,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 17
+    },
+    "java_production_hunks": 3,
+    "developer_aux_hunks": 4,
+    "processed_hunk_indices": [
+      1,
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "failed",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 2,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [
+      {
+        "error_type": "namespace_adaptation_failed",
+        "error_message": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}",
+        "attempt_count": 2,
+        "suggested_action": "structural_refactor"
+      },
+      {
+        "error_type": "synthesis_skipped_no_localization",
+        "error_message": "Hunk unclaimed; localization failed entirely",
+        "attempt_count": 4,
+        "suggested_action": "manual_review"
+      },
+      {
+        "error_type": "synthesis_failed_no_match",
+        "error_message": "Could not verify exact string in target file",
+        "attempt_count": 4,
+        "suggested_action": "relocalize"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java",
+        "old_file_path": null,
+        "old_content": "package org.elasticsearch.index.query;\n\nimport org.apache.lucene.index.Term;\nimport org.apache.lucene.queries.spans.SpanQuery;\nimport org.apache.lucene.queries.spans.SpanTermQuery;\nimport org.apache.lucene.search.BooleanClause;\nimport org.apache.lucene.search.Query;\n",
+        "new_content": "package org.elasticsearch.index.query;\n\nimport org.apache.lucene.index.Term;\nimport org.apache.lucene.queries.spans.SpanTermQuery;\nimport org.apache.lucene.search.BooleanClause;\nimport org.apache.lucene.search.Query;\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "is_rename": false,
+        "file_operation": "MODIFIED",
+        "error": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}"
+      },
+      {
+        "file_path": "server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java",
+        "old_file_path": null,
+        "old_content": "    }\n\n    @Override\n    protected SpanQuery doToQuery(SearchExecutionContext context) throws IOException {\n        MappedFieldType mapper = context.getFieldType(fieldName);\n        Term term;\n        if (mapper == null) {\n            term = new Term(fieldName, BytesRefs.toBytesRef(value));\n        } else {\n            if (mapper.getTextSearchInfo().hasPositions() == false) {\n                throw new IllegalArgumentException(\n                    \"Span term query requires position data, but field \" + fieldName + \" was indexed without position data\"\n                );\n            }\n            Query termQuery = mapper.termQuery(value, context);\n            List<Term> termsList = new ArrayList<>();\n            termQuery.visit(new QueryVisitor() {\n                @Override\n                public QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {\n                    if (occur == BooleanClause.Occur.MUST || occur == BooleanClause.Occur.FILTER) {\n                        return this;\n                    }\n                    return EMPTY_VISITOR;\n                }\n\n                @Override\n                public void consumeTerms(Query query, Term... terms) {\n                    termsList.addAll(Arrays.asList(terms));\n                }\n            });\n            if (termsList.size() != 1) {\n                // This is for safety, but we have called mapper.termQuery above: we really should get one and only one term from the query?\n                throw new IllegalArgumentException(\"Cannot extract a term from a query of type \" + termQuery.getClass() + \": \" + termQuery);\n            }\n            term = termsList.get(0);\n        }\n        return new SpanTermQuery(term);\n    }\n\n    public static SpanTermQueryBuilder fromXContent(XContentParser parser) throws IOException, ParsingException {\n",
+        "new_content": "    }\n\n    @Override\n    protected Query doToQuery(SearchExecutionContext context) throws IOException {\n        MappedFieldType mapper = context.getFieldType(fieldName);\n        if (mapper == null) {\n            return new SpanMatchNoDocsQuery(fieldName, \"unmapped field: \" + fieldName);\n        }\n        if (mapper.getTextSearchInfo().hasPositions() == false) {\n            throw new IllegalArgumentException(\n                \"Span term query requires position data, but field \" + fieldName + \" was indexed without position data\"\n            );\n        }\n        Query termQuery = mapper.termQuery(value, context);\n        List<Term> termsList = new ArrayList<>();\n        termQuery.visit(new QueryVisitor() {\n            @Override\n            public QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {\n                if (occur == BooleanClause.Occur.MUST || occur == BooleanClause.Occur.FILTER) {\n                    return this;\n                }\n                return EMPTY_VISITOR;\n            }\n\n            @Override\n            public void consumeTerms(Query query, Term... terms) {\n                termsList.addAll(Arrays.asList(terms));\n            }\n        });\n        if (termsList.size() != 1) {\n            // This is for safety, but we have called mapper.termQuery above: we really should get one and only one term from the query?\n            throw new IllegalArgumentException(\"Cannot extract a term from a query of type \" + termQuery.getClass() + \": \" + termQuery);\n        }\n        return new SpanTermQuery(termsList.get(0));\n    }\n\n    public static SpanTermQueryBuilder fromXContent(XContentParser parser) throws IOException, ParsingException {\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "is_rename": false,
+        "file_operation": "MODIFIED"
+      }
+    ],
+    "generated_patch_bytes": 0,
+    "target_patch_bytes": 12179,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 17,
+      "patched_total": 17,
+      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

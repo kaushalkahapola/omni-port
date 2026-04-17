@@ -1,0 +1,305 @@
+{
+  "run_timestamp": "2026-04-13T06:50:35.296176",
+  "repo": "graylog2-server",
+  "patch_type": "TYPE-II",
+  "original_commit": "90a12d6b4170ed10ada22f909af4a6089113dad6",
+  "backport_commit": "aafd66b9fa32f97adb95faf084ca5dab8be32309",
+  "description": "master \u2192 6.0",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 3,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 128,
+          "end_line": 133,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 201,
+          "end_line": 206,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/MultiGrokMatch.java",
+          "method_used": "new_file",
+          "confidence": 1.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.42,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch adds a new feature by introducing a new file (MultiGrokMatch.java) and modifying existing files to integrate this new function. The localization evidence shows that the changes in existing files were found via 'git_exact' with high confidence, indicating that the patch applies cleanly without structural conflicts. The new file addition is straightforward and does not conflict with existing code. The test additions and changelog are also straightforward. Overall, the patch is an exact match addition with no structural or API divergence, fitting the TYPE_I classification.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 1.47,
+      "error": null,
+      "synthesized_count": 1,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/MultiGrokMatch.java",
+          "old_string": "",
+          "new_string": "/*\n * Copyright (C) 2020 Graylog, Inc.\n *\n * This program is free software: you can redistribute it and/or modify\n * it under the terms of the Server Side Public License, version 1,\n * as published by MongoDB, Inc.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the\n * Server Side Public License for more details.\n *\n * You should have received a copy of the Server Side Public License\n * along with this program. If not, see\n * <http://www.mongodb.com/licensing/server-side-public-license>.\n */\npackage org.graylog.plugins.pipelineprocessor.functions.strings;\n\nimport com.google.common.reflect.TypeToken;\nimport io.krakens.grok.api.Grok;\nimport io.krakens.grok.api.Match;\nimport jakarta.inject.Inject;\nimport org.graylog.plugins.pipelineprocessor.EvaluationContext;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.AbstractFunction;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.FunctionArgs;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.FunctionDescriptor;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.ParameterDescriptor;\nimport org.graylog2.grok.GrokPatternRegistry;\n\nimport java.util.Collection;\nimport java.util.Collections;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Objects;\nimport java.util.stream.Collectors;\n\nimport static com.google.common.collect.ImmutableList.of;\n\npublic class MultiGrokMatch extends AbstractFunction<GrokMatch.GrokResult> {\n    public static final String NAME = \"multi_grok\";\n\n    @SuppressWarnings(\"unchecked\")\n    private static final Class<List<String>> LIST_RETURN_TYPE = (Class<List<String>>) new TypeToken<List<String>>() {\n    }.getRawType();\n    private final ParameterDescriptor<String, String> valueParam;\n    private final ParameterDescriptor<Object, List<String>> patternsParam;\n    private final ParameterDescriptor<Boolean, Boolean> namedOnly;\n\n    private final GrokPatternRegistry grokPatternRegistry;\n\n    @Inject\n    public MultiGrokMatch(GrokPatternRegistry grokPatternRegistry) {\n        this.grokPatternRegistry = grokPatternRegistry;\n\n        valueParam = ParameterDescriptor.string(\"value\").description(\"The string to apply each Grok pattern against\").build();\n        patternsParam = ParameterDescriptor.object(\"patterns\", LIST_RETURN_TYPE)\n                .description(\"The Grok patterns to match in order\")\n                .transform(this::transformToList)\n                .build();\n        namedOnly = ParameterDescriptor.bool(\"only_named_captures\").optional().description(\"Whether to only use explicitly named groups in the patterns\").build();\n    }\n\n    @Override\n    public GrokMatch.GrokResult evaluate(FunctionArgs args, EvaluationContext context) {\n        final String value = valueParam.required(args, context);\n        final List<String> patterns = patternsParam.required(args, context);\n        final boolean onlyNamedCaptures = namedOnly.optional(args, context).orElse(false);\n\n        if (value == null || patterns == null || patterns.isEmpty()) {\n            return null;\n        }\n\n        for (String pattern : patterns) {\n            final Grok grok = grokPatternRegistry.cachedGrokForPattern(pattern, onlyNamedCaptures);\n\n            final Match match = grok.match(value);\n            if (!match.isNull()) {\n                return new GrokMatch.GrokResult(match.captureFlattened());\n            }\n        }\n        return new GrokMatch.GrokResult(Map.of());\n    }\n\n    private List<String> transformToList(Object value) {\n        if (value instanceof Collection<?>) {\n            return ((Collection<?>) value).stream()\n                    .map(Object::toString)\n                    .filter(Objects::nonNull)\n                    .collect(Collectors.toList());\n        }\n        return Collections.emptyList();\n    }\n\n    @Override\n    public FunctionDescriptor<GrokMatch.GrokResult> descriptor() {\n        return FunctionDescriptor.<GrokMatch.GrokResult>builder()\n                .name(NAME)\n                .returnType(GrokMatch.GrokResult.class)\n                .params(of(patternsParam, valueParam, namedOnly))\n                .description(\"Applies a list of Grok patterns to a string and returns the first match\")\n                .build();\n    }\n\n}",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.02,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/MultiGrokMatch.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 1
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "graylog2-server-helper",
+      "test_success": true,
+      "test_mode": "graylog2-server-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog.events.notifications.types.HTTPEventNotificationV2Test.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog.mcp.server.MarkdownBuilderTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog.plugins.cef.codec.CEFCodecTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog.plugins.pipelineprocessor.functions.strings.KeyValueTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog.plugins.views.search.rest.export.response.ExportTabularResultResponseTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog2.database.filtering.inmemory.SingleFilterParserTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog2.indexer.MongoIndexSetRegistryTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog2.inputs.syslog.tcp.SyslogOctetCountFrameDecoderTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog2.inputs.syslog.tcp.SyslogTCPFramingRouterHandlerTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog2.rest.resources.system.inputs.InputsResourceTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog2.search.SearchQueryParserTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/build/all-test-results/TEST-org.graylog2.shared.journal.LocalKafkaJournalTest.xml",
+          "/home/cseroot/omni-port/repos/graylog2-server/graylog2-server/target/surefire-reports/TEST-org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest.xml"
+        ],
+        "target_classes": [
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest"
+        ],
+        "test_cases": {
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#jsonpath": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#strings": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#arrayContains": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#stringEntropy": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#grok_exists_not": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#csvMap": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#clonedMessage": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#listCount": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#fieldPrefixSuffix": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#multiGrok": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#grok_exists": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#removeFromStream": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#conversions": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#mapGet": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#mapSet": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#regexMatch": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#dateConversion": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#removeFromStreamRetainDefault": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#syslog": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#fieldRenaming": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupHasValue": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#notExpressionTypeCheck": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#comparisons": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#stringConcat": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#ipAnonymize": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#removeField": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupAddStringList": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#stringLength": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupClearKey": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#grok": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#json": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#urls": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#timezones": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#datesUnixTimestamps": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#dates": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#debug": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#split": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#removeFieldsByRegex": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#listGet": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#setFields": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupSetStringListWithTtl": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#removeSingleField": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupSetStringList": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#keyValue": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#int2ipv4": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#substring": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupSetValue": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#ipMatching": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#clonedMessageWithInvalidTimestamp": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#arrayRemove": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#dateArithmetic": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#normalizeFields": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupAssignTtl": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#mapRemove": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#newlyCreatedMessage": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#accountingSize": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupAll": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#routeToStreamRemoveDefault": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#regexReplace": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#flattenJson": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#setField": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#keyValueFailure": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#encodings": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#stringArrayAdd": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#digests": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#routeToStream": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupRemoveStringList": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#metricCounter": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#jsonpathFromMessageField": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#grokIssue18883": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#evalErrorSuppressed": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#lookupSetValueWithTtl": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#firstNonNull": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#removeFieldsByName": "passed",
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest#ipMatchingIssue28": "passed"
+        },
+        "classes": {
+          "org.graylog.plugins.pipelineprocessor.functions.FunctionsSnippetsTest": "passed"
+        },
+        "summary": {
+          "passed": 75,
+          "failed": 0,
+          "skipped": 0,
+          "total": 75
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 75,
+        "patched_total": 75,
+        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 8,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-graylog2-server-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 75
+    },
+    "java_production_hunks": 3,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 1,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "clean",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 6500,
+    "target_patch_bytes": 11182,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "graylog2-server-helper",
+    "test_transition": {
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 75,
+      "patched_total": 75,
+      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

@@ -1,0 +1,53 @@
+commit d21fe32bea9dacb33d2c975847361995b4d170bf
+Author: François JACQUES <hypnoce@donarproject.org>
+Date:   Fri Mar 29 18:00:32 2024 +0100
+
+    okhttp: Remove finished stream even if a pending stream was started
+    
+    Fixes #11053
+
+diff --git a/okhttp/src/main/java/io/grpc/okhttp/OkHttpClientTransport.java b/okhttp/src/main/java/io/grpc/okhttp/OkHttpClientTransport.java
+index 3b9513eeb..29d3dbc1c 100644
+--- a/okhttp/src/main/java/io/grpc/okhttp/OkHttpClientTransport.java
++++ b/okhttp/src/main/java/io/grpc/okhttp/OkHttpClientTransport.java
+@@ -953,8 +953,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
+         }
+         if (!startPendingStreams()) {
+           stopIfNecessary();
+-          maybeClearInUse(stream);
+         }
++        maybeClearInUse(stream);
+       }
+     }
+   }
+diff --git a/okhttp/src/test/java/io/grpc/okhttp/OkHttpClientTransportTest.java b/okhttp/src/test/java/io/grpc/okhttp/OkHttpClientTransportTest.java
+index 7347399bf..ab7dff984 100644
+--- a/okhttp/src/test/java/io/grpc/okhttp/OkHttpClientTransportTest.java
++++ b/okhttp/src/test/java/io/grpc/okhttp/OkHttpClientTransportTest.java
+@@ -2080,6 +2080,26 @@ public class OkHttpClientTransportTest {
+     assertEquals(MISCARRIED, listener3.rpcProgress);
+   }
+ 
++  @Test
++  public void finishedStreamRemovedFromInUseState() throws Exception {
++    initTransport();
++    setMaxConcurrentStreams(1);
++    final MockStreamListener listener = new MockStreamListener();
++    OkHttpClientStream stream =
++        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
++    stream.start(listener);
++    OkHttpClientStream pendingStream =
++        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
++    pendingStream.start(listener);
++    waitForStreamPending(1);
++    clientTransport.finishStream(stream.transportState().id(), Status.OK, PROCESSED,
++        false, null, null);
++    verify(transportListener).transportInUse(true);
++    clientTransport.finishStream(pendingStream.transportState().id(), Status.OK, PROCESSED,
++        false, null, null);
++    verify(transportListener).transportInUse(false);
++  }
++
+   private int activeStreamCount() {
+     return clientTransport.getActiveStreams().length;
+   }

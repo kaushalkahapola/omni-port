@@ -1,0 +1,139 @@
+commit 197b8477a9d8d82817bb5999d86b46c4cf26ee3b
+Author: graylog-internal-actions-access[bot] <121166801+graylog-internal-actions-access[bot]@users.noreply.github.com>
+Date:   Wed Aug 6 08:13:46 2025 +0200
+
+    Always release retained ByteBuf in SyslogTCPFramingRouterHandler when Exception is thrown (#23317) (#23343)
+    
+    * Always release retained ByteBuf in SyslogTCPFramingRouterHandler when exception is thrown
+    
+    * throw proper DecoderException
+    
+    * add changelog
+    
+    (cherry picked from commit b17cee737de905c07e9aa9403fb98e40ba018cbe)
+    
+    Co-authored-by: Maxwell <98284293+kodjo-anipah@users.noreply.github.com>
+
+diff --git a/changelog/unreleased/issue-23312.toml b/changelog/unreleased/issue-23312.toml
+new file mode 100644
+index 0000000000..0563f1d09b
+--- /dev/null
++++ b/changelog/unreleased/issue-23312.toml
+@@ -0,0 +1,5 @@
++type = "f"
++message = "Ensure retained ByteBuf is released in SyslogTCPFramingRouterHandler on decode failure."
++
++pulls = ["23317"]
++issues = ["23312"]
+diff --git a/graylog2-server/src/main/java/org/graylog2/inputs/syslog/tcp/SyslogOctetCountFrameDecoder.java b/graylog2-server/src/main/java/org/graylog2/inputs/syslog/tcp/SyslogOctetCountFrameDecoder.java
+index 4e2829904c..04cbc4dcde 100644
+--- a/graylog2-server/src/main/java/org/graylog2/inputs/syslog/tcp/SyslogOctetCountFrameDecoder.java
++++ b/graylog2-server/src/main/java/org/graylog2/inputs/syslog/tcp/SyslogOctetCountFrameDecoder.java
+@@ -20,6 +20,7 @@ package org.graylog2.inputs.syslog.tcp;
+ import io.netty.buffer.ByteBuf;
+ import io.netty.channel.ChannelHandlerContext;
+ import io.netty.handler.codec.ByteToMessageDecoder;
++import io.netty.handler.codec.DecoderException;
+ import io.netty.util.ByteProcessor;
+ 
+ import java.nio.charset.StandardCharsets;
+@@ -44,7 +45,7 @@ public class SyslogOctetCountFrameDecoder extends ByteToMessageDecoder {
+ 
+         // Convert the frame length value bytes into an integer without mutating the buffer reader index.
+         final String lengthString = buffer.slice(buffer.readerIndex(), frameSizeValueLength).toString(StandardCharsets.UTF_8);
+-        final int length = Integer.parseInt(lengthString);
++        final int length = getLengthFromString(lengthString);
+         final int skipLength = frameSizeValueLength + 1; // Frame length value bytes and the whitespace that follows it.
+ 
+         // We have to take the skipped bytes (frame size value length + whitespace) into account when checking if
+@@ -61,6 +62,14 @@ public class SyslogOctetCountFrameDecoder extends ByteToMessageDecoder {
+         out.add(frame);
+     }
+ 
++    private int getLengthFromString(String lengthString) {
++        try {
++            return Integer.parseInt(lengthString);
++        } catch (NumberFormatException e) {
++            throw new DecoderException("Invalid syslog message format: missing or invalid frame length at start: " + lengthString, e);
++        }
++    }
++
+     /**
+      * Find the byte length of the frame length value.
+      *
+diff --git a/graylog2-server/src/main/java/org/graylog2/inputs/syslog/tcp/SyslogTCPFramingRouterHandler.java b/graylog2-server/src/main/java/org/graylog2/inputs/syslog/tcp/SyslogTCPFramingRouterHandler.java
+index bf2c7958c2..186197c0a1 100644
+--- a/graylog2-server/src/main/java/org/graylog2/inputs/syslog/tcp/SyslogTCPFramingRouterHandler.java
++++ b/graylog2-server/src/main/java/org/graylog2/inputs/syslog/tcp/SyslogTCPFramingRouterHandler.java
+@@ -45,8 +45,14 @@ public class SyslogTCPFramingRouterHandler extends SimpleChannelInboundHandler<B
+                     handler = new DelimiterBasedFrameDecoder(maxFrameLength, delimiter);
+                 }
+             }
++            try {
++                handler.channelRead(ctx, ReferenceCountUtil.retain(msg));
++            } catch (Exception e) {
++                // Because we've retained the buffer, we must release it in case of an exception to avoid memory leaks
++                ReferenceCountUtil.release(msg);
++                throw e;
++            }
+ 
+-            handler.channelRead(ctx, ReferenceCountUtil.retain(msg));
+         } else {
+             ctx.fireChannelRead(msg);
+         }
+diff --git a/graylog2-server/src/test/java/org/graylog2/inputs/syslog/tcp/SyslogOctetCountFrameDecoderTest.java b/graylog2-server/src/test/java/org/graylog2/inputs/syslog/tcp/SyslogOctetCountFrameDecoderTest.java
+index 2511eb69a9..408579c3fc 100644
+--- a/graylog2-server/src/test/java/org/graylog2/inputs/syslog/tcp/SyslogOctetCountFrameDecoderTest.java
++++ b/graylog2-server/src/test/java/org/graylog2/inputs/syslog/tcp/SyslogOctetCountFrameDecoderTest.java
+@@ -25,6 +25,7 @@ import org.junit.Test;
+ 
+ import java.nio.charset.StandardCharsets;
+ 
++import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.assertFalse;
+ import static org.junit.Assert.assertNull;
+@@ -142,4 +143,12 @@ public class SyslogOctetCountFrameDecoderTest {
+         assertEquals("<45>1 2014-10-21T10:21:09+00:00 c4dc57ba1ebb syslog-ng 7120 - " + longString + "\n", actual.toString(StandardCharsets.US_ASCII));
+         assertNull(channel.readInbound());
+     }
++
++    @Test
++    public void testInvalidFrameLenghtThrowsDecodingException() {
++        final ByteBuf buf = Unpooled.copiedBuffer("2025-07-29 12:34:56 myhost myapp: This is a test syslog message\n", StandardCharsets.US_ASCII);
++        assertThatExceptionOfType(DecoderException.class)
++                .isThrownBy(() -> channel.writeInbound(buf))
++                .withMessage("Invalid syslog message format: missing or invalid frame length at start: 2025-07-29");
++    }
+ }
+diff --git a/graylog2-server/src/test/java/org/graylog2/inputs/syslog/tcp/SyslogTCPFramingRouterHandlerTest.java b/graylog2-server/src/test/java/org/graylog2/inputs/syslog/tcp/SyslogTCPFramingRouterHandlerTest.java
+index 43a7ac9387..6ce2abf7af 100644
+--- a/graylog2-server/src/test/java/org/graylog2/inputs/syslog/tcp/SyslogTCPFramingRouterHandlerTest.java
++++ b/graylog2-server/src/test/java/org/graylog2/inputs/syslog/tcp/SyslogTCPFramingRouterHandlerTest.java
+@@ -19,6 +19,7 @@ package org.graylog2.inputs.syslog.tcp;
+ import io.netty.buffer.ByteBuf;
+ import io.netty.buffer.Unpooled;
+ import io.netty.channel.embedded.EmbeddedChannel;
++import io.netty.handler.codec.DecoderException;
+ import io.netty.handler.codec.Delimiters;
+ import io.netty.handler.codec.TooLongFrameException;
+ import org.junit.After;
+@@ -114,4 +115,18 @@ public class SyslogTCPFramingRouterHandlerTest {
+         assertThat((ByteBuf) channel.readInbound()).isEqualTo(emptyBuffer);
+         assertThat((ByteBuf) channel.readInbound()).isNull();
+     }
++
++    @Test
++    public void testRetainedBufferReleasedDuringException() {
++        // Creates an initial reference count of 1
++        final ByteBuf buf = Unpooled.copiedBuffer("2025-07-29 12:34:56 myhost myapp: This is a test syslog message\n", StandardCharsets.US_ASCII);
++        assertThat(buf.refCnt()).isNotZero();
++
++        // Trying to decode aboves msg throws an exception
++        assertThatExceptionOfType(DecoderException.class)
++                .isThrownBy(() -> channel.writeInbound(buf));
++
++        // Buffer is properly released even after running into an exception
++        assertThat(buf.refCnt()).isZero();
++    }
+ }

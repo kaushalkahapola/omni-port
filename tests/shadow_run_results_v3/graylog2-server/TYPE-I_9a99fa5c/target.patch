@@ -1,0 +1,775 @@
+commit 70e3b2210c304a0b3c8562df8683197f8562f8c9
+Author: graylog-internal-actions-access[bot] <121166801+graylog-internal-actions-access[bot]@users.noreply.github.com>
+Date:   Wed Nov 26 03:51:16 2025 -0500
+
+    chore(mcp): use context-aware Markdown escaping (#24011) (#24357)
+    
+    * fix: use context-aware markdown escaping
+    
+    * add escapeMarkdown instance method
+    
+    * use all keys passed when casting to a map, with empty default values
+    
+    * add changelog file
+    
+    * style conditional block
+    
+    (cherry picked from commit 9a99fa5c88c6674027f25b4715dcc77420331a14)
+    
+    Co-authored-by: Ramón Márquez <ramon.marquez@graylog.com>
+
+diff --git a/changelog/unreleased/pr-24011.toml b/changelog/unreleased/pr-24011.toml
+new file mode 100644
+index 0000000000..c98ec25235
+--- /dev/null
++++ b/changelog/unreleased/pr-24011.toml
+@@ -0,0 +1,5 @@
++type = "added" # One of: a(dded), c(hanged), d(eprecated), r(emoved), f(ixed), s(ecurity)
++message = "Add support for separately opening and closing code blocks. Use context-aware Markdown escaping."
++
++issues = ["graylog-plugin-enterprise#12306"]
++pulls = ["24011"]
+diff --git a/graylog2-server/src/main/java/org/graylog/mcp/server/MarkdownBuilder.java b/graylog2-server/src/main/java/org/graylog/mcp/server/MarkdownBuilder.java
+index f6704d72c8..45379534c1 100644
+--- a/graylog2-server/src/main/java/org/graylog/mcp/server/MarkdownBuilder.java
++++ b/graylog2-server/src/main/java/org/graylog/mcp/server/MarkdownBuilder.java
+@@ -26,66 +26,163 @@ import java.util.Arrays;
+ import java.util.LinkedHashMap;
+ import java.util.List;
+ import java.util.Map;
++import java.util.regex.Pattern;
+ import java.util.stream.Collectors;
+ 
+ public class MarkdownBuilder {
+     private final StringBuilder sb;
+     private final ObjectMapper mapper;
++    private boolean isCodeBlockOpen;
++
++    // Pre-compiled regex patterns for performance
++    private static final Pattern HEADING_SPECIAL_CHARS = Pattern.compile("(?m)^(\\s*)([#>\\-+*])");
++    private static final Pattern HEADING_ORDERED_LIST = Pattern.compile("(?m)^(\\s*)(\\d+)\\.");
++    private static final Pattern INLINE_EMPHASIS = Pattern.compile("(?U)(?<=\\w)[*_](?=\\w)");
++
++    public MarkdownBuilder() {
++        this.sb = new StringBuilder();
++        this.mapper = new ObjectMapper().registerModule(new Jdk8Module()).registerModule(new JodaModule());
++        this.isCodeBlockOpen = false;
++    }
++
++    public boolean isEmpty() {
++        return sb.isEmpty();
++    }
+ 
+     public static String orEmpty(Object input) {
+         return input == null ? "" : input.toString();
+     }
+ 
++    public enum MdContext {
++        PARAGRAPH,            // normal text
++        HEADING,              // text used as a heading after '#'
++        TABLE_CELL,           // inside GFM table cell
++        LINK_TEXT,            // inside [text]
++        LINK_URL              // inside (url)
++    }
++
++    public static String escapeMarkdown(String text) {
++        return escapeMarkdown(text, null);
++    }
++
+     /**
+-     * Escapes markdown special characters to prevent formatting issues.
+-     * This prevents user input from breaking markdown structure (tables, code blocks, etc.)
++     * Escapes Markdown special characters to prevent formatting issues.
++     * This prevents user input from breaking Markdown structure (tables, code blocks, etc.).
+      * <p>
+-     * Note: Does not escape periods (.) as they're rarely problematic in markdown.
++     * Note: Does not escape periods (.) as they're rarely problematic in Markdown.
++     * <p>
++     * <b>Usage guidance:</b><br>
++     * Markdown escaping should be applied <em>only when necessary</em>.
++     * <ul>
++     *   <li>
++     *     <b>Always escape</b>:
++     *     <ul>
++     *       <li>Backslash (<code>\\</code>): must always be escaped first.</li>
++     *       <li>Backtick (<code>`</code>): breaks code formatting if unescaped.</li>
++     *     </ul>
++     *   </li>
++     *   <li>
++     *     <b>Otherwise, escape only for:</b>
++     *     <ul>
++     *       <li>
++     *         <b>Headings / list items / blockquotes:</b>
++     *         Escape leading <code>#</code>, <code>-</code>, <code>+</code>, <code>*</code>, <code>&gt;</code>,
++     *         or digit + period (<code>1.</code>) if they appear at the start of a line.
++     *       </li>
++     *       <li>
++     *         <b>Inline text:</b>
++     *         Escape <code>*</code> and <code>_</code> only when they are adjacent to word characters
++     *         (i.e., could form bold or italic syntax).
++     *       </li>
++     *       <li>
++     *         <b>Links / images:</b>
++     *         Escape <code>[</code> and <code>]</code> in link text or image alt text, and
++     *         <code>(</code> and <code>)</code> in URLs.
++     *       </li>
++     *       <li>
++     *         <b>Tables:</b>
++     *         Escape the pipe character (<code>|</code>) inside table cells
++     *         (required in GitHub-Flavored Markdown tables).
++     *       </li>
++     *     </ul>
++     *   </li>
++     *   <li>
++     *     <b>Prefer wrapping in code blocks</b>:
++     *     When rendering structured or user-generated data (e.g., key-value pairs, YAML, JSON),
++     *     wrap the entire section in a fenced {@link #codeBlock(String)} (<code>```</code>).
++     *   </li>
++     * </ul>
++     *
++     * <b>Warning:</b> Do not call this method multiple times on the same string,
++     * as it will escape already-escaped characters. If you need to add pre-escaped
++     * content, use {@link #unsafeRaw(String)} instead.
+      *
+-     * @param text The text to escape
+-     * @return The escaped text, or empty string if input is null
++     * @param text The text to escape (should not be pre-escaped)
++     * @param context The markdown context
++     * @return The escaped text, or an empty string if input is null or empty.
+      */
+-    public static String escapeMarkdown(String text) {
++    public static String escapeMarkdown(String text, MdContext context) {
+         if (text == null || text.isEmpty()) {
+             return "";
+         }
+-        // Escape special markdown characters
+-        // Order matters: backslash must be first since it's used for escaping
+-        return text
++        // Always escape backslash and backstick
++        String s = text
+                 .replace("\\", "\\\\")  // Backslash
+-                .replace("`", "\\`")    // Backtick (breaks code)
+-                .replace("*", "\\*")    // Asterisk (breaks bold/italic)
+-                .replace("_", "\\_")    // Underscore (breaks italic/bold)
+-                .replace("{", "\\{")    // Curly braces
+-                .replace("}", "\\}")
+-                .replace("[", "\\[")    // Square brackets (breaks links)
+-                .replace("]", "\\]")
+-                .replace("(", "\\(")    // Parentheses (breaks links)
+-                .replace(")", "\\)")
+-                .replace("#", "\\#")    // Hash (breaks headings)
+-                .replace("+", "\\+")    // Plus (breaks lists)
+-                .replace("-", "\\-")    // Minus (breaks lists/hr)
+-                .replace("!", "\\!")    // Exclamation (breaks images)
+-                .replace("|", "\\|");   // Pipe (CRITICAL: breaks tables)
++                .replace("`", "\\`");   // Backtick (breaks code)
++
++        switch (context) {
++            case HEADING:
++                // Escape headings (#), blockquotes (>), or unordered list items (- + *)
++                // as well as ordered list items (1., 2., …)
++                // when these appear at the start of a line
++                s = HEADING_SPECIAL_CHARS.matcher(s).replaceAll("$1\\\\$2");
++                s = HEADING_ORDERED_LIST.matcher(s).replaceAll("$1$2\\\\.");
++                // Fall through to PARAGRAPH to also escape inline emphasis
++            case PARAGRAPH:
++                // Escape * and _ only when they can start/end emphasis, i.e., when they are between word characters.
++                return INLINE_EMPHASIS.matcher(s).replaceAll("\\\\$0");
++            case TABLE_CELL:
++                // Escape pipes when working with tables
++                s = s.replace("|", "\\|");
++                // Also escape inline emphasis like PARAGRAPH does
++                return INLINE_EMPHASIS.matcher(s).replaceAll("\\\\$0");
++            case LINK_TEXT:
++                // Escape square brackets only when working with links
++                return s.replace("[", "\\[").replace("]", "\\]");
++            case LINK_URL:
++                // Escape parentheses for link urls
++                return s.replace("(", "\\(").replace(")", "\\)");
++            case null, default:
++                return s;
++        }
++    }
++
++    /**
++     * Instance method that escapes markdown based on current builder state.
++     * If a code block is open, no escaping is performed.
++     */
++    private String escapeMarkdownInstance(String text, MdContext context) {
++        if (isCodeBlockOpen) {
++            return orEmpty(text);
++        }
++        return escapeMarkdown(text, context);
+     }
+ 
+     public static String bold(String text) {
+-        return "**" + escapeMarkdown(orEmpty(text)) + "**";
++        return "**" + escapeMarkdown(orEmpty(text), MdContext.PARAGRAPH) + "**";
+     }
+ 
+     public static String italic(String text) {
+-        return "*" + escapeMarkdown(orEmpty(text)) + "*";
++        return "*" + escapeMarkdown(orEmpty(text), MdContext.PARAGRAPH) + "*";
+     }
+ 
+     public static String code(String text) {
+-        // Code content should be literal, but we need to escape backticks to prevent breaking the inline code
+-        final String escaped = text == null ? "" : text.replace("`", "\\`");
+-        return "`" + escaped + "`";
++        return "`" + escapeMarkdown(text) + "`";
+     }
+ 
+     public static String link(String text, String url) {
+         // Escape link text but not URL (URLs should remain as-is)
+-        return "[" + escapeMarkdown(orEmpty(text)) + "](" + orEmpty(url) + ")";
++        return "[" + escapeMarkdown(orEmpty(text), MdContext.LINK_TEXT) + "](" + orEmpty(url) + ")";
+     }
+ 
+     public static Map<String, String> castMapValues(Map<String, Object> items, List<String> keys) {
+@@ -93,10 +190,11 @@ public class MarkdownBuilder {
+             return null;
+         }
+         try (var stream = (keys == null || keys.isEmpty()) ? items.entrySet().stream() : keys.stream()
+-                .filter(items::containsKey).map(k -> new AbstractMap.SimpleEntry<>(k, items.get(k)))) {
++//                .filter(items::containsKey)
++                .map(k -> new AbstractMap.SimpleEntry<>(k, items.getOrDefault(k, null)))) {
+             return stream.collect(Collectors.toMap(
+                     Map.Entry::getKey,
+-                    e -> escapeMarkdown(orEmpty(e.getValue()).trim().replace("\n", " ")),
++                    e -> orEmpty(e.getValue()).trim().replace("\n", " "),
+                     (a, b) -> b,
+                     LinkedHashMap::new
+             ));
+@@ -107,19 +205,10 @@ public class MarkdownBuilder {
+         return castMapValues(items, null);
+     }
+ 
+-    public MarkdownBuilder() {
+-        this.sb = new StringBuilder();
+-        this.mapper = new ObjectMapper().registerModule(new Jdk8Module()).registerModule(new JodaModule());
+-    }
+-
+-    public boolean isEmpty() {
+-        return sb.isEmpty();
+-    }
+-
+     private MarkdownBuilder heading(int level, String text) {
+         sb.append("#".repeat(Math.min(6, Math.max(level, 1))))
+                 .append(" ")
+-                .append(escapeMarkdown(orEmpty(text)))
++                .append(escapeMarkdownInstance(orEmpty(text), MdContext.HEADING))
+                 .append("\n\n");
+         return this;
+     }
+@@ -149,7 +238,7 @@ public class MarkdownBuilder {
+     }
+ 
+     public MarkdownBuilder paragraph(String text) {
+-        sb.append(escapeMarkdown(orEmpty(text))).append("\n\n");
++        sb.append(escapeMarkdownInstance(orEmpty(text), MdContext.PARAGRAPH)).append("\n\n");
+         return this;
+     }
+ 
+@@ -160,7 +249,24 @@ public class MarkdownBuilder {
+     public MarkdownBuilder codeBlock(String code, String language) {
+         // Code blocks should preserve literal content
+         // Note: triple backticks (```) in code content will break the block, but this is a markdown limitation
+-        sb.append("```").append(orEmpty(language)).append("\n").append(orEmpty(code)).append("\n```\n\n");
++        openCodeBlock(language);
++        sb.append(orEmpty(code));
++        return closeCodeBlock();
++    }
++
++    public MarkdownBuilder openCodeBlock() {
++        return openCodeBlock(null);
++    }
++
++    public MarkdownBuilder openCodeBlock(String language) {
++        sb.append("```").append(orEmpty(language)).append("\n");
++        isCodeBlockOpen = true;
++        return this;
++    }
++
++    public MarkdownBuilder closeCodeBlock() {
++        sb.append("\n```\n\n");
++        isCodeBlockOpen = false;
+         return this;
+     }
+ 
+@@ -170,7 +276,7 @@ public class MarkdownBuilder {
+         }
+         String[] lines = text.split("\n");
+         for (String line : lines) {
+-            sb.append("> ").append(escapeMarkdown(orEmpty(line))).append("\n");
++            sb.append("> ").append(escapeMarkdownInstance(orEmpty(line), MdContext.HEADING)).append("\n");
+         }
+         sb.append("\n");
+         return this;
+@@ -182,7 +288,7 @@ public class MarkdownBuilder {
+         }
+         int i = 0;
+         for (String item : items) {
+-            sb.append(++i).append(". ").append(escapeMarkdown(orEmpty(item))).append("\n");
++            sb.append(++i).append(". ").append(escapeMarkdownInstance(orEmpty(item), MdContext.HEADING)).append("\n");
+         }
+         sb.append("\n");
+         return this;
+@@ -196,7 +302,7 @@ public class MarkdownBuilder {
+     }
+ 
+     public MarkdownBuilder unorderedListItem(String item) {
+-        sb.append("- ").append(escapeMarkdown(orEmpty(item))).append("\n");
++        sb.append("- ").append(escapeMarkdownInstance(orEmpty(item), MdContext.HEADING)).append("\n");
+         return this;
+     }
+ 
+@@ -210,7 +316,9 @@ public class MarkdownBuilder {
+     }
+ 
+     public MarkdownBuilder unorderedListKVItem(String key, String value) {
+-        sb.append("- ").append(bold(key)).append(": ").append(escapeMarkdown(orEmpty(value))).append("\n");
++        sb.append("- ")
++                .append(bold(escapeMarkdownInstance(key, MdContext.HEADING)))
++                .append(": ").append(escapeMarkdownInstance(value, null)).append("\n");
+         return this;
+     }
+ 
+@@ -268,7 +376,7 @@ public class MarkdownBuilder {
+         // Escape each cell to prevent pipes from breaking table structure
+         List<String> escapedItems = new java.util.ArrayList<>();
+         for (String item : rowItems) {
+-            escapedItems.add(escapeMarkdown(item));
++            escapedItems.add(escapeMarkdownInstance(item, MdContext.TABLE_CELL));
+         }
+         sb.append("| ").append(String.join(" | ", escapedItems)).append(" |\n");
+         return this;
+@@ -353,12 +461,31 @@ public class MarkdownBuilder {
+     }
+ 
+     public MarkdownBuilder raw(String content) {
+-        sb.append(content);
++        sb.append(escapeMarkdownInstance(content, MdContext.PARAGRAPH));
++        return this;
++    }
++
++    /**
++     * Appends raw content without any markdown escaping.
++     * Use this method when you want to insert literal Markdown syntax or
++     * when you have already escaped the content yourself.
++     * <p>
++     * <b>Warning:</b> Using this method with untrusted user input may allow
++     * markdown injection and break document structure.
++     *
++     * @param content The raw content to append (no escaping applied)
++     * @return This MarkdownBuilder instance for method chaining
++     */
++    public MarkdownBuilder unsafeRaw(String content) {
++        sb.append(orEmpty(content));
+         return this;
+     }
+ 
+     @Override
+     public String toString() {
++        if (this.isCodeBlockOpen) {
++            closeCodeBlock();
++        }
+         return sb.toString().trim() + "\n";
+     }
+ }
+diff --git a/graylog2-server/src/test/java/org/graylog/mcp/server/MarkdownBuilderTest.java b/graylog2-server/src/test/java/org/graylog/mcp/server/MarkdownBuilderTest.java
+index 56b3317f09..06500237c8 100644
+--- a/graylog2-server/src/test/java/org/graylog/mcp/server/MarkdownBuilderTest.java
++++ b/graylog2-server/src/test/java/org/graylog/mcp/server/MarkdownBuilderTest.java
+@@ -237,7 +237,7 @@ class MarkdownBuilderTest {
+ 
+     @Test
+     void testUnorderedListWithNull() {
+-        String result = builder.unorderedList((Iterable<String>) null).toString();
++        String result = builder.unorderedList(null).toString();
+         assertThat(result).isEqualTo("\n");
+     }
+ 
+@@ -279,7 +279,7 @@ class MarkdownBuilderTest {
+ 
+     @Test
+     void testUnorderedListKVItemWithNullMap() {
+-        String result = builder.unorderedListKVItem((Map<String, String>) null).toString();
++        String result = builder.unorderedListKVItem(null).toString();
+         assertThat(result).isEqualTo("\n");
+     }
+ 
+@@ -387,7 +387,7 @@ class MarkdownBuilderTest {
+ 
+     @Test
+     void testTableWithNullMap() {
+-        String result = builder.table((Map<String, String>) null).toString();
++        String result = builder.table(null).toString();
+         assertThat(result).isEqualTo("\n");
+     }
+ 
+@@ -477,45 +477,51 @@ class MarkdownBuilderTest {
+ 
+     @Test
+     void testEscapeMarkdown() {
+-        assertThat(MarkdownBuilder.escapeMarkdown(null)).isEqualTo("");
+-        assertThat(MarkdownBuilder.escapeMarkdown("")).isEqualTo("");
+-        assertThat(MarkdownBuilder.escapeMarkdown("plain text")).isEqualTo("plain text");
+-    }
+-
+-    @Test
+-    void testEscapeMarkdownSpecialCharacters() {
+-        // Test each special character (note: period is not escaped)
+-        assertThat(MarkdownBuilder.escapeMarkdown("\\")).isEqualTo("\\\\");
+-        assertThat(MarkdownBuilder.escapeMarkdown("`")).isEqualTo("\\`");
+-        assertThat(MarkdownBuilder.escapeMarkdown("*")).isEqualTo("\\*");
+-        assertThat(MarkdownBuilder.escapeMarkdown("_")).isEqualTo("\\_");
+-        assertThat(MarkdownBuilder.escapeMarkdown("{")).isEqualTo("\\{");
+-        assertThat(MarkdownBuilder.escapeMarkdown("}")).isEqualTo("\\}");
+-        assertThat(MarkdownBuilder.escapeMarkdown("[")).isEqualTo("\\[");
+-        assertThat(MarkdownBuilder.escapeMarkdown("]")).isEqualTo("\\]");
+-        assertThat(MarkdownBuilder.escapeMarkdown("(")).isEqualTo("\\(");
+-        assertThat(MarkdownBuilder.escapeMarkdown(")")).isEqualTo("\\)");
+-        assertThat(MarkdownBuilder.escapeMarkdown("#")).isEqualTo("\\#");
+-        assertThat(MarkdownBuilder.escapeMarkdown("+")).isEqualTo("\\+");
+-        assertThat(MarkdownBuilder.escapeMarkdown("-")).isEqualTo("\\-");
+-        assertThat(MarkdownBuilder.escapeMarkdown(".")).isEqualTo("."); // Period NOT escaped
+-        assertThat(MarkdownBuilder.escapeMarkdown("!")).isEqualTo("\\!");
+-        assertThat(MarkdownBuilder.escapeMarkdown("|")).isEqualTo("\\|");
+-    }
+-
+-    @Test
+-    void testEscapeMarkdownMultipleCharacters() {
++        assertThat(MarkdownBuilder.escapeMarkdown(null, null)).isEqualTo("");
++        assertThat(MarkdownBuilder.escapeMarkdown("", null)).isEqualTo("");
++        assertThat(MarkdownBuilder.escapeMarkdown("plain text", null)).isEqualTo("plain text");
++    }
++
++    @Test
++    void testEscapeMarkdownAlwaysEscaped() {
++        // Backslash and backtick are ALWAYS escaped regardless of context
++        assertThat(MarkdownBuilder.escapeMarkdown("\\", null)).isEqualTo("\\\\");
++        assertThat(MarkdownBuilder.escapeMarkdown("`", null)).isEqualTo("\\`");
++        assertThat(MarkdownBuilder.escapeMarkdown("test\\code`here", null)).isEqualTo("test\\\\code\\`here");
++
++        // Test in different contexts - still always escaped
++        assertThat(MarkdownBuilder.escapeMarkdown("\\", MarkdownBuilder.MdContext.PARAGRAPH)).isEqualTo("\\\\");
++        assertThat(MarkdownBuilder.escapeMarkdown("`", MarkdownBuilder.MdContext.TABLE_CELL)).isEqualTo("\\`");
++        assertThat(MarkdownBuilder.escapeMarkdown("\\`", MarkdownBuilder.MdContext.HEADING)).isEqualTo("\\\\\\`");
++    }
++
++    @Test
++    void testEscapeMarkdownMultipleCharactersTableContext() {
++        // In TABLE_CELL context, only pipes are escaped
+         String input = "User|Name*Age#Status";
+-        String expected = "User\\|Name\\*Age\\#Status";
+-        assertThat(MarkdownBuilder.escapeMarkdown(input)).isEqualTo(expected);
++        String expected = "User\\|Name\\*Age#Status";
++        assertThat(MarkdownBuilder.escapeMarkdown(input, MarkdownBuilder.MdContext.TABLE_CELL)).isEqualTo(expected);
++    }
++
++    @Test
++    void testEscapeMarkdownMultipleCharactersParagraphContext() {
++        // In PARAGRAPH context, only * and _ between word characters are escaped
++        String input = "text*with*underscores_and_asterisks";
++        String expected = "text\\*with\\*underscores\\_and\\_asterisks";
++        assertThat(MarkdownBuilder.escapeMarkdown(input, MarkdownBuilder.MdContext.PARAGRAPH)).isEqualTo(expected);
+     }
+ 
+     @Test
+     void testEscapeMarkdownWithBackslashFirst() {
+-        // Ensure backslash is escaped first to prevent double-escaping
+-        String input = "\\*test*";
+-        String expected = "\\\\\\*test\\*"; // \\, \*, \*
+-        assertThat(MarkdownBuilder.escapeMarkdown(input)).isEqualTo(expected);
++        // Ensure backslash is always escaped first
++        String input = "\\test";
++        String expected = "\\\\test";
++        assertThat(MarkdownBuilder.escapeMarkdown(input, null)).isEqualTo(expected);
++
++        // In PARAGRAPH context with asterisk
++        String input2 = "test\\*with";
++        String expected2 = "test\\\\*with";
++        assertThat(MarkdownBuilder.escapeMarkdown(input2, MarkdownBuilder.MdContext.PARAGRAPH)).isEqualTo(expected2);
+     }
+ 
+     @Test
+@@ -538,7 +544,7 @@ class MarkdownBuilderTest {
+ 
+     @Test
+     void testLinkWithSpecialCharacters() {
+-        String result = MarkdownBuilder.link("Link [text]", "http://example.com");
++        String result = MarkdownBuilder.link("Link [text]", "https://example.com");
+         assertThat(result).contains("\\[text\\]");
+     }
+ 
+@@ -553,43 +559,95 @@ class MarkdownBuilderTest {
+     void testTableRowWithSpecialCharacters() {
+         String[] row = {"Name*", "Age|25", "Status#Active"};
+         String result = builder.tableRow(row).toString();
+-        assertThat(result).contains("Name\\*");
++        // In TABLE_CELL context, pipes and inline emphasis (* _) between word chars are escaped
++        assertThat(result).contains("Name*"); // * not between word characters, not escaped
+         assertThat(result).contains("Age\\|25");
+-        assertThat(result).contains("Status\\#Active");
++        assertThat(result).contains("Status#Active");
++    }
++
++    @Test
++    void testTableRowWithInlineEmphasis() {
++        String[] row = {"text*with*asterisks", "word_with_underscores", "normal|pipe"};
++        String result = builder.tableRow(row).toString();
++        // TABLE_CELL escapes pipes AND inline emphasis between word chars
++        assertThat(result).contains("text\\*with\\*asterisks");
++        assertThat(result).contains("word\\_with\\_underscores");
++        assertThat(result).contains("normal\\|pipe");
+     }
+ 
+     @Test
+     void testUnorderedListWithSpecialCharacters() {
+         String result = builder.unorderedList(List.of("Item*1", "Item|2", "Item#3")).toString();
++        // In HEADING context, special chars only escape at line start, not in middle, except for * and _
+         assertThat(result).contains("- Item\\*1");
+-        assertThat(result).contains("- Item\\|2");
+-        assertThat(result).contains("- Item\\#3");
++        assertThat(result).contains("- Item|2");
++        assertThat(result).contains("- Item#3");
++    }
++
++    @Test
++    void testUnorderedListWithLeadingSpecialCharacters() {
++        // Test that special characters at the start of items ARE escaped
++        String result = builder.unorderedList(List.of("#hashtag", "*asterisk", "-dash")).toString();
++        assertThat(result).contains("- \\#hashtag");
++        assertThat(result).contains("- \\*asterisk");
++        assertThat(result).contains("- \\-dash");
+     }
+ 
+     @Test
+     void testUnorderedListKVItemWithSpecialCharacters() {
+         String result = builder.unorderedListKVItem("Key*Special", "Value|Pipes").toString();
+-        assertThat(result).contains("**Key\\*Special**");
+-        assertThat(result).contains("Value\\|Pipes");
++        // Key uses HEADING context, Value has no context
++        assertThat(result).contains("**Key\\\\*Special**");
++        assertThat(result).contains("Value|Pipes");
+     }
+ 
+     @Test
+     void testHeadingWithSpecialCharacters() {
++        // Special characters in middle of heading text are not escaped
+         String result = builder.h1("Heading # with hash").toString();
+-        assertThat(result).isEqualTo("# Heading \\# with hash\n");
++        assertThat(result).isEqualTo("# Heading # with hash\n");
++    }
++
++    @Test
++    void testHeadingWithLeadingSpecialCharacters() {
++        // Special characters at the start ARE escaped in HEADING context
++        String result = builder.h1("# Leading hash").toString();
++        assertThat(result).isEqualTo("# \\# Leading hash\n");
++
++        builder = new MarkdownBuilder();
++        String result2 = builder.h2("> Quote-like").toString();
++        assertThat(result2).isEqualTo("## \\> Quote-like\n");
+     }
+ 
+     @Test
+     void testParagraphWithSpecialCharacters() {
++        // In PARAGRAPH context, * and _ only escape when between word characters
++        // Spaces around them mean no escaping occurs
+         String result = builder.paragraph("Text with *asterisks* and |pipes|").toString();
+-        assertThat(result).contains("\\*asterisks\\*");
+-        assertThat(result).contains("\\|pipes\\|");
++        assertThat(result).contains("*asterisks*");
++        assertThat(result).contains("|pipes|");
++    }
++
++    @Test
++    void testParagraphWithEmphasizableCharacters() {
++        // When * or _ appear between word characters, they ARE escaped
++        String result = builder.paragraph("word*with*asterisks and word_with_underscores").toString();
++        assertThat(result).contains("word\\*with\\*asterisks");
++        assertThat(result).contains("word\\_with\\_underscores");
+     }
+ 
+     @Test
+     void testBlockquoteWithSpecialCharacters() {
++        // Blockquote uses HEADING context, * with spaces around not escaped
+         String result = builder.blockquote("Quote with *special* chars").toString();
+-        assertThat(result).contains("\\*special\\*");
++        assertThat(result).contains("*special*");
++    }
++
++    @Test
++    void testBlockquoteWithLeadingSpecialCharacters() {
++        // Test leading special characters ARE escaped
++        String result = builder.blockquote("# Looks like heading").toString();
++        assertThat(result).contains("> \\# Looks like heading");
+     }
+ 
+     @Test
+@@ -604,22 +662,78 @@ class MarkdownBuilderTest {
+ 
+         String result = builder.toString();
+ 
+-        // Verify pipes are escaped and don't break table structure
++        // In TABLE_CELL context, pipes are escaped but * and _ with spaces are not
+         assertThat(result).contains("User\\|Name");
+-        assertThat(result).contains("\\*");
+-        assertThat(result).contains("\\_");
++        assertThat(result).contains("Description with * and _"); // spaces around, not escaped
+         assertThat(result).contains("Active\\|Pending");
+     }
+ 
++    @Test
++    void testTableWithInlineFormattingCharacters() {
++        // Test that inline emphasis between word characters IS escaped in tables
++        builder.tableHeaders("Column1", "Column2");
++        builder.tableRow(new String[]{"user*name*here", "value_with_underscores"});
++
++        String result = builder.toString();
++        assertThat(result).contains("user\\*name\\*here");
++        assertThat(result).contains("value\\_with\\_underscores");
++    }
++
+     @Test
+     void testCodeBlockPreservesLiteralContent() {
+         // Code blocks should preserve content literally (except triple backticks)
+-        String code = "int x = 5 * 3;\nSystem.out.println(\"Hello\");";
++        String code = "int x = 5 * 3;\nString s = \"pipe|asterisk*underscore_hash#\";\nSystem.out.println(\"Hello\");";
+         String result = builder.codeBlock(code, "java").toString();
+ 
+-        // Content should not be escaped (should preserve * and other chars)
++        // Content should not be escaped - all markdown special chars preserved
+         assertThat(result).contains("int x = 5 * 3;");
++        assertThat(result).contains("pipe|asterisk*underscore_hash#");
+         assertThat(result).contains("System.out.println");
++
++        // Verify these chars are NOT escaped
++        assertThat(result).doesNotContain("\\|");
++        assertThat(result).doesNotContain("\\*");
++        assertThat(result).doesNotContain("\\_");
++        assertThat(result).doesNotContain("\\#");
++    }
++
++    @Test
++    void testOpenCodeBlockPreservesLiteralContent() {
++        // Test that content added between openCodeBlock/closeCodeBlock is not escaped
++        builder.openCodeBlock("yaml");
++        builder.unsafeRaw("key: value|with*special_chars#here");
++        builder.unsafeRaw("\nanother: line_with*markdown|syntax");
++        builder.closeCodeBlock();
++
++        String result = builder.toString();
++
++        // Content should not be escaped
++        assertThat(result).contains("```yaml");
++        assertThat(result).contains("key: value|with*special_chars#here");
++        assertThat(result).contains("another: line_with*markdown|syntax");
++
++        // Verify no escaping occurred
++        assertThat(result).doesNotContain("\\|");
++        assertThat(result).doesNotContain("\\*");
++        assertThat(result).doesNotContain("\\_");
++        assertThat(result).doesNotContain("\\#");
++    }
++
++    @Test
++    void testCodeBlockDoesNotEscapeButOtherMethodsDo() {
++        // Verify that code blocks don't escape, but regular methods do
++        builder.openCodeBlock("text");
++        builder.unsafeRaw("text*with*asterisks");
++        builder.closeCodeBlock();
++        builder.paragraph("text*with*asterisks");
++
++        String result = builder.toString();
++
++        // Inside code block: not escaped
++        assertThat(result).containsPattern("```text\\s+text\\*with\\*asterisks");
++
++        // In paragraph: escaped
++        assertThat(result).contains("text\\*with\\*asterisks");
+     }
+ 
+     @Test
+@@ -630,25 +744,69 @@ class MarkdownBuilderTest {
+ 
+         Map<String, String> result = MarkdownBuilder.castMapValues(input);
+ 
+-        assertThat(result.get("key1")).isEqualTo("value\\|with\\|pipes");
+-        assertThat(result.get("key2")).isEqualTo("value\\*with\\*asterisks");
++        // castMapValues does NOT escape, it just converts to strings
++        assertThat(result.get("key1")).isEqualTo("value|with|pipes");
++        assertThat(result.get("key2")).isEqualTo("value*with*asterisks");
+     }
+ 
+     @Test
+     void testNoDoubleEscaping() {
+-        // Verify that already-escaped content doesn't get double-escaped incorrectly
++        // Verify that already-escaped content gets backslash escaped
+         String alreadyEscaped = "already\\|escaped";
+-        String result = MarkdownBuilder.escapeMarkdown(alreadyEscaped);
+ 
+-        // Should escape the backslash and the pipe
+-        assertThat(result).isEqualTo("already\\\\\\|escaped");
++        // With no context, only backslash is escaped (pipe is not)
++        String result = MarkdownBuilder.escapeMarkdown(alreadyEscaped, null);
++        assertThat(result).isEqualTo("already\\\\|escaped");
++
++        // With TABLE_CELL context, both backslash and pipe are escaped
++        String result2 = MarkdownBuilder.escapeMarkdown(alreadyEscaped, MarkdownBuilder.MdContext.TABLE_CELL);
++        assertThat(result2).isEqualTo("already\\\\\\|escaped");
++    }
++
++    @Test
++    void testContextSpecificEscaping() {
++        // Test that different contexts escape different characters
++        String testString = "\\`*_[]()#|";
++
++        // No context: only backslash and backtick
++        String noContext = MarkdownBuilder.escapeMarkdown(testString, null);
++        assertThat(noContext).isEqualTo("\\\\\\`*_[]()#|");
++
++        // TABLE_CELL: backslash, backtick, pipe (no * or _ since not between word chars here)
++        String tableCell = MarkdownBuilder.escapeMarkdown(testString, MarkdownBuilder.MdContext.TABLE_CELL);
++        assertThat(tableCell).isEqualTo("\\\\\\`*_[]()#\\|");
++
++        // LINK_TEXT: backslash, backtick, and square brackets
++        String linkText = MarkdownBuilder.escapeMarkdown(testString, MarkdownBuilder.MdContext.LINK_TEXT);
++        assertThat(linkText).isEqualTo("\\\\\\`*_\\[\\]()#|");
++
++        // LINK_URL: backslash, backtick, and parentheses
++        String linkUrl = MarkdownBuilder.escapeMarkdown(testString, MarkdownBuilder.MdContext.LINK_URL);
++        assertThat(linkUrl).isEqualTo("\\\\\\`*_[]\\(\\)#|");
++    }
++
++    @Test
++    void testContextSpecificEscapingWithWordBoundaries() {
++        // Test inline emphasis escaping when between word characters
++        String testString = "word*test*word word_test_word";
++
++        // PARAGRAPH: escapes * and _ between word chars
++        String paragraph = MarkdownBuilder.escapeMarkdown(testString, MarkdownBuilder.MdContext.PARAGRAPH);
++        assertThat(paragraph).isEqualTo("word\\*test\\*word word\\_test\\_word");
++
++        // TABLE_CELL: also escapes * and _ between word chars
++        String tableCell = MarkdownBuilder.escapeMarkdown(testString, MarkdownBuilder.MdContext.TABLE_CELL);
++        assertThat(tableCell).isEqualTo("word\\*test\\*word word\\_test\\_word");
++
++        // LINK_TEXT: does NOT escape * and _ (only brackets)
++        String linkText = MarkdownBuilder.escapeMarkdown(testString, MarkdownBuilder.MdContext.LINK_TEXT);
++        assertThat(linkText).isEqualTo("word*test*word word_test_word");
+     }
+ 
+     @Test
+-    void testAllSpecialCharactersTogether() {
+-        String allSpecial = "\\`*_{}[]()#+-.!|";
+-        String result = MarkdownBuilder.escapeMarkdown(allSpecial);
+-        // Period is NOT escaped
+-        assertThat(result).isEqualTo("\\\\\\`\\*\\_\\{\\}\\[\\]\\(\\)\\#\\+\\-.\\!\\|");
++    void testUnsafeRaw() {
++        String result = builder.unsafeRaw("**bold** and *italic* with |pipes|").toString();
++        // unsafeRaw should preserve all Markdown syntax literally
++        assertThat(result).isEqualTo("**bold** and *italic* with |pipes|\n");
+     }
+ }

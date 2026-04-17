@@ -1,0 +1,17 @@
+diff --git a/server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java b/server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java
+index 2e606f7b83e..94227aed40d 100644
+--- a/server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java
++++ b/server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java
+@@ -54,7 +54,11 @@ public class InternalSettingsPreparer {
+         loadOverrides(output, properties);
+         output.put(input);
+         replaceForcedSettings(output);
+-        output.replacePropertyPlaceholders();
++        try {
++            output.replacePropertyPlaceholders();
++        } catch (Exception e) {
++            throw new SettingsException("Failed to replace property placeholders from [" + configFile.getFileName() + "]", e);
++        }
+         ensureSpecialSettingsExist(output, defaultNodeName);
+ 
+         return new Environment(output.build(), configDir);

@@ -1,0 +1,251 @@
+commit 075a40aecbd42a4915cc17ccd9871e4f62f5920b
+Author: Kostas Krikellas <131142368+kkrik-es@users.noreply.github.com>
+Date:   Mon Oct 21 13:53:53 2024 +0300
+
+    SyntheticSourceIndexSettingsProvider restores stored source (#114978) (#115187)
+    
+    * SyntheticSourceIndexSettingsProvider restores stored source
+    
+    * remove asserts
+    
+    * add and fix tests
+    
+    * fix test
+    
+    * more tests
+    
+    * fix assert
+    
+    * remove assert
+    
+    (cherry picked from commit 5645240976cd88ff9f1a30240c0923e9788f3f4c)
+
+diff --git a/modules/data-streams/src/javaRestTest/java/org/elasticsearch/datastreams/DisabledSecurityDataStreamTestCase.java b/modules/data-streams/src/javaRestTest/java/org/elasticsearch/datastreams/DisabledSecurityDataStreamTestCase.java
+index 9839f9abb08..619bfd74d85 100644
+--- a/modules/data-streams/src/javaRestTest/java/org/elasticsearch/datastreams/DisabledSecurityDataStreamTestCase.java
++++ b/modules/data-streams/src/javaRestTest/java/org/elasticsearch/datastreams/DisabledSecurityDataStreamTestCase.java
+@@ -28,6 +28,7 @@ public abstract class DisabledSecurityDataStreamTestCase extends ESRestTestCase
+     public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
+         .distribution(DistributionType.DEFAULT)
+         .feature(FeatureFlag.FAILURE_STORE_ENABLED)
++        .setting("xpack.license.self_generated.type", "trial")
+         .setting("xpack.security.enabled", "false")
+         .setting("xpack.watcher.enabled", "false")
+         .build();
+diff --git a/x-pack/plugin/downsample/qa/rest/src/yamlRestTest/java/org/elasticsearch/xpack/downsample/DownsampleRestIT.java b/x-pack/plugin/downsample/qa/rest/src/yamlRestTest/java/org/elasticsearch/xpack/downsample/DownsampleRestIT.java
+index 504326f1bd4..6794bc47fa3 100644
+--- a/x-pack/plugin/downsample/qa/rest/src/yamlRestTest/java/org/elasticsearch/xpack/downsample/DownsampleRestIT.java
++++ b/x-pack/plugin/downsample/qa/rest/src/yamlRestTest/java/org/elasticsearch/xpack/downsample/DownsampleRestIT.java
+@@ -20,7 +20,7 @@ public class DownsampleRestIT extends ESClientYamlSuiteTestCase {
+     @ClassRule
+     public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
+         .distribution(DistributionType.DEFAULT)
+-        .setting("xpack.license.self_generated.type", "basic")
++        .setting("xpack.license.self_generated.type", "trial")
+         .setting("xpack.security.enabled", "false")
+         .build();
+ 
+diff --git a/x-pack/plugin/logsdb/qa/with-basic/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsdbRestIT.java b/x-pack/plugin/logsdb/qa/with-basic/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsdbRestIT.java
+index 813a181045f..edecf4eb966 100644
+--- a/x-pack/plugin/logsdb/qa/with-basic/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsdbRestIT.java
++++ b/x-pack/plugin/logsdb/qa/with-basic/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsdbRestIT.java
+@@ -8,6 +8,7 @@
+ package org.elasticsearch.xpack.logsdb;
+ 
+ import org.elasticsearch.common.settings.Settings;
++import org.elasticsearch.index.mapper.SourceFieldMapper;
+ import org.elasticsearch.test.cluster.ElasticsearchCluster;
+ import org.elasticsearch.test.cluster.local.distribution.DistributionType;
+ import org.elasticsearch.test.rest.ESRestTestCase;
+@@ -72,4 +73,37 @@ public class LogsdbRestIT extends ESRestTestCase {
+         }
+     }
+ 
++    public void testLogsdbIndexGetsStoredSource() throws IOException {
++        final String index = "test-index";
++        createIndex(index, Settings.builder().put("index.mode", "logsdb").build());
++        var settings = (Map<?, ?>) ((Map<?, ?>) getIndexSettings(index).get(index)).get("settings");
++        assertEquals("logsdb", settings.get("index.mode"));
++        assertEquals(SourceFieldMapper.Mode.STORED.toString(), settings.get("index.mapping.source.mode"));
++    }
++
++    public void testLogsdbOverrideSyntheticSourceModeInMapping() throws IOException {
++        final String index = "test-index";
++        String mapping = """
++            {
++                "_source": {
++                    "mode": "synthetic"
++                }
++            }
++            """;
++        createIndex(index, Settings.builder().put("index.mode", "logsdb").build(), mapping);
++        var settings = (Map<?, ?>) ((Map<?, ?>) getIndexSettings(index).get(index)).get("settings");
++        assertEquals("logsdb", settings.get("index.mode"));
++        assertEquals(SourceFieldMapper.Mode.STORED.toString(), settings.get("index.mapping.source.mode"));
++    }
++
++    public void testLogsdbNoOverrideSyntheticSourceSetting() throws IOException {
++        final String index = "test-index";
++        createIndex(
++            index,
++            Settings.builder().put("index.mode", "logsdb").put("index.mapping.source.mode", SourceFieldMapper.Mode.SYNTHETIC).build()
++        );
++        var settings = (Map<?, ?>) ((Map<?, ?>) getIndexSettings(index).get(index)).get("settings");
++        assertEquals("logsdb", settings.get("index.mode"));
++        assertEquals(SourceFieldMapper.Mode.SYNTHETIC.toString(), settings.get("index.mapping.source.mode"));
++    }
+ }
+diff --git a/x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsdbRestIT.java b/x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsdbRestIT.java
+index b2d2978a254..16759c3292f 100644
+--- a/x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsdbRestIT.java
++++ b/x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/LogsdbRestIT.java
+@@ -75,6 +75,9 @@ public class LogsdbRestIT extends ESRestTestCase {
+             Map<?, ?> feature = features.stream().filter(map -> "mappings".equals(map.get("family"))).findFirst().get();
+             assertThat(feature.get("name"), equalTo("synthetic-source"));
+             assertThat(feature.get("license_level"), equalTo("enterprise"));
++
++            var settings = (Map<?, ?>) ((Map<?, ?>) getIndexSettings("test-index").get("test-index")).get("settings");
++            assertNull(settings.get("index.mapping.source.mode"));  // Default, no downgrading.
+         }
+     }
+ 
+diff --git a/x-pack/plugin/logsdb/src/main/java/org/elasticsearch/xpack/logsdb/SyntheticSourceIndexSettingsProvider.java b/x-pack/plugin/logsdb/src/main/java/org/elasticsearch/xpack/logsdb/SyntheticSourceIndexSettingsProvider.java
+index a190ff72de8..f60c941c75a 100644
+--- a/x-pack/plugin/logsdb/src/main/java/org/elasticsearch/xpack/logsdb/SyntheticSourceIndexSettingsProvider.java
++++ b/x-pack/plugin/logsdb/src/main/java/org/elasticsearch/xpack/logsdb/SyntheticSourceIndexSettingsProvider.java
+@@ -21,6 +21,7 @@ import org.elasticsearch.index.IndexSettingProvider;
+ import org.elasticsearch.index.IndexSettings;
+ import org.elasticsearch.index.IndexVersion;
+ import org.elasticsearch.index.mapper.MapperService;
++import org.elasticsearch.index.mapper.SourceFieldMapper;
+ 
+ import java.io.IOException;
+ import java.time.Instant;
+@@ -62,7 +63,9 @@ final class SyntheticSourceIndexSettingsProvider implements IndexSettingProvider
+         if (newIndexHasSyntheticSourceUsage(indexName, templateIndexMode, indexTemplateAndCreateRequestSettings, combinedTemplateMappings)
+             && syntheticSourceLicenseService.fallbackToStoredSource(isTemplateValidation)) {
+             LOGGER.debug("creation of index [{}] with synthetic source without it being allowed", indexName);
+-            // TODO: handle falling back to stored source
++            return Settings.builder()
++                .put(SourceFieldMapper.INDEX_MAPPER_SOURCE_MODE_SETTING.getKey(), SourceFieldMapper.Mode.STORED.toString())
++                .build();
+         }
+         return Settings.EMPTY;
+     }
+diff --git a/x-pack/plugin/logsdb/src/test/java/org/elasticsearch/xpack/logsdb/SyntheticSourceIndexSettingsProviderTests.java b/x-pack/plugin/logsdb/src/test/java/org/elasticsearch/xpack/logsdb/SyntheticSourceIndexSettingsProviderTests.java
+index 738487b9365..362b3877261 100644
+--- a/x-pack/plugin/logsdb/src/test/java/org/elasticsearch/xpack/logsdb/SyntheticSourceIndexSettingsProviderTests.java
++++ b/x-pack/plugin/logsdb/src/test/java/org/elasticsearch/xpack/logsdb/SyntheticSourceIndexSettingsProviderTests.java
+@@ -8,22 +8,42 @@
+ package org.elasticsearch.xpack.logsdb;
+ 
+ import org.elasticsearch.cluster.metadata.DataStream;
++import org.elasticsearch.cluster.metadata.DataStreamTestHelper;
++import org.elasticsearch.cluster.metadata.Metadata;
+ import org.elasticsearch.common.compress.CompressedXContent;
+ import org.elasticsearch.common.settings.Settings;
++import org.elasticsearch.core.Tuple;
++import org.elasticsearch.index.IndexMode;
+ import org.elasticsearch.index.MapperTestUtils;
++import org.elasticsearch.index.mapper.SourceFieldMapper;
++import org.elasticsearch.license.MockLicenseState;
+ import org.elasticsearch.test.ESTestCase;
+ import org.junit.Before;
+ 
+ import java.io.IOException;
++import java.time.Instant;
+ import java.util.List;
+ 
++import static org.elasticsearch.common.settings.Settings.builder;
++import static org.hamcrest.Matchers.equalTo;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++
+ public class SyntheticSourceIndexSettingsProviderTests extends ESTestCase {
+ 
++    private SyntheticSourceLicenseService syntheticSourceLicenseService;
+     private SyntheticSourceIndexSettingsProvider provider;
+ 
+     @Before
+     public void setup() {
+-        SyntheticSourceLicenseService syntheticSourceLicenseService = new SyntheticSourceLicenseService(Settings.EMPTY);
++        MockLicenseState licenseState = mock(MockLicenseState.class);
++        when(licenseState.isAllowed(any())).thenReturn(true);
++        var licenseService = new SyntheticSourceLicenseService(Settings.EMPTY);
++        licenseService.setLicenseState(licenseState);
++        syntheticSourceLicenseService = new SyntheticSourceLicenseService(Settings.EMPTY);
++        syntheticSourceLicenseService.setLicenseState(licenseState);
++
+         provider = new SyntheticSourceIndexSettingsProvider(
+             syntheticSourceLicenseService,
+             im -> MapperTestUtils.newMapperService(xContentRegistry(), createTempDir(), im.getSettings(), im.getIndex().getName())
+@@ -226,4 +246,68 @@ public class SyntheticSourceIndexSettingsProviderTests extends ESTestCase {
+         }
+     }
+ 
++    public void testGetAdditionalIndexSettingsDowngradeFromSyntheticSource() throws IOException {
++        String dataStreamName = "logs-app1";
++        Metadata.Builder mb = Metadata.builder(
++            DataStreamTestHelper.getClusterStateWithDataStreams(
++                List.of(Tuple.tuple(dataStreamName, 1)),
++                List.of(),
++                Instant.now().toEpochMilli(),
++                builder().build(),
++                1
++            ).getMetadata()
++        );
++        Metadata metadata = mb.build();
++
++        Settings settings = builder().put(SourceFieldMapper.INDEX_MAPPER_SOURCE_MODE_SETTING.getKey(), SourceFieldMapper.Mode.SYNTHETIC)
++            .build();
++
++        Settings result = provider.getAdditionalIndexSettings(
++            DataStream.getDefaultBackingIndexName(dataStreamName, 2),
++            dataStreamName,
++            null,
++            metadata,
++            Instant.ofEpochMilli(1L),
++            settings,
++            List.of()
++        );
++        assertThat(result.size(), equalTo(0));
++
++        syntheticSourceLicenseService.setSyntheticSourceFallback(true);
++        result = provider.getAdditionalIndexSettings(
++            DataStream.getDefaultBackingIndexName(dataStreamName, 2),
++            dataStreamName,
++            null,
++            metadata,
++            Instant.ofEpochMilli(1L),
++            settings,
++            List.of()
++        );
++        assertThat(result.size(), equalTo(1));
++        assertEquals(SourceFieldMapper.Mode.STORED, SourceFieldMapper.INDEX_MAPPER_SOURCE_MODE_SETTING.get(result));
++
++        result = provider.getAdditionalIndexSettings(
++            DataStream.getDefaultBackingIndexName(dataStreamName, 2),
++            dataStreamName,
++            IndexMode.TIME_SERIES,
++            metadata,
++            Instant.ofEpochMilli(1L),
++            settings,
++            List.of()
++        );
++        assertThat(result.size(), equalTo(1));
++        assertEquals(SourceFieldMapper.Mode.STORED, SourceFieldMapper.INDEX_MAPPER_SOURCE_MODE_SETTING.get(result));
++
++        result = provider.getAdditionalIndexSettings(
++            DataStream.getDefaultBackingIndexName(dataStreamName, 2),
++            dataStreamName,
++            IndexMode.LOGSDB,
++            metadata,
++            Instant.ofEpochMilli(1L),
++            settings,
++            List.of()
++        );
++        assertThat(result.size(), equalTo(1));
++        assertEquals(SourceFieldMapper.Mode.STORED, SourceFieldMapper.INDEX_MAPPER_SOURCE_MODE_SETTING.get(result));
++    }
+ }

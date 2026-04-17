@@ -1,0 +1,174 @@
+commit dd5f141df01149645cf939e5a0bffc03a1c09afd
+Author: Jack Conradson <osjdconrad@gmail.com>
+Date:   Fri Jan 17 12:04:17 2025 -0800
+
+    Add `PolicyValdidationException` for entitlements (#120225) (#120414)
+    
+    This adds a new exception called PolicyValdidationException. This exception is intended to be used during construction of entitlements that require parsing additional arguments. This allows PolicyParser to give improved error messaging about a specific entitlement that may have failed during the parsing process.
+
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/NetworkEntitlement.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/NetworkEntitlement.java
+index 9b4035cee98..ea78c8cafc9 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/NetworkEntitlement.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/NetworkEntitlement.java
+@@ -47,10 +47,10 @@ public class NetworkEntitlement implements Entitlement {
+         for (String actionString : actionsList) {
+             var action = ACTION_MAP.get(actionString);
+             if (action == null) {
+-                throw new IllegalArgumentException("unknown network action [" + actionString + "]");
++                throw new PolicyValidationException("unknown network action [" + actionString + "]");
+             }
+             if ((actionsInt & action) == action) {
+-                throw new IllegalArgumentException(Strings.format("network action [%s] specified multiple times", actionString));
++                throw new PolicyValidationException(Strings.format("network action [%s] specified multiple times", actionString));
+             }
+             actionsInt |= action;
+         }
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParser.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParser.java
+index ac4d4afdd97..42c0da8444b 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParser.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParser.java
+@@ -9,6 +9,7 @@
+ 
+ package org.elasticsearch.entitlement.runtime.policy;
+ 
++import org.elasticsearch.xcontent.XContentLocation;
+ import org.elasticsearch.xcontent.XContentParser;
+ import org.elasticsearch.xcontent.XContentParserConfiguration;
+ import org.elasticsearch.xcontent.yaml.YamlXContent;
+@@ -119,6 +120,7 @@ public class PolicyParser {
+     }
+ 
+     protected Entitlement parseEntitlement(String scopeName, String entitlementType) throws IOException {
++        XContentLocation startLocation = policyParser.getTokenLocation();
+         Class<?> entitlementClass = EXTERNAL_ENTITLEMENTS.get(entitlementType);
+ 
+         if (entitlementClass == null) {
+@@ -170,7 +172,10 @@ public class PolicyParser {
+         try {
+             return (Entitlement) entitlementConstructor.newInstance(parameterValues);
+         } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
+-            throw new IllegalStateException("internal error");
++            if (e.getCause() instanceof PolicyValidationException piae) {
++                throw newPolicyParserException(startLocation, scopeName, entitlementType, piae);
++            }
++            throw new IllegalStateException("internal error", e);
+         }
+     }
+ 
+@@ -191,4 +196,13 @@ public class PolicyParser {
+             message
+         );
+     }
++
++    protected PolicyParserException newPolicyParserException(
++        XContentLocation location,
++        String scopeName,
++        String entitlementType,
++        PolicyValidationException cause
++    ) {
++        return PolicyParserException.newPolicyParserException(location, policyName, scopeName, entitlementType, cause);
++    }
+ }
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserException.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserException.java
+index 5dfa12f11d0..e7cc8bed2ca 100644
+--- a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserException.java
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserException.java
+@@ -86,7 +86,36 @@ public class PolicyParserException extends RuntimeException {
+         }
+     }
+ 
++    public static PolicyParserException newPolicyParserException(
++        XContentLocation location,
++        String policyName,
++        String scopeName,
++        String entitlementType,
++        PolicyValidationException cause
++    ) {
++        assert (scopeName != null);
++        return new PolicyParserException(
++            "["
++                + location.lineNumber()
++                + ":"
++                + location.columnNumber()
++                + "] policy parsing error for ["
++                + policyName
++                + "] in scope ["
++                + scopeName
++                + "] for entitlement type ["
++                + entitlementType
++                + "]: "
++                + cause.getMessage(),
++            cause
++        );
++    }
++
+     private PolicyParserException(String message) {
+         super(message);
+     }
++
++    private PolicyParserException(String message, PolicyValidationException cause) {
++        super(message, cause);
++    }
+ }
+diff --git a/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyValidationException.java b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyValidationException.java
+new file mode 100644
+index 00000000000..a2bc49d99b4
+--- /dev/null
++++ b/libs/entitlement/src/main/java/org/elasticsearch/entitlement/runtime/policy/PolicyValidationException.java
+@@ -0,0 +1,27 @@
++/*
++ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
++ * or more contributor license agreements. Licensed under the "Elastic License
++ * 2.0", the "GNU Affero General Public License v3.0 only", and the "Server Side
++ * Public License v 1"; you may not use this file except in compliance with, at
++ * your election, the "Elastic License 2.0", the "GNU Affero General Public
++ * License v3.0 only", or the "Server Side Public License, v 1".
++ */
++
++package org.elasticsearch.entitlement.runtime.policy;
++
++/**
++ * This exception is used to track validation errors thrown during the construction
++ * of entitlements. By using this instead of other exception types the policy
++ * parser is able to wrap this exception with a line/character number for
++ * additional useful error information.
++ */
++class PolicyValidationException extends RuntimeException {
++
++    PolicyValidationException(String message) {
++        super(message);
++    }
++
++    PolicyValidationException(String message, Throwable cause) {
++        super(message, cause);
++    }
++}
+diff --git a/libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserTests.java b/libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserTests.java
+index 1e0c31d2280..2951ac19065 100644
+--- a/libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserTests.java
++++ b/libs/entitlement/src/test/java/org/elasticsearch/entitlement/runtime/policy/PolicyParserTests.java
+@@ -68,6 +68,24 @@ public class PolicyParserTests extends ESTestCase {
+         assertEquals(expected, parsedPolicy);
+     }
+ 
++    public void testParseNetworkIllegalAction() throws IOException {
++        var ex = expectThrows(PolicyParserException.class, () -> new PolicyParser(new ByteArrayInputStream("""
++            entitlement-module-name:
++              - network:
++                  actions:
++                    - listen
++                    - doesnotexist
++                    - connect
++            """.getBytes(StandardCharsets.UTF_8)), "test-policy.yaml", false).parsePolicy());
++        assertThat(
++            ex.getMessage(),
++            equalTo(
++                "[2:5] policy parsing error for [test-policy.yaml] in scope [entitlement-module-name] for entitlement type [network]: "
++                    + "unknown network action [doesnotexist]"
++            )
++        );
++    }
++
+     public void testParseCreateClassloader() throws IOException {
+         Policy parsedPolicy = new PolicyParser(new ByteArrayInputStream("""
+             entitlement-module-name:

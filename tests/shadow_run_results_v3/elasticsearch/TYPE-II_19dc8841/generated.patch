@@ -1,0 +1,55 @@
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/NestedObjectMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/NestedObjectMapper.java
+index 62e04d5cc93..f3c438adcea 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/NestedObjectMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/NestedObjectMapper.java
+@@ -463,17 +463,14 @@ public class NestedObjectMapper extends ObjectMapper {
+         public void write(XContentBuilder b) throws IOException {
+             assert (children != null && children.size() > 0);
+             if (children.size() == 1) {
+-                b.startObject(leafName());
++                b.field(leafName());
+                 leafStoredFieldLoader.advanceTo(children.get(0));
+                 leafSourceLoader.write(leafStoredFieldLoader, children.get(0), b);
+-                b.endObject();
+             } else {
+                 b.startArray(leafName());
+                 for (int childId : children) {
+-                    b.startObject();
+                     leafStoredFieldLoader.advanceTo(childId);
+                     leafSourceLoader.write(leafStoredFieldLoader, childId, b);
+-                    b.endObject();
+                 }
+                 b.endArray();
+             }
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java
+index 9a9f8916812..2c78db6bc8b 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java
+@@ -840,12 +840,10 @@ public class ObjectMapper extends Mapper {
+                 return;
+             }
+ 
+-            if (isFragment == false) {
+-                if (isRoot()) {
+-                    b.startObject();
+-                } else {
+-                    b.startObject(leafName());
+-                }
++            if (isRoot() || isFragment) {
++                b.startObject();
++            } else {
++                b.startObject(leafName());
+             }
+ 
+             if (ignoredValues != null && ignoredValues.isEmpty() == false) {
+@@ -872,9 +870,7 @@ public class ObjectMapper extends Mapper {
+                 }
+             }
+             hasValue = false;
+-            if (isFragment == false) {
+-                b.endObject();
+-            }
++            b.endObject();
+         }
+ 
+         @Override

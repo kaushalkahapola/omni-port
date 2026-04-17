@@ -1,0 +1,88 @@
+commit 498f717fcb41085c2ba0228a0e6c2d3d3c727877
+Author: srkethireddy <73372452+srkethireddy@users.noreply.github.com>
+Date:   Wed Nov 12 10:39:33 2025 -0800
+
+    alts: Metadata server address modification to account for default port
+    
+    Fixing the utilization of the GCE Metadata host server address
+    environment variable to account for the case where the user does not
+    specify a port (defaults to port 8080)
+    
+    b/451639946
+
+diff --git a/alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java b/alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java
+index f03cc6f8c..5e32d22d9 100644
+--- a/alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java
++++ b/alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java
+@@ -16,7 +16,6 @@
+ 
+ package io.grpc.alts;
+ 
+-import com.google.common.base.MoreObjects;
+ import io.grpc.CallOptions;
+ import io.grpc.Channel;
+ import io.grpc.ClientCall;
+@@ -38,13 +37,29 @@ import java.util.concurrent.TimeUnit;
+  * application will have at most one connection to the handshaker service.
+  */
+ final class HandshakerServiceChannel {
++  // Port 8080 is necessary for ALTS handshake.
++  private static final int ALTS_PORT = 8080;
++  private static final String DEFAULT_TARGET = "metadata.google.internal.:8080";
+ 
+   static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =
+-      new ChannelResource(
+-          MoreObjects.firstNonNull(
+-              System.getenv("GCE_METADATA_HOST"), "metadata.google.internal.:8080"));
+-
+-
++      new ChannelResource(getHandshakerTarget(System.getenv("GCE_METADATA_HOST")));
++  
++  /**
++   * Returns handshaker target. When GCE_METADATA_HOST is provided, it might contain port which we
++   * will discard and use ALTS_PORT instead.
++   */
++  static String getHandshakerTarget(String envValue) {
++    if (envValue == null || envValue.isEmpty()) {
++      return DEFAULT_TARGET;
++    }
++    String host = envValue;
++    int portIndex = host.lastIndexOf(':');
++    if (portIndex != -1) {
++      host = host.substring(0, portIndex); // Discard port if specified
++    }
++    return host + ":" + ALTS_PORT; // Utilize ALTS port in all cases
++  }
++  
+   /** Returns a resource of handshaker service channel for testing only. */
+   static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {
+     return new ChannelResource(handshakerAddress);
+diff --git a/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java b/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java
+index a3937904c..221001157 100644
+--- a/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java
++++ b/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java
+@@ -67,6 +67,24 @@ public final class HandshakerServiceChannelTest {
+     }
+   }
+ 
++  @Test
++  public void getHandshakerTarget_nullEnvVar() {
++    assertThat(HandshakerServiceChannel.getHandshakerTarget(null))
++        .isEqualTo("metadata.google.internal.:8080");
++  }
++
++  @Test
++  public void getHandshakerTarget_envVarWithPort() {
++    assertThat(HandshakerServiceChannel.getHandshakerTarget("169.254.169.254:80"))
++        .isEqualTo("169.254.169.254:8080");
++  }
++
++  @Test
++  public void getHandshakerTarget_envVarWithHostOnly() {
++    assertThat(HandshakerServiceChannel.getHandshakerTarget("169.254.169.254"))
++        .isEqualTo("169.254.169.254:8080");
++  }
++  
+   @Test
+   public void resource_works() {
+     Channel channel = resource.create();

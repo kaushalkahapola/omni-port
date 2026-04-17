@@ -1,0 +1,202 @@
+commit d1644b37ca64f3a646032895895d5900eee805af
+Author: Luca Cavanna <javanna@apache.org>
+Date:   Mon Oct 7 13:09:54 2024 +0200
+
+    Span term query to convert to match no docs when unmapped field is targeted (#113251)
+    
+    SpanTermQueryBuilder currently creates a valid SpanTermQuery against unmapped fields.
+    In practice, if the field is unmapped, there won't be a match. This commit changes
+    the toQuery impl to return a MatchNoDocsQuery instead like we do in similar scenarios.
+
+diff --git a/docs/changelog/113251.yaml b/docs/changelog/113251.yaml
+new file mode 100644
+index 00000000000..49167e6e4c9
+--- /dev/null
++++ b/docs/changelog/113251.yaml
+@@ -0,0 +1,5 @@
++pr: 113251
++summary: Span term query to convert to match no docs when unmapped field is targeted
++area: Search
++type: bug
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java b/server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java
+index aeffff28269..20874a736b1 100644
+--- a/server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java
++++ b/server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java
+@@ -10,7 +10,6 @@
+ package org.elasticsearch.index.query;
+ 
+ import org.apache.lucene.index.Term;
+-import org.apache.lucene.queries.spans.SpanQuery;
+ import org.apache.lucene.queries.spans.SpanTermQuery;
+ import org.apache.lucene.search.BooleanClause;
+ import org.apache.lucene.search.Query;
+@@ -19,8 +18,8 @@ import org.elasticsearch.TransportVersion;
+ import org.elasticsearch.TransportVersions;
+ import org.elasticsearch.common.ParsingException;
+ import org.elasticsearch.common.io.stream.StreamInput;
+-import org.elasticsearch.common.lucene.BytesRefs;
+ import org.elasticsearch.index.mapper.MappedFieldType;
++import org.elasticsearch.lucene.queries.SpanMatchNoDocsQuery;
+ import org.elasticsearch.xcontent.ParseField;
+ import org.elasticsearch.xcontent.XContentParser;
+ 
+@@ -76,40 +75,37 @@ public class SpanTermQueryBuilder extends BaseTermQueryBuilder<SpanTermQueryBuil
+     }
+ 
+     @Override
+-    protected SpanQuery doToQuery(SearchExecutionContext context) throws IOException {
++    protected Query doToQuery(SearchExecutionContext context) throws IOException {
+         MappedFieldType mapper = context.getFieldType(fieldName);
+-        Term term;
+         if (mapper == null) {
+-            term = new Term(fieldName, BytesRefs.toBytesRef(value));
+-        } else {
+-            if (mapper.getTextSearchInfo().hasPositions() == false) {
+-                throw new IllegalArgumentException(
+-                    "Span term query requires position data, but field " + fieldName + " was indexed without position data"
+-                );
+-            }
+-            Query termQuery = mapper.termQuery(value, context);
+-            List<Term> termsList = new ArrayList<>();
+-            termQuery.visit(new QueryVisitor() {
+-                @Override
+-                public QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {
+-                    if (occur == BooleanClause.Occur.MUST || occur == BooleanClause.Occur.FILTER) {
+-                        return this;
+-                    }
+-                    return EMPTY_VISITOR;
++            return new SpanMatchNoDocsQuery(fieldName, "unmapped field: " + fieldName);
++        }
++        if (mapper.getTextSearchInfo().hasPositions() == false) {
++            throw new IllegalArgumentException(
++                "Span term query requires position data, but field " + fieldName + " was indexed without position data"
++            );
++        }
++        Query termQuery = mapper.termQuery(value, context);
++        List<Term> termsList = new ArrayList<>();
++        termQuery.visit(new QueryVisitor() {
++            @Override
++            public QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {
++                if (occur == BooleanClause.Occur.MUST || occur == BooleanClause.Occur.FILTER) {
++                    return this;
+                 }
++                return EMPTY_VISITOR;
++            }
+ 
+-                @Override
+-                public void consumeTerms(Query query, Term... terms) {
+-                    termsList.addAll(Arrays.asList(terms));
+-                }
+-            });
+-            if (termsList.size() != 1) {
+-                // This is for safety, but we have called mapper.termQuery above: we really should get one and only one term from the query?
+-                throw new IllegalArgumentException("Cannot extract a term from a query of type " + termQuery.getClass() + ": " + termQuery);
++            @Override
++            public void consumeTerms(Query query, Term... terms) {
++                termsList.addAll(Arrays.asList(terms));
+             }
+-            term = termsList.get(0);
++        });
++        if (termsList.size() != 1) {
++            // This is for safety, but we have called mapper.termQuery above: we really should get one and only one term from the query?
++            throw new IllegalArgumentException("Cannot extract a term from a query of type " + termQuery.getClass() + ": " + termQuery);
+         }
+-        return new SpanTermQuery(term);
++        return new SpanTermQuery(termsList.get(0));
+     }
+ 
+     public static SpanTermQueryBuilder fromXContent(XContentParser parser) throws IOException, ParsingException {
+diff --git a/server/src/test/java/org/elasticsearch/index/query/FieldMaskingSpanQueryBuilderTests.java b/server/src/test/java/org/elasticsearch/index/query/FieldMaskingSpanQueryBuilderTests.java
+index bc2ba833536..3890b53e29f 100644
+--- a/server/src/test/java/org/elasticsearch/index/query/FieldMaskingSpanQueryBuilderTests.java
++++ b/server/src/test/java/org/elasticsearch/index/query/FieldMaskingSpanQueryBuilderTests.java
+@@ -9,13 +9,12 @@
+ 
+ package org.elasticsearch.index.query;
+ 
+-import org.apache.lucene.index.Term;
+ import org.apache.lucene.queries.spans.FieldMaskingSpanQuery;
+-import org.apache.lucene.queries.spans.SpanTermQuery;
+ import org.apache.lucene.search.BoostQuery;
+ import org.apache.lucene.search.Query;
+ import org.elasticsearch.common.ParsingException;
+ import org.elasticsearch.core.Strings;
++import org.elasticsearch.lucene.queries.SpanMatchNoDocsQuery;
+ import org.elasticsearch.test.AbstractQueryTestCase;
+ 
+ import java.io.IOException;
+@@ -105,7 +104,7 @@ public class FieldMaskingSpanQueryBuilderTests extends AbstractQueryTestCase<Fie
+               }
+             }""", NAME.getPreferredName());
+         Query q = parseQuery(json).toQuery(createSearchExecutionContext());
+-        assertEquals(new BoostQuery(new FieldMaskingSpanQuery(new SpanTermQuery(new Term("value", "foo")), "mapped_geo_shape"), 42.0f), q);
++        assertEquals(new BoostQuery(new FieldMaskingSpanQuery(new SpanMatchNoDocsQuery("value", null), "mapped_geo_shape"), 42.0f), q);
+     }
+ 
+     public void testJsonWithDeprecatedName() throws IOException {
+diff --git a/server/src/test/java/org/elasticsearch/index/query/SpanTermQueryBuilderTests.java b/server/src/test/java/org/elasticsearch/index/query/SpanTermQueryBuilderTests.java
+index f0f23d8539e..c4a9267ff68 100644
+--- a/server/src/test/java/org/elasticsearch/index/query/SpanTermQueryBuilderTests.java
++++ b/server/src/test/java/org/elasticsearch/index/query/SpanTermQueryBuilderTests.java
+@@ -15,9 +15,9 @@ import org.apache.lucene.search.BoostQuery;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.TermQuery;
+ import org.elasticsearch.common.ParsingException;
+-import org.elasticsearch.common.lucene.BytesRefs;
+ import org.elasticsearch.index.mapper.IdFieldMapper;
+ import org.elasticsearch.index.mapper.MappedFieldType;
++import org.elasticsearch.lucene.queries.SpanMatchNoDocsQuery;
+ import org.elasticsearch.xcontent.json.JsonStringEncoder;
+ 
+ import java.io.IOException;
+@@ -49,18 +49,16 @@ public class SpanTermQueryBuilderTests extends AbstractTermQueryTestCase<SpanTer
+ 
+     @Override
+     protected void doAssertLuceneQuery(SpanTermQueryBuilder queryBuilder, Query query, SearchExecutionContext context) throws IOException {
+-        assertThat(query, instanceOf(SpanTermQuery.class));
+-        SpanTermQuery spanTermQuery = (SpanTermQuery) query;
+-
+-        String expectedFieldName = expectedFieldName(queryBuilder.fieldName);
+-        assertThat(spanTermQuery.getTerm().field(), equalTo(expectedFieldName));
+-
+         MappedFieldType mapper = context.getFieldType(queryBuilder.fieldName());
+         if (mapper != null) {
++            String expectedFieldName = expectedFieldName(queryBuilder.fieldName);
++            assertThat(query, instanceOf(SpanTermQuery.class));
++            SpanTermQuery spanTermQuery = (SpanTermQuery) query;
++            assertThat(spanTermQuery.getTerm().field(), equalTo(expectedFieldName));
+             Term term = ((TermQuery) mapper.termQuery(queryBuilder.value(), null)).getTerm();
+             assertThat(spanTermQuery.getTerm(), equalTo(term));
+         } else {
+-            assertThat(spanTermQuery.getTerm().bytes(), equalTo(BytesRefs.toBytesRef(queryBuilder.value())));
++            assertThat(query, instanceOf(SpanMatchNoDocsQuery.class));
+         }
+     }
+ 
+@@ -117,23 +115,13 @@ public class SpanTermQueryBuilderTests extends AbstractTermQueryTestCase<SpanTer
+         assertEquals("[span_term] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());
+     }
+ 
+-    public void testWithMetadataField() throws IOException {
+-        SearchExecutionContext context = createSearchExecutionContext();
+-        for (String field : new String[] { "field1", "field2" }) {
+-            SpanTermQueryBuilder spanTermQueryBuilder = new SpanTermQueryBuilder(field, "toto");
+-            Query query = spanTermQueryBuilder.toQuery(context);
+-            Query expected = new SpanTermQuery(new Term(field, "toto"));
+-            assertEquals(expected, query);
+-        }
+-    }
+-
+     public void testWithBoost() throws IOException {
+         SearchExecutionContext context = createSearchExecutionContext();
+-        for (String field : new String[] { "field1", "field2" }) {
++        for (String field : new String[] { TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME }) {
+             SpanTermQueryBuilder spanTermQueryBuilder = new SpanTermQueryBuilder(field, "toto");
+             spanTermQueryBuilder.boost(10);
+             Query query = spanTermQueryBuilder.toQuery(context);
+-            Query expected = new BoostQuery(new SpanTermQuery(new Term(field, "toto")), 10);
++            Query expected = new BoostQuery(new SpanTermQuery(new Term(TEXT_FIELD_NAME, "toto")), 10);
+             assertEquals(expected, query);
+         }
+     }

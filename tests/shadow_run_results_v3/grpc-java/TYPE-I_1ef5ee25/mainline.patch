@@ -1,0 +1,78 @@
+commit 1ef5ee25905b540a64424d36ea735ac431e117fa
+Author: Eric Anderson <ejona@google.com>
+Date:   Mon Nov 3 13:12:50 2025 -0800
+
+    core: Fix NPE during address update with Happy Eyeballs
+    
+    Fixes #12168
+
+diff --git a/core/src/main/java/io/grpc/internal/PickFirstLeafLoadBalancer.java b/core/src/main/java/io/grpc/internal/PickFirstLeafLoadBalancer.java
+index ebe329ca5..2689d7d23 100644
+--- a/core/src/main/java/io/grpc/internal/PickFirstLeafLoadBalancer.java
++++ b/core/src/main/java/io/grpc/internal/PickFirstLeafLoadBalancer.java
+@@ -137,9 +137,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
+     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
+         ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
+ 
+-    if (rawConnectivityState == READY || rawConnectivityState == CONNECTING) {
++    if (rawConnectivityState == READY
++        || (rawConnectivityState == CONNECTING
++          && (!enableHappyEyeballs || addressIndex.isValid()))) {
+       // If the previous ready (or connecting) subchannel exists in new address list,
+-      // keep this connection and don't create new subchannels
++      // keep this connection and don't create new subchannels. Happy Eyeballs is excluded when
++      // connecting, because it allows multiple attempts simultaneously, thus is fine to start at
++      // the beginning.
+       SocketAddress previousAddress = addressIndex.getCurrentAddress();
+       addressIndex.updateGroups(newImmutableAddressGroups);
+       if (addressIndex.seekTo(previousAddress)) {
+diff --git a/core/src/test/java/io/grpc/internal/PickFirstLeafLoadBalancerTest.java b/core/src/test/java/io/grpc/internal/PickFirstLeafLoadBalancerTest.java
+index 0e902bfdd..8b09fce2a 100644
+--- a/core/src/test/java/io/grpc/internal/PickFirstLeafLoadBalancerTest.java
++++ b/core/src/test/java/io/grpc/internal/PickFirstLeafLoadBalancerTest.java
+@@ -1872,6 +1872,45 @@ public class PickFirstLeafLoadBalancerTest {
+     assertEquals(PickResult.withSubchannel(mockSubchannel1), picker.pickSubchannel(mockArgs));
+   }
+ 
++  @Test
++  public void updateAddresses_identicalSingleAddress_connecting() {
++    // Creating first set of endpoints/addresses
++    List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0));
++
++    // Accept Addresses and verify proper connection flow
++    assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
++    loadBalancer.acceptResolvedAddresses(
++        ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
++    verify(mockSubchannel1).start(stateListenerCaptor.capture());
++    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
++    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
++
++    // First connection attempt is successful
++    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
++    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
++    fakeClock.forwardTime(CONNECTION_DELAY_INTERVAL_MS, TimeUnit.MILLISECONDS);
++
++    // verify that picker returns no subchannel
++    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
++    SubchannelPicker picker = pickerCaptor.getValue();
++    assertEquals(PickResult.withNoResult(), picker.pickSubchannel(mockArgs));
++
++    // Accept same resolved addresses to update
++    reset(mockHelper);
++    loadBalancer.acceptResolvedAddresses(
++        ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
++    fakeClock.forwardTime(CONNECTION_DELAY_INTERVAL_MS, TimeUnit.MILLISECONDS);
++
++    // Verify that no new subchannels were created or started
++    verify(mockSubchannel2, never()).start(any());
++    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
++
++    // verify that picker hasn't changed via checking mock helper's interactions
++    verify(mockHelper, atLeast(0)).getSynchronizationContext();  // Don't care
++    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
++    verifyNoMoreInteractions(mockHelper);
++  }
++
+   @Test
+   public void twoAddressesSeriallyConnect() {
+     // Starting first connection attempt

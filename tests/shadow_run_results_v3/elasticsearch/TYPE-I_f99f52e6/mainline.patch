@@ -1,0 +1,176 @@
+commit f99f52e60deaec8f4211ff36e8bee7c9ca8ac160
+Author: Iván Cea Fontenla <ivancea96@outlook.com>
+Date:   Fri Jan 17 14:40:41 2025 +0100
+
+    ESQL: Lookup join drop unused columns on lookup index (#120281)
+    
+    Closes https://github.com/elastic/elasticsearch/issues/118778
+    
+    Unignore/Update some tests when dropping the lookup columns, and update PruneColumns rule to prune the columns even if only 1 remains
+
+diff --git a/x-pack/plugin/esql/qa/testFixtures/src/main/resources/lookup-join.csv-spec b/x-pack/plugin/esql/qa/testFixtures/src/main/resources/lookup-join.csv-spec
+index 8d24ddb4560..c8203042a23 100644
+--- a/x-pack/plugin/esql/qa/testFixtures/src/main/resources/lookup-join.csv-spec
++++ b/x-pack/plugin/esql/qa/testFixtures/src/main/resources/lookup-join.csv-spec
+@@ -206,10 +206,7 @@ language_code:integer | language_name:keyword
+ 4                     | German
+ ;
+ 
+-dropAllLookedUpFieldsOnTheDataNode-Ignore
+-// Depends on
+-// https://github.com/elastic/elasticsearch/issues/118778
+-// https://github.com/elastic/elasticsearch/issues/118781
++keepFieldNotInLookup
+ required_capability: join_lookup_v11
+ 
+ FROM employees
+@@ -217,7 +214,7 @@ FROM employees
+ | LOOKUP JOIN languages_lookup_non_unique_key ON language_code
+ | WHERE emp_no == 10001
+ | SORT emp_no
+-| DROP language*
++| keep emp_no
+ ;
+ 
+ emp_no:integer
+@@ -227,18 +224,15 @@ emp_no:integer
+ 10001
+ ;
+ 
+-dropAllLookedUpFieldsOnTheCoordinator-Ignore
+-// Depends on
+-// https://github.com/elastic/elasticsearch/issues/118778
+-// https://github.com/elastic/elasticsearch/issues/118781
++dropAllFieldsUsedInLookup
+ required_capability: join_lookup_v11
+ 
+ FROM employees
+-| SORT emp_no
+-| LIMIT 2
++| WHERE emp_no == 10001
++| keep emp_no
+ | EVAL language_code = emp_no % 10
+ | LOOKUP JOIN languages_lookup_non_unique_key ON language_code
+-| DROP language*
++| DROP language_*, country*
+ ;
+ 
+ emp_no:integer
+@@ -246,9 +240,6 @@ emp_no:integer
+ 10001
+ 10001
+ 10001
+-10002
+-10002
+-10002
+ ;
+ 
+ ###############################################
+diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PruneColumns.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PruneColumns.java
+index 1c7e765c6bd..4b3077aebba 100644
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PruneColumns.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/logical/PruneColumns.java
+@@ -104,12 +104,10 @@ public final class PruneColumns extends Rule<LogicalPlan, LogicalPlan> {
+                     }
+                 } else if (p instanceof EsRelation esRelation && esRelation.indexMode() == IndexMode.LOOKUP) {
+                     // Normally, pruning EsRelation has no effect because InsertFieldExtraction only extracts the required fields, anyway.
+-                    // The field extraction for LOOKUP JOIN works differently, however - we extract all fields (other than the join key)
+-                    // that the EsRelation has.
++                    // However, InsertFieldExtraction can't be currently used in LOOKUP JOIN right index,
++                    // it works differently as we extract all fields (other than the join key) that the EsRelation has.
+                     var remaining = removeUnused(esRelation.output(), used);
+-                    // TODO: LookupFromIndexOperator cannot handle 0 lookup fields, yet. That means 1 field in total (key field + lookup).
+-                    // https://github.com/elastic/elasticsearch/issues/118778
+-                    if (remaining != null && remaining.size() > 1) {
++                    if (remaining != null) {
+                         p = new EsRelation(esRelation.source(), esRelation.index(), remaining, esRelation.indexMode(), esRelation.frozen());
+                     }
+                 }
+diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java
+index 0c02b82d9a2..e5db29e4c96 100644
+--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java
++++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/optimizer/LogicalPlanOptimizerTests.java
+@@ -6223,6 +6223,83 @@ public class LogicalPlanOptimizerTests extends ESTestCase {
+         var rightRel = as(join.right(), EsRelation.class);
+     }
+ 
++    /**
++     * When dropping lookup fields, the lookup relation shouldn't include them.
++     * At least until we can implement InsertFieldExtract there.
++     * Expects
++     * EsqlProject[[languages{f}#10]]
++     * \_Join[LEFT,[language_code{r}#4],[language_code{r}#4],[language_code{f}#18]]
++     *   |_Project[[_meta_field{f}#13, emp_no{f}#7, first_name{f}#8, gender{f}#9, hire_date{f}#14, job{f}#15, job.raw{f}#16, lang
++     * uages{f}#10, last_name{f}#11, long_noidx{f}#17, salary{f}#12, languages{f}#10 AS language_code]]
++     *   | \_Limit[1000[INTEGER]]
++     *   |   \_EsRelation[test][_meta_field{f}#13, emp_no{f}#7, first_name{f}#8, ge..]
++     *   \_EsRelation[languages_lookup][LOOKUP][language_code{f}#18]
++     */
++    public void testLookupJoinKeepNoLookupFields() {
++        assumeTrue("Requires LOOKUP JOIN", EsqlCapabilities.Cap.JOIN_LOOKUP_V11.isEnabled());
++
++        String commandDiscardingFields = randomBoolean() ? "| KEEP languages" : """
++            | DROP _meta_field, emp_no, first_name, gender, language_code,
++                   language_name, last_name, salary, hire_date, job, job.raw, long_noidx
++            """;
++
++        String query = """
++            FROM test
++            | EVAL language_code = languages
++            | LOOKUP JOIN languages_lookup ON language_code
++            """ + commandDiscardingFields;
++
++        var plan = optimizedPlan(query);
++
++        var project = as(plan, Project.class);
++        assertThat(project.projections().size(), equalTo(1));
++        assertThat(project.projections().get(0).name(), equalTo("languages"));
++
++        var join = as(project.child(), Join.class);
++        var joinRightRelation = as(join.right(), EsRelation.class);
++
++        assertThat(joinRightRelation.output().size(), equalTo(1));
++        assertThat(joinRightRelation.output().get(0).name(), equalTo("language_code"));
++    }
++
++    /**
++     * Ensure a JOIN shadowed by another JOIN doesn't request the shadowed fields.
++     *
++     * Expected
++     * Join[LEFT,[language_code{r}#4],[language_code{r}#4],[language_code{f}#20]]
++     * |_Join[LEFT,[language_code{r}#4],[language_code{r}#4],[language_code{f}#18]]
++     * | |_Eval[[languages{f}#10 AS language_code]]
++     * | | \_Limit[1000[INTEGER]]
++     * | |   \_EsRelation[test][_meta_field{f}#13, emp_no{f}#7, first_name{f}#8, ge..]
++     * | \_EsRelation[languages_lookup][LOOKUP][language_code{f}#18]
++     * \_EsRelation[languages_lookup][LOOKUP][language_code{f}#20, language_name{f}#21]
++     */
++    public void testMultipleLookupShadowing() {
++        assumeTrue("Requires LOOKUP JOIN", EsqlCapabilities.Cap.JOIN_LOOKUP_V11.isEnabled());
++
++        String query = """
++            FROM test
++            | EVAL language_code = languages
++            | LOOKUP JOIN languages_lookup ON language_code
++            | LOOKUP JOIN languages_lookup ON language_code
++            """;
++
++        var plan = optimizedPlan(query);
++
++        var finalJoin = as(plan, Join.class);
++        var finalJoinRightRelation = as(finalJoin.right(), EsRelation.class);
++
++        assertThat(finalJoinRightRelation.output().size(), equalTo(2));
++        assertThat(finalJoinRightRelation.output().get(0).name(), equalTo("language_code"));
++        assertThat(finalJoinRightRelation.output().get(1).name(), equalTo("language_name"));
++
++        var initialJoin = as(finalJoin.left(), Join.class);
++        var initialJoinRightRelation = as(initialJoin.right(), EsRelation.class);
++
++        assertThat(initialJoinRightRelation.output().size(), equalTo(1));
++        assertThat(initialJoinRightRelation.output().get(0).name(), equalTo("language_code"));
++    }
++
+     //
+     //
+     //

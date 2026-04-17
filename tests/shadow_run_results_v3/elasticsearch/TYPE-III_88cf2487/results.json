@@ -1,0 +1,226 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-III",
+  "original_commit": "88cf2487e7deb38686870e40bf08b2b729b7d848",
+  "backport_commit": "223d50f0524d3d3e9a19f18a3b146212ff830042",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 13.05,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+          "method_used": "fuzzy",
+          "confidence": 0.889,
+          "start_line": 25,
+          "end_line": 30,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+          "method_used": "embedding",
+          "confidence": 0.8,
+          "start_line": 201,
+          "end_line": 210,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.2,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch involves a small fix in the serialization logic of the ScriptStats class, changing a field name from COMPILATIONS_HISTORY to CACHE_EVICTIONS_HISTORY. This is a minor code correction involving a string constant and a related test addition. The patch was found via fuzzy matching and embedding with high confidence, indicating some formatting or minor structural drift but no deep structural or API changes. The addition of a test method is straightforward and does not introduce complex refactoring. Therefore, the patch complexity aligns with TYPE_II, involving minor formatting or string corrections requiring fuzzy matching.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 2.81,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 2,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": false,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.script.ScriptStatsTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.script.ScriptStatsTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.script.ScriptStatsTests#testTimeSeriesSerialization": "passed",
+          "org.elasticsearch.script.ScriptStatsTests#testXContentChunked": "passed",
+          "org.elasticsearch.script.ScriptStatsTests#testSerializeEmptyTimeSeries": "passed",
+          "org.elasticsearch.script.ScriptStatsTests#testMerge": "passed",
+          "org.elasticsearch.script.ScriptStatsTests#testXContentChunkedHistory": "failed",
+          "org.elasticsearch.script.ScriptStatsTests#testSerializeTimeSeries": "passed",
+          "org.elasticsearch.script.ScriptStatsTests#testTimeSeriesIsEmpty": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.script.ScriptStatsTests": "failed"
+        },
+        "summary": {
+          "passed": 6,
+          "failed": 1,
+          "skipped": 0,
+          "total": 7
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 7,
+        "patched_total": 7,
+        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": true,
+      "test_cases_total": 7
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 0,
+    "failed_hunks_total": 2,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [
+      {
+        "error_type": "namespace_adaptation_failed",
+        "error_message": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}",
+        "attempt_count": 2,
+        "suggested_action": "structural_refactor"
+      },
+      {
+        "error_type": "namespace_adaptation_failed",
+        "error_message": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}",
+        "attempt_count": 2,
+        "suggested_action": "structural_refactor"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "old_file_path": null,
+        "old_content": "import java.util.Objects;\n\nimport static org.elasticsearch.common.collect.Iterators.single;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n",
+        "new_content": "import java.util.Objects;\n\nimport static org.elasticsearch.common.collect.Iterators.single;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.CACHE_EVICTIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptContextStats.Fields.COMPILATIONS_HISTORY;\nimport static org.elasticsearch.script.ScriptStats.Fields.CACHE_EVICTIONS;\nimport static org.elasticsearch.script.ScriptStats.Fields.COMPILATIONS;\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "is_rename": false,
+        "file_operation": "MODIFIED",
+        "error": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}"
+      },
+      {
+        "file_path": "server/src/main/java/org/elasticsearch/script/ScriptStats.java",
+        "old_file_path": null,
+        "old_content": "                builder.endObject();\n            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                builder.startObject(COMPILATIONS_HISTORY);\n                cacheEvictionsHistory.toXContent(builder, params);\n                builder.endObject();\n            }\n",
+        "new_content": "                builder.endObject();\n            }\n            if (cacheEvictionsHistory != null && cacheEvictionsHistory.areTimingsEmpty() == false) {\n                builder.startObject(CACHE_EVICTIONS_HISTORY);\n                cacheEvictionsHistory.toXContent(builder, params);\n                builder.endObject();\n            }\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "is_rename": false,
+        "file_operation": "MODIFIED",
+        "error": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}"
+      }
+    ],
+    "generated_patch_bytes": 0,
+    "target_patch_bytes": 3775,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 7,
+      "patched_total": 7,
+      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

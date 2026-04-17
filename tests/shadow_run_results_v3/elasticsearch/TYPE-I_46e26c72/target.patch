@@ -1,0 +1,63 @@
+commit 0f0efb79e327b3ce626ee8cd88e8bf3a4730154e
+Author: David Turner <david.turner@elastic.co>
+Date:   Fri Oct 11 12:11:10 2024 +0100
+
+    Improve exception message for bad environment variable placeholders in settings (#114552) (#114584)
+    
+    Closes #110858
+    
+    Co-authored-by: Mike Choe <44465330+minkichoe@users.noreply.github.com>
+
+diff --git a/docs/changelog/114552.yaml b/docs/changelog/114552.yaml
+new file mode 100644
+index 00000000000..00e2f95b503
+--- /dev/null
++++ b/docs/changelog/114552.yaml
+@@ -0,0 +1,5 @@
++pr: 114552
++summary: Improve exception message for bad environment variable placeholders in settings
++area: Infra/Settings
++type: enhancement
++issues: [110858]
+diff --git a/server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java b/server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java
+index 2e606f7b83e..94227aed40d 100644
+--- a/server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java
++++ b/server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java
+@@ -54,7 +54,11 @@ public class InternalSettingsPreparer {
+         loadOverrides(output, properties);
+         output.put(input);
+         replaceForcedSettings(output);
+-        output.replacePropertyPlaceholders();
++        try {
++            output.replacePropertyPlaceholders();
++        } catch (Exception e) {
++            throw new SettingsException("Failed to replace property placeholders from [" + configFile.getFileName() + "]", e);
++        }
+         ensureSpecialSettingsExist(output, defaultNodeName);
+ 
+         return new Environment(output.build(), configDir);
+diff --git a/server/src/test/java/org/elasticsearch/node/InternalSettingsPreparerTests.java b/server/src/test/java/org/elasticsearch/node/InternalSettingsPreparerTests.java
+index 3d406fff79e..32edcc0ad82 100644
+--- a/server/src/test/java/org/elasticsearch/node/InternalSettingsPreparerTests.java
++++ b/server/src/test/java/org/elasticsearch/node/InternalSettingsPreparerTests.java
+@@ -86,6 +86,20 @@ public class InternalSettingsPreparerTests extends ESTestCase {
+         }
+     }
+ 
++    public void testReplacePlaceholderFailure() {
++        try {
++            InternalSettingsPreparer.prepareEnvironment(
++                Settings.builder().put(baseEnvSettings).put("cluster.name", "${ES_CLUSTER_NAME}").build(),
++                emptyMap(),
++                null,
++                () -> "default_node_name"
++            );
++            fail("Expected SettingsException");
++        } catch (SettingsException e) {
++            assertEquals("Failed to replace property placeholders from [elasticsearch.yml]", e.getMessage());
++        }
++    }
++
+     public void testSecureSettings() {
+         MockSecureSettings secureSettings = new MockSecureSettings();
+         secureSettings.setString("foo", "secret");

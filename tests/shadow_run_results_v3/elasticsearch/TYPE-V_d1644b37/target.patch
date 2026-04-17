@@ -1,0 +1,223 @@
+commit 74f523d4ccb6d26dc65c99138ccad1d43d6cdaaf
+Author: Luca Cavanna <javanna@apache.org>
+Date:   Tue Oct 8 08:48:53 2024 +0200
+
+    Span term query to convert to match no docs when unmapped field is targeted (#113251)
+    
+    SpanTermQueryBuilder currently creates a valid SpanTermQuery against unmapped fields.
+    In practice, if the field is unmapped, there won't be a match. This commit changes
+    the toQuery impl to return a MatchNoDocsQuery instead like we do in similar scenarios.
+
+diff --git a/docs/changelog/113251.yaml b/docs/changelog/113251.yaml
+new file mode 100644
+index 00000000000..49167e6e4c9
+--- /dev/null
++++ b/docs/changelog/113251.yaml
+@@ -0,0 +1,5 @@
++pr: 113251
++summary: Span term query to convert to match no docs when unmapped field is targeted
++area: Search
++type: bug
++issues: []
+diff --git a/qa/full-cluster-restart/src/javaRestTest/java/org/elasticsearch/upgrades/QueryBuilderBWCIT.java b/qa/full-cluster-restart/src/javaRestTest/java/org/elasticsearch/upgrades/QueryBuilderBWCIT.java
+index e817290d71a..42a0a3d6da0 100644
+--- a/qa/full-cluster-restart/src/javaRestTest/java/org/elasticsearch/upgrades/QueryBuilderBWCIT.java
++++ b/qa/full-cluster-restart/src/javaRestTest/java/org/elasticsearch/upgrades/QueryBuilderBWCIT.java
+@@ -154,29 +154,29 @@ public class QueryBuilderBWCIT extends ParameterizedFullClusterRestartTestCase {
+         );
+         addCandidate(
+             """
+-                "span_near": {"clauses": [{ "span_term": { "keyword_field": "value1" }}, \
+-                { "span_term": { "keyword_field": "value2" }}]}
++                "span_near": {"clauses": [{ "span_term": { "text_field": "value1" }}, \
++                { "span_term": { "text_field": "value2" }}]}
+                 """,
+-            new SpanNearQueryBuilder(new SpanTermQueryBuilder("keyword_field", "value1"), 0).addClause(
+-                new SpanTermQueryBuilder("keyword_field", "value2")
++            new SpanNearQueryBuilder(new SpanTermQueryBuilder("text_field", "value1"), 0).addClause(
++                new SpanTermQueryBuilder("text_field", "value2")
+             )
+         );
+         addCandidate(
+             """
+-                "span_near": {"clauses": [{ "span_term": { "keyword_field": "value1" }}, \
+-                { "span_term": { "keyword_field": "value2" }}], "slop": 2}
++                "span_near": {"clauses": [{ "span_term": { "text_field": "value1" }}, \
++                { "span_term": { "text_field": "value2" }}], "slop": 2}
+                 """,
+-            new SpanNearQueryBuilder(new SpanTermQueryBuilder("keyword_field", "value1"), 2).addClause(
+-                new SpanTermQueryBuilder("keyword_field", "value2")
++            new SpanNearQueryBuilder(new SpanTermQueryBuilder("text_field", "value1"), 2).addClause(
++                new SpanTermQueryBuilder("text_field", "value2")
+             )
+         );
+         addCandidate(
+             """
+-                "span_near": {"clauses": [{ "span_term": { "keyword_field": "value1" }}, \
+-                { "span_term": { "keyword_field": "value2" }}], "slop": 2, "in_order": false}
++                "span_near": {"clauses": [{ "span_term": { "text_field": "value1" }}, \
++                { "span_term": { "text_field": "value2" }}], "slop": 2, "in_order": false}
+                 """,
+-            new SpanNearQueryBuilder(new SpanTermQueryBuilder("keyword_field", "value1"), 2).addClause(
+-                new SpanTermQueryBuilder("keyword_field", "value2")
++            new SpanNearQueryBuilder(new SpanTermQueryBuilder("text_field", "value1"), 2).addClause(
++                new SpanTermQueryBuilder("text_field", "value2")
+             ).inOrder(false)
+         );
+     }
+@@ -204,11 +204,6 @@ public class QueryBuilderBWCIT extends ParameterizedFullClusterRestartTestCase {
+                     mappingsAndSettings.field("type", "percolator");
+                     mappingsAndSettings.endObject();
+                 }
+-                {
+-                    mappingsAndSettings.startObject("keyword_field");
+-                    mappingsAndSettings.field("type", "keyword");
+-                    mappingsAndSettings.endObject();
+-                }
+                 {
+                     mappingsAndSettings.startObject("text_field");
+                     mappingsAndSettings.field("type", "text");
+diff --git a/server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java b/server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java
+index 55df1f144bb..fcbe4ded2fe 100644
+--- a/server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java
++++ b/server/src/main/java/org/elasticsearch/index/query/SpanTermQueryBuilder.java
+@@ -9,16 +9,14 @@
+ 
+ package org.elasticsearch.index.query;
+ 
+-import org.apache.lucene.index.Term;
+-import org.apache.lucene.queries.spans.SpanQuery;
+ import org.apache.lucene.queries.spans.SpanTermQuery;
+ import org.apache.lucene.search.Query;
+ import org.elasticsearch.TransportVersion;
+ import org.elasticsearch.TransportVersions;
+ import org.elasticsearch.common.ParsingException;
+ import org.elasticsearch.common.io.stream.StreamInput;
+-import org.elasticsearch.common.lucene.BytesRefs;
+ import org.elasticsearch.index.mapper.MappedFieldType;
++import org.elasticsearch.lucene.queries.SpanMatchNoDocsQuery;
+ import org.elasticsearch.xcontent.ParseField;
+ import org.elasticsearch.xcontent.XContentParser;
+ 
+@@ -71,16 +69,18 @@ public class SpanTermQueryBuilder extends BaseTermQueryBuilder<SpanTermQueryBuil
+     }
+ 
+     @Override
+-    protected SpanQuery doToQuery(SearchExecutionContext context) throws IOException {
++    protected Query doToQuery(SearchExecutionContext context) throws IOException {
+         MappedFieldType mapper = context.getFieldType(fieldName);
+-        Term term;
+         if (mapper == null) {
+-            term = new Term(fieldName, BytesRefs.toBytesRef(value));
+-        } else {
+-            Query termQuery = mapper.termQuery(value, context);
+-            term = MappedFieldType.extractTerm(termQuery);
++            return new SpanMatchNoDocsQuery(fieldName, "unmapped field: " + fieldName);
+         }
+-        return new SpanTermQuery(term);
++        Query termQuery = mapper.termQuery(value, context);
++        if (mapper.getTextSearchInfo().hasPositions() == false) {
++            throw new IllegalArgumentException(
++                "Span term query requires position data, but field " + fieldName + " was indexed without position data"
++            );
++        }
++        return new SpanTermQuery(MappedFieldType.extractTerm(termQuery));
+     }
+ 
+     public static SpanTermQueryBuilder fromXContent(XContentParser parser) throws IOException, ParsingException {
+diff --git a/server/src/test/java/org/elasticsearch/index/query/FieldMaskingSpanQueryBuilderTests.java b/server/src/test/java/org/elasticsearch/index/query/FieldMaskingSpanQueryBuilderTests.java
+index bc2ba833536..3890b53e29f 100644
+--- a/server/src/test/java/org/elasticsearch/index/query/FieldMaskingSpanQueryBuilderTests.java
++++ b/server/src/test/java/org/elasticsearch/index/query/FieldMaskingSpanQueryBuilderTests.java
+@@ -9,13 +9,12 @@
+ 
+ package org.elasticsearch.index.query;
+ 
+-import org.apache.lucene.index.Term;
+ import org.apache.lucene.queries.spans.FieldMaskingSpanQuery;
+-import org.apache.lucene.queries.spans.SpanTermQuery;
+ import org.apache.lucene.search.BoostQuery;
+ import org.apache.lucene.search.Query;
+ import org.elasticsearch.common.ParsingException;
+ import org.elasticsearch.core.Strings;
++import org.elasticsearch.lucene.queries.SpanMatchNoDocsQuery;
+ import org.elasticsearch.test.AbstractQueryTestCase;
+ 
+ import java.io.IOException;
+@@ -105,7 +104,7 @@ public class FieldMaskingSpanQueryBuilderTests extends AbstractQueryTestCase<Fie
+               }
+             }""", NAME.getPreferredName());
+         Query q = parseQuery(json).toQuery(createSearchExecutionContext());
+-        assertEquals(new BoostQuery(new FieldMaskingSpanQuery(new SpanTermQuery(new Term("value", "foo")), "mapped_geo_shape"), 42.0f), q);
++        assertEquals(new BoostQuery(new FieldMaskingSpanQuery(new SpanMatchNoDocsQuery("value", null), "mapped_geo_shape"), 42.0f), q);
+     }
+ 
+     public void testJsonWithDeprecatedName() throws IOException {
+diff --git a/server/src/test/java/org/elasticsearch/index/query/SpanTermQueryBuilderTests.java b/server/src/test/java/org/elasticsearch/index/query/SpanTermQueryBuilderTests.java
+index 5e01f6c304e..c4a9267ff68 100644
+--- a/server/src/test/java/org/elasticsearch/index/query/SpanTermQueryBuilderTests.java
++++ b/server/src/test/java/org/elasticsearch/index/query/SpanTermQueryBuilderTests.java
+@@ -11,11 +11,13 @@ package org.elasticsearch.index.query;
+ 
+ import org.apache.lucene.index.Term;
+ import org.apache.lucene.queries.spans.SpanTermQuery;
++import org.apache.lucene.search.BoostQuery;
+ import org.apache.lucene.search.Query;
+ import org.apache.lucene.search.TermQuery;
+ import org.elasticsearch.common.ParsingException;
+-import org.elasticsearch.common.lucene.BytesRefs;
++import org.elasticsearch.index.mapper.IdFieldMapper;
+ import org.elasticsearch.index.mapper.MappedFieldType;
++import org.elasticsearch.lucene.queries.SpanMatchNoDocsQuery;
+ import org.elasticsearch.xcontent.json.JsonStringEncoder;
+ 
+ import java.io.IOException;
+@@ -47,18 +49,16 @@ public class SpanTermQueryBuilderTests extends AbstractTermQueryTestCase<SpanTer
+ 
+     @Override
+     protected void doAssertLuceneQuery(SpanTermQueryBuilder queryBuilder, Query query, SearchExecutionContext context) throws IOException {
+-        assertThat(query, instanceOf(SpanTermQuery.class));
+-        SpanTermQuery spanTermQuery = (SpanTermQuery) query;
+-
+-        String expectedFieldName = expectedFieldName(queryBuilder.fieldName);
+-        assertThat(spanTermQuery.getTerm().field(), equalTo(expectedFieldName));
+-
+         MappedFieldType mapper = context.getFieldType(queryBuilder.fieldName());
+         if (mapper != null) {
++            String expectedFieldName = expectedFieldName(queryBuilder.fieldName);
++            assertThat(query, instanceOf(SpanTermQuery.class));
++            SpanTermQuery spanTermQuery = (SpanTermQuery) query;
++            assertThat(spanTermQuery.getTerm().field(), equalTo(expectedFieldName));
+             Term term = ((TermQuery) mapper.termQuery(queryBuilder.value(), null)).getTerm();
+             assertThat(spanTermQuery.getTerm(), equalTo(term));
+         } else {
+-            assertThat(spanTermQuery.getTerm().bytes(), equalTo(BytesRefs.toBytesRef(queryBuilder.value())));
++            assertThat(query, instanceOf(SpanMatchNoDocsQuery.class));
+         }
+     }
+ 
+@@ -115,13 +115,21 @@ public class SpanTermQueryBuilderTests extends AbstractTermQueryTestCase<SpanTer
+         assertEquals("[span_term] query doesn't support multiple fields, found [message1] and [message2]", e.getMessage());
+     }
+ 
+-    public void testWithMetadataField() throws IOException {
++    public void testWithBoost() throws IOException {
+         SearchExecutionContext context = createSearchExecutionContext();
+-        for (String field : new String[] { "field1", "field2" }) {
++        for (String field : new String[] { TEXT_FIELD_NAME, TEXT_ALIAS_FIELD_NAME }) {
+             SpanTermQueryBuilder spanTermQueryBuilder = new SpanTermQueryBuilder(field, "toto");
++            spanTermQueryBuilder.boost(10);
+             Query query = spanTermQueryBuilder.toQuery(context);
+-            Query expected = new SpanTermQuery(new Term(field, "toto"));
++            Query expected = new BoostQuery(new SpanTermQuery(new Term(TEXT_FIELD_NAME, "toto")), 10);
+             assertEquals(expected, query);
+         }
+     }
++
++    public void testFieldWithoutPositions() {
++        SearchExecutionContext context = createSearchExecutionContext();
++        SpanTermQueryBuilder spanTermQueryBuilder = new SpanTermQueryBuilder(IdFieldMapper.NAME, "1234");
++        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> spanTermQueryBuilder.toQuery(context));
++        assertEquals("Span term query requires position data, but field _id was indexed without position data", iae.getMessage());
++    }
+ }

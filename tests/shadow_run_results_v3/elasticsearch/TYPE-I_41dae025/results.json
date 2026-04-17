@@ -1,0 +1,208 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "41dae025e7d68ecfbf91c3547219ec7d663ab364",
+  "backport_commit": "730b538d967f1b51fa22be03bbbaffe28c377446",
+  "description": "main \u2192 9.0",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 3,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/indices/rollover/TransportRolloverAction.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 154,
+          "end_line": 165,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.87,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.85,
+        "reasoning": "The patch modifies the method TransportRolloverAction.checkBlock with added logic to handle data streams differently, including checks for write indices and failure stores. This involves structural changes to how indices are resolved and blocks are checked, indicating a structural change rather than a simple string or whitespace change. The patch also adds extensive new test methods to cover these cases, which further suggests a moderate complexity involving structural understanding of data streams and index blocks. The patch was found via 'git_exact' for the main hunk, but the complexity of the changes and new test code justifies a TYPE_III classification. The confidence is high but not absolute due to the complexity and potential for subtle API differences. The token budget estimate is moderate to high due to the size and complexity of the patch and tests.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.01,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/action/admin/indices/rollover/TransportRolloverAction.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.07,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/modules/data-streams/build/test-results/internalClusterTest/TEST-org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT.xml",
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT"
+        ],
+        "test_cases": {
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testErrorRecordingOnRetention": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testSystemDataStreamRetention": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testAutomaticForceMerge": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testUpdatingLifecycleAppliesToAllBackingIndices": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testDataLifecycleServiceConfiguresTheMergePolicy": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testRolloverAndRetention": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testOriginationDate": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testErrorRecordingOnRollover": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testRolloverLifecycle": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testLifecycleAppliedToFailureStore": "passed",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testReenableDataStreamLifecycle": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testCheckBlockForIndices": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testLazyRolloverFails": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testCheckBlockForDataStreamFailureStores": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testRolloverAliasToDataStreamFails": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testCheckBlockForDataStreams": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testEvaluateWithoutStats": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testEvaluateConditions": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testConditionEvaluationWhenAliasToWriteAndReadIndicesConsidersOnlyPrimariesFromWriteIndex": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testLazyRollover": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testDocStatsSelectionFromPrimariesOnly": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testEvaluateWithoutMetadata": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT": "passed",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests": "passed"
+        },
+        "summary": {
+          "passed": 22,
+          "failed": 0,
+          "skipped": 0,
+          "total": 22
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testCheckBlockForDataStreamFailureStores",
+          "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testCheckBlockForDataStreams",
+          "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testErrorRecordingOnRetention"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 22,
+        "patched_total": 22,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 9,
+    "developer_aux_hunks_from_target": 3,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 22
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 3,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 2726,
+    "target_patch_bytes": 20826,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testCheckBlockForDataStreamFailureStores",
+        "org.elasticsearch.action.admin.indices.rollover.TransportRolloverActionTests#testCheckBlockForDataStreams",
+        "org.elasticsearch.datastreams.lifecycle.DataStreamLifecycleServiceIT#testErrorRecordingOnRetention"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 22,
+      "patched_total": 22,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 3,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

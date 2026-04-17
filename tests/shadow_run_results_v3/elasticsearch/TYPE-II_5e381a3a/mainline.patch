@@ -1,0 +1,50 @@
+commit 5e381a3a89fb734ade6a1a299881ef1be4df7019
+Author: Matteo Piergiovanni <134913285+piergm@users.noreply.github.com>
+Date:   Fri Oct 18 08:44:39 2024 +0200
+
+    Bool query early termination should also consider must_not clauses (#115031)
+    
+    * Bool query early termination should also consider must_not clauses
+    
+    * Update docs/changelog/115031.yaml
+
+diff --git a/docs/changelog/115031.yaml b/docs/changelog/115031.yaml
+new file mode 100644
+index 00000000000..d8d6e1a3f81
+--- /dev/null
++++ b/docs/changelog/115031.yaml
+@@ -0,0 +1,5 @@
++pr: 115031
++summary: Bool query early termination should also consider `must_not` clauses
++area: Search
++type: enhancement
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/index/query/BoolQueryBuilder.java b/server/src/main/java/org/elasticsearch/index/query/BoolQueryBuilder.java
+index 2401719caaa..5329dbf0197 100644
+--- a/server/src/main/java/org/elasticsearch/index/query/BoolQueryBuilder.java
++++ b/server/src/main/java/org/elasticsearch/index/query/BoolQueryBuilder.java
+@@ -356,6 +356,7 @@ public class BoolQueryBuilder extends AbstractQueryBuilder<BoolQueryBuilder> {
+         if (mustClauses.size() == 0
+             && filterClauses.size() == 0
+             && shouldClauses.size() > 0
++            && mustNotClauses.size() == 0
+             && newBuilder.shouldClauses.stream().allMatch(b -> b instanceof MatchNoneQueryBuilder)) {
+             return new MatchNoneQueryBuilder("The \"" + getName() + "\" query was rewritten to a \"match_none\" query.");
+         }
+diff --git a/server/src/test/java/org/elasticsearch/index/query/BoolQueryBuilderTests.java b/server/src/test/java/org/elasticsearch/index/query/BoolQueryBuilderTests.java
+index 25d4c1008ba..0fa8f70525e 100644
+--- a/server/src/test/java/org/elasticsearch/index/query/BoolQueryBuilderTests.java
++++ b/server/src/test/java/org/elasticsearch/index/query/BoolQueryBuilderTests.java
+@@ -449,6 +449,12 @@ public class BoolQueryBuilderTests extends AbstractQueryTestCase<BoolQueryBuilde
+         rewritten = Rewriteable.rewrite(boolQueryBuilder, createSearchExecutionContext());
+         assertNotEquals(new MatchNoneQueryBuilder(), rewritten);
+ 
++        boolQueryBuilder = new BoolQueryBuilder();
++        boolQueryBuilder.should(new WrapperQueryBuilder(new MatchNoneQueryBuilder().toString()));
++        boolQueryBuilder.mustNot(new TermQueryBuilder(TEXT_FIELD_NAME, "bar"));
++        rewritten = Rewriteable.rewrite(boolQueryBuilder, createSearchExecutionContext());
++        assertNotEquals(new MatchNoneQueryBuilder(), rewritten);
++
+         boolQueryBuilder = new BoolQueryBuilder();
+         boolQueryBuilder.filter(new TermQueryBuilder(TEXT_FIELD_NAME, "bar"));
+         boolQueryBuilder.mustNot(new WrapperQueryBuilder(new WrapperQueryBuilder(new MatchAllQueryBuilder().toString()).toString()));

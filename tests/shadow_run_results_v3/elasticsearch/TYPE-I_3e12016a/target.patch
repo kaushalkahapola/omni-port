@@ -1,0 +1,144 @@
+commit b74832610d396d75059148a70f26d0a1188b1418
+Author: Ignacio Vera <ignacio.vera@elastic.co>
+Date:   Mon Jan 13 18:54:08 2025 +0100
+
+    Improve error handling when parsing retrievers (#120047) (#120067)
+    
+    PARSER#declareNamedObject does not handle empty objects or objects with extra stuff.
+    Therefore we do it manually.
+
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/rank/random/RandomRankRetrieverBuilder.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/rank/random/RandomRankRetrieverBuilder.java
+index 7236b0141a8..503000c31f7 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/rank/random/RandomRankRetrieverBuilder.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/rank/random/RandomRankRetrieverBuilder.java
+@@ -14,6 +14,7 @@ import org.elasticsearch.search.builder.SearchSourceBuilder;
+ import org.elasticsearch.search.retriever.RetrieverBuilder;
+ import org.elasticsearch.search.retriever.RetrieverParserContext;
+ import org.elasticsearch.xcontent.ConstructingObjectParser;
++import org.elasticsearch.xcontent.ObjectParser;
+ import org.elasticsearch.xcontent.ParseField;
+ import org.elasticsearch.xcontent.XContentBuilder;
+ import org.elasticsearch.xcontent.XContentParser;
+@@ -48,7 +49,12 @@ public class RandomRankRetrieverBuilder extends RetrieverBuilder {
+         });
+ 
+     static {
+-        PARSER.declareNamedObject(constructorArg(), (p, c, n) -> p.namedObject(RetrieverBuilder.class, n, c), RETRIEVER_FIELD);
++        PARSER.declareField(
++            constructorArg(),
++            RandomRankRetrieverBuilder::parseRetrieverBuilder,
++            RETRIEVER_FIELD,
++            ObjectParser.ValueType.OBJECT
++        );
+         PARSER.declareString(optionalConstructorArg(), FIELD_FIELD);
+         PARSER.declareInt(optionalConstructorArg(), RANK_WINDOW_SIZE_FIELD);
+         PARSER.declareInt(optionalConstructorArg(), SEED_FIELD);
+@@ -63,6 +69,22 @@ public class RandomRankRetrieverBuilder extends RetrieverBuilder {
+         return PARSER.apply(parser, context);
+     }
+ 
++    private static RetrieverBuilder parseRetrieverBuilder(XContentParser parser, RetrieverParserContext context) throws IOException {
++        assert parser.currentToken() == XContentParser.Token.START_OBJECT;
++        parser.nextToken();
++        if (parser.currentToken() == XContentParser.Token.END_OBJECT) {
++            throw new ParsingException(parser.getTokenLocation(), "empty [" + RETRIEVER_FIELD + "] object");
++        }
++        assert parser.currentToken() == XContentParser.Token.FIELD_NAME;
++        final RetrieverBuilder builder = parser.namedObject(RetrieverBuilder.class, parser.currentName(), context);
++        parser.nextToken();
++        if (parser.currentToken() == XContentParser.Token.FIELD_NAME) {
++            throw new ParsingException(parser.getTokenLocation(), "unexpected field [" + parser.currentName() + "]");
++        }
++        assert parser.currentToken() == XContentParser.Token.END_OBJECT;
++        return builder;
++    }
++
+     private final RetrieverBuilder retrieverBuilder;
+     private final String field;
+     private final int rankWindowSize;
+diff --git a/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/rank/random/RandomRankRetrieverBuilderTests.java b/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/rank/random/RandomRankRetrieverBuilderTests.java
+index c0ef4e45f10..deb5fb47ab9 100644
+--- a/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/rank/random/RandomRankRetrieverBuilderTests.java
++++ b/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/rank/random/RandomRankRetrieverBuilderTests.java
+@@ -15,6 +15,7 @@ import org.elasticsearch.test.AbstractXContentTestCase;
+ import org.elasticsearch.usage.SearchUsage;
+ import org.elasticsearch.xcontent.NamedXContentRegistry;
+ import org.elasticsearch.xcontent.ParseField;
++import org.elasticsearch.xcontent.XContentParseException;
+ import org.elasticsearch.xcontent.XContentParser;
+ import org.elasticsearch.xcontent.json.JsonXContent;
+ 
+@@ -23,6 +24,7 @@ import java.util.ArrayList;
+ import java.util.List;
+ 
+ import static org.elasticsearch.search.rank.RankBuilder.DEFAULT_RANK_WINDOW_SIZE;
++import static org.hamcrest.Matchers.containsString;
+ 
+ public class RandomRankRetrieverBuilderTests extends AbstractXContentTestCase<RandomRankRetrieverBuilder> {
+ 
+@@ -99,4 +101,65 @@ public class RandomRankRetrieverBuilderTests extends AbstractXContentTestCase<Ra
+         }
+     }
+ 
++    public void testParserEmptyRetriever() throws IOException {
++        String json = """
++            {
++              "retriever": {
++              },
++              "field": "my-field"
++            }""";
++
++        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
++            XContentParseException ex = expectThrows(
++                XContentParseException.class,
++                () -> RandomRankRetrieverBuilder.PARSER.parse(parser, null)
++            );
++            assertThat(ex.getMessage(), containsString("[random_reranker] failed to parse field [retriever]"));
++            assertThat(ex.getCause().getMessage(), containsString("empty [retriever] object"));
++        }
++    }
++
++    public void testParserWrongRetrieverName() throws IOException {
++        String json = """
++            {
++              "retriever": {
++                "test2": {
++                  "value": "my-test-retriever"
++                }
++              },
++              "field": "my-field"
++            }""";
++
++        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
++            XContentParseException ex = expectThrows(
++                XContentParseException.class,
++                () -> RandomRankRetrieverBuilder.PARSER.parse(parser, null)
++            );
++            assertThat(ex.getMessage(), containsString("[random_reranker] failed to parse field [retriever]"));
++            assertThat(ex.getCause().getMessage(), containsString("unknown field [test2]"));
++        }
++    }
++
++    public void testExtraContent() throws IOException {
++        String json = """
++            {
++              "retriever": {
++                "test": {
++                  "value": "my-test-retriever"
++                },
++                "field2": "my-field"
++              },
++              "field": "my-field"
++            }""";
++
++        try (XContentParser parser = createParser(JsonXContent.jsonXContent, json)) {
++            XContentParseException ex = expectThrows(
++                XContentParseException.class,
++                () -> RandomRankRetrieverBuilder.PARSER.parse(parser, null)
++            );
++            assertThat(ex.getMessage(), containsString("[random_reranker] failed to parse field [retriever]"));
++            assertThat(ex.getCause().getMessage(), containsString("unexpected field [field2]"));
++        }
++    }
++
+ }

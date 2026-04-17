@@ -1,0 +1,59 @@
+commit 32877ea94f9c9b04b6fecc60c8ea850ce971a1fc
+Author: Eric Anderson <ejona@google.com>
+Date:   Mon Dec 16 20:54:00 2024 -0800
+
+    xds: Unexpected types in server_features should be ignored
+    
+    It was clearly defined in gRFC A30. The relevant text was copied as a
+    comment in the code.
+    
+    As discovered due to grpc/grpc-go#7932
+
+diff --git a/xds/src/main/java/io/grpc/xds/client/BootstrapperImpl.java b/xds/src/main/java/io/grpc/xds/client/BootstrapperImpl.java
+index 7ef739c80..c929da269 100644
+--- a/xds/src/main/java/io/grpc/xds/client/BootstrapperImpl.java
++++ b/xds/src/main/java/io/grpc/xds/client/BootstrapperImpl.java
+@@ -234,7 +234,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
+       Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
+ 
+       boolean ignoreResourceDeletion = false;
+-      List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
++      // "For forward compatibility reasons, the client will ignore any entry in the list that it
++      // does not understand, regardless of type."
++      List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
+       if (serverFeatures != null) {
+         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
+         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
+diff --git a/xds/src/test/java/io/grpc/xds/GrpcBootstrapperImplTest.java b/xds/src/test/java/io/grpc/xds/GrpcBootstrapperImplTest.java
+index 30ea76b54..b9e4428c5 100644
+--- a/xds/src/test/java/io/grpc/xds/GrpcBootstrapperImplTest.java
++++ b/xds/src/test/java/io/grpc/xds/GrpcBootstrapperImplTest.java
+@@ -650,6 +650,28 @@ public class GrpcBootstrapperImplTest {
+     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
+   }
+ 
++  @Test
++  public void serverFeatures_ignoresUnknownValues() throws XdsInitializationException {
++    String rawData = "{\n"
++        + "  \"xds_servers\": [\n"
++        + "    {\n"
++        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
++        + "      \"channel_creds\": [\n"
++        + "        {\"type\": \"insecure\"}\n"
++        + "      ],\n"
++        + "      \"server_features\": [\n"
++        + "        null, {}, 3, true, \"unexpected\", \"ignore_resource_deletion\"\n"
++        + "      ]\n"
++        + "    }\n"
++        + "  ]\n"
++        + "}";
++
++    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
++    BootstrapInfo info = bootstrapper.bootstrap();
++    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
++    assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
++  }
++
+   @Test
+   public void notFound() {
+     bootstrapper.bootstrapPathFromEnvVar = null;

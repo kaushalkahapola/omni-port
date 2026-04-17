@@ -1,0 +1,187 @@
+diff --git a/api/src/main/java/io/grpc/LoadBalancer.java b/api/src/main/java/io/grpc/LoadBalancer.java
+index 53ba60fdc..d2fd8409e 100644
+--- a/api/src/main/java/io/grpc/LoadBalancer.java
++++ b/api/src/main/java/io/grpc/LoadBalancer.java
+@@ -1189,6 +1189,10 @@ public abstract class LoadBalancer {
+      * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
+      * as that the callback methods on the {@link LoadBalancer} interface are run in.
+      *
++     * <p>Work added to the synchronization context might not run immediately, so LB implementations
++     * must be careful to ensure that any assumptions still hold when it is executed. In particular,
++     * the LB might have been shut down or subchannels might have changed state.
++     *
+      * <p>Pro-tip: in order to call {@link SynchronizationContext#schedule}, you need to provide a
+      * {@link ScheduledExecutorService}.  {@link #getScheduledExecutorService} is provided for your
+      * convenience.
+diff --git a/core/src/main/java/io/grpc/internal/ManagedChannelImpl.java b/core/src/main/java/io/grpc/internal/ManagedChannelImpl.java
+index 9b756c316..8ed16f706 100644
+--- a/core/src/main/java/io/grpc/internal/ManagedChannelImpl.java
++++ b/core/src/main/java/io/grpc/internal/ManagedChannelImpl.java
+@@ -1970,6 +1970,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
+     public void requestConnection() {
+       syncContext.throwIfNotInThisSynchronizationContext();
+       checkState(started, "not started");
++      if (shutdown) {
++        return;
++      }
+       subchannel.obtainActiveTransport();
+     }
+ 
+diff --git a/core/src/main/java/io/grpc/internal/PickFirstLoadBalancer.java b/core/src/main/java/io/grpc/internal/PickFirstLoadBalancer.java
+index acef79d3d..a23855e67 100644
+--- a/core/src/main/java/io/grpc/internal/PickFirstLoadBalancer.java
++++ b/core/src/main/java/io/grpc/internal/PickFirstLoadBalancer.java
+@@ -134,7 +134,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
+     SubchannelPicker picker;
+     switch (newState) {
+       case IDLE:
+-        picker = new RequestConnectionPicker(subchannel);
++        picker = new RequestConnectionPicker();
+         break;
+       case CONNECTING:
+         // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could leave
+@@ -197,22 +197,12 @@ final class PickFirstLoadBalancer extends LoadBalancer {
+ 
+   /** Picker that requests connection during the first pick, and returns noResult. */
+   private final class RequestConnectionPicker extends SubchannelPicker {
+-    private final Subchannel subchannel;
+     private final AtomicBoolean connectionRequested = new AtomicBoolean(false);
+ 
+-    RequestConnectionPicker(Subchannel subchannel) {
+-      this.subchannel = checkNotNull(subchannel, "subchannel");
+-    }
+-
+     @Override
+     public PickResult pickSubchannel(PickSubchannelArgs args) {
+       if (connectionRequested.compareAndSet(false, true)) {
+-        helper.getSynchronizationContext().execute(new Runnable() {
+-            @Override
+-            public void run() {
+-              subchannel.requestConnection();
+-            }
+-          });
++        helper.getSynchronizationContext().execute(PickFirstLoadBalancer.this::requestConnection);
+       }
+       return PickResult.withNoResult();
+     }
+diff --git a/examples/src/main/java/io/grpc/examples/customloadbalance/ShufflingPickFirstLoadBalancer.java b/examples/src/main/java/io/grpc/examples/customloadbalance/ShufflingPickFirstLoadBalancer.java
+index 4cf09170c..89a81be75 100644
+--- a/examples/src/main/java/io/grpc/examples/customloadbalance/ShufflingPickFirstLoadBalancer.java
++++ b/examples/src/main/java/io/grpc/examples/customloadbalance/ShufflingPickFirstLoadBalancer.java
+@@ -122,7 +122,7 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
+     SubchannelPicker picker;
+     switch (currentState) {
+       case IDLE:
+-        picker = new RequestConnectionPicker(subchannel);
++        picker = new RequestConnectionPicker();
+         break;
+       case CONNECTING:
+         picker = new Picker(PickResult.withNoResult());
+@@ -139,7 +139,6 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
+     helper.updateBalancingState(currentState, picker);
+   }
+ 
+-
+   @Override
+   public void shutdown() {
+     if (subchannel != null) {
+@@ -182,22 +181,13 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
+    */
+   private final class RequestConnectionPicker extends SubchannelPicker {
+ 
+-    private final Subchannel subchannel;
+     private final AtomicBoolean connectionRequested = new AtomicBoolean(false);
+ 
+-    RequestConnectionPicker(Subchannel subchannel) {
+-      this.subchannel = checkNotNull(subchannel, "subchannel");
+-    }
+-
+     @Override
+     public PickResult pickSubchannel(PickSubchannelArgs args) {
+       if (connectionRequested.compareAndSet(false, true)) {
+-        helper.getSynchronizationContext().execute(new Runnable() {
+-          @Override
+-          public void run() {
+-            subchannel.requestConnection();
+-          }
+-        });
++        helper.getSynchronizationContext().execute(
++            ShufflingPickFirstLoadBalancer.this::requestConnection);
+       }
+       return PickResult.withNoResult();
+     }
+diff --git a/xds/src/main/java/io/grpc/xds/LazyLoadBalancer.java b/xds/src/main/java/io/grpc/xds/LazyLoadBalancer.java
+index 8ba1cb28c..b5f09c4ea 100644
+--- a/xds/src/main/java/io/grpc/xds/LazyLoadBalancer.java
++++ b/xds/src/main/java/io/grpc/xds/LazyLoadBalancer.java
+@@ -99,11 +99,13 @@ final class LazyLoadBalancer extends ForwardingLoadBalancer {
+ 
+     @Override
+     public void shutdown() {
++      delegate = new NoopLoadBalancer();
+     }
+ 
+     private final class LazyPicker extends SubchannelPicker {
+       @Override
+       public PickResult pickSubchannel(PickSubchannelArgs args) {
++        // activate() is a no-op after shutdown()
+         helper.getSynchronizationContext().execute(LazyDelegate.this::activate);
+         return PickResult.withNoResult();
+       }
+@@ -121,4 +123,17 @@ final class LazyLoadBalancer extends ForwardingLoadBalancer {
+       return new LazyLoadBalancer(helper, delegate);
+     }
+   }
++
++  private static final class NoopLoadBalancer extends LoadBalancer {
++    @Override
++    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
++      return Status.OK;
++    }
++
++    @Override
++    public void handleNameResolutionError(Status error) {}
++
++    @Override
++    public void shutdown() {}
++  }
+ }
+diff --git a/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java b/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
+index 96ce5b970..8a3a50968 100644
+--- a/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
++++ b/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
+@@ -146,7 +146,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
+     return super.acceptResolvedAddresses(resolvedAddresses);
+   }
+ 
+-
+   /**
+    * Updates the overall balancing state by aggregating the connectivity states of all subchannels.
+    *
+@@ -438,7 +437,9 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
+ 
+           if (subchannelView.connectivityState == IDLE) {
+             syncContext.execute(() -> {
+-              childLbState.getLb().requestConnection();
++              if (childLbState.getCurrentState() == IDLE) {
++                childLbState.getLb().requestConnection();
++              }
+             });
+ 
+             return PickResult.withNoResult(); // Indicates that this should be retried after backoff
+@@ -456,10 +457,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
+             return childLbState.getCurrentPicker().pickSubchannel(args);
+           }
+           if (!requestedConnection && subchannelView.connectivityState == IDLE) {
+-            syncContext.execute(
+-                () -> {
+-                  childLbState.getLb().requestConnection();
+-                });
++            syncContext.execute(() -> {
++              if (childLbState.getCurrentState() == IDLE) {
++                childLbState.getLb().requestConnection();
++              }
++            });
+             requestedConnection = true;
+           }
+         }

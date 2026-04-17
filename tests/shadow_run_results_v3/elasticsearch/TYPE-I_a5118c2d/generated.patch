@@ -1,0 +1,182 @@
+diff --git a/server/src/main/java/org/elasticsearch/search/internal/ContextIndexSearcher.java b/server/src/main/java/org/elasticsearch/search/internal/ContextIndexSearcher.java
+index 18de4b81cbf..da5d2d093fb 100644
+--- a/server/src/main/java/org/elasticsearch/search/internal/ContextIndexSearcher.java
++++ b/server/src/main/java/org/elasticsearch/search/internal/ContextIndexSearcher.java
+@@ -407,7 +407,7 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
+         }
+     }
+ 
+-    private static class TimeExceededException extends RuntimeException {
++    public static class TimeExceededException extends RuntimeException {
+         // This exception should never be re-thrown, but we fill in the stacktrace to be able to trace where it does not get properly caught
+     }
+ 
+diff --git a/server/src/main/java/org/elasticsearch/search/rescore/QueryRescorer.java b/server/src/main/java/org/elasticsearch/search/rescore/QueryRescorer.java
+index 5cd947a1cc7..cb9169dbeb5 100644
+--- a/server/src/main/java/org/elasticsearch/search/rescore/QueryRescorer.java
++++ b/server/src/main/java/org/elasticsearch/search/rescore/QueryRescorer.java
+@@ -26,6 +26,7 @@ import static java.util.stream.Collectors.toUnmodifiableSet;
+ 
+ public final class QueryRescorer implements Rescorer {
+ 
++    private static final int MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK = 10;
+     public static final Rescorer INSTANCE = new QueryRescorer();
+ 
+     @Override
+@@ -39,9 +40,14 @@ public final class QueryRescorer implements Rescorer {
+         final QueryRescoreContext rescore = (QueryRescoreContext) rescoreContext;
+ 
+         org.apache.lucene.search.Rescorer rescorer = new org.apache.lucene.search.QueryRescorer(rescore.parsedQuery().query()) {
++            int count = 0;
+ 
+             @Override
+             protected float combine(float firstPassScore, boolean secondPassMatches, float secondPassScore) {
++                if (count % MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK == 0) {
++                    rescore.checkCancellation();
++                }
++                count++;
+                 if (secondPassMatches) {
+                     return rescore.scoreMode.combine(
+                         firstPassScore * rescore.queryWeight(),
+diff --git a/server/src/main/java/org/elasticsearch/search/rescore/RescoreContext.java b/server/src/main/java/org/elasticsearch/search/rescore/RescoreContext.java
+index 297b197a6d0..0ae6c326ddc 100644
+--- a/server/src/main/java/org/elasticsearch/search/rescore/RescoreContext.java
++++ b/server/src/main/java/org/elasticsearch/search/rescore/RescoreContext.java
+@@ -24,6 +24,7 @@ public class RescoreContext {
+     private final int windowSize;
+     private final Rescorer rescorer;
+     private Set<Integer> rescoredDocs; // doc Ids for which rescoring was applied
++    private Runnable isCancelled;
+ 
+     /**
+      * Build the context.
+@@ -34,6 +35,16 @@ public class RescoreContext {
+         this.rescorer = rescorer;
+     }
+ 
++    public void setCancellationChecker(Runnable isCancelled) {
++        this.isCancelled = isCancelled;
++    }
++
++    public void checkCancellation() {
++        if (isCancelled != null) {
++            isCancelled.run();
++        }
++    }
++
+     /**
+      * The rescorer to actually apply.
+      */
+diff --git a/server/src/main/java/org/elasticsearch/search/rescore/RescorePhase.java b/server/src/main/java/org/elasticsearch/search/rescore/RescorePhase.java
+index be961b8ef94..1227db5d8e1 100644
+--- a/server/src/main/java/org/elasticsearch/search/rescore/RescorePhase.java
++++ b/server/src/main/java/org/elasticsearch/search/rescore/RescorePhase.java
+@@ -14,12 +14,18 @@ import org.apache.lucene.search.ScoreDoc;
+ import org.apache.lucene.search.SortField;
+ import org.apache.lucene.search.TopDocs;
+ import org.elasticsearch.ElasticsearchException;
++import org.elasticsearch.action.search.SearchShardTask;
+ import org.elasticsearch.common.lucene.search.TopDocsAndMaxScore;
+ import org.elasticsearch.common.util.Maps;
+ import org.elasticsearch.lucene.grouping.TopFieldGroups;
++import org.elasticsearch.search.internal.ContextIndexSearcher;
+ import org.elasticsearch.search.internal.SearchContext;
++import org.elasticsearch.search.query.QueryPhase;
++import org.elasticsearch.search.query.SearchTimeoutException;
+ 
+ import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
+ import java.util.Map;
+ 
+ /**
+@@ -44,11 +50,14 @@ public class RescorePhase {
+             topGroups = topFieldGroups;
+         }
+         try {
++            Runnable cancellationCheck = getCancellationChecks(context);
+             for (RescoreContext ctx : context.rescore()) {
++                ctx.setCancellationChecker(cancellationCheck);
+                 topDocs = ctx.rescorer().rescore(topDocs, context.searcher(), ctx);
+                 // It is the responsibility of the rescorer to sort the resulted top docs,
+                 // here we only assert that this condition is met.
+                 assert context.sort() == null && topDocsSortedByScore(topDocs) : "topdocs should be sorted after rescore";
++                ctx.setCancellationChecker(null);
+             }
+             if (topGroups != null) {
+                 assert context.collapse() != null;
+@@ -63,6 +72,11 @@ public class RescorePhase {
+                 .topDocs(new TopDocsAndMaxScore(topDocs, topDocs.scoreDocs[0].score), context.queryResult().sortValueFormats());
+         } catch (IOException e) {
+             throw new ElasticsearchException("Rescore Phase Failed", e);
++        } catch (ContextIndexSearcher.TimeExceededException e) {
++            if (context.request().allowPartialSearchResults() == false) {
++                throw new SearchTimeoutException(context.shardTarget(), "Time exceeded");
++            }
++            context.queryResult().searchTimedOut(true);
+         }
+     }
+ 
+@@ -106,4 +120,27 @@ public class RescorePhase {
+         }
+         return true;
+     }
++
++    static Runnable getCancellationChecks(SearchContext context) {
++        List<Runnable> cancellationChecks = new ArrayList<>();
++        if (context.lowLevelCancellation()) {
++            cancellationChecks.add(() -> {
++                final SearchShardTask task = context.getTask();
++                if (task != null) {
++                    task.ensureNotCancelled();
++                }
++            });
++        }
++
++        final Runnable timeoutRunnable = QueryPhase.getTimeoutCheck(context);
++        if (timeoutRunnable != null) {
++            cancellationChecks.add(timeoutRunnable);
++        }
++
++        return () -> {
++            for (var check : cancellationChecks) {
++                check.run();
++            }
++        };
++    }
+ }
+diff --git a/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/inference/ltr/LearningToRankRescorer.java b/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/inference/ltr/LearningToRankRescorer.java
+index 70d0b980bb3..54a9fe908fa 100644
+--- a/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/inference/ltr/LearningToRankRescorer.java
++++ b/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/inference/ltr/LearningToRankRescorer.java
+@@ -35,6 +35,7 @@ import static java.util.stream.Collectors.toUnmodifiableSet;
+ 
+ public class LearningToRankRescorer implements Rescorer {
+ 
++    private static final int MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK = 10;
+     public static final LearningToRankRescorer INSTANCE = new LearningToRankRescorer();
+     private static final Logger logger = LogManager.getLogger(LearningToRankRescorer.class);
+ 
+@@ -78,7 +79,12 @@ public class LearningToRankRescorer implements Rescorer {
+         List<FeatureExtractor> featureExtractors = ltrRescoreContext.buildFeatureExtractors(searcher);
+         List<Map<String, Object>> docFeatures = new ArrayList<>(topDocIDs.size());
+         int featureSize = featureExtractors.stream().mapToInt(fe -> fe.featureNames().size()).sum();
++        int count = 0;
+         while (hitUpto < hitsToRescore.length) {
++            if (count % MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK == 0) {
++                rescoreContext.checkCancellation();
++            }
++            count++;
+             final ScoreDoc hit = hitsToRescore[hitUpto];
+             final int docID = hit.doc;
+             while (docID >= endDoc) {
+@@ -106,6 +112,9 @@ public class LearningToRankRescorer implements Rescorer {
+             hitUpto++;
+         }
+         for (int i = 0; i < hitsToRescore.length; i++) {
++            if (i % MAX_CALLS_BEFORE_QUERY_TIMEOUT_CHECK == 0) {
++                rescoreContext.checkCancellation();
++            }
+             Map<String, Object> features = docFeatures.get(i);
+             try {
+                 InferenceResults results = definition.inferLtr(features, ltrRescoreContext.learningToRankConfig);

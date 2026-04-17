@@ -1,0 +1,1104 @@
+commit c368a0f9f8a02d64790d5dae7fda8b2aed54428d
+Author: Eric Anderson <ejona@google.com>
+Date:   Mon May 6 07:27:41 2024 -0700
+
+    Migrate GlobalInterceptors to ConfiguratorRegistry
+    
+    This should preserve all the existing behavior of GlobalInterceptors as
+    used by grpc-gcp-observability, including it disabling the implicit
+    OpenCensus integration.
+    
+    Both the old and new API are internal. I hid Configurator and
+    ConfiguratorRegistry behind Internal-prefixed classes, like had been
+    done with GlobalInterceptors to further discourage use until the API is
+    ready.
+    
+    GlobalInterceptorsTest was modified to become ConfiguratorRegistryTest.
+
+diff --git a/api/src/main/java/io/grpc/Configurator.java b/api/src/main/java/io/grpc/Configurator.java
+index a904af13d..90468769a 100644
+--- a/api/src/main/java/io/grpc/Configurator.java
++++ b/api/src/main/java/io/grpc/Configurator.java
+@@ -19,8 +19,7 @@ package io.grpc;
+ /**
+  * Provides hooks for modifying gRPC channels and servers during their construction.
+  */
+-@Internal
+-public interface Configurator {
++interface Configurator {
+   /**
+    * Allows implementations to modify the channel builder.
+    *
+diff --git a/api/src/main/java/io/grpc/ConfiguratorRegistry.java b/api/src/main/java/io/grpc/ConfiguratorRegistry.java
+index 3d6a7aadd..b2efcc1cf 100644
+--- a/api/src/main/java/io/grpc/ConfiguratorRegistry.java
++++ b/api/src/main/java/io/grpc/ConfiguratorRegistry.java
+@@ -19,6 +19,7 @@ package io.grpc;
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.List;
++import javax.annotation.concurrent.GuardedBy;
+ 
+ /**
+  * A registry for {@link Configurator} instances.
+@@ -26,10 +27,14 @@ import java.util.List;
+  * <p>This class is responsible for maintaining a list of configurators and providing access to
+  * them. The default registry can be obtained using {@link #getDefaultRegistry()}.
+  */
+-@Internal
+-public final class ConfiguratorRegistry {
++final class ConfiguratorRegistry {
+   private static ConfiguratorRegistry instance;
+-  private static boolean isConfiguratorsSet;
++
++  @GuardedBy("this")
++  private boolean wasConfiguratorsSet;
++  @GuardedBy("this")
++  private boolean configFrozen;
++  @GuardedBy("this")
+   private List<Configurator> configurators = Collections.emptyList();
+ 
+   ConfiguratorRegistry() {}
+@@ -50,18 +55,24 @@ public final class ConfiguratorRegistry {
+    * @param configurators the configurators to set
+    * @throws IllegalStateException if this method is called more than once
+    */
+-  public synchronized void setConfigurators(List<Configurator> configurators) {
+-    if (isConfiguratorsSet) {
++  public synchronized void setConfigurators(List<? extends Configurator> configurators) {
++    if (configFrozen) {
+       throw new IllegalStateException("Configurators are already set");
+     }
+-    configurators = Collections.unmodifiableList(new ArrayList<>(configurators));
+-    isConfiguratorsSet = true;
++    this.configurators = Collections.unmodifiableList(new ArrayList<>(configurators));
++    configFrozen = true;
++    wasConfiguratorsSet = true;
+   }
+ 
+   /**
+    * Returns a list of the configurators in this registry.
+    */
+   public synchronized List<Configurator> getConfigurators() {
++    configFrozen = true;
+     return configurators;
+   }
++
++  public synchronized boolean wasSetConfiguratorsCalled() {
++    return wasConfiguratorsSet;
++  }
+ }
+diff --git a/api/src/main/java/io/grpc/GlobalInterceptors.java b/api/src/main/java/io/grpc/GlobalInterceptors.java
+deleted file mode 100644
+index e5fd86170..000000000
+--- a/api/src/main/java/io/grpc/GlobalInterceptors.java
++++ /dev/null
+@@ -1,93 +0,0 @@
+-/*
+- * Copyright 2022 The gRPC Authors
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package io.grpc;
+-
+-import static com.google.common.base.Preconditions.checkNotNull;
+-
+-import java.util.ArrayList;
+-import java.util.Collections;
+-import java.util.List;
+-
+-/** The collection of global interceptors and global server stream tracers. */
+-@Internal
+-final class GlobalInterceptors {
+-  private static List<ClientInterceptor> clientInterceptors = null;
+-  private static List<ServerInterceptor> serverInterceptors = null;
+-  private static List<ServerStreamTracer.Factory> serverStreamTracerFactories =
+-      null;
+-  private static boolean isGlobalInterceptorsTracersSet;
+-  private static boolean isGlobalInterceptorsTracersGet;
+-
+-  // Prevent instantiation
+-  private GlobalInterceptors() {}
+-
+-  /**
+-   * Sets the list of global interceptors and global server stream tracers.
+-   *
+-   * <p>If {@code setInterceptorsTracers()} is called again, this method will throw {@link
+-   * IllegalStateException}.
+-   *
+-   * <p>It is only safe to call early. This method throws {@link IllegalStateException} after any of
+-   * the get calls [{@link #getClientInterceptors()}, {@link #getServerInterceptors()} or {@link
+-   * #getServerStreamTracerFactories()}] has been called, in order to limit changes to the result of
+-   * {@code setInterceptorsTracers()}.
+-   *
+-   * @param clientInterceptorList list of {@link ClientInterceptor} that make up global Client
+-   *     Interceptors.
+-   * @param serverInterceptorList list of {@link ServerInterceptor} that make up global Server
+-   *     Interceptors.
+-   * @param serverStreamTracerFactoryList list of {@link ServerStreamTracer.Factory} that make up
+-   *     global ServerStreamTracer factories.
+-   */
+-  static synchronized void setInterceptorsTracers(
+-      List<ClientInterceptor> clientInterceptorList,
+-      List<ServerInterceptor> serverInterceptorList,
+-      List<ServerStreamTracer.Factory> serverStreamTracerFactoryList) {
+-    if (isGlobalInterceptorsTracersGet) {
+-      throw new IllegalStateException("Set cannot be called after any get call");
+-    }
+-    if (isGlobalInterceptorsTracersSet) {
+-      throw new IllegalStateException("Global interceptors and tracers are already set");
+-    }
+-    checkNotNull(clientInterceptorList);
+-    checkNotNull(serverInterceptorList);
+-    checkNotNull(serverStreamTracerFactoryList);
+-    clientInterceptors = Collections.unmodifiableList(new ArrayList<>(clientInterceptorList));
+-    serverInterceptors = Collections.unmodifiableList(new ArrayList<>(serverInterceptorList));
+-    serverStreamTracerFactories =
+-          Collections.unmodifiableList(new ArrayList<>(serverStreamTracerFactoryList));
+-    isGlobalInterceptorsTracersSet = true;
+-  }
+-
+-  /** Returns the list of global {@link ClientInterceptor}. If not set, this returns null. */
+-  static synchronized List<ClientInterceptor> getClientInterceptors() {
+-    isGlobalInterceptorsTracersGet = true;
+-    return clientInterceptors;
+-  }
+-
+-  /** Returns list of global {@link ServerInterceptor}. If not set, this returns null. */
+-  static synchronized List<ServerInterceptor> getServerInterceptors() {
+-    isGlobalInterceptorsTracersGet = true;
+-    return serverInterceptors;
+-  }
+-
+-  /** Returns list of global {@link ServerStreamTracer.Factory}. If not set, this returns null. */
+-  static synchronized List<ServerStreamTracer.Factory> getServerStreamTracerFactories() {
+-    isGlobalInterceptorsTracersGet = true;
+-    return serverStreamTracerFactories;
+-  }
+-}
+diff --git a/api/src/main/java/io/grpc/InternalConfigurator.java b/api/src/main/java/io/grpc/InternalConfigurator.java
+new file mode 100644
+index 000000000..7091767a2
+--- /dev/null
++++ b/api/src/main/java/io/grpc/InternalConfigurator.java
+@@ -0,0 +1,23 @@
++/*
++ * Copyright 2024 The gRPC Authors
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package io.grpc;
++
++/**
++ * Internal access to Configurator API.
++ */
++@Internal
++public interface InternalConfigurator extends Configurator {}
+diff --git a/api/src/main/java/io/grpc/InternalConfiguratorRegistry.java b/api/src/main/java/io/grpc/InternalConfiguratorRegistry.java
+new file mode 100644
+index 000000000..b495800ff
+--- /dev/null
++++ b/api/src/main/java/io/grpc/InternalConfiguratorRegistry.java
+@@ -0,0 +1,51 @@
++/*
++ * Copyright 2024 The gRPC Authors
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package io.grpc;
++
++import java.util.List;
++
++/**
++ * Access internal global configurators.
++ */
++@Internal
++public final class InternalConfiguratorRegistry {
++  private InternalConfiguratorRegistry() {}
++
++  public static void setConfigurators(List<InternalConfigurator> configurators) {
++    ConfiguratorRegistry.getDefaultRegistry().setConfigurators(configurators);
++  }
++
++  public static List<?> getConfigurators() {
++    return ConfiguratorRegistry.getDefaultRegistry().getConfigurators();
++  }
++
++  public static void configureChannelBuilder(ManagedChannelBuilder<?> channelBuilder) {
++    for (Configurator configurator : ConfiguratorRegistry.getDefaultRegistry().getConfigurators()) {
++      configurator.configureChannelBuilder(channelBuilder);
++    }
++  }
++
++  public static void configureServerBuilder(ServerBuilder<?> serverBuilder) {
++    for (Configurator configurator : ConfiguratorRegistry.getDefaultRegistry().getConfigurators()) {
++      configurator.configureServerBuilder(serverBuilder);
++    }
++  }
++
++  public static boolean wasSetConfiguratorsCalled() {
++    return ConfiguratorRegistry.getDefaultRegistry().wasSetConfiguratorsCalled();
++  }
++}
+diff --git a/api/src/main/java/io/grpc/InternalGlobalInterceptors.java b/api/src/main/java/io/grpc/InternalGlobalInterceptors.java
+deleted file mode 100644
+index db0ff6e2c..000000000
+--- a/api/src/main/java/io/grpc/InternalGlobalInterceptors.java
++++ /dev/null
+@@ -1,46 +0,0 @@
+-/*
+- * Copyright 2022 The gRPC Authors
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package io.grpc;
+-
+-import java.util.List;
+-
+-/** Accessor to internal methods of {@link GlobalInterceptors}. */
+-@Internal
+-public final class InternalGlobalInterceptors {
+-
+-  public static void setInterceptorsTracers(
+-      List<ClientInterceptor> clientInterceptorList,
+-      List<ServerInterceptor> serverInterceptorList,
+-      List<ServerStreamTracer.Factory> serverStreamTracerFactoryList) {
+-    GlobalInterceptors.setInterceptorsTracers(
+-        clientInterceptorList, serverInterceptorList, serverStreamTracerFactoryList);
+-  }
+-
+-  public static List<ClientInterceptor> getClientInterceptors() {
+-    return GlobalInterceptors.getClientInterceptors();
+-  }
+-
+-  public static List<ServerInterceptor> getServerInterceptors() {
+-    return GlobalInterceptors.getServerInterceptors();
+-  }
+-
+-  public static List<ServerStreamTracer.Factory> getServerStreamTracerFactories() {
+-    return GlobalInterceptors.getServerStreamTracerFactories();
+-  }
+-
+-  private InternalGlobalInterceptors() {}
+-}
+diff --git a/api/src/test/java/io/grpc/ConfiguratorRegistryTest.java b/api/src/test/java/io/grpc/ConfiguratorRegistryTest.java
+new file mode 100644
+index 000000000..e231d1350
+--- /dev/null
++++ b/api/src/test/java/io/grpc/ConfiguratorRegistryTest.java
+@@ -0,0 +1,100 @@
++/*
++ * Copyright 2022 The gRPC Authors
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package io.grpc;
++
++import static com.google.common.truth.Truth.assertThat;
++import static org.junit.Assert.fail;
++
++import java.util.Arrays;
++import java.util.List;
++import java.util.regex.Pattern;
++import org.junit.Test;
++import org.junit.runner.RunWith;
++import org.junit.runners.JUnit4;
++
++@RunWith(JUnit4.class)
++public class ConfiguratorRegistryTest {
++
++  private final StaticTestingClassLoader classLoader =
++      new StaticTestingClassLoader(
++          getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
++
++  @Test
++  public void setConfigurators() throws Exception {
++    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSet.class.getName());
++    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
++  }
++
++  @Test
++  public void setGlobalConfigurators_twice() throws Exception {
++    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSetTwice.class.getName());
++    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
++  }
++
++  @Test
++  public void getBeforeSet() throws Exception {
++    Class<?> runnable =
++        classLoader.loadClass(
++            StaticTestingClassLoaderGetBeforeSet.class.getName());
++    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
++  }
++
++  // UsedReflectively
++  public static final class StaticTestingClassLoaderSet implements Runnable {
++    @Override
++    public void run() {
++      List<Configurator> configurators = Arrays.asList(new NoopConfigurator());
++
++      ConfiguratorRegistry.getDefaultRegistry().setConfigurators(configurators);
++
++      assertThat(ConfiguratorRegistry.getDefaultRegistry().getConfigurators())
++          .isEqualTo(configurators);
++    }
++  }
++
++  public static final class StaticTestingClassLoaderSetTwice implements Runnable {
++    @Override
++    public void run() {
++      ConfiguratorRegistry.getDefaultRegistry()
++          .setConfigurators(Arrays.asList(new NoopConfigurator()));
++      try {
++        ConfiguratorRegistry.getDefaultRegistry()
++            .setConfigurators(Arrays.asList(new NoopConfigurator()));
++        fail("should have failed for calling setConfigurators() again");
++      } catch (IllegalStateException e) {
++        assertThat(e).hasMessageThat().isEqualTo("Configurators are already set");
++      }
++    }
++  }
++
++  public static final class StaticTestingClassLoaderGetBeforeSet implements Runnable {
++    @Override
++    public void run() {
++      assertThat(ConfiguratorRegistry.getDefaultRegistry().getConfigurators()).isEmpty();
++
++      try {
++        ConfiguratorRegistry.getDefaultRegistry()
++            .setConfigurators(Arrays.asList(new NoopConfigurator()));
++        fail("should have failed for invoking set call after get is already called");
++      } catch (IllegalStateException e) {
++        assertThat(e).hasMessageThat().isEqualTo("Configurators are already set");
++      }
++    }
++  }
++
++  private static class NoopConfigurator implements Configurator {}
++}
+diff --git a/api/src/test/java/io/grpc/GlobalInterceptorsTest.java b/api/src/test/java/io/grpc/GlobalInterceptorsTest.java
+deleted file mode 100644
+index 7315186f1..000000000
+--- a/api/src/test/java/io/grpc/GlobalInterceptorsTest.java
++++ /dev/null
+@@ -1,188 +0,0 @@
+-/*
+- * Copyright 2022 The gRPC Authors
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package io.grpc;
+-
+-import static com.google.common.truth.Truth.assertThat;
+-import static org.junit.Assert.fail;
+-
+-import java.util.ArrayList;
+-import java.util.Arrays;
+-import java.util.Collections;
+-import java.util.List;
+-import java.util.regex.Pattern;
+-import org.junit.Test;
+-import org.junit.runner.RunWith;
+-import org.junit.runners.JUnit4;
+-
+-@RunWith(JUnit4.class)
+-public class GlobalInterceptorsTest {
+-
+-  private final StaticTestingClassLoader classLoader =
+-      new StaticTestingClassLoader(
+-          getClass().getClassLoader(), Pattern.compile("io\\.grpc\\.[^.]+"));
+-
+-  @Test
+-  public void setInterceptorsTracers() throws Exception {
+-    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSet.class.getName());
+-    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+-  }
+-
+-  @Test
+-  public void setGlobalInterceptorsTracers_twice() throws Exception {
+-    Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderSetTwice.class.getName());
+-    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+-  }
+-
+-  @Test
+-  public void getBeforeSet_clientInterceptors() throws Exception {
+-    Class<?> runnable =
+-        classLoader.loadClass(
+-            StaticTestingClassLoaderGetBeforeSetClientInterceptor.class.getName());
+-    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+-  }
+-
+-  @Test
+-  public void getBeforeSet_serverInterceptors() throws Exception {
+-    Class<?> runnable =
+-        classLoader.loadClass(
+-            StaticTestingClassLoaderGetBeforeSetServerInterceptor.class.getName());
+-    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+-  }
+-
+-  @Test
+-  public void getBeforeSet_serverStreamTracerFactories() throws Exception {
+-    Class<?> runnable =
+-        classLoader.loadClass(
+-            StaticTestingClassLoaderGetBeforeSetServerStreamTracerFactory.class.getName());
+-    ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+-  }
+-
+-  // UsedReflectively
+-  public static final class StaticTestingClassLoaderSet implements Runnable {
+-    @Override
+-    public void run() {
+-      List<ClientInterceptor> clientInterceptorList =
+-          new ArrayList<>(Arrays.asList(new NoopClientInterceptor()));
+-      List<ServerInterceptor> serverInterceptorList =
+-          new ArrayList<>(Arrays.asList(new NoopServerInterceptor()));
+-      List<ServerStreamTracer.Factory> serverStreamTracerFactoryList =
+-          new ArrayList<>(
+-              Arrays.asList(
+-                  new NoopServerStreamTracerFactory(), new NoopServerStreamTracerFactory()));
+-
+-      GlobalInterceptors.setInterceptorsTracers(
+-          clientInterceptorList, serverInterceptorList, serverStreamTracerFactoryList);
+-
+-      assertThat(GlobalInterceptors.getClientInterceptors()).isEqualTo(clientInterceptorList);
+-      assertThat(GlobalInterceptors.getServerInterceptors()).isEqualTo(serverInterceptorList);
+-      assertThat(GlobalInterceptors.getServerStreamTracerFactories())
+-          .isEqualTo(serverStreamTracerFactoryList);
+-    }
+-  }
+-
+-  public static final class StaticTestingClassLoaderSetTwice implements Runnable {
+-    @Override
+-    public void run() {
+-      GlobalInterceptors.setInterceptorsTracers(
+-          new ArrayList<>(Arrays.asList(new NoopClientInterceptor())),
+-              Collections.emptyList(),
+-          new ArrayList<>(Arrays.asList(new NoopServerStreamTracerFactory())));
+-      try {
+-        GlobalInterceptors.setInterceptorsTracers(
+-            null, new ArrayList<>(Arrays.asList(new NoopServerInterceptor())), null);
+-        fail("should have failed for calling setGlobalInterceptorsTracers() again");
+-      } catch (IllegalStateException e) {
+-        assertThat(e).hasMessageThat().isEqualTo("Global interceptors and tracers are already set");
+-      }
+-    }
+-  }
+-
+-  public static final class StaticTestingClassLoaderGetBeforeSetClientInterceptor
+-      implements Runnable {
+-    @Override
+-    public void run() {
+-      List<ClientInterceptor> clientInterceptors = GlobalInterceptors.getClientInterceptors();
+-      assertThat(clientInterceptors).isNull();
+-
+-      try {
+-        GlobalInterceptors.setInterceptorsTracers(
+-            new ArrayList<>(Arrays.asList(new NoopClientInterceptor())), null, null);
+-        fail("should have failed for invoking set call after get is already called");
+-      } catch (IllegalStateException e) {
+-        assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+-      }
+-    }
+-  }
+-
+-  public static final class StaticTestingClassLoaderGetBeforeSetServerInterceptor
+-      implements Runnable {
+-    @Override
+-    public void run() {
+-      List<ServerInterceptor> serverInterceptors = GlobalInterceptors.getServerInterceptors();
+-      assertThat(serverInterceptors).isNull();
+-
+-      try {
+-        GlobalInterceptors.setInterceptorsTracers(
+-            null, new ArrayList<>(Arrays.asList(new NoopServerInterceptor())), null);
+-        fail("should have failed for invoking set call after get is already called");
+-      } catch (IllegalStateException e) {
+-        assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+-      }
+-    }
+-  }
+-
+-  public static final class StaticTestingClassLoaderGetBeforeSetServerStreamTracerFactory
+-      implements Runnable {
+-    @Override
+-    public void run() {
+-      List<ServerStreamTracer.Factory> serverStreamTracerFactories =
+-          GlobalInterceptors.getServerStreamTracerFactories();
+-      assertThat(serverStreamTracerFactories).isNull();
+-
+-      try {
+-        GlobalInterceptors.setInterceptorsTracers(
+-            null, null, new ArrayList<>(Arrays.asList(new NoopServerStreamTracerFactory())));
+-        fail("should have failed for invoking set call after get is already called");
+-      } catch (IllegalStateException e) {
+-        assertThat(e).hasMessageThat().isEqualTo("Set cannot be called after any get call");
+-      }
+-    }
+-  }
+-
+-  private static class NoopClientInterceptor implements ClientInterceptor {
+-    @Override
+-    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+-        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+-      return next.newCall(method, callOptions);
+-    }
+-  }
+-
+-  private static class NoopServerInterceptor implements ServerInterceptor {
+-    @Override
+-    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+-        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+-      return next.startCall(call, headers);
+-    }
+-  }
+-
+-  private static class NoopServerStreamTracerFactory extends ServerStreamTracer.Factory {
+-    @Override
+-    public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+-      throw new UnsupportedOperationException();
+-    }
+-  }
+-}
+diff --git a/core/src/main/java/io/grpc/internal/ManagedChannelImplBuilder.java b/core/src/main/java/io/grpc/internal/ManagedChannelImplBuilder.java
+index 2c7603ad7..b787d7664 100644
+--- a/core/src/main/java/io/grpc/internal/ManagedChannelImplBuilder.java
++++ b/core/src/main/java/io/grpc/internal/ManagedChannelImplBuilder.java
+@@ -30,12 +30,10 @@ import io.grpc.ChannelCredentials;
+ import io.grpc.ClientInterceptor;
+ import io.grpc.ClientTransportFilter;
+ import io.grpc.CompressorRegistry;
+-import io.grpc.Configurator;
+-import io.grpc.ConfiguratorRegistry;
+ import io.grpc.DecompressorRegistry;
+ import io.grpc.EquivalentAddressGroup;
+ import io.grpc.InternalChannelz;
+-import io.grpc.InternalGlobalInterceptors;
++import io.grpc.InternalConfiguratorRegistry;
+ import io.grpc.ManagedChannel;
+ import io.grpc.ManagedChannelBuilder;
+ import io.grpc.MetricSink;
+@@ -287,6 +285,8 @@ public final class ManagedChannelImplBuilder
+     } else {
+       this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
+     }
++    // TODO(dnvindhya): Move configurator to all the individual builders
++    InternalConfiguratorRegistry.configureChannelBuilder(this);
+   }
+ 
+   /**
+@@ -345,9 +345,7 @@ public final class ManagedChannelImplBuilder
+       this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
+     }
+     // TODO(dnvindhya): Move configurator to all the individual builders
+-    for (Configurator configurator : ConfiguratorRegistry.getDefaultRegistry().getConfigurators()) {
+-      configurator.configureChannelBuilder(this);
+-    }
++    InternalConfiguratorRegistry.configureChannelBuilder(this);
+   }
+ 
+   @Override
+@@ -692,16 +690,12 @@ public final class ManagedChannelImplBuilder
+   // TODO(zdapeng): FIX IT
+   @VisibleForTesting
+   List<ClientInterceptor> getEffectiveInterceptors() {
+-    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
+-    boolean isGlobalInterceptorsSet = false;
+-    // TODO(dnvindhya) : Convert to Configurator
+-    List<ClientInterceptor> globalClientInterceptors =
+-        InternalGlobalInterceptors.getClientInterceptors();
+-    if (globalClientInterceptors != null) {
+-      effectiveInterceptors.addAll(globalClientInterceptors);
+-      isGlobalInterceptorsSet = true;
++    boolean disableImplicitCensus = InternalConfiguratorRegistry.wasSetConfiguratorsCalled();
++    if (disableImplicitCensus) {
++      return this.interceptors;
+     }
+-    if (!isGlobalInterceptorsSet && statsEnabled) {
++    List<ClientInterceptor> effectiveInterceptors = new ArrayList<>(this.interceptors);
++    if (statsEnabled) {
+       ClientInterceptor statsInterceptor = null;
+ 
+       if (GET_CLIENT_INTERCEPTOR_METHOD != null) {
+@@ -727,7 +721,7 @@ public final class ManagedChannelImplBuilder
+         effectiveInterceptors.add(0, statsInterceptor);
+       }
+     }
+-    if (!isGlobalInterceptorsSet && tracingEnabled) {
++    if (tracingEnabled) {
+       ClientInterceptor tracingInterceptor = null;
+       try {
+         Class<?> censusTracingAccessor =
+diff --git a/core/src/main/java/io/grpc/internal/ServerImplBuilder.java b/core/src/main/java/io/grpc/internal/ServerImplBuilder.java
+index 85f9d56d7..b679baf3a 100644
+--- a/core/src/main/java/io/grpc/internal/ServerImplBuilder.java
++++ b/core/src/main/java/io/grpc/internal/ServerImplBuilder.java
+@@ -25,14 +25,12 @@ import com.google.errorprone.annotations.DoNotCall;
+ import io.grpc.BinaryLog;
+ import io.grpc.BindableService;
+ import io.grpc.CompressorRegistry;
+-import io.grpc.Configurator;
+-import io.grpc.ConfiguratorRegistry;
+ import io.grpc.Context;
+ import io.grpc.Deadline;
+ import io.grpc.DecompressorRegistry;
+ import io.grpc.HandlerRegistry;
+ import io.grpc.InternalChannelz;
+-import io.grpc.InternalGlobalInterceptors;
++import io.grpc.InternalConfiguratorRegistry;
+ import io.grpc.Server;
+ import io.grpc.ServerBuilder;
+ import io.grpc.ServerCallExecutorSupplier;
+@@ -116,9 +114,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
+     this.clientTransportServersBuilder = checkNotNull(clientTransportServersBuilder,
+         "clientTransportServersBuilder");
+     // TODO(dnvindhya): Move configurator to all the individual builders
+-    for (Configurator configurator : ConfiguratorRegistry.getDefaultRegistry().getConfigurators()) {
+-      configurator.configureServerBuilder(this);
+-    }
++    InternalConfiguratorRegistry.configureServerBuilder(this);
+   }
+ 
+   @Override
+@@ -252,18 +248,12 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
+ 
+   @VisibleForTesting
+   List<? extends ServerStreamTracer.Factory> getTracerFactories() {
+-    ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
+-    boolean isGlobalInterceptorsTracersSet = false;
+-    List<ServerInterceptor> globalServerInterceptors
+-        = InternalGlobalInterceptors.getServerInterceptors();
+-    List<ServerStreamTracer.Factory> globalServerStreamTracerFactories
+-        = InternalGlobalInterceptors.getServerStreamTracerFactories();
+-    if (globalServerInterceptors != null) {
+-      tracerFactories.addAll(globalServerStreamTracerFactories);
+-      interceptors.addAll(globalServerInterceptors);
+-      isGlobalInterceptorsTracersSet = true;
++    boolean disableImplicitCensus = InternalConfiguratorRegistry.wasSetConfiguratorsCalled();
++    if (disableImplicitCensus) {
++      return streamTracerFactories;
+     }
+-    if (!isGlobalInterceptorsTracersSet && statsEnabled) {
++    ArrayList<ServerStreamTracer.Factory> tracerFactories = new ArrayList<>();
++    if (statsEnabled) {
+       ServerStreamTracer.Factory censusStatsTracerFactory = null;
+       try {
+         Class<?> censusStatsAccessor =
+@@ -295,7 +285,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
+         tracerFactories.add(censusStatsTracerFactory);
+       }
+     }
+-    if (!isGlobalInterceptorsTracersSet && tracingEnabled) {
++    if (tracingEnabled) {
+       ServerStreamTracer.Factory tracingStreamTracerFactory = null;
+       try {
+         Class<?> censusTracingAccessor =
+diff --git a/core/src/test/java/io/grpc/internal/ManagedChannelImplBuilderTest.java b/core/src/test/java/io/grpc/internal/ManagedChannelImplBuilderTest.java
+index 90c8951cb..bebf5e3d2 100644
+--- a/core/src/test/java/io/grpc/internal/ManagedChannelImplBuilderTest.java
++++ b/core/src/test/java/io/grpc/internal/ManagedChannelImplBuilderTest.java
+@@ -36,8 +36,10 @@ import io.grpc.ClientCall;
+ import io.grpc.ClientInterceptor;
+ import io.grpc.CompressorRegistry;
+ import io.grpc.DecompressorRegistry;
+-import io.grpc.InternalGlobalInterceptors;
++import io.grpc.InternalConfigurator;
++import io.grpc.InternalConfiguratorRegistry;
+ import io.grpc.ManagedChannel;
++import io.grpc.ManagedChannelBuilder;
+ import io.grpc.MethodDescriptor;
+ import io.grpc.MetricSink;
+ import io.grpc.NameResolver;
+@@ -110,7 +112,8 @@ public class ManagedChannelImplBuilderTest {
+       new StaticTestingClassLoader(
+           getClass().getClassLoader(),
+           Pattern.compile(
+-              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
++              "io\\.grpc\\.InternalConfigurator|io\\.grpc\\.Configurator|"
++                  + "io\\.grpc\\.InternalConfiguratorRegistry|io\\.grpc\\.ConfiguratorRegistry|"
+                   + "io\\.grpc\\.internal\\.[^.]+"));
+ 
+   @Before
+@@ -511,7 +514,7 @@ public class ManagedChannelImplBuilderTest {
+   }
+ 
+   @Test
+-  public void getEffectiveInterceptors_callsGetGlobalInterceptors() throws Exception {
++  public void getEffectiveInterceptors_callsGetConfiguratorRegistry() throws Exception {
+     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsGet.class.getName());
+     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+   }
+@@ -529,19 +532,16 @@ public class ManagedChannelImplBuilderTest {
+       List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+       assertThat(effectiveInterceptors).hasSize(2);
+       try {
+-        InternalGlobalInterceptors.setInterceptorsTracers(
+-            Arrays.asList(DUMMY_USER_INTERCEPTOR),
+-            Collections.emptyList(),
+-            Collections.emptyList());
++        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+         fail("exception expected");
+       } catch (IllegalStateException e) {
+-        assertThat(e).hasMessageThat().contains("Set cannot be called after any get call");
++        assertThat(e).hasMessageThat().contains("Configurators are already set");
+       }
+     }
+   }
+ 
+   @Test
+-  public void getEffectiveInterceptors_callsSetGlobalInterceptors() throws Exception {
++  public void getEffectiveInterceptors_callsSetConfiguratorRegistry() throws Exception {
+     Class<?> runnable = classLoader.loadClass(StaticTestingClassLoaderCallsSet.class.getName());
+     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+   }
+@@ -551,10 +551,13 @@ public class ManagedChannelImplBuilderTest {
+ 
+     @Override
+     public void run() {
+-      InternalGlobalInterceptors.setInterceptorsTracers(
+-          Arrays.asList(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1),
+-          Collections.emptyList(),
+-          Collections.emptyList());
++      InternalConfiguratorRegistry.setConfigurators(
++          Arrays.asList(new InternalConfigurator() {
++            @Override
++            public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
++              builder.intercept(DUMMY_USER_INTERCEPTOR, DUMMY_USER_INTERCEPTOR1);
++            }
++          }));
+       ManagedChannelImplBuilder builder =
+           new ManagedChannelImplBuilder(
+               DUMMY_TARGET,
+@@ -567,7 +570,7 @@ public class ManagedChannelImplBuilderTest {
+   }
+ 
+   @Test
+-  public void getEffectiveInterceptors_setEmptyGlobalInterceptors() throws Exception {
++  public void getEffectiveInterceptors_setEmptyConfiguratorRegistry() throws Exception {
+     Class<?> runnable =
+         classLoader.loadClass(StaticTestingClassLoaderCallsSetEmpty.class.getName());
+     ((Runnable) runnable.getDeclaredConstructor().newInstance()).run();
+@@ -578,8 +581,7 @@ public class ManagedChannelImplBuilderTest {
+ 
+     @Override
+     public void run() {
+-      InternalGlobalInterceptors.setInterceptorsTracers(
+-          Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
++      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+       ManagedChannelImplBuilder builder =
+           new ManagedChannelImplBuilder(
+               DUMMY_TARGET,
+diff --git a/core/src/test/java/io/grpc/internal/ServerImplBuilderTest.java b/core/src/test/java/io/grpc/internal/ServerImplBuilderTest.java
+index ce601c5f8..107591038 100644
+--- a/core/src/test/java/io/grpc/internal/ServerImplBuilderTest.java
++++ b/core/src/test/java/io/grpc/internal/ServerImplBuilderTest.java
+@@ -20,8 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
+ import static org.junit.Assert.assertEquals;
+ import static org.junit.Assert.fail;
+ 
+-import io.grpc.InternalGlobalInterceptors;
++import io.grpc.InternalConfigurator;
++import io.grpc.InternalConfiguratorRegistry;
+ import io.grpc.Metadata;
++import io.grpc.ServerBuilder;
+ import io.grpc.ServerCall;
+ import io.grpc.ServerCallHandler;
+ import io.grpc.ServerInterceptor;
+@@ -60,7 +62,8 @@ public class ServerImplBuilderTest {
+       new StaticTestingClassLoader(
+           getClass().getClassLoader(),
+           Pattern.compile(
+-              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
++              "io\\.grpc\\.InternalConfigurator|io\\.grpc\\.Configurator|"
++                  + "io\\.grpc\\.InternalConfiguratorRegistry|io\\.grpc\\.ConfiguratorRegistry|"
+                   + "io\\.grpc\\.internal\\.[^.]+"));
+ 
+   private ServerImplBuilder builder;
+@@ -143,11 +146,10 @@ public class ServerImplBuilderTest {
+       assertThat(builder.getTracerFactories()).hasSize(2);
+       assertThat(builder.interceptors).hasSize(0);
+       try {
+-        InternalGlobalInterceptors.setInterceptorsTracers(
+-            Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
++        InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+         fail("exception expected");
+       } catch (IllegalStateException e) {
+-        assertThat(e).hasMessageThat().contains("Set cannot be called after any get call");
++        assertThat(e).hasMessageThat().contains("Configurators are already set");
+       }
+     }
+   }
+@@ -161,10 +163,14 @@ public class ServerImplBuilderTest {
+   public static final class StaticTestingClassLoaderCallsSet implements Runnable {
+     @Override
+     public void run() {
+-      InternalGlobalInterceptors.setInterceptorsTracers(
+-          Collections.emptyList(),
+-          Arrays.asList(DUMMY_TEST_INTERCEPTOR),
+-          Arrays.asList(DUMMY_USER_TRACER));
++      InternalConfiguratorRegistry.setConfigurators(
++          Arrays.asList(new InternalConfigurator() {
++            @Override
++            public void configureServerBuilder(ServerBuilder<?> builder) {
++              builder.intercept(DUMMY_TEST_INTERCEPTOR);
++              builder.addStreamTracerFactory(DUMMY_USER_TRACER);
++            }
++          }));
+       ServerImplBuilder builder =
+           new ServerImplBuilder(
+               streamTracerFactories -> {
+@@ -187,8 +193,7 @@ public class ServerImplBuilderTest {
+ 
+     @Override
+     public void run() {
+-      InternalGlobalInterceptors.setInterceptorsTracers(
+-          Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
++      InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
+       ServerImplBuilder builder =
+           new ServerImplBuilder(
+               streamTracerFactories -> {
+diff --git a/gcp-observability/src/main/java/io/grpc/gcp/observability/GcpObservability.java b/gcp-observability/src/main/java/io/grpc/gcp/observability/GcpObservability.java
+index d7eaf43f9..497a1eda3 100644
+--- a/gcp-observability/src/main/java/io/grpc/gcp/observability/GcpObservability.java
++++ b/gcp-observability/src/main/java/io/grpc/gcp/observability/GcpObservability.java
+@@ -19,10 +19,14 @@ package io.grpc.gcp.observability;
+ import static com.google.common.base.Preconditions.checkNotNull;
+ 
+ import com.google.common.annotations.VisibleForTesting;
++import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableSet;
+ import io.grpc.ClientInterceptor;
+-import io.grpc.InternalGlobalInterceptors;
++import io.grpc.InternalConfigurator;
++import io.grpc.InternalConfiguratorRegistry;
++import io.grpc.ManagedChannelBuilder;
+ import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
++import io.grpc.ServerBuilder;
+ import io.grpc.ServerInterceptor;
+ import io.grpc.ServerStreamTracer;
+ import io.grpc.census.InternalCensusStatsAccessor;
+@@ -55,7 +59,9 @@ import java.net.InetAddress;
+ import java.net.UnknownHostException;
+ import java.security.SecureRandom;
+ import java.util.ArrayList;
++import java.util.Arrays;
+ import java.util.HashMap;
++import java.util.List;
+ import java.util.Map;
+ import java.util.concurrent.TimeUnit;
+ import java.util.logging.Level;
+@@ -161,8 +167,42 @@ public final class GcpObservability implements AutoCloseable {
+       tracerFactories.add(InternalCensusTracingAccessor.getServerStreamTracerFactory());
+     }
+ 
+-    InternalGlobalInterceptors.setInterceptorsTracers(
+-        clientInterceptors, serverInterceptors, tracerFactories);
++    InternalConfiguratorRegistry.setConfigurators(Arrays.asList(
++        new ObservabilityConfigurator(clientInterceptors, serverInterceptors, tracerFactories)));
++  }
++
++  @VisibleForTesting
++  static final class ObservabilityConfigurator implements InternalConfigurator {
++    final List<ClientInterceptor> clientInterceptors;
++    final List<ServerInterceptor> serverInterceptors;
++    final List<ServerStreamTracer.Factory> tracerFactories;
++
++    ObservabilityConfigurator(
++        List<ClientInterceptor> clientInterceptors,
++        List<ServerInterceptor> serverInterceptors,
++        List<ServerStreamTracer.Factory> tracerFactories) {
++      this.clientInterceptors = ImmutableList.copyOf(
++          checkNotNull(clientInterceptors, "clientInterceptors"));
++      this.serverInterceptors = ImmutableList.copyOf(
++          checkNotNull(serverInterceptors, "serverInterceptors"));
++      this.tracerFactories = ImmutableList.copyOf(
++          checkNotNull(tracerFactories, "tracerFactories"));
++    }
++
++    @Override
++    public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
++      builder.intercept(clientInterceptors);
++    }
++
++    @Override
++    public void configureServerBuilder(ServerBuilder<?> builder) {
++      for (ServerInterceptor interceptor : serverInterceptors) {
++        builder.intercept(interceptor);
++      }
++      for (ServerStreamTracer.Factory factory : tracerFactories) {
++        builder.addStreamTracerFactory(factory);
++      }
++    }
+   }
+ 
+   static ConditionalClientInterceptor getConditionalInterceptor(ClientInterceptor interceptor) {
+diff --git a/gcp-observability/src/test/java/io/grpc/gcp/observability/GcpObservabilityTest.java b/gcp-observability/src/test/java/io/grpc/gcp/observability/GcpObservabilityTest.java
+index c42d7b65c..40f2fb014 100644
+--- a/gcp-observability/src/test/java/io/grpc/gcp/observability/GcpObservabilityTest.java
++++ b/gcp-observability/src/test/java/io/grpc/gcp/observability/GcpObservabilityTest.java
+@@ -30,13 +30,14 @@ import io.grpc.CallOptions;
+ import io.grpc.Channel;
+ import io.grpc.ClientCall;
+ import io.grpc.ClientInterceptor;
+-import io.grpc.InternalGlobalInterceptors;
++import io.grpc.InternalConfiguratorRegistry;
+ import io.grpc.Metadata;
+ import io.grpc.MethodDescriptor;
+ import io.grpc.ServerCall;
+ import io.grpc.ServerCallHandler;
+ import io.grpc.ServerInterceptor;
+ import io.grpc.StaticTestingClassLoader;
++import io.grpc.gcp.observability.GcpObservability.ObservabilityConfigurator;
+ import io.grpc.gcp.observability.interceptors.ConditionalClientInterceptor;
+ import io.grpc.gcp.observability.interceptors.InternalLoggingChannelInterceptor;
+ import io.grpc.gcp.observability.interceptors.InternalLoggingServerInterceptor;
+@@ -56,7 +57,8 @@ public class GcpObservabilityTest {
+       new StaticTestingClassLoader(
+           getClass().getClassLoader(),
+           Pattern.compile(
+-              "io\\.grpc\\.InternalGlobalInterceptors|io\\.grpc\\.GlobalInterceptors|"
++              "io\\.grpc\\.InternalConfigurator|io\\.grpc\\.Configurator|"
++                  + "io\\.grpc\\.InternalConfiguratorRegistry|io\\.grpc\\.ConfiguratorRegistry|"
+                   + "io\\.grpc\\.gcp\\.observability\\.[^.]+|"
+                   + "io\\.grpc\\.gcp\\.observability\\.interceptors\\.[^.]+|"
+                   + "io\\.grpc\\.gcp\\.observability\\.GcpObservabilityTest\\$.*"));
+@@ -197,12 +199,15 @@ public class GcpObservabilityTest {
+       try (GcpObservability unused =
+           GcpObservability.grpcInit(
+               sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+-        List<ClientInterceptor> list = InternalGlobalInterceptors.getClientInterceptors();
++        List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
++        assertThat(configurators).hasSize(1);
++        ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
++        List<ClientInterceptor> list = configurator.clientInterceptors;
+         assertThat(list).hasSize(3);
+         assertThat(list.get(1)).isInstanceOf(ConditionalClientInterceptor.class);
+         assertThat(list.get(2)).isInstanceOf(ConditionalClientInterceptor.class);
+-        assertThat(InternalGlobalInterceptors.getServerInterceptors()).hasSize(1);
+-        assertThat(InternalGlobalInterceptors.getServerStreamTracerFactories()).hasSize(2);
++        assertThat(configurator.serverInterceptors).hasSize(1);
++        assertThat(configurator.tracerFactories).hasSize(2);
+       } catch (Exception e) {
+         fail("Encountered exception: " + e);
+       }
+@@ -228,9 +233,12 @@ public class GcpObservabilityTest {
+       try (GcpObservability unused =
+           GcpObservability.grpcInit(
+               sink, config, channelInterceptorFactory, serverInterceptorFactory)) {
+-        assertThat(InternalGlobalInterceptors.getClientInterceptors()).isEmpty();
+-        assertThat(InternalGlobalInterceptors.getServerInterceptors()).isEmpty();
+-        assertThat(InternalGlobalInterceptors.getServerStreamTracerFactories()).isEmpty();
++        List<?> configurators = InternalConfiguratorRegistry.getConfigurators();
++        assertThat(configurators).hasSize(1);
++        ObservabilityConfigurator configurator = (ObservabilityConfigurator) configurators.get(0);
++        assertThat(configurator.clientInterceptors).isEmpty();
++        assertThat(configurator.serverInterceptors).isEmpty();
++        assertThat(configurator.tracerFactories).isEmpty();
+       } catch (Exception e) {
+         fail("Encountered exception: " + e);
+       }
+diff --git a/gcp-observability/src/test/java/io/grpc/gcp/observability/LoggingTest.java b/gcp-observability/src/test/java/io/grpc/gcp/observability/LoggingTest.java
+index 6d575e58e..ee711cad0 100644
+--- a/gcp-observability/src/test/java/io/grpc/gcp/observability/LoggingTest.java
++++ b/gcp-observability/src/test/java/io/grpc/gcp/observability/LoggingTest.java
+@@ -71,7 +71,7 @@ public class LoggingTest {
+       new StaticTestingClassLoader(getClass().getClassLoader(), Pattern.compile("io\\.grpc\\..*"));
+ 
+   /**
+-   * Cloud logging test using GlobalInterceptors.
++   * Cloud logging test using global interceptors.
+    *
+    * <p> Ignoring test, because it calls external Cloud Logging APIs.
+    * To test cloud logging setup locally,
+diff --git a/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryModule.java b/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryModule.java
+index f01dbcf98..03a9cccbb 100644
+--- a/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryModule.java
++++ b/opentelemetry/src/main/java/io/grpc/opentelemetry/OpenTelemetryModule.java
+@@ -24,9 +24,9 @@ import com.google.common.base.Stopwatch;
+ import com.google.common.base.Supplier;
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableMap;
+-import io.grpc.Configurator;
+-import io.grpc.ConfiguratorRegistry;
+ import io.grpc.ExperimentalApi;
++import io.grpc.InternalConfigurator;
++import io.grpc.InternalConfiguratorRegistry;
+ import io.grpc.ManagedChannelBuilder;
+ import io.grpc.MetricSink;
+ import io.grpc.ServerBuilder;
+@@ -127,8 +127,8 @@ public final class OpenTelemetryModule {
+    * gRPC channels and servers.
+    */
+   public void registerGlobal() {
+-    ConfiguratorRegistry.getDefaultRegistry().setConfigurators(Collections.singletonList(
+-        new Configurator() {
++    InternalConfiguratorRegistry.setConfigurators(Collections.singletonList(
++        new InternalConfigurator() {
+           @Override
+           public void configureChannelBuilder(ManagedChannelBuilder<?> channelBuilder) {
+             OpenTelemetryModule.this.configureChannelBuilder(channelBuilder);

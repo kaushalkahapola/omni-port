@@ -1,0 +1,193 @@
+commit 19dc8841d4053fd449a47c4e9bd26d35767d649e
+Author: Oleksandr Kolomiiets <oleksandr.kolomiiets@elastic.co>
+Date:   Mon Aug 19 09:52:41 2024 -0700
+
+    Fix synthetic source for empty nested objects (#111943)
+
+diff --git a/docs/changelog/111943.yaml b/docs/changelog/111943.yaml
+new file mode 100644
+index 00000000000..6b9f03ccee3
+--- /dev/null
++++ b/docs/changelog/111943.yaml
+@@ -0,0 +1,6 @@
++pr: 111943
++summary: Fix synthetic source for empty nested objects
++area: Mapping
++type: bug
++issues:
++ - 111811
+diff --git a/modules/data-streams/src/javaRestTest/java/org/elasticsearch/datastreams/logsdb/qa/StandardVersusLogsIndexModeRandomDataChallengeRestIT.java b/modules/data-streams/src/javaRestTest/java/org/elasticsearch/datastreams/logsdb/qa/StandardVersusLogsIndexModeRandomDataChallengeRestIT.java
+index 0b41d62f6fe..8f23f862672 100644
+--- a/modules/data-streams/src/javaRestTest/java/org/elasticsearch/datastreams/logsdb/qa/StandardVersusLogsIndexModeRandomDataChallengeRestIT.java
++++ b/modules/data-streams/src/javaRestTest/java/org/elasticsearch/datastreams/logsdb/qa/StandardVersusLogsIndexModeRandomDataChallengeRestIT.java
+@@ -42,10 +42,9 @@ public class StandardVersusLogsIndexModeRandomDataChallengeRestIT extends Standa
+         this.subobjectsDisabled = randomBoolean();
+ 
+         var specificationBuilder = DataGeneratorSpecification.builder();
+-        // TODO enable nested fields when subobjects are enabled
+-        // It currently hits a bug with empty nested objects
+-        // Nested fields don't work with subobjects: false.
+-        specificationBuilder = specificationBuilder.withNestedFieldsLimit(0);
++        if (subobjectsDisabled) {
++            specificationBuilder = specificationBuilder.withNestedFieldsLimit(0);
++        }
+         this.dataGenerator = new DataGenerator(specificationBuilder.withDataSourceHandlers(List.of(new DataSourceHandler() {
+             @Override
+             public DataSourceResponse.FieldTypeGenerator handle(DataSourceRequest.FieldTypeGenerator request) {
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/NestedObjectMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/NestedObjectMapper.java
+index 76212f9899f..23bdd0f5592 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/NestedObjectMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/NestedObjectMapper.java
+@@ -463,17 +463,14 @@ public class NestedObjectMapper extends ObjectMapper {
+         public void write(XContentBuilder b) throws IOException {
+             assert (children != null && children.size() > 0);
+             if (children.size() == 1) {
+-                b.startObject(leafName());
++                b.field(leafName());
+                 leafStoredFieldLoader.advanceTo(children.get(0));
+                 leafSourceLoader.write(leafStoredFieldLoader, children.get(0), b);
+-                b.endObject();
+             } else {
+                 b.startArray(leafName());
+                 for (int childId : children) {
+-                    b.startObject();
+                     leafStoredFieldLoader.advanceTo(childId);
+                     leafSourceLoader.write(leafStoredFieldLoader, childId, b);
+-                    b.endObject();
+                 }
+                 b.endArray();
+             }
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java b/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java
+index a3d5999a3dc..843fc3b15a6 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java
+@@ -843,12 +843,10 @@ public class ObjectMapper extends Mapper {
+                 return;
+             }
+ 
+-            if (isFragment == false) {
+-                if (isRoot()) {
+-                    b.startObject();
+-                } else {
+-                    b.startObject(leafName());
+-                }
++            if (isRoot() || isFragment) {
++                b.startObject();
++            } else {
++                b.startObject(leafName());
+             }
+ 
+             if (ignoredValues != null && ignoredValues.isEmpty() == false) {
+@@ -875,9 +873,7 @@ public class ObjectMapper extends Mapper {
+                 }
+             }
+             hasValue = false;
+-            if (isFragment == false) {
+-                b.endObject();
+-            }
++            b.endObject();
+         }
+ 
+         @Override
+diff --git a/server/src/test/java/org/elasticsearch/index/mapper/NestedObjectMapperTests.java b/server/src/test/java/org/elasticsearch/index/mapper/NestedObjectMapperTests.java
+index 30688709984..4fba22101df 100644
+--- a/server/src/test/java/org/elasticsearch/index/mapper/NestedObjectMapperTests.java
++++ b/server/src/test/java/org/elasticsearch/index/mapper/NestedObjectMapperTests.java
+@@ -1737,6 +1737,97 @@ public class NestedObjectMapperTests extends MapperServiceTestCase {
+             {"path":{"bar":"B","foo":"A"}}""", syntheticSource);
+     }
+ 
++    public void testSyntheticNestedWithEmptyObject() throws IOException {
++        DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
++            b.startObject("path").field("type", "nested");
++            {
++                b.startObject("properties");
++                {
++                    b.startObject("foo").field("type", "keyword").endObject();
++                }
++                b.endObject();
++            }
++            b.endObject();
++        })).documentMapper();
++        var syntheticSource = syntheticSource(documentMapper, b -> { b.startObject("path").nullField("foo").endObject(); });
++        assertEquals("""
++            {"path":{}}""", syntheticSource);
++    }
++
++    public void testSyntheticNestedWithEmptySubObject() throws IOException {
++        DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
++            b.startObject("path").field("type", "nested");
++            {
++                b.startObject("properties");
++                {
++                    b.startObject("to").startObject("properties");
++                    {
++                        b.startObject("foo").field("type", "keyword").endObject();
++                    }
++                    b.endObject().endObject();
++                }
++                b.endObject();
++            }
++            b.endObject();
++        })).documentMapper();
++        var syntheticSource = syntheticSource(documentMapper, b -> {
++            b.startObject("path");
++            {
++                b.startObject("to").nullField("foo").endObject();
++            }
++            b.endObject();
++        });
++        assertEquals("""
++            {"path":{}}""", syntheticSource);
++    }
++
++    public void testSyntheticNestedWithArrayContainingEmptyObject() throws IOException {
++        DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
++            b.startObject("path").field("type", "nested");
++            {
++                b.startObject("properties");
++                {
++                    b.startObject("foo").field("type", "keyword").endObject();
++                }
++                b.endObject();
++            }
++            b.endObject();
++        })).documentMapper();
++        var syntheticSource = syntheticSource(documentMapper, b -> {
++            b.startArray("path");
++            {
++                b.startObject().field("foo", "A").endObject();
++                b.startObject().nullField("foo").endObject();
++            }
++            b.endArray();
++        });
++        assertEquals("""
++            {"path":[{"foo":"A"},{}]}""", syntheticSource);
++    }
++
++    public void testSyntheticNestedWithArrayContainingOnlyEmptyObject() throws IOException {
++        DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
++            b.startObject("path").field("type", "nested");
++            {
++                b.startObject("properties");
++                {
++                    b.startObject("foo").field("type", "keyword").endObject();
++                }
++                b.endObject();
++            }
++            b.endObject();
++        })).documentMapper();
++        var syntheticSource = syntheticSource(documentMapper, b -> {
++            b.startArray("path");
++            {
++                b.startObject().nullField("foo").endObject();
++            }
++            b.endArray();
++        });
++        assertEquals("""
++            {"path":{}}""", syntheticSource);
++    }
++
+     private NestedObjectMapper createNestedObjectMapperWithAllParametersSet(CheckedConsumer<XContentBuilder, IOException> propertiesBuilder)
+         throws IOException {
+         DocumentMapper mapper = createDocumentMapper(mapping(b -> {

@@ -79,6 +79,8 @@ OUTPUT_DIR = Path(__file__).parent / "shadow_run_results_v3"
 REPO_PATH_MAP: dict[str, str] = {
     "elasticsearch": "repos/elasticsearch",
     "crate": "repos/crate",
+    "grpc-java": "repos/grpc-java",
+    "graylog2-server": "repos/graylog2-server",
     "druid": "repos/druid",
     "hibernate-orm": "repos/hibernate-orm",
     "logstash": "repos/logstash",

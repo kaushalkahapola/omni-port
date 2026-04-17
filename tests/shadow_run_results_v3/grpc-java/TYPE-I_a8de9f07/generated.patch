@@ -1,0 +1,43 @@
+diff --git a/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java b/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
+index 4f314e539..82c477c64 100644
+--- a/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
++++ b/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
+@@ -51,6 +51,7 @@ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Objects;
+ import java.util.Set;
+ import java.util.stream.Collectors;
+ import javax.annotation.Nullable;
+@@ -145,7 +146,6 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
+     return super.acceptResolvedAddresses(resolvedAddresses);
+   }
+ 
+-
+   /**
+    * Updates the overall balancing state by aggregating the connectivity states of all subchannels.
+    *
+@@ -523,6 +523,22 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
+       this.requestHashHeader = requestHashHeader;
+     }
+ 
++    @Override
++    public boolean equals(Object o) {
++      if (!(o instanceof RingHashConfig)) {
++        return false;
++      }
++      RingHashConfig that = (RingHashConfig) o;
++      return this.minRingSize == that.minRingSize
++          && this.maxRingSize == that.maxRingSize
++          && Objects.equals(this.requestHashHeader, that.requestHashHeader);
++    }
++
++    @Override
++    public int hashCode() {
++      return Objects.hash(minRingSize, maxRingSize, requestHashHeader);
++    }
++
+     @Override
+     public String toString() {
+       return MoreObjects.toStringHelper(this)

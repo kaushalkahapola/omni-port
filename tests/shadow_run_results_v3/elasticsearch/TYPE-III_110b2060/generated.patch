@@ -1,0 +1,24 @@
+diff --git a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java
+index e62ffbb2ab7..898367ca706 100644
+--- a/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java
++++ b/x-pack/plugin/deprecation/src/main/java/org/elasticsearch/xpack/deprecation/DeprecationChecks.java
+@@ -89,7 +89,8 @@ public class DeprecationChecks {
+                 NodeDeprecationChecks::checkEqlEnabledSetting,
+                 NodeDeprecationChecks::checkNodeAttrData,
+                 NodeDeprecationChecks::checkWatcherBulkConcurrentRequestsSetting,
+-                NodeDeprecationChecks::checkTracingApmSettings
++                NodeDeprecationChecks::checkTracingApmSettings,
++                NodeDeprecationChecks::checkSourceModeInComponentTemplates
+             );
+ 
+     static List<BiFunction<IndexMetadata, ClusterState, DeprecationIssue>> INDEX_SETTINGS_CHECKS = List.of(
+@@ -98,8 +99,7 @@ public class DeprecationChecks {
+         IndexDeprecationChecks::checkIndexDataPath,
+         IndexDeprecationChecks::storeTypeSettingCheck,
+         IndexDeprecationChecks::frozenIndexSettingCheck,
+-        IndexDeprecationChecks::deprecatedCamelCasePattern,
+-        IndexDeprecationChecks::checkSourceModeInMapping
++        IndexDeprecationChecks::deprecatedCamelCasePattern
+     );
+ 
+     static List<BiFunction<DataStream, ClusterState, DeprecationIssue>> DATA_STREAM_CHECKS = List.of(

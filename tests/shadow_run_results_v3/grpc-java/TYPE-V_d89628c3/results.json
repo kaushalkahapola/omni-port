@@ -1,0 +1,361 @@
+{
+  "run_timestamp": "2026-04-13T00:15:13.324388",
+  "repo": "grpc-java",
+  "patch_type": "TYPE-V",
+  "original_commit": "d89628c3c5035d4b8e4221c702492a31fe9303c1",
+  "backport_commit": "498f717fcb41085c2ba0228a0e6c2d3d3c727877",
+  "description": "master \u2192 v1.77.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 7.14,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java",
+          "method_used": "fuzzy",
+          "confidence": 0.823,
+          "start_line": 17,
+          "end_line": 22,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java",
+          "method_used": "gumtree_ast",
+          "confidence": 0.75,
+          "start_line": 40,
+          "end_line": 51,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.67,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.8,
+        "reasoning": "The patch modifies the initialization of a static resource by introducing a call to MoreObjects.firstNonNull and reading an environment variable. This is more than a simple string replacement or whitespace change, involving structural modification to the code. The localization evidence shows the hunks were found via 'fuzzy' and 'gumtree_ast' with reasonably high confidence, indicating structural changes rather than trivial edits. The patch does not represent a deep refactoring or redesign, so TYPE_III is appropriate.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 0,
+      "applied_hunks": []
+    },
+    "agent4_namespace": {
+      "elapsed_s": 1.43,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 1,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Compilation error during test phase.",
+      "validation_attempts": 1,
+      "retry_files": [
+        "alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java"
+      ],
+      "build_success": true,
+      "build_mode": "grpc-java-helper",
+      "test_success": false,
+      "test_mode": "grpc-java-helper",
+      "test_state": {
+        "xml_reports": [],
+        "target_classes": [
+          "HandshakerServiceChannelTest"
+        ],
+        "test_cases": {},
+        "classes": {},
+        "summary": {
+          "passed": 0,
+          "failed": 0,
+          "skipped": 0,
+          "total": 0
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
+      },
+      "compile_errors": []
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "failed",
+      "fallback_attempts": 1,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java",
+          "what_changed": "Added an import statement for MoreObjects from Guava.",
+          "where_in_code": "package imports",
+          "intent": "To enable usage of MoreObjects utility methods in the class.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "MoreObjects"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java",
+          "what_changed": "Modified the initialization of the SHARED_HANDSHAKER_CHANNEL field to use an environment variable GCE_METADATA_HOST if set, otherwise defaulting to a hardcoded address.",
+          "where_in_code": "class HandshakerServiceChannel, static field SHARED_HANDSHAKER_CHANNEL",
+          "intent": "To make the handshaker service channel address configurable via environment variable, improving flexibility and adaptability to different deployment environments.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "SHARED_HANDSHAKER_CHANNEL",
+            "ChannelResource",
+            "MoreObjects.firstNonNull",
+            "System.getenv"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Compilation error during test phase.",
+      "validation_attempts": 2,
+      "retry_files": [
+        "alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java"
+      ],
+      "build_success": true,
+      "build_mode": "grpc-java-helper",
+      "test_success": false,
+      "test_mode": "grpc-java-helper",
+      "test_state": {
+        "xml_reports": [],
+        "target_classes": [
+          "HandshakerServiceChannelTest"
+        ],
+        "test_cases": {},
+        "classes": {},
+        "summary": {
+          "passed": 0,
+          "failed": 0,
+          "skipped": 0,
+          "total": 0
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
+      },
+      "compile_errors": []
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java",
+          "what_changed": "Added an import statement for MoreObjects from Guava.",
+          "where_in_code": "package imports",
+          "intent": "To enable usage of MoreObjects utility methods in the class.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "MoreObjects"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java",
+          "what_changed": "Modified the initialization of the SHARED_HANDSHAKER_CHANNEL field to use an environment variable GCE_METADATA_HOST if set, otherwise defaulting to the previous hardcoded address.",
+          "where_in_code": "class HandshakerServiceChannel, static field SHARED_HANDSHAKER_CHANNEL",
+          "intent": "To make the handshaker service channel address configurable via environment variable, improving flexibility and adaptability to different deployment environments.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "SHARED_HANDSHAKER_CHANNEL",
+            "ChannelResource",
+            "MoreObjects.firstNonNull",
+            "System.getenv"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry2": {
+      "validation_passed": false,
+      "validation_failure_category": "context_mismatch",
+      "validation_error_context": "Compilation error during test phase.",
+      "validation_attempts": 3,
+      "retry_files": [
+        "alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java"
+      ],
+      "build_success": true,
+      "build_mode": "grpc-java-helper",
+      "test_success": false,
+      "test_mode": "grpc-java-helper",
+      "test_state": {
+        "xml_reports": [],
+        "target_classes": [
+          "HandshakerServiceChannelTest"
+        ],
+        "test_cases": {},
+        "classes": {},
+        "summary": {
+          "passed": 0,
+          "failed": 0,
+          "skipped": 0,
+          "total": 0
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 2,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-grpc-java-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 0
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 1929,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 1384,
+        "output": 545
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 0,
+    "synthesized_count": 0,
+    "failed_hunks_total": 1,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 2,
+    "retry_contexts": [
+      {
+        "error_type": "namespace_adaptation_failed",
+        "error_message": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}",
+        "attempt_count": 2,
+        "suggested_action": "structural_refactor"
+      },
+      {
+        "error_type": "context_mismatch",
+        "error_message": "/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:72: error: cannot find symbol\n  symbol:   method getHandshakerTarget(<null>)\n/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:78: error: cannot find symbol\n  symbol:   method getHandshakerTarget(String)\n/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:84: error: cannot find symbol\n  symbol:   method getHandshakerTarget(String)\n> Task :grpc-alts:compileTestJava FAILED\n  /repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:72: error: cannot find symbol\n    symbol:   method getHandshakerTarget(<null>)\nBUILD FAILED in 20s",
+        "attempt_count": 1,
+        "suggested_action": "re-localize"
+      },
+      {
+        "error_type": "context_mismatch",
+        "error_message": "/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:72: error: cannot find symbol\n  symbol:   method getHandshakerTarget(<null>)\n/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:78: error: cannot find symbol\n  symbol:   method getHandshakerTarget(String)\n/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:84: error: cannot find symbol\n  symbol:   method getHandshakerTarget(String)\n> Task :grpc-alts:compileTestJava FAILED\n  /repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:72: error: cannot find symbol\n    symbol:   method getHandshakerTarget(<null>)\nBUILD FAILED in 19s",
+        "attempt_count": 2,
+        "suggested_action": "re-localize"
+      },
+      {
+        "error_type": "context_mismatch",
+        "error_message": "/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:72: error: cannot find symbol\n  symbol:   method getHandshakerTarget(<null>)\n/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:78: error: cannot find symbol\n  symbol:   method getHandshakerTarget(String)\n/repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:84: error: cannot find symbol\n  symbol:   method getHandshakerTarget(String)\n> Task :grpc-alts:compileTestJava FAILED\n  /repo/alts/src/test/java/io/grpc/alts/HandshakerServiceChannelTest.java:72: error: cannot find symbol\n    symbol:   method getHandshakerTarget(<null>)\nBUILD FAILED in 20s",
+        "attempt_count": 3,
+        "suggested_action": "re-localize"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "alts/src/main/java/io/grpc/alts/HandshakerServiceChannel.java",
+        "old_file_path": null,
+        "old_content": "final class HandshakerServiceChannel {\n\n  static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =\n      new ChannelResource(\"metadata.google.internal.:8080\");\n\n  /** Returns a resource of handshaker service channel for testing only. */\n  static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {\n",
+        "new_content": "final class HandshakerServiceChannel {\n\n  static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =\n      new ChannelResource(\n          MoreObjects.firstNonNull(\n              System.getenv(\"GCE_METADATA_HOST\"), \"metadata.google.internal.:8080\"));\n\n\n  /** Returns a resource of handshaker service channel for testing only. */\n  static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "is_rename": false,
+        "file_operation": "MODIFIED",
+        "error": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}"
+      }
+    ],
+    "generated_patch_bytes": 0,
+    "target_patch_bytes": 3451,
+    "validation_passed": false,
+    "validation_failure_category": "context_mismatch",
+    "build_success": true,
+    "test_success": false,
+    "test_mode": "grpc-java-helper",
+    "test_transition": {
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "reason": "Inconclusive: Relevant target tests were not observed in baseline or patched runs."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

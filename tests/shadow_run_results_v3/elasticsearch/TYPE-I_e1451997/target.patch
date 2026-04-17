@@ -1,0 +1,43 @@
+commit fc63a614ee3059cc361458efb02aed6eb68d6629
+Author: Dan Rubinstein <daniel.rubinstein@elastic.co>
+Date:   Mon Oct 14 12:03:13 2024 -0400
+
+    [ML] Switch default chunking strategy to sentence (#114453) (#114730)
+
+diff --git a/docs/changelog/114453.yaml b/docs/changelog/114453.yaml
+new file mode 100644
+index 00000000000..0d5345ad9d2
+--- /dev/null
++++ b/docs/changelog/114453.yaml
+@@ -0,0 +1,5 @@
++pr: 114453
++summary: Switch default chunking strategy to sentence
++area: Machine Learning
++type: enhancement
++issues: []
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/chunking/ChunkingSettingsBuilder.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/chunking/ChunkingSettingsBuilder.java
+index 477c3ea6352..20520ca8292 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/chunking/ChunkingSettingsBuilder.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/chunking/ChunkingSettingsBuilder.java
+@@ -13,7 +13,7 @@ import org.elasticsearch.inference.ChunkingStrategy;
+ import java.util.Map;
+ 
+ public class ChunkingSettingsBuilder {
+-    public static final WordBoundaryChunkingSettings DEFAULT_SETTINGS = new WordBoundaryChunkingSettings(250, 100);
++    public static final SentenceBoundaryChunkingSettings DEFAULT_SETTINGS = new SentenceBoundaryChunkingSettings(250, 1);
+ 
+     public static ChunkingSettings fromMap(Map<String, Object> settings) {
+         if (settings.isEmpty()) {
+diff --git a/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/chunking/ChunkingSettingsBuilderTests.java b/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/chunking/ChunkingSettingsBuilderTests.java
+index 3c09984ac01..5b9625073e6 100644
+--- a/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/chunking/ChunkingSettingsBuilderTests.java
++++ b/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/chunking/ChunkingSettingsBuilderTests.java
+@@ -17,7 +17,7 @@ import java.util.Map;
+ 
+ public class ChunkingSettingsBuilderTests extends ESTestCase {
+ 
+-    public static final WordBoundaryChunkingSettings DEFAULT_SETTINGS = new WordBoundaryChunkingSettings(250, 100);
++    public static final SentenceBoundaryChunkingSettings DEFAULT_SETTINGS = new SentenceBoundaryChunkingSettings(250, 1);
+ 
+     public void testEmptyChunkingSettingsMap() {
+         ChunkingSettings chunkingSettings = ChunkingSettingsBuilder.fromMap(Collections.emptyMap());

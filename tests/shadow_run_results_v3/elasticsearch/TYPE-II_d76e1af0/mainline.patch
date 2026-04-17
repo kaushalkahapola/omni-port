@@ -1,0 +1,90 @@
+commit d76e1af0a5bb00ac69abc8e608ba8c3f6b75e54f
+Author: Oleksandr Kolomiiets <oleksandr.kolomiiets@elastic.co>
+Date:   Wed Aug 21 08:46:40 2024 -0700
+
+    Fix calculation of parent offset for ignored source in some cases (#112046)
+
+diff --git a/docs/changelog/112046.yaml b/docs/changelog/112046.yaml
+new file mode 100644
+index 00000000000..f3cda1ed7a7
+--- /dev/null
++++ b/docs/changelog/112046.yaml
+@@ -0,0 +1,5 @@
++pr: 112046
++summary: Fix calculation of parent offset for ignored source in some cases
++area: Mapping
++type: bug
++issues: []
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+index aad8d5f6dfa..2bf3668a3da 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+@@ -274,7 +274,7 @@ public final class DocumentParser {
+                 context.addIgnoredField(
+                     new IgnoredSourceFieldMapper.NameValue(
+                         context.parent().fullPath(),
+-                        context.parent().fullPath().indexOf(currentFieldName),
++                        context.parent().fullPath().lastIndexOf(currentFieldName),
+                         XContentDataHelper.encodeToken(parser),
+                         context.doc()
+                     )
+@@ -301,7 +301,7 @@ public final class DocumentParser {
+                 context.addIgnoredField(
+                     new IgnoredSourceFieldMapper.NameValue(
+                         context.parent().fullPath(),
+-                        context.parent().fullPath().indexOf(context.parent().leafName()),
++                        context.parent().fullPath().lastIndexOf(context.parent().leafName()),
+                         XContentDataHelper.encodeXContentBuilder(tuple.v2()),
+                         context.doc()
+                     )
+diff --git a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+index fc30b9b6677..436200d919d 100644
+--- a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
++++ b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+@@ -1055,4 +1055,46 @@ public class IgnoredSourceFieldMapperTests extends MapperServiceTestCase {
+         assertEquals("""
+             {"path":[{"to":{"foo":"A","bar":"B"}},{"to":{"foo":"C","bar":"D"}}]}""", syntheticSource);
+     }
++
++    public void testDisabledSubObjectWithNameOverlappingParentName() throws IOException {
++        DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
++            b.startObject("path");
++            b.startObject("properties");
++            {
++                b.startObject("at").field("type", "object").field("enabled", "false").endObject();
++            }
++            b.endObject();
++            b.endObject();
++        })).documentMapper();
++        var syntheticSource = syntheticSource(documentMapper, b -> {
++            b.startObject("path");
++            {
++                b.startObject("at").field("foo", "A").endObject();
++            }
++            b.endObject();
++        });
++        assertEquals("""
++            {"path":{"at":{"foo":"A"}}}""", syntheticSource);
++    }
++
++    public void testStoredNestedSubObjectWithNameOverlappingParentName() throws IOException {
++        DocumentMapper documentMapper = createMapperService(syntheticSourceMapping(b -> {
++            b.startObject("path");
++            b.startObject("properties");
++            {
++                b.startObject("at").field("type", "nested").field("store_array_source", "true").endObject();
++            }
++            b.endObject();
++            b.endObject();
++        })).documentMapper();
++        var syntheticSource = syntheticSource(documentMapper, b -> {
++            b.startObject("path");
++            {
++                b.startObject("at").field("foo", "A").endObject();
++            }
++            b.endObject();
++        });
++        assertEquals("""
++            {"path":{"at":{"foo":"A"}}}""", syntheticSource);
++    }
+ }

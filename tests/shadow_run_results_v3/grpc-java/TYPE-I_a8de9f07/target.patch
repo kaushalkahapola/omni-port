@@ -1,0 +1,78 @@
+commit a5eaa66ccc2add0c9b78096ca3196ec1c7904c1f
+Author: Eric Anderson <ejona@google.com>
+Date:   Fri Jul 11 16:49:06 2025 -0700
+
+    xds: Implement equals in RingHashConfig
+    
+    Lack of equals causes cluster_resolver to consider every update a
+    different configuration and restart itself.
+    
+    b/430347751
+
+diff --git a/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java b/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
+index 4f314e539..96ce5b970 100644
+--- a/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
++++ b/xds/src/main/java/io/grpc/xds/RingHashLoadBalancer.java
+@@ -51,6 +51,7 @@ import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Objects;
+ import java.util.Set;
+ import java.util.stream.Collectors;
+ import javax.annotation.Nullable;
+@@ -523,6 +524,22 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
+       this.requestHashHeader = requestHashHeader;
+     }
+ 
++    @Override
++    public boolean equals(Object o) {
++      if (!(o instanceof RingHashConfig)) {
++        return false;
++      }
++      RingHashConfig that = (RingHashConfig) o;
++      return this.minRingSize == that.minRingSize
++          && this.maxRingSize == that.maxRingSize
++          && Objects.equals(this.requestHashHeader, that.requestHashHeader);
++    }
++
++    @Override
++    public int hashCode() {
++      return Objects.hash(minRingSize, maxRingSize, requestHashHeader);
++    }
++
+     @Override
+     public String toString() {
+       return MoreObjects.toStringHelper(this)
+diff --git a/xds/src/test/java/io/grpc/xds/RingHashLoadBalancerTest.java b/xds/src/test/java/io/grpc/xds/RingHashLoadBalancerTest.java
+index f27cb772d..fc5f21156 100644
+--- a/xds/src/test/java/io/grpc/xds/RingHashLoadBalancerTest.java
++++ b/xds/src/test/java/io/grpc/xds/RingHashLoadBalancerTest.java
+@@ -42,6 +42,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
+ 
+ import com.google.common.collect.Iterables;
+ import com.google.common.primitives.UnsignedInteger;
++import com.google.common.testing.EqualsTester;
+ import io.grpc.Attributes;
+ import io.grpc.CallOptions;
+ import io.grpc.ConnectivityState;
+@@ -1113,6 +1114,19 @@ public class RingHashLoadBalancerTest {
+     assertThat(picks).containsExactly(subchannel1);
+   }
+ 
++  @Test
++  public void config_equalsTester() {
++    new EqualsTester()
++        .addEqualityGroup(
++            new RingHashConfig(1, 2, "headerA"),
++            new RingHashConfig(1, 2, "headerA"))
++        .addEqualityGroup(new RingHashConfig(1, 1, "headerA"))
++        .addEqualityGroup(new RingHashConfig(2, 2, "headerA"))
++        .addEqualityGroup(new RingHashConfig(1, 2, "headerB"))
++        .addEqualityGroup(new RingHashConfig(1, 2, ""))
++        .testEquals();
++  }
++
+   private List<Subchannel> initializeLbSubchannels(RingHashConfig config,
+       List<EquivalentAddressGroup> servers, InitializationFlags... initFlags) {
+ 

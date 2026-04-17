@@ -1,0 +1,70 @@
+diff --git a/xds/src/main/java/io/grpc/xds/XdsDependencyManager.java b/xds/src/main/java/io/grpc/xds/XdsDependencyManager.java
+index 8cd311972..03db6b034 100644
+--- a/xds/src/main/java/io/grpc/xds/XdsDependencyManager.java
++++ b/xds/src/main/java/io/grpc/xds/XdsDependencyManager.java
+@@ -199,6 +199,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
+     for (Map.Entry<String, XdsWatcherBase<T>> watcherEntry : watchers.watchers.entrySet()) {
+       xdsClient.cancelXdsResourceWatch(watchers.resourceType, watcherEntry.getKey(),
+           watcherEntry.getValue());
++      watcherEntry.getValue().cancelled = true;
+     }
+   }
+ 
+@@ -582,7 +583,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
+     @Nullable
+     private StatusOr<T> data;
+ 
+-
+     private XdsWatcherBase(XdsResourceType<T> type, String resourceName) {
+       this.type = checkNotNull(type, "type");
+       this.resourceName = checkNotNull(resourceName, "resourceName");
+@@ -591,6 +591,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
+     @Override
+     public void onError(Status error) {
+       checkNotNull(error, "error");
++      if (cancelled) {
++        return;
++      }
+       // Don't update configuration on error, if we've already received configuration
+       if (!hasDataValue()) {
+         setDataAsStatus(Status.UNAVAILABLE.withDescription(
+@@ -659,6 +662,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
+     @Override
+     public void onChanged(XdsListenerResource.LdsUpdate update) {
+       checkNotNull(update, "update");
++      if (cancelled) {
++        return;
++      }
+ 
+       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
+       List<VirtualHost> virtualHosts;
+@@ -787,6 +793,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
+     @Override
+     public void onChanged(RdsUpdate update) {
+       checkNotNull(update, "update");
++      if (cancelled) {
++        return;
++      }
+       List<VirtualHost> oldVirtualHosts = hasDataValue()
+           ? getData().getValue().virtualHosts
+           : Collections.emptyList();
+@@ -815,6 +824,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
+     @Override
+     public void onChanged(XdsClusterResource.CdsUpdate update) {
+       checkNotNull(update, "update");
++      if (cancelled) {
++        return;
++      }
+       switch (update.clusterType()) {
+         case EDS:
+           setData(update);
+@@ -895,6 +907,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
+ 
+     @Override
+     public void onChanged(XdsEndpointResource.EdsUpdate update) {
++      if (cancelled) {
++        return;
++      }
+       setData(checkNotNull(update, "update"));
+       maybePublishConfig();
+     }

@@ -1,0 +1,347 @@
+commit dd4f4d56649c72622933fafd6f8dedf33a269918
+Author: Luigi Dell'Aquila <luigi.dellaquila@gmail.com>
+Date:   Fri Sep 13 10:47:31 2024 +0200
+
+    ES|QL: shorten error messages for UnsupportedAttributes (#111973) (#112819)
+    
+    * ES|QL: shorten error messages for UnsupportedAttributes (#111973)
+    
+    When dealing with index patterns, eg. `FROM logs-*`, some fields can
+    have the same name but different types in different indices.
+    
+    In this case we build an error message like
+    
+    ```
+    Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:
+    [ip] in [test1, test2], [keyword] in [test3]"
+    ```
+    
+    With this PR, in case of many indices involved, we avoid listing them
+    all, but we only list three of them and provide information about how
+    many other indices are affected, eg.
+    
+    ```
+    Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:
+    [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]
+    ```
+    
+    (see the `and [2] other indices`)
+    
+    Since these error messages are stored in `UnspportedAttributes` and
+    serialized, this PR reduces significantly the size of a serialized
+    execution plan with many type conflicts.
+    
+    Fixes https://github.com/elastic/elasticsearch/issues/111964
+    
+    Related to https://github.com/elastic/elasticsearch/issues/111358
+    
+    * Spotless
+    
+    ---------
+    
+    Co-authored-by: Elastic Machine <elasticmachine@users.noreply.github.com>
+
+diff --git a/x-pack/plugin/esql-core/src/main/java/org/elasticsearch/xpack/esql/core/type/InvalidMappedField.java b/x-pack/plugin/esql-core/src/main/java/org/elasticsearch/xpack/esql/core/type/InvalidMappedField.java
+index 9b3d7950c2a..8b15893f8a0 100644
+--- a/x-pack/plugin/esql-core/src/main/java/org/elasticsearch/xpack/esql/core/type/InvalidMappedField.java
++++ b/x-pack/plugin/esql-core/src/main/java/org/elasticsearch/xpack/esql/core/type/InvalidMappedField.java
+@@ -130,7 +130,13 @@ public class InvalidMappedField extends EsField {
+             errorMessage.append("[");
+             errorMessage.append(e.getKey());
+             errorMessage.append("] in ");
+-            errorMessage.append(e.getValue());
++            if (e.getValue().size() <= 3) {
++                errorMessage.append(e.getValue());
++            } else {
++                errorMessage.append(e.getValue().stream().sorted().limit(3).collect(Collectors.toList()));
++                errorMessage.append(" and [" + (e.getValue().size() - 3) + "] other ");
++                errorMessage.append(e.getValue().size() == 4 ? "index" : "indices");
++            }
+         }
+         return errorMessage.toString();
+     }
+diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/action/EsqlCapabilities.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/action/EsqlCapabilities.java
+index 7feb8b311de..945919fc076 100644
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/action/EsqlCapabilities.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/action/EsqlCapabilities.java
+@@ -156,7 +156,12 @@ public class EsqlCapabilities {
+          * Make attributes of GROK/DISSECT adjustable and fix a shadowing bug when pushing them down past PROJECT.
+          * https://github.com/elastic/elasticsearch/issues/108008
+          */
+-        FIXED_PUSHDOWN_PAST_PROJECT;
++        FIXED_PUSHDOWN_PAST_PROJECT,
++
++        /**
++         * Changed error messages for fields with conflicting types in different indices.
++         */
++        SHORT_ERROR_MESSAGES_FOR_UNSUPPORTED_FIELDS;
+ 
+         private final boolean snapshotOnly;
+ 
+diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java
+index 988f66fa2ef..bdad164593d 100644
+--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java
++++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/analysis/VerifierTests.java
+@@ -64,9 +64,12 @@ public class VerifierTests extends ESTestCase {
+         LinkedHashSet<String> ipIndices = new LinkedHashSet<>();
+         ipIndices.add("test1");
+         ipIndices.add("test2");
++        ipIndices.add("test3");
++        ipIndices.add("test4");
++        ipIndices.add("test5");
+         LinkedHashMap<String, Set<String>> typesToIndices = new LinkedHashMap<>();
+         typesToIndices.put("ip", ipIndices);
+-        typesToIndices.put("keyword", Set.of("test3"));
++        typesToIndices.put("keyword", Set.of("test6"));
+         EsField multiTypedField = new InvalidMappedField(multiTyped, typesToIndices);
+ 
+         // Also add an unsupported/multityped field under the names `int` and `double` so we can use `LOOKUP int_number_names ...` and
+@@ -85,7 +88,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:22: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | dissect multi_typed \"%{foo}\"", analyzer)
+         );
+ 
+@@ -95,7 +98,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:19: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | grok multi_typed \"%{WORD:foo}\"", analyzer)
+         );
+ 
+@@ -115,7 +118,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:23: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | eval x = multi_typed", analyzer)
+         );
+ 
+@@ -125,7 +128,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:32: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | eval x = to_lower(multi_typed)", analyzer)
+         );
+ 
+@@ -135,7 +138,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:32: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | stats count(1) by multi_typed", analyzer)
+         );
+         if (Build.current().isSnapshot()) {
+@@ -145,7 +148,7 @@ public class VerifierTests extends ESTestCase {
+             );
+             assertEquals(
+                 "1:38: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                    + " [ip] in [test1, test2], [keyword] in [test3]",
++                    + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+                 error("from test* | inlinestats count(1) by multi_typed", analyzer)
+             );
+         }
+@@ -156,7 +159,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:27: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | stats values(multi_typed)", analyzer)
+         );
+         if (Build.current().isSnapshot()) {
+@@ -166,7 +169,7 @@ public class VerifierTests extends ESTestCase {
+             );
+             assertEquals(
+                 "1:33: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                    + " [ip] in [test1, test2], [keyword] in [test3]",
++                    + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+                 error("from test* | inlinestats values(multi_typed)", analyzer)
+             );
+         }
+@@ -177,7 +180,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:27: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | stats values(multi_typed)", analyzer)
+         );
+ 
+@@ -200,7 +203,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:24: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | mv_expand multi_typed", analyzer)
+         );
+ 
+@@ -210,7 +213,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:21: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | rename multi_typed as x", analyzer)
+         );
+ 
+@@ -220,7 +223,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:19: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | sort multi_typed desc", analyzer)
+         );
+ 
+@@ -230,7 +233,7 @@ public class VerifierTests extends ESTestCase {
+         );
+         assertEquals(
+             "1:20: Cannot use field [multi_typed] due to ambiguities being mapped as [2] incompatible types:"
+-                + " [ip] in [test1, test2], [keyword] in [test3]",
++                + " [ip] in [test1, test2, test3] and [2] other indices, [keyword] in [test6]",
+             error("from test* | where multi_typed is not null", analyzer)
+         );
+     }
+diff --git a/x-pack/plugin/src/yamlRestTest/resources/rest-api-spec/test/esql/51_many_indexes.yml b/x-pack/plugin/src/yamlRestTest/resources/rest-api-spec/test/esql/51_many_indexes.yml
+new file mode 100644
+index 00000000000..eb589cb810c
+--- /dev/null
++++ b/x-pack/plugin/src/yamlRestTest/resources/rest-api-spec/test/esql/51_many_indexes.yml
+@@ -0,0 +1,126 @@
++setup:
++  - requires:
++      capabilities:
++        - method: POST
++          path: /_query
++          parameters: [method, path, parameters, capabilities]
++          capabilities: [short_error_messages_for_unsupported_fields]
++      reason: "We changed error messages for unsupported fields in v 8.16"
++      test_runner_features: [capabilities, allowed_warnings_regex]
++
++  - do:
++      indices.create:
++        index: ambiguous_1
++        body:
++          mappings:
++            properties:
++              "name":
++                type: keyword
++
++  - do:
++      indices.create:
++        index: ambiguous_2
++        body:
++          mappings:
++            properties:
++              "name":
++                type: keyword
++
++  - do:
++      indices.create:
++        index: ambiguous_3
++        body:
++          mappings:
++            properties:
++              "name":
++                type: keyword
++
++  - do:
++      indices.create:
++        index: ambiguous_4
++        body:
++          mappings:
++            properties:
++              "name":
++                type: integer
++
++  - do:
++      indices.create:
++        index: ambiguous_5
++        body:
++          mappings:
++            properties:
++              "name":
++                type: integer
++
++  - do:
++      indices.create:
++        index: ambiguous_6
++        body:
++          mappings:
++            properties:
++              "name":
++                type: integer
++
++  - do:
++      indices.create:
++        index: ambiguous_7
++        body:
++          mappings:
++            properties:
++              "name":
++                type: integer
++
++  - do:
++      indices.create:
++        index: ambiguous_8
++        body:
++          mappings:
++            properties:
++              "name":
++                type: ip
++
++  - do:
++      indices.create:
++        index: ambiguous_9
++        body:
++          mappings:
++            properties:
++              "name":
++                type: ip
++
++  - do:
++      indices.create:
++        index: ambiguous_10
++        body:
++          mappings:
++            properties:
++              "name":
++                type: ip
++
++  - do:
++      indices.create:
++        index: ambiguous_11
++        body:
++          mappings:
++            properties:
++              "name":
++                type: ip
++
++  - do:
++      indices.create:
++        index: ambiguous_12
++        body:
++          mappings:
++            properties:
++              "name":
++                type: ip
++
++---
++load many indices with ambiguities:
++  - do:
++      catch: '/Cannot use field \[name\] due to ambiguities being mapped as \[3\] incompatible types: \[integer\] in \[ambiguous_4, ambiguous_5, ambiguous_6\] and \[1\] other index, \[ip\] in \[ambiguous_10, ambiguous_11, ambiguous_12\] and \[2\] other indices, \[keyword\] in \[ambiguous_1, ambiguous_2, ambiguous_3\]/'
++      esql.query:
++        body:
++          query: 'FROM ambiguous* | SORT name'
++

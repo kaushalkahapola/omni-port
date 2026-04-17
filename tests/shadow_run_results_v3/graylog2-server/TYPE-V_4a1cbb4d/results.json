@@ -1,0 +1,576 @@
+{
+  "run_timestamp": "2026-04-13T06:50:35.296176",
+  "repo": "graylog2-server",
+  "patch_type": "TYPE-V",
+  "original_commit": "4a1cbb4dcb8563a6686e0709040dea75ed831359",
+  "backport_commit": "d6e2f6c6ad542ebeee0d15a732e3d21ca8ec724e",
+  "description": "master \u2192 5.1",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 2.95,
+      "error": null,
+      "java_hunks": 7,
+      "aux_hunks": 6,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 96,
+          "end_line": 101,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 164,
+          "end_line": 169,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.9,
+          "start_line": 24,
+          "end_line": 29,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "method_used": "git_pickaxe",
+          "confidence": 0.812,
+          "start_line": 32,
+          "end_line": 56,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "method_used": "embedding",
+          "confidence": 0.775,
+          "start_line": 31,
+          "end_line": 40,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java",
+          "method_used": "new_file",
+          "confidence": 1.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java",
+          "method_used": "new_file",
+          "confidence": 1.0,
+          "start_line": 0,
+          "end_line": 0,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.06,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.95,
+        "reasoning": "The patch introduces two new pipeline functions (RemoveSingleField and RemoveMultipleFields) and modifies an existing function (RemoveField) to deprecate it and change its behavior. It adds new Java classes and updates existing ones, including changes to parameter types and method implementations. The patch also updates test cases and adds new test resources. The localization evidence shows that some hunks are exact matches, but others require pickaxe or embedding methods, indicating structural changes. Overall, the patch involves structural additions and modifications but not deep refactoring or redesign, fitting the TYPE_III classification.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 5.11,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 3.92,
+      "error": null,
+      "synthesized_count": 2,
+      "failed_count": 3,
+      "synthesis_status": "success",
+      "synthesized_hunks": [
+        {
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java",
+          "old_string": "",
+          "new_string": "/*\n * Copyright (C) 2020 Graylog, Inc.\n *\n * This program is free software: you can redistribute it and/or modify\n * it under the terms of the Server Side Public License, version 1,\n * as published by MongoDB, Inc.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the\n * Server Side Public License for more details.\n *\n * You should have received a copy of the Server Side Public License\n * along with this program. If not, see\n * <http://www.mongodb.com/licensing/server-side-public-license>.\n */\npackage org.graylog.plugins.pipelineprocessor.functions.messages;\n\nimport com.google.common.collect.ImmutableList;\nimport org.graylog.plugins.pipelineprocessor.EvaluationContext;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.AbstractFunction;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.FunctionArgs;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.FunctionDescriptor;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.ParameterDescriptor;\nimport org.graylog.plugins.pipelineprocessor.rulebuilder.RuleBuilderFunctionGroup;\nimport org.graylog2.plugin.Message;\n\nimport java.util.List;\nimport java.util.regex.Pattern;\n\nimport static org.graylog.plugins.pipelineprocessor.ast.functions.ParameterDescriptor.type;\n\npublic class RemoveMultipleFields extends AbstractFunction<Void> {\n    public static final String NAME = \"remove_multiple_fields\";\n    private static final String REGEX_PATTERN = \"pattern\";\n    private static final String LIST_OF_NAMES = \"names\";\n    private final ParameterDescriptor<String, Pattern> regexParam;\n    private final ParameterDescriptor<List, List> namesParam;\n    private final ParameterDescriptor<Message, Message> messageParam;\n\n    public RemoveMultipleFields() {\n        regexParam = ParameterDescriptor.string(REGEX_PATTERN, Pattern.class)\n                .optional()\n                .transform(Pattern::compile)\n                .description(\"A regex specifying field names to be removed\").build();\n        namesParam = type(LIST_OF_NAMES, List.class).optional().description(\"A list of field names to be removed\").build();\n        messageParam = type(\"message\", Message.class).optional().description(\"The message to use, defaults to '$message'\").build();\n    }\n\n    @Override\n    public Void evaluate(FunctionArgs args, EvaluationContext context) {\n        final Message message = messageParam.optional(args, context).orElse(context.currentMessage());\n        if (regexParam.optional(args, context).isPresent()) {\n            removeRegex(message, regexParam.optional(args, context).get());\n        }\n        if (namesParam.optional(args, context).isPresent()) {\n            removeNames(message, namesParam.optional(args, context).get());\n        }\n        return null;\n    }\n\n    private void removeRegex(Message message, Pattern pattern) {\n        message.getFieldNames().stream()\n                .filter(name -> pattern.matcher(name).matches())\n                .toList() // required to avoid ConcurrentModificationException\n                .forEach(message::removeField);\n    }\n\n    private void removeNames(Message message, List names) {\n        for (Object name : names) {\n            message.removeField(String.valueOf(name));\n        }\n    }\n\n    @Override\n    public FunctionDescriptor<Void> descriptor() {\n        return FunctionDescriptor.<Void>builder()\n                .name(NAME)\n                .returnType(Void.class)\n                .params(ImmutableList.of(regexParam, namesParam, messageParam))\n                .description(\"Removes the specified field(s) from message, unless the field name is reserved. If no specific message is provided, it uses the currently processed message.\")\n                .ruleBuilderEnabled()\n                .ruleBuilderName(\"Remove field - multiple\")\n                .ruleBuilderTitle(\"Remove multiple fields by<#if pattern??> regex '${pattern}'</#if><#if pattern?? && names??> or</#if><#if names??> name list '${names}'</#if>\")\n                .ruleBuilderFunctionGroup(RuleBuilderFunctionGroup.MESSAGE)\n                .build();\n    }\n}",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        },
+        {
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java",
+          "old_string": "",
+          "new_string": "/*\n * Copyright (C) 2020 Graylog, Inc.\n *\n * This program is free software: you can redistribute it and/or modify\n * it under the terms of the Server Side Public License, version 1,\n * as published by MongoDB, Inc.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the\n * Server Side Public License for more details.\n *\n * You should have received a copy of the Server Side Public License\n * along with this program. If not, see\n * <http://www.mongodb.com/licensing/server-side-public-license>.\n */\npackage org.graylog.plugins.pipelineprocessor.functions.messages;\n\nimport com.google.common.collect.ImmutableList;\nimport org.graylog.plugins.pipelineprocessor.EvaluationContext;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.AbstractFunction;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.FunctionArgs;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.FunctionDescriptor;\nimport org.graylog.plugins.pipelineprocessor.ast.functions.ParameterDescriptor;\nimport org.graylog.plugins.pipelineprocessor.rulebuilder.RuleBuilderFunctionGroup;\nimport org.graylog2.plugin.Message;\n\nimport static org.graylog.plugins.pipelineprocessor.ast.functions.ParameterDescriptor.type;\n\npublic class RemoveSingleField extends AbstractFunction<Void> {\n    public static final String NAME = \"remove_single_field\";\n    public static final String FIELD = \"field\";\n    private final ParameterDescriptor<String, String> fieldParam;\n    private final ParameterDescriptor<Message, Message> messageParam;\n\n    public RemoveSingleField() {\n        fieldParam = ParameterDescriptor.string(FIELD).description(\"The field to remove\").build();\n        messageParam = type(\"message\", Message.class).optional().description(\"The message to use, defaults to '$message'\").build();\n    }\n\n    @Override\n    public Void evaluate(FunctionArgs args, EvaluationContext context) {\n        final String field = fieldParam.required(args, context);\n        final Message message = messageParam.optional(args, context).orElse(context.currentMessage());\n\n        message.removeField(field);\n        return null;\n    }\n\n    @Override\n    public FunctionDescriptor<Void> descriptor() {\n        return FunctionDescriptor.<Void>builder()\n                .name(NAME)\n                .returnType(Void.class)\n                .params(ImmutableList.of(fieldParam, messageParam))\n                .description(\"Removes a field from a message\")\n                .ruleBuilderEnabled()\n                .ruleBuilderName(\"Remove field - single\")\n                .ruleBuilderTitle(\"Remove the single field '${field}'\")\n                .ruleBuilderFunctionGroup(RuleBuilderFunctionGroup.MESSAGE)\n                .build();\n    }\n}",
+          "confidence": 1.0,
+          "context_lines_included": 0,
+          "verified": true
+        }
+      ]
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.04,
+      "error": null,
+      "syntax_repair_status": "clean",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [
+        {
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java",
+          "outcome": "clean"
+        },
+        {
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java",
+          "outcome": "clean"
+        }
+      ],
+      "synthesized_count_after_repair": 2
+    },
+    "agent7_validator": {
+      "validation_passed": false,
+      "validation_failure_category": "unknown",
+      "validation_error_context": "Build failed (graylog2-server-helper) \u2014 compile errors:\ngraylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java:25: error: package org.graylog.plugins.pipelineprocessor.rulebuilder does not exist\ngraylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java:25: error: package org.graylog.plugins.pipelineprocessor.rulebuilder does not exist",
+      "validation_attempts": 1,
+      "retry_files": [
+        "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java",
+        "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java"
+      ],
+      "build_success": false,
+      "build_mode": "graylog2-server-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java",
+          "line": 25,
+          "message": "error: package org.graylog.plugins.pipelineprocessor.rulebuilder does not exist"
+        },
+        {
+          "file": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java",
+          "line": 25,
+          "message": "error: package org.graylog.plugins.pipelineprocessor.rulebuilder does not exist"
+        }
+      ]
+    },
+    "agent9_fallback_1": {
+      "fallback_status": "failed",
+      "fallback_attempts": 1,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "what_changed": "Added imports for two new message processing functions: RemoveMultipleFields and RemoveSingleField.",
+          "where_in_code": "Imports section of ProcessorFunctionsModule.java",
+          "intent": "To include the new field removal functions in the module for registration and use.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "RemoveMultipleFields",
+            "RemoveSingleField"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "what_changed": "Registered two new message processor functions, RemoveSingleField and RemoveMultipleFields, alongside existing functions.",
+          "where_in_code": "ProcessorFunctionsModule.java, inside method registering message processor functions",
+          "intent": "To enable the new field removal functions to be available for pipeline processing.",
+          "change_type": "other",
+          "key_symbols": [
+            "RemoveSingleField",
+            "RemoveMultipleFields"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "what_changed": "Added import of java.util.regex.Pattern to support regex operations in RemoveField.",
+          "where_in_code": "Imports section of RemoveField.java",
+          "intent": "To enable use of regex Pattern for matching field names in the RemoveField function.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Pattern"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "what_changed": "Changed the field parameter type from String to compiled Pattern and updated evaluation logic to use regex matching instead of String.matches.",
+          "where_in_code": "RemoveField class, constructor and evaluate method",
+          "intent": "To improve performance and correctness by compiling the regex pattern once and using it for matching field names during removal.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "fieldParam",
+            "evaluate"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "what_changed": "Updated function descriptor to mark RemoveField as deprecated and recommend using remove_single_field or remove_multiple_fields instead.",
+          "where_in_code": "RemoveField class, descriptor method",
+          "intent": "To inform users that RemoveField is deprecated and guide them to use more performant alternatives.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "descriptor",
+            "RemoveField"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java",
+          "what_changed": "Added a new function RemoveMultipleFields that removes multiple fields from a message either by regex pattern or by a list of field names.",
+          "where_in_code": "RemoveMultipleFields class, including constructor, evaluate method, and helper methods removeRegex and removeNames",
+          "intent": "To provide a performant and flexible way to remove multiple fields from a message in pipeline processing.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "RemoveMultipleFields",
+            "evaluate",
+            "removeRegex",
+            "removeNames"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java",
+          "what_changed": "Added a new function RemoveSingleField that removes a single specified field from a message.",
+          "where_in_code": "RemoveSingleField class, including constructor and evaluate method",
+          "intent": "To provide a simple and efficient function to remove a single field from a message in pipeline processing.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "RemoveSingleField",
+            "evaluate"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_1": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry1": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (graylog2-server-helper) \u2014 compile errors:\ngraylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:103: error: cannot find symbol\ngraylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:104: error: cannot find symbol",
+      "validation_attempts": 2,
+      "retry_files": [
+        "graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java"
+      ],
+      "build_success": false,
+      "build_mode": "graylog2-server-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java",
+          "line": 103,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java",
+          "line": 104,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    },
+    "agent9_fallback_2": {
+      "fallback_status": "failed",
+      "fallback_attempts": 2,
+      "synthesized_count": 0,
+      "hunk_descriptions": [
+        {
+          "hunk_index": 0,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "what_changed": "Added imports for two new message processing functions: RemoveMultipleFields and RemoveSingleField.",
+          "where_in_code": "Imports section of ProcessorFunctionsModule.java",
+          "intent": "To include the new functions RemoveMultipleFields and RemoveSingleField in the module for registration and use.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "RemoveMultipleFields",
+            "RemoveSingleField"
+          ]
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java",
+          "what_changed": "Registered two new message processor functions RemoveSingleField and RemoveMultipleFields alongside existing functions.",
+          "where_in_code": "ProcessorFunctionsModule.java, inside method registering message processor functions",
+          "intent": "To make the new RemoveSingleField and RemoveMultipleFields functions available for pipeline processing.",
+          "change_type": "other",
+          "key_symbols": [
+            "RemoveSingleField",
+            "RemoveMultipleFields"
+          ]
+        },
+        {
+          "hunk_index": 2,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "what_changed": "Added import of java.util.regex.Pattern to support regex operations in RemoveField.",
+          "where_in_code": "Imports section of RemoveField.java",
+          "intent": "To enable pattern matching for field names using regex in the RemoveField function.",
+          "change_type": "modify_import",
+          "key_symbols": [
+            "Pattern"
+          ]
+        },
+        {
+          "hunk_index": 3,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "what_changed": "Changed the field parameter type from String to compiled Pattern with transformation; updated evaluation logic to use regex matching instead of string matching.",
+          "where_in_code": "RemoveField class, constructor and evaluate method",
+          "intent": "To improve field matching by using compiled regex patterns for more flexible field removal and to avoid repeated pattern compilation.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "fieldParam",
+            "evaluate"
+          ]
+        },
+        {
+          "hunk_index": 4,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+          "what_changed": "Updated function descriptor to mark RemoveField as deprecated and recommend using remove_single_field or remove_multiple_fields instead; adjusted description and rule builder naming accordingly.",
+          "where_in_code": "RemoveField class, descriptor method",
+          "intent": "To inform users that RemoveField is deprecated and encourage migration to newer, more performant functions.",
+          "change_type": "modify_logic",
+          "key_symbols": [
+            "descriptor",
+            "RemoveField"
+          ]
+        },
+        {
+          "hunk_index": 5,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java",
+          "what_changed": "Added a new function RemoveMultipleFields that removes multiple fields from a message either by regex pattern or by a list of field names.",
+          "where_in_code": "RemoveMultipleFields class, including constructor, evaluate method, and helper methods removeRegex and removeNames",
+          "intent": "To provide a performant and flexible way to remove multiple fields from a message, improving on the deprecated RemoveField function.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "RemoveMultipleFields",
+            "evaluate",
+            "removeRegex",
+            "removeNames"
+          ]
+        },
+        {
+          "hunk_index": 6,
+          "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java",
+          "what_changed": "Added a new function RemoveSingleField that removes a single specified field from a message.",
+          "where_in_code": "RemoveSingleField class, including constructor, evaluate method, and descriptor method",
+          "intent": "To provide a simple and efficient function to remove a single field from a message, as a replacement for the deprecated RemoveField function.",
+          "change_type": "add_method",
+          "key_symbols": [
+            "RemoveSingleField",
+            "evaluate",
+            "descriptor"
+          ]
+        }
+      ]
+    },
+    "agent8_syntax_repair_fallback_2": {
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": []
+    },
+    "agent7_validator_retry2": {
+      "validation_passed": false,
+      "validation_failure_category": "api_mismatch",
+      "validation_error_context": "Build failed (graylog2-server-helper) \u2014 compile errors:\ngraylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:103: error: cannot find symbol\ngraylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:104: error: cannot find symbol",
+      "validation_attempts": 3,
+      "retry_files": [
+        "graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java"
+      ],
+      "build_success": false,
+      "build_mode": "graylog2-server-helper",
+      "test_success": null,
+      "test_mode": null,
+      "test_state": null,
+      "test_state_transition": null,
+      "compile_errors": [
+        {
+          "file": "graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java",
+          "line": 103,
+          "message": "error: cannot find symbol"
+        },
+        {
+          "file": "graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java",
+          "line": 104,
+          "message": "error: cannot find symbol"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 15,
+    "developer_aux_hunks_from_target": 6,
+    "phase0_baseline": {
+      "mode": "baseline-graylog2-server-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 75
+    },
+    "java_production_hunks": 7,
+    "developer_aux_hunks": 6,
+    "processed_hunk_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "tokens_used": 9439,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent4_namespace": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      },
+      "agent8_syntax_repair": {
+        "input": 0,
+        "output": 0
+      },
+      "agent9_fallback": {
+        "input": 7572,
+        "output": 1867
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 3,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "failed",
+    "fallback_attempts": 2,
+    "retry_contexts": [
+      {
+        "error_type": "namespace_adaptation_failed",
+        "error_message": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}",
+        "attempt_count": 2,
+        "suggested_action": "structural_refactor"
+      },
+      {
+        "error_type": "namespace_adaptation_failed",
+        "error_message": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}",
+        "attempt_count": 2,
+        "suggested_action": "structural_refactor"
+      },
+      {
+        "error_type": "namespace_adaptation_failed",
+        "error_message": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}",
+        "attempt_count": 2,
+        "suggested_action": "structural_refactor"
+      },
+      {
+        "error_type": "unknown",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java:[25,56] error: package org.graylog.plugins.pipelineprocessor.rulebuilder does not exist\n[ERROR] /repo/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java:[25,56] error: package org.graylog.plugins.pipelineprocessor.rulebuilder does not exist\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.10.1:compile (default-compile) on project graylog2-server: Compilation failure: Compilation failure: \n[ERROR] /repo/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveMultipleFields.java:[25,56] error: package org.graylog.plugins.pipelineprocessor.rulebuilder does not exist\n[ERROR] /repo/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveSingleField.java:[25,56] error: package org.graylog.plugins.pipelineprocessor.rulebuilder does not exist\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :graylog2-server",
+        "attempt_count": 1,
+        "suggested_action": "inspect_and_retry"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:[103,63] error: cannot find symbol\n  symbol:   class RemoveMultipleFields\n[ERROR] /repo/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:[104,63] error: cannot find symbol\n  symbol:   class RemoveSingleField\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.10.1:testCompile (default-testCompile) on project graylog2-server: Compilation failure: Compilation failure: \n[ERROR] /repo/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:[103,63] error: cannot find symbol\n[ERROR]   symbol:   class RemoveMultipleFields\n[ERROR]   location: package org.graylog.plugins.pipelineprocessor.functions.messages\n[ERROR] /repo/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:[104,63] error: cannot find symbol\n[ERROR]   symbol:   class RemoveSingleField\n[ERROR]   location: package org.graylog.plugins.pipelineprocessor.functions.messages\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :graylog2-server",
+        "attempt_count": 2,
+        "suggested_action": "route_to_namespace_or_structural"
+      },
+      {
+        "error_type": "api_mismatch",
+        "error_message": "[ERROR] COMPILATION ERROR : \n[ERROR] /repo/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:[103,63] error: cannot find symbol\n  symbol:   class RemoveMultipleFields\n[ERROR] /repo/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:[104,63] error: cannot find symbol\n  symbol:   class RemoveSingleField\n[INFO] BUILD FAILURE\n[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.10.1:testCompile (default-testCompile) on project graylog2-server: Compilation failure: Compilation failure: \n[ERROR] /repo/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:[103,63] error: cannot find symbol\n[ERROR]   symbol:   class RemoveMultipleFields\n[ERROR]   location: package org.graylog.plugins.pipelineprocessor.functions.messages\n[ERROR] /repo/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java:[104,63] error: cannot find symbol\n[ERROR]   symbol:   class RemoveSingleField\n[ERROR]   location: package org.graylog.plugins.pipelineprocessor.functions.messages\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n[ERROR] \n[ERROR] After correcting the problems, you can resume the build with the command\n[ERROR]   mvn <args> -rf :graylog2-server",
+        "attempt_count": 3,
+        "suggested_action": "route_to_namespace_or_structural"
+      }
+    ],
+    "failed_hunks": [
+      {
+        "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+        "old_file_path": null,
+        "old_content": "import org.graylog.plugins.pipelineprocessor.rulebuilder.RuleBuilderFunctionGroup;\nimport org.graylog2.plugin.Message;\n\nimport java.util.stream.Collectors;\n\nimport static org.graylog.plugins.pipelineprocessor.ast.functions.ParameterDescriptor.type;\n",
+        "new_content": "import org.graylog.plugins.pipelineprocessor.rulebuilder.RuleBuilderFunctionGroup;\nimport org.graylog2.plugin.Message;\n\nimport java.util.regex.Pattern;\nimport java.util.stream.Collectors;\n\nimport static org.graylog.plugins.pipelineprocessor.ast.functions.ParameterDescriptor.type;\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "is_rename": false,
+        "file_operation": "MODIFIED",
+        "error": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}"
+      },
+      {
+        "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+        "old_file_path": null,
+        "old_content": "    public static final String NAME = \"remove_field\";\n    public static final String FIELD = \"field\";\n    public static final String INVERT = \"invert\";\n    private final ParameterDescriptor<String, String> fieldParam;\n    private final ParameterDescriptor<Message, Message> messageParam;\n    private final ParameterDescriptor<Boolean, Boolean> invertParam;\n\n    public RemoveField() {\n        fieldParam = ParameterDescriptor.string(FIELD).description(\"The field(s) to remove (name or regex)\").build();\n        messageParam = type(\"message\", Message.class).optional().description(\"The message to use, defaults to '$message'\").build();\n        invertParam = ParameterDescriptor.bool(INVERT).optional().description(\"Invert: keep matching field(s) and remove all others\").build();\n    }\n\n    @Override\n    public Void evaluate(FunctionArgs args, EvaluationContext context) {\n        final String fieldOrPattern = fieldParam.required(args, context);\n        final Message message = messageParam.optional(args, context).orElse(context.currentMessage());\n        final Boolean invert = invertParam.optional(args, context).orElse(false);\n\n        message.getFieldNames().stream()\n                .filter(f -> {\n                    boolean condition = f.matches(fieldOrPattern);\n                    return invert ? !condition : condition;\n                })\n                .collect(Collectors.toList()) // required to avoid ConcurrentModificationException\n",
+        "new_content": "    public static final String NAME = \"remove_field\";\n    public static final String FIELD = \"field\";\n    public static final String INVERT = \"invert\";\n    private final ParameterDescriptor<String, Pattern> fieldParam;\n    private final ParameterDescriptor<Message, Message> messageParam;\n    private final ParameterDescriptor<Boolean, Boolean> invertParam;\n\n    public RemoveField() {\n        fieldParam = ParameterDescriptor.string(FIELD, Pattern.class)\n                .transform(Pattern::compile)\n                .description(\"The field(s) to remove (name or regex)\").build();\n        messageParam = type(\"message\", Message.class).optional().description(\"The message to use, defaults to '$message'\").build();\n        invertParam = ParameterDescriptor.bool(INVERT).optional().description(\"Invert: keep matching field(s) and remove all others\").build();\n    }\n\n    @Override\n    public Void evaluate(FunctionArgs args, EvaluationContext context) {\n        final Pattern pattern = fieldParam.required(args, context);\n        final Message message = messageParam.optional(args, context).orElse(context.currentMessage());\n        final Boolean invert = invertParam.optional(args, context).orElse(false);\n\n        message.getFieldNames().stream()\n                .filter(f -> {\n                    boolean condition = pattern.matcher(f).matches();\n                    return invert ? !condition : condition;\n                })\n                .collect(Collectors.toList()) // required to avoid ConcurrentModificationException\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "is_rename": false,
+        "file_operation": "MODIFIED",
+        "error": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}"
+      },
+      {
+        "file_path": "graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/messages/RemoveField.java",
+        "old_file_path": null,
+        "old_content": "                .name(NAME)\n                .returnType(Void.class)\n                .params(ImmutableList.of(fieldParam, messageParam, invertParam))\n                .description(\"Removes the named field from message, unless the field is reserved. If no specific message is provided, it removes the field from the currently processed message.\")\n                .ruleBuilderEnabled()\n                .ruleBuilderName(\"Remove field\")\n                .ruleBuilderTitle(\"Remove field '${field}'\")\n                .ruleBuilderFunctionGroup(RuleBuilderFunctionGroup.MESSAGE)\n                .build();\n",
+        "new_content": "                .name(NAME)\n                .returnType(Void.class)\n                .params(ImmutableList.of(fieldParam, messageParam, invertParam))\n                .description(\"Removes the named field from message, unless the field is reserved. \" +\n                        \"If no specific message is provided, it uses the currently processed message. \" +\n                        \"This function is deprecated - use the more performant remove_single_field or remove_multiple_fields.\")\n                .ruleBuilderEnabled()\n                .ruleBuilderName(\"Remove field (deprecated)\")\n                .ruleBuilderTitle(\"Remove field '${field}'\")\n                .ruleBuilderFunctionGroup(RuleBuilderFunctionGroup.MESSAGE)\n                .build();\n",
+        "is_new_file": false,
+        "is_del_file": false,
+        "is_rename": false,
+        "file_operation": "MODIFIED",
+        "error": "Error code: 400 - {'error': {'message': \"Unsupported value: 'temperature' does not support 0.2 with this model. Only the default (1) value is supported.\", 'type': 'invalid_request_error', 'param': 'temperature', 'code': 'unsupported_value'}}"
+      }
+    ],
+    "generated_patch_bytes": 10005,
+    "target_patch_bytes": 21681,
+    "validation_passed": false,
+    "validation_failure_category": "api_mismatch",
+    "build_success": false,
+    "test_success": null,
+    "test_mode": null,
+    "test_transition": {},
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

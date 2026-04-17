@@ -1,0 +1,55 @@
+commit 393ea618d7c01c7c5ef2bb23f4a41185833be5d3
+Author: Jim Ferenczi <jim.ferenczi@elastic.co>
+Date:   Tue Jan 7 19:27:06 2025 +0000
+
+    Semantic text with legacy format cannot store term vectors (#119690)
+    
+    This change fixes the store option of the underlying sparse vector field for semantic text.
+    For legacy indices, the store option should remain false since changing this option on an existing index is not allowed and that term vectors are already stored in _source.
+
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/mapper/SemanticTextFieldMapper.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/mapper/SemanticTextFieldMapper.java
+index 690a136c566..9126fd78cad 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/mapper/SemanticTextFieldMapper.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/mapper/SemanticTextFieldMapper.java
+@@ -858,7 +858,7 @@ public class SemanticTextFieldMapper extends FieldMapper implements InferenceFie
+         );
+         chunksField.dynamic(ObjectMapper.Dynamic.FALSE);
+         if (modelSettings != null) {
+-            chunksField.add(createEmbeddingsField(indexSettings.getIndexVersionCreated(), modelSettings));
++            chunksField.add(createEmbeddingsField(indexSettings.getIndexVersionCreated(), modelSettings, useLegacyFormat));
+         }
+         if (useLegacyFormat) {
+             var chunkTextField = new KeywordFieldMapper.Builder(TEXT_FIELD, indexVersionCreated).indexed(false).docValues(false);
+@@ -869,9 +869,13 @@ public class SemanticTextFieldMapper extends FieldMapper implements InferenceFie
+         return chunksField;
+     }
+ 
+-    private static Mapper.Builder createEmbeddingsField(IndexVersion indexVersionCreated, SemanticTextField.ModelSettings modelSettings) {
++    private static Mapper.Builder createEmbeddingsField(
++        IndexVersion indexVersionCreated,
++        SemanticTextField.ModelSettings modelSettings,
++        boolean useLegacyFormat
++    ) {
+         return switch (modelSettings.taskType()) {
+-            case SPARSE_EMBEDDING -> new SparseVectorFieldMapper.Builder(CHUNKED_EMBEDDINGS_FIELD).setStored(true);
++            case SPARSE_EMBEDDING -> new SparseVectorFieldMapper.Builder(CHUNKED_EMBEDDINGS_FIELD).setStored(useLegacyFormat == false);
+             case TEXT_EMBEDDING -> {
+                 DenseVectorFieldMapper.Builder denseVectorMapperBuilder = new DenseVectorFieldMapper.Builder(
+                     CHUNKED_EMBEDDINGS_FIELD,
+diff --git a/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/mapper/SemanticTextFieldMapperTests.java b/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/mapper/SemanticTextFieldMapperTests.java
+index e6d68c8343d..b056f5880b2 100644
+--- a/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/mapper/SemanticTextFieldMapperTests.java
++++ b/x-pack/plugin/inference/src/test/java/org/elasticsearch/xpack/inference/mapper/SemanticTextFieldMapperTests.java
+@@ -536,7 +536,11 @@ public class SemanticTextFieldMapperTests extends MapperTestCase {
+             assertTrue(embeddingsFieldMapper.fieldType() == mapperService.mappingLookup().getFieldType(getEmbeddingsFieldName(fieldName)));
+             assertThat(embeddingsMapper.fullPath(), equalTo(getEmbeddingsFieldName(fieldName)));
+             switch (semanticFieldMapper.fieldType().getModelSettings().taskType()) {
+-                case SPARSE_EMBEDDING -> assertThat(embeddingsMapper, instanceOf(SparseVectorFieldMapper.class));
++                case SPARSE_EMBEDDING -> {
++                    assertThat(embeddingsMapper, instanceOf(SparseVectorFieldMapper.class));
++                    SparseVectorFieldMapper sparseMapper = (SparseVectorFieldMapper) embeddingsMapper;
++                    assertEquals(sparseMapper.fieldType().isStored(), semanticTextFieldType.useLegacyFormat() == false);
++                }
+                 case TEXT_EMBEDDING -> assertThat(embeddingsMapper, instanceOf(DenseVectorFieldMapper.class));
+                 default -> throw new AssertionError("Invalid task type");
+             }

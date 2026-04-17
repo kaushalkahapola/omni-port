@@ -1,0 +1,129 @@
+commit 969cd70aa00f0c104b5b94dabee05ac84be0e0d9
+Author: Kostas Krikellas <131142368+kkrik-es@users.noreply.github.com>
+Date:   Fri Jan 24 19:36:59 2025 +0200
+
+    Restore source matching in randomized logsdb tests (#120773)
+    
+    Applies the fix in `SourceMatcher` from #120756, along with disabling
+    `SCALED_FLOAT` and `HALF_FLOAT` that have accuracy issues leading to
+    false positives.
+
+diff --git a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+index 9ddb6f0d496..5a417c541d7 100644
+--- a/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
++++ b/server/src/main/java/org/elasticsearch/index/mapper/DocumentParser.java
+@@ -729,28 +729,20 @@ public final class DocumentParser {
+ 
+         XContentParser parser = context.parser();
+         XContentParser.Token token;
+-        int elements = 0;
+         while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+             if (token == XContentParser.Token.START_OBJECT) {
+-                elements = Integer.MAX_VALUE;
+                 parseObject(context, lastFieldName);
+             } else if (token == XContentParser.Token.START_ARRAY) {
+-                elements = Integer.MAX_VALUE;
+                 parseArray(context, lastFieldName);
+             } else if (token == XContentParser.Token.VALUE_NULL) {
+-                elements++;
+                 parseNullValue(context, lastFieldName);
+             } else if (token == null) {
+                 throwEOFOnParseArray(arrayFieldName, context);
+             } else {
+                 assert token.isValue();
+-                elements++;
+                 parseValue(context, lastFieldName);
+             }
+         }
+-        if (elements <= 1 && canRemoveSingleLeafElement) {
+-            context.removeLastIgnoredField(fullPath);
+-        }
+         postProcessDynamicArrayMapping(context, lastFieldName);
+     }
+ 
+diff --git a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+index 14902aa419b..2b36c0ce0b5 100644
+--- a/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
++++ b/server/src/test/java/org/elasticsearch/index/mapper/IgnoredSourceFieldMapperTests.java
+@@ -743,9 +743,7 @@ public class IgnoredSourceFieldMapperTests extends MapperServiceTestCase {
+             b.startObject("int_value").field("type", "integer").endObject();
+         })).documentMapper();
+         var syntheticSource = syntheticSource(documentMapper, b -> b.array("int_value", new int[] { 10 }));
+-        assertEquals("{\"int_value\":10}", syntheticSource);
+-        ParsedDocument doc = documentMapper.parse(source(syntheticSource));
+-        assertNull(doc.rootDoc().getField("_ignored_source"));
++        assertEquals("{\"int_value\":[10]}", syntheticSource);
+     }
+ 
+     public void testIndexStoredArraySourceSingleLeafElementAndNull() throws IOException {
+diff --git a/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/FieldType.java b/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/FieldType.java
+index 96b75f29382..07744851aba 100644
+--- a/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/FieldType.java
++++ b/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/FieldType.java
+@@ -13,11 +13,9 @@ import org.elasticsearch.logsdb.datageneration.datasource.DataSource;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.ByteFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.DoubleFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.FloatFieldDataGenerator;
+-import org.elasticsearch.logsdb.datageneration.fields.leaf.HalfFloatFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.IntegerFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.KeywordFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.LongFieldDataGenerator;
+-import org.elasticsearch.logsdb.datageneration.fields.leaf.ScaledFloatFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.ShortFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.UnsignedLongFieldDataGenerator;
+ 
+@@ -32,9 +30,7 @@ public enum FieldType {
+     SHORT("short"),
+     BYTE("byte"),
+     DOUBLE("double"),
+-    FLOAT("float"),
+-    HALF_FLOAT("half_float"),
+-    SCALED_FLOAT("scaled_float");
++    FLOAT("float");
+ 
+     private final String name;
+ 
+@@ -52,8 +48,6 @@ public enum FieldType {
+             case BYTE -> new ByteFieldDataGenerator(fieldName, dataSource);
+             case DOUBLE -> new DoubleFieldDataGenerator(fieldName, dataSource);
+             case FLOAT -> new FloatFieldDataGenerator(fieldName, dataSource);
+-            case HALF_FLOAT -> new HalfFloatFieldDataGenerator(fieldName, dataSource);
+-            case SCALED_FLOAT -> new ScaledFloatFieldDataGenerator(fieldName, dataSource);
+         };
+     }
+ 
+diff --git a/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/datasource/DefaultMappingParametersHandler.java b/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/datasource/DefaultMappingParametersHandler.java
+index b639108ea6a..db13867fe71 100644
+--- a/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/datasource/DefaultMappingParametersHandler.java
++++ b/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/datasource/DefaultMappingParametersHandler.java
+@@ -32,8 +32,7 @@ public class DefaultMappingParametersHandler implements DataSourceHandler {
+ 
+         return new DataSourceResponse.LeafMappingParametersGenerator(switch (request.fieldType()) {
+             case KEYWORD -> keywordMapping(request, map);
+-            case LONG, INTEGER, SHORT, BYTE, DOUBLE, FLOAT, HALF_FLOAT, UNSIGNED_LONG -> plain(map);
+-            case SCALED_FLOAT -> scaledFloatMapping(map);
++            case LONG, INTEGER, SHORT, BYTE, DOUBLE, FLOAT, UNSIGNED_LONG -> plain(map);
+         });
+     }
+ 
+diff --git a/x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/qa/matchers/source/SourceMatcher.java b/x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/qa/matchers/source/SourceMatcher.java
+index cd2bb361d06..d4d53a85c6e 100644
+--- a/x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/qa/matchers/source/SourceMatcher.java
++++ b/x-pack/plugin/logsdb/src/javaRestTest/java/org/elasticsearch/xpack/logsdb/qa/matchers/source/SourceMatcher.java
+@@ -104,7 +104,7 @@ public class SourceMatcher extends GenericEqualsMatcher<List<Map<String, Object>
+             // See #111916.
+             var genericMatchResult = matchWithGenericMatcher(actualValues, expectedValues);
+             if (genericMatchResult.isMatch()) {
+-                return genericMatchResult;
++                continue;
+             }
+ 
+             var matchIncludingFieldSpecificMatchers = matchWithFieldSpecificMatcher(name, actualValues, expectedValues).orElse(
+@@ -115,7 +115,6 @@ public class SourceMatcher extends GenericEqualsMatcher<List<Map<String, Object>
+                 return MatchResult.noMatch(message);
+             }
+         }
+-
+         return MatchResult.match();
+     }
+ 

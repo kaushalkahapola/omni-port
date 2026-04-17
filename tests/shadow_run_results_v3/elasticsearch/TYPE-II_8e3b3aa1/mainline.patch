@@ -1,0 +1,185 @@
+commit 8e3b3aa1a5c8cf8935b997dff54cc72a2eb591ee
+Author: Martijn van Groningen <martijn.v.groningen@gmail.com>
+Date:   Thu Oct 10 20:12:17 2024 +0200
+
+    No longer require logs@settings component template to enable logsdb by default. (#114501)
+    
+    This change also opts out apm logs from logsdb.
+
+diff --git a/qa/rolling-upgrade/src/javaRestTest/java/org/elasticsearch/upgrades/LogsIndexModeRollingUpgradeIT.java b/qa/rolling-upgrade/src/javaRestTest/java/org/elasticsearch/upgrades/LogsIndexModeRollingUpgradeIT.java
+index d15f20aee0c..ba79de4ab6c 100644
+--- a/qa/rolling-upgrade/src/javaRestTest/java/org/elasticsearch/upgrades/LogsIndexModeRollingUpgradeIT.java
++++ b/qa/rolling-upgrade/src/javaRestTest/java/org/elasticsearch/upgrades/LogsIndexModeRollingUpgradeIT.java
+@@ -45,7 +45,9 @@ public class LogsIndexModeRollingUpgradeIT extends AbstractRollingUpgradeTestCas
+         .module("x-pack-stack")
+         .setting("xpack.security.enabled", "false")
+         .setting("xpack.license.self_generated.type", "trial")
+-        .setting("cluster.logsdb.enabled", "true")
++        // We upgrade from standard to logsdb, so we need to start with logsdb disabled,
++        // then later cluster.logsdb.enabled gets set to true and next rollover data stream is in logsdb mode.
++        .setting("cluster.logsdb.enabled", "false")
+         .setting("stack.templates.enabled", "false")
+         .build();
+ 
+@@ -91,39 +93,6 @@ public class LogsIndexModeRollingUpgradeIT extends AbstractRollingUpgradeTestCas
+           }
+         }""";
+ 
+-    private static final String LOGS_TEMPLATE = """
+-        {
+-          "index_patterns": [ "logs-*-*" ],
+-          "data_stream": {},
+-          "priority": 500,
+-          "template": {
+-            "settings": {
+-              "index": {
+-                "mode": "logsdb"
+-              }
+-            },
+-            "mappings": {
+-              "properties": {
+-                "@timestamp" : {
+-                  "type": "date"
+-                },
+-                "host.name": {
+-                  "type": "keyword"
+-                },
+-                "method": {
+-                  "type": "keyword"
+-                },
+-                "message": {
+-                  "type": "text"
+-                },
+-                "ip.address": {
+-                  "type": "ip"
+-                }
+-              }
+-            }
+-          }
+-        }""";
+-
+     public void testLogsIndexing() throws IOException {
+         if (isOldCluster()) {
+             assertOK(client().performRequest(putTemplate(client(), "logs-template", STANDARD_TEMPLATE)));
+@@ -169,7 +138,7 @@ public class LogsIndexModeRollingUpgradeIT extends AbstractRollingUpgradeTestCas
+             assertOK(bulkIndexResponse);
+             assertThat(entityAsMap(bulkIndexResponse).get("errors"), Matchers.is(false));
+         } else if (isUpgradedCluster()) {
+-            assertOK(client().performRequest(putTemplate(client(), "logs-template", LOGS_TEMPLATE)));
++            enableLogsdbByDefault();
+             assertOK(client().performRequest(rolloverDataStream(client(), "logs-apache-production")));
+             final Response bulkIndexResponse = client().performRequest(bulkIndex("logs-apache-production", () -> {
+                 final StringBuilder sb = new StringBuilder();
+@@ -202,6 +171,18 @@ public class LogsIndexModeRollingUpgradeIT extends AbstractRollingUpgradeTestCas
+         }
+     }
+ 
++    private static void enableLogsdbByDefault() throws IOException {
++        var request = new Request("PUT", "/_cluster/settings");
++        request.setJsonEntity("""
++            {
++                "persistent": {
++                    "cluster.logsdb.enabled": true
++                }
++            }
++            """);
++        assertOK(client().performRequest(request));
++    }
++
+     private void assertIndexMappingsAndSettings(int backingIndex, final Matcher<Object> indexModeMatcher, final MapMatcher mappingsMatcher)
+         throws IOException {
+         assertThat(
+diff --git a/x-pack/plugin/apm-data/src/main/resources/component-templates/logs-apm@settings.yaml b/x-pack/plugin/apm-data/src/main/resources/component-templates/logs-apm@settings.yaml
+index 323f2340fb3..6bb8079c534 100644
+--- a/x-pack/plugin/apm-data/src/main/resources/component-templates/logs-apm@settings.yaml
++++ b/x-pack/plugin/apm-data/src/main/resources/component-templates/logs-apm@settings.yaml
+@@ -6,3 +6,4 @@ _meta:
+ template:
+   settings:
+     codec: best_compression
++    mode: standard
+diff --git a/x-pack/plugin/logsdb/src/main/java/org/elasticsearch/xpack/logsdb/LogsdbIndexModeSettingsProvider.java b/x-pack/plugin/logsdb/src/main/java/org/elasticsearch/xpack/logsdb/LogsdbIndexModeSettingsProvider.java
+index 4bef45f2103..b463426de08 100644
+--- a/x-pack/plugin/logsdb/src/main/java/org/elasticsearch/xpack/logsdb/LogsdbIndexModeSettingsProvider.java
++++ b/x-pack/plugin/logsdb/src/main/java/org/elasticsearch/xpack/logsdb/LogsdbIndexModeSettingsProvider.java
+@@ -7,9 +7,7 @@
+ 
+ package org.elasticsearch.xpack.logsdb;
+ 
+-import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
+ import org.elasticsearch.cluster.metadata.Metadata;
+-import org.elasticsearch.cluster.metadata.MetadataIndexTemplateService;
+ import org.elasticsearch.common.compress.CompressedXContent;
+ import org.elasticsearch.common.regex.Regex;
+ import org.elasticsearch.common.settings.Setting;
+@@ -59,7 +57,7 @@ final class LogsdbIndexModeSettingsProvider implements IndexSettingProvider {
+             return Settings.EMPTY;
+         }
+ 
+-        if (usesLogsAtSettingsComponentTemplate(metadata, dataStreamName) && matchesLogsPattern(dataStreamName)) {
++        if (matchesLogsPattern(dataStreamName)) {
+             return Settings.builder().put("index.mode", IndexMode.LOGSDB.getName()).build();
+         }
+ 
+@@ -74,21 +72,4 @@ final class LogsdbIndexModeSettingsProvider implements IndexSettingProvider {
+         return mode != null ? Enum.valueOf(IndexMode.class, mode.toUpperCase(Locale.ROOT)) : null;
+     }
+ 
+-    private boolean usesLogsAtSettingsComponentTemplate(final Metadata metadata, final String name) {
+-        final String template = MetadataIndexTemplateService.findV2Template(metadata, name, false);
+-        if (template == null) {
+-            return false;
+-        }
+-        final ComposableIndexTemplate composableIndexTemplate = metadata.templatesV2().get(template);
+-        if (composableIndexTemplate == null) {
+-            return false;
+-        }
+-        for (final String componentTemplate : composableIndexTemplate.composedOf()) {
+-            if ("logs@settings".equals(componentTemplate)) {
+-                return true;
+-            }
+-        }
+-        return false;
+-    }
+-
+ }
+diff --git a/x-pack/plugin/logsdb/src/test/java/org/elasticsearch/xpack/logsdb/LogsdbIndexModeSettingsProviderTests.java b/x-pack/plugin/logsdb/src/test/java/org/elasticsearch/xpack/logsdb/LogsdbIndexModeSettingsProviderTests.java
+index eeb5389644c..04e89af254f 100644
+--- a/x-pack/plugin/logsdb/src/test/java/org/elasticsearch/xpack/logsdb/LogsdbIndexModeSettingsProviderTests.java
++++ b/x-pack/plugin/logsdb/src/test/java/org/elasticsearch/xpack/logsdb/LogsdbIndexModeSettingsProviderTests.java
+@@ -148,7 +148,7 @@ public class LogsdbIndexModeSettingsProviderTests extends ESTestCase {
+             List.of(new CompressedXContent(DEFAULT_MAPPING))
+         );
+ 
+-        assertTrue(additionalIndexSettings.isEmpty());
++        assertIndexMode(additionalIndexSettings, IndexMode.LOGSDB.getName());
+     }
+ 
+     public void testWithLogsComponentTemplate() throws IOException {
+@@ -202,7 +202,7 @@ public class LogsdbIndexModeSettingsProviderTests extends ESTestCase {
+             List.of(new CompressedXContent(DEFAULT_MAPPING))
+         );
+ 
+-        assertTrue(additionalIndexSettings.isEmpty());
++        assertIndexMode(additionalIndexSettings, IndexMode.LOGSDB.getName());
+     }
+ 
+     public void testNonMatchingTemplateIndexPattern() throws IOException {
+@@ -220,7 +220,7 @@ public class LogsdbIndexModeSettingsProviderTests extends ESTestCase {
+             List.of(new CompressedXContent(DEFAULT_MAPPING))
+         );
+ 
+-        assertTrue(additionalIndexSettings.isEmpty());
++        assertIndexMode(additionalIndexSettings, IndexMode.LOGSDB.getName());
+     }
+ 
+     public void testCaseSensitivity() throws IOException {
+@@ -256,7 +256,7 @@ public class LogsdbIndexModeSettingsProviderTests extends ESTestCase {
+             List.of(new CompressedXContent(DEFAULT_MAPPING))
+         );
+ 
+-        assertTrue(additionalIndexSettings.isEmpty());
++        assertIndexMode(additionalIndexSettings, IndexMode.LOGSDB.getName());
+     }
+ 
+     public void testBeforeAndAFterSettingUpdate() throws IOException {

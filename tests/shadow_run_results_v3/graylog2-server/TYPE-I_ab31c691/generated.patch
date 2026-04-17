@@ -1,0 +1,90 @@
+diff --git a/graylog2-server/src/main/java/org/graylog2/lookup/caches/CaffeineLookupCache.java b/graylog2-server/src/main/java/org/graylog2/lookup/caches/CaffeineLookupCache.java
+index 631f609fde..64779e2cb0 100644
+--- a/graylog2-server/src/main/java/org/graylog2/lookup/caches/CaffeineLookupCache.java
++++ b/graylog2-server/src/main/java/org/graylog2/lookup/caches/CaffeineLookupCache.java
+@@ -159,17 +159,22 @@ public class CaffeineLookupCache extends LookupCache {
+         final Function<LookupCacheKey, LookupResult> mapFunction = unused -> {
+             try {
+                 final LookupResult result = loader.call();
+-                if (ignoreResult(result, config.ignoreNull())) {
+-                    LOG.trace("Ignoring failed lookup for key {}", key);
+-                    return LookupResult.builder()
+-                            .cacheTTL(0L)
+-                            .build();
++                if (result.hasError()) {
++                    // Bubble up errors unaltered
++                    return result;
+                 }
+                 if (isResultEmpty(result)) {
+-                    LOG.trace("Empty lookup for key {} with TTL {}", key, ttlEmptyMillis());
+-                    return LookupResult.builder()
+-                            .cacheTTL(ttlEmptyMillis())
+-                            .build();
++                    if (Boolean.TRUE.equals(config.ignoreNull())) {
++                        LOG.trace("Ignoring empty lookup for key {}", key);
++                        return LookupResult.builder()
++                                .cacheTTL(0L)
++                                .build();
++                    } else {
++                        LOG.trace("Empty lookup for key {} with TTL {}", key, ttlEmptyMillis());
++                        return LookupResult.builder()
++                                .cacheTTL(ttlEmptyMillis())
++                                .build();
++                    }
+                 }
+                 return result;
+             } catch (Exception e) {
+@@ -178,18 +183,12 @@ public class CaffeineLookupCache extends LookupCache {
+                         String.format(Locale.ENGLISH, "Loading value from data adapter failed for key <%s>: %s", key.toString(), e.getMessage()));
+             }
+         };
++
+         try (final Timer.Context ignored = lookupTimer()) {
+             return cache.get(key, mapFunction);
+         }
+     }
+ 
+-    private boolean ignoreResult(LookupResult result, Boolean ignoreNull) {
+-        if (Boolean.TRUE.equals(ignoreNull)) {
+-            return isResultEmpty(result);
+-        }
+-        return false;
+-    }
+-
+     private boolean isResultEmpty(LookupResult result) {
+         return (result == null ||
+                 (result.singleValue() == null && result.multiValue() == null && result.stringListValue() == null));
+diff --git a/graylog2-server/src/main/java/org/graylog2/plugin/lookup/LookupResult.java b/graylog2-server/src/main/java/org/graylog2/plugin/lookup/LookupResult.java
+index d61c743c17..38ffd52c87 100644
+--- a/graylog2-server/src/main/java/org/graylog2/plugin/lookup/LookupResult.java
++++ b/graylog2-server/src/main/java/org/graylog2/plugin/lookup/LookupResult.java
+@@ -49,11 +49,11 @@ public abstract class LookupResult {
+     // Cache erroneous results with a shorter TTL
+     private static final long ERROR_CACHE_TTL = Duration.ofSeconds(5).toMillis();
+ 
+-    private static final LookupResult EMPTY_LOOKUP_RESULT = builder()
++    public static final LookupResult EMPTY_LOOKUP_RESULT = builder()
+             .cacheTTL(NO_TTL)
+             .build();
+ 
+-    private static final LookupResult DEFAULT_ERROR_LOOKUP_RESULT = builder()
++    public static final LookupResult DEFAULT_ERROR_LOOKUP_RESULT = builder()
+             .cacheTTL(ERROR_CACHE_TTL)
+             .hasError(true)
+             .build();
+@@ -72,7 +72,6 @@ public abstract class LookupResult {
+     @Nullable
+     public abstract List<String> stringListValue();
+ 
+-
+     @JsonProperty("has_error")
+     public abstract boolean hasError();
+ 
+@@ -185,7 +184,6 @@ public abstract class LookupResult {
+                 .build();
+     }
+ 
+-
+     public static Builder withoutTTL() {
+         return builder().cacheTTL(NO_TTL);
+     }

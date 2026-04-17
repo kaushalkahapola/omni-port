@@ -1,0 +1,178 @@
+commit 56362c72d24db0532161c3288b2b21e2d2772c01
+Author: Ryan <103449971+ryan-carroll-graylog@users.noreply.github.com>
+Date:   Thu Jan 11 08:12:32 2024 -0500
+
+    Update select_jsonpath to accept strings of JSON in addition to JsonNode objects (#17683) (#17896)
+    
+    * Update select_jsonpath to accept strings of JSON in addition to JsonNode objects
+    
+    * Add unit test
+    
+    * Add changelog entry
+    
+    * Update changelog with correct issue/pr
+    
+    
+    
+    ---------
+    
+    Co-authored-by: Zack King <91903901+kingzacko1@users.noreply.github.com>
+
+diff --git a/changelog/unreleased/issue-17647.toml b/changelog/unreleased/issue-17647.toml
+new file mode 100644
+index 0000000000..7f9a1ea975
+--- /dev/null
++++ b/changelog/unreleased/issue-17647.toml
+@@ -0,0 +1,5 @@
++type = "c"
++message = "Updated the select_jsonpath pipeline function to accept JSON strings as the `json` parameter in addition to parsed JsonNode objects."
++
++issues = ["17647"]
++pulls = ["17683"]
+diff --git a/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/json/SelectJsonPath.java b/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/json/SelectJsonPath.java
+index 272a359bc1..f8ea4d3c67 100644
+--- a/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/json/SelectJsonPath.java
++++ b/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/json/SelectJsonPath.java
+@@ -16,6 +16,7 @@
+  */
+ package org.graylog.plugins.pipelineprocessor.functions.json;
+ 
++import com.fasterxml.jackson.core.JsonProcessingException;
+ import com.fasterxml.jackson.databind.JsonNode;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.google.common.collect.ImmutableList;
+@@ -44,18 +45,20 @@ public class SelectJsonPath extends AbstractFunction<Map<String, Object>> {
+ 
+     public static final String NAME = "select_jsonpath";
+ 
++    private final ObjectMapper objectMapper;
+     private final Configuration configuration;
+-    private final ParameterDescriptor<JsonNode, JsonNode> jsonParam;
++    private final ParameterDescriptor<Object, Object> jsonParam;
+     private final ParameterDescriptor<Map<String, String>, Map<String, JsonPath>> pathsParam;
+ 
+     @Inject
+     public SelectJsonPath(ObjectMapper objectMapper) {
++        this.objectMapper = objectMapper;
+         configuration = Configuration.builder()
+                 .options(Option.SUPPRESS_EXCEPTIONS)
+                 .jsonProvider(new JacksonJsonNodeJsonProvider(objectMapper))
+                 .build();
+ 
+-        jsonParam = ParameterDescriptor.type("json", JsonNode.class).description("A parsed JSON tree").build();
++        jsonParam = ParameterDescriptor.type("json", Object.class).description("A parsed JSON tree or String representation of a JSON tree").build();
+         // sigh generics and type erasure
+         //noinspection unchecked
+         pathsParam = ParameterDescriptor.type("paths",
+@@ -70,7 +73,21 @@ public class SelectJsonPath extends AbstractFunction<Map<String, Object>> {
+ 
+     @Override
+     public Map<String, Object> evaluate(FunctionArgs args, EvaluationContext context) {
+-        final JsonNode json = jsonParam.required(args, context);
++        final Object jsonObj = jsonParam.required(args, context);
++        JsonNode json = null;
++        if (jsonObj instanceof JsonNode jsonNode) {
++            json = jsonNode;
++        } else if (jsonObj instanceof String jsonString) {
++            try {
++                json = objectMapper.readTree(jsonString);
++            } catch (JsonProcessingException e) {
++                log.warn(context.pipelineErrorMessage("Unable to parse JSON"), e);
++            }
++        } else {
++            throw new IllegalArgumentException(context.pipelineErrorMessage(
++                    "`json` parameter must be a parsed JSON tree or String representation of a JSON tree"));
++        }
++
+         final Map<String, JsonPath> paths = pathsParam.required(args, context);
+         if (json == null || paths == null) {
+             return Collections.emptyMap();
+diff --git a/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java b/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java
+index b06e3568c6..0ee1434c4c 100644
+--- a/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java
++++ b/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java
+@@ -441,6 +441,55 @@ public class FunctionsSnippetsTest extends BaseParserTest {
+         assertThat(message.hasField("this_should_exist")).isTrue();
+     }
+ 
++    @Test
++    public void jsonpathFromMessageField() {
++        final String json = "{\n" +
++                "    \"store\": {\n" +
++                "        \"book\": [\n" +
++                "            {\n" +
++                "                \"category\": \"reference\",\n" +
++                "                \"author\": \"Nigel Rees\",\n" +
++                "                \"title\": \"Sayings of the Century\",\n" +
++                "                \"price\": 8.95\n" +
++                "            },\n" +
++                "            {\n" +
++                "                \"category\": \"fiction\",\n" +
++                "                \"author\": \"Evelyn Waugh\",\n" +
++                "                \"title\": \"Sword of Honour\",\n" +
++                "                \"price\": 12.99\n" +
++                "            },\n" +
++                "            {\n" +
++                "                \"category\": \"fiction\",\n" +
++                "                \"author\": \"Herman Melville\",\n" +
++                "                \"title\": \"Moby Dick\",\n" +
++                "                \"isbn\": \"0-553-21311-3\",\n" +
++                "                \"price\": 8.99\n" +
++                "            },\n" +
++                "            {\n" +
++                "                \"category\": \"fiction\",\n" +
++                "                \"author\": \"J. R. R. Tolkien\",\n" +
++                "                \"title\": \"The Lord of the Rings\",\n" +
++                "                \"isbn\": \"0-395-19395-8\",\n" +
++                "                \"price\": 22.99\n" +
++                "            }\n" +
++                "        ],\n" +
++                "        \"bicycle\": {\n" +
++                "            \"color\": \"red\",\n" +
++                "            \"price\": 19.95\n" +
++                "        }\n" +
++                "    },\n" +
++                "    \"expensive\": 10\n" +
++                "}";
++
++        final Rule rule = parser.parseRule(ruleForTest(), false);
++        final Message message = evaluateRule(rule, new Message(json, "test", Tools.nowUTC()));
++
++        assertThat(message.hasField("author_first")).isTrue();
++        assertThat(message.getField("author_first")).isEqualTo("Nigel Rees");
++        assertThat(message.hasField("author_last")).isTrue();
++        assertThat(message.hasField("this_should_exist")).isTrue();
++    }
++
+     @Test
+     public void json() {
+         final String flatJson = "{\"str\":\"foobar\",\"int\":42,\"float\":2.5,\"bool\":true,\"array\":[1,2,3]}";
+diff --git a/graylog2-server/src/test/resources/org/graylog/plugins/pipelineprocessor/functions/jsonpathFromMessageField.txt b/graylog2-server/src/test/resources/org/graylog/plugins/pipelineprocessor/functions/jsonpathFromMessageField.txt
+new file mode 100644
+index 0000000000..f9f11ebf4b
+--- /dev/null
++++ b/graylog2-server/src/test/resources/org/graylog/plugins/pipelineprocessor/functions/jsonpathFromMessageField.txt
+@@ -0,0 +1,23 @@
++rule "jsonpathFromMessageField"
++when
++  is_json(parse_json("{}")) == true &&
++  is_json("foobar") == false &&
++  is_json(1234) == false &&
++  is_json(12.34) == false &&
++  is_json(true) == false
++then
++  let new_fields = select_jsonpath($message.message,
++            { author_first: "$['store']['book'][0]['author']",
++              author_last: "$['store']['book'][-1:]['author']"
++            });
++  set_fields(new_fields);
++
++  // Don't fail on empty input
++  let invalid_json = parse_json("#FOOBAR#");
++  let invalid_json_fields = select_jsonpath(invalid_json, { some_field: "$.message" });
++  set_fields(invalid_json_fields);
++
++  // Don't fail on missing field
++  let missing_fields = select_jsonpath($message.message, { some_field: "$.i_dont_exist", this_should_exist: "$['store']['book'][-1:]['author']" });
++  set_fields(missing_fields);
++end

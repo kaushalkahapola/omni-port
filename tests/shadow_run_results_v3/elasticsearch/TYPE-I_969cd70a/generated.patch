@@ -1,0 +1,50 @@
+diff --git a/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/FieldType.java b/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/FieldType.java
+index 96b75f29382..07744851aba 100644
+--- a/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/FieldType.java
++++ b/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/FieldType.java
+@@ -13,11 +13,9 @@ import org.elasticsearch.logsdb.datageneration.datasource.DataSource;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.ByteFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.DoubleFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.FloatFieldDataGenerator;
+-import org.elasticsearch.logsdb.datageneration.fields.leaf.HalfFloatFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.IntegerFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.KeywordFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.LongFieldDataGenerator;
+-import org.elasticsearch.logsdb.datageneration.fields.leaf.ScaledFloatFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.ShortFieldDataGenerator;
+ import org.elasticsearch.logsdb.datageneration.fields.leaf.UnsignedLongFieldDataGenerator;
+ 
+@@ -32,9 +30,7 @@ public enum FieldType {
+     SHORT("short"),
+     BYTE("byte"),
+     DOUBLE("double"),
+-    FLOAT("float"),
+-    HALF_FLOAT("half_float"),
+-    SCALED_FLOAT("scaled_float");
++    FLOAT("float");
+ 
+     private final String name;
+ 
+@@ -52,8 +48,6 @@ public enum FieldType {
+             case BYTE -> new ByteFieldDataGenerator(fieldName, dataSource);
+             case DOUBLE -> new DoubleFieldDataGenerator(fieldName, dataSource);
+             case FLOAT -> new FloatFieldDataGenerator(fieldName, dataSource);
+-            case HALF_FLOAT -> new HalfFloatFieldDataGenerator(fieldName, dataSource);
+-            case SCALED_FLOAT -> new ScaledFloatFieldDataGenerator(fieldName, dataSource);
+         };
+     }
+ 
+diff --git a/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/datasource/DefaultMappingParametersHandler.java b/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/datasource/DefaultMappingParametersHandler.java
+index 4b33f3fefcf..0e64284c96f 100644
+--- a/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/datasource/DefaultMappingParametersHandler.java
++++ b/test/framework/src/main/java/org/elasticsearch/logsdb/datageneration/datasource/DefaultMappingParametersHandler.java
+@@ -32,8 +32,7 @@ public class DefaultMappingParametersHandler implements DataSourceHandler {
+ 
+         return new DataSourceResponse.LeafMappingParametersGenerator(switch (request.fieldType()) {
+             case KEYWORD -> keywordMapping(request, map);
+-            case LONG, INTEGER, SHORT, BYTE, DOUBLE, FLOAT, HALF_FLOAT, UNSIGNED_LONG -> plain(map);
+-            case SCALED_FLOAT -> scaledFloatMapping(map);
++            case LONG, INTEGER, SHORT, BYTE, DOUBLE, FLOAT, UNSIGNED_LONG -> plain(map);
+         });
+     }
+ 

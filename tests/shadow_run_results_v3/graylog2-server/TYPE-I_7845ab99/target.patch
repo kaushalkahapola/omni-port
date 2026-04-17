@@ -1,0 +1,320 @@
+commit 566d3c019156ffb46ef920d08b32774cdbe1e727
+Author: graylog-internal-actions-access[bot] <121166801+graylog-internal-actions-access[bot]@users.noreply.github.com>
+Date:   Wed Feb 26 09:08:26 2025 +0100
+
+    Improve performance for working with indices (`6.1`) (#21763)
+    
+    * Improve performance for working with indices (#21195)
+    
+    * Issue #18563: Don't iterate over all IndexSets for a given indexName, instead use `getForIndex(String)` directly. Also converted some loops to streaming.
+    
+    * Add changelog
+    
+    * Review comments
+    
+    * Review comments part two
+    
+    (cherry picked from commit 7845ab99117250085170ffede89de0e8ae84de7f)
+    
+    * Added PR for backport to 6.1 to the list of PR's
+    
+    ---------
+    
+    Co-authored-by: Florian Petersen <188503754+fpetersen-gl@users.noreply.github.com>
+
+diff --git a/changelog/unreleased/issue-18563.toml b/changelog/unreleased/issue-18563.toml
+new file mode 100644
+index 0000000000..48c9eb93cc
+--- /dev/null
++++ b/changelog/unreleased/issue-18563.toml
+@@ -0,0 +1,5 @@
++type = "fixed"
++message = "Improve performance of close and delete actions when working with a lot of index sets."
++
++issues = ["18563"]
++pulls = ["21195", "21763"]
+diff --git a/graylog2-server/src/main/java/org/graylog2/indexer/MongoIndexSetRegistry.java b/graylog2-server/src/main/java/org/graylog2/indexer/MongoIndexSetRegistry.java
+index f601a0aaa7..14a96ed5a5 100644
+--- a/graylog2-server/src/main/java/org/graylog2/indexer/MongoIndexSetRegistry.java
++++ b/graylog2-server/src/main/java/org/graylog2/indexer/MongoIndexSetRegistry.java
+@@ -22,15 +22,15 @@ import com.google.common.base.Suppliers;
+ import com.google.common.collect.ImmutableSet;
+ import com.google.common.eventbus.EventBus;
+ import com.google.common.eventbus.Subscribe;
++import jakarta.annotation.Nonnull;
++import jakarta.inject.Inject;
++import jakarta.inject.Singleton;
+ import org.graylog2.indexer.indexset.IndexSetConfig;
+ import org.graylog2.indexer.indexset.IndexSetService;
+ import org.graylog2.indexer.indexset.events.IndexSetCreatedEvent;
+ import org.graylog2.indexer.indexset.events.IndexSetDeletedEvent;
+ import org.graylog2.indexer.indices.TooManyAliasesException;
+ 
+-import jakarta.inject.Inject;
+-import jakarta.inject.Singleton;
+-
+ import java.util.Collection;
+ import java.util.Collections;
+ import java.util.Iterator;
+@@ -42,6 +42,7 @@ import java.util.Set;
+ import java.util.concurrent.atomic.AtomicReference;
+ import java.util.function.Function;
+ import java.util.stream.Collectors;
++import java.util.stream.Stream;
+ 
+ import static java.util.Objects.requireNonNull;
+ 
+@@ -52,7 +53,7 @@ public class MongoIndexSetRegistry implements IndexSetRegistry {
+ 
+     static class IndexSetsCache {
+         private final IndexSetService indexSetService;
+-        private AtomicReference<Supplier<List<IndexSetConfig>>> indexSetConfigs;
++        private final AtomicReference<Supplier<List<IndexSetConfig>>> indexSetConfigs;
+ 
+         @Inject
+         IndexSetsCache(IndexSetService indexSetService,
+@@ -143,12 +144,9 @@ public class MongoIndexSetRegistry implements IndexSetRegistry {
+ 
+     @Override
+     public Set<IndexSet> getFromIndexConfig(Collection<IndexSetConfig> indexSetConfigs) {
+-        final ImmutableSet.Builder<MongoIndexSet> mongoIndexSets = ImmutableSet.builder();
+-        for (IndexSetConfig config : indexSetConfigs) {
+-            final MongoIndexSet mongoIndexSet = mongoIndexSetFactory.create(config);
+-            mongoIndexSets.add(mongoIndexSet);
+-        }
+-        return ImmutableSet.copyOf(mongoIndexSets.build());
++        return indexSetConfigs.stream()
++                .map(mongoIndexSetFactory::create)
++                .collect(Collectors.toUnmodifiableSet());
+     }
+ 
+     @Override
+@@ -158,13 +156,9 @@ public class MongoIndexSetRegistry implements IndexSetRegistry {
+ 
+     @Override
+     public String[] getManagedIndices() {
+-        final ImmutableSet.Builder<String> indexNamesBuilder = ImmutableSet.builder();
+-        for (MongoIndexSet indexSet : findAllMongoIndexSets()) {
+-            indexNamesBuilder.add(indexSet.getManagedIndices());
+-        }
+-
+-        final ImmutableSet<String> indexNames = indexNamesBuilder.build();
+-        return indexNames.toArray(new String[0]);
++        return findAllMongoIndexSets().stream()
++                .flatMap(indexSet -> Stream.of(indexSet.getManagedIndices()))
++                .toArray(String[]::new);
+     }
+ 
+     @Override
+@@ -180,38 +174,25 @@ public class MongoIndexSetRegistry implements IndexSetRegistry {
+     }
+ 
+     private boolean isManagedIndex(Collection<? extends IndexSet> indexSets, String index) {
+-        for (IndexSet indexSet : indexSets) {
+-            if (indexSet.isManagedIndex(index)) {
+-                return true;
+-            }
+-        }
+-        return false;
++        return indexSets.stream()
++                .anyMatch(indexSet -> indexSet.isManagedIndex(index));
++    }
++
++    private String[] doWithWritableIndices(Function<MongoIndexSet, String> fn) {
++        return findAllMongoIndexSets().stream()
++                .filter(indexSet -> indexSet.getConfig().isWritable())
++                .map(fn)
++                .toArray(String[]::new);
+     }
+ 
+     @Override
+     public String[] getIndexWildcards() {
+-        final ImmutableSet.Builder<String> wildcardsBuilder = ImmutableSet.builder();
+-        for (MongoIndexSet indexSet : findAllMongoIndexSets()) {
+-            if (indexSet.getConfig().isWritable()) {
+-                wildcardsBuilder.add(indexSet.getIndexWildcard());
+-            }
+-        }
+-
+-        final ImmutableSet<String> wildcards = wildcardsBuilder.build();
+-        return wildcards.toArray(new String[0]);
++        return doWithWritableIndices(MongoIndexSet::getIndexWildcard);
+     }
+ 
+     @Override
+     public String[] getWriteIndexAliases() {
+-        final ImmutableSet.Builder<String> indexNamesBuilder = ImmutableSet.builder();
+-        for (MongoIndexSet indexSet : findAllMongoIndexSets()) {
+-            if (indexSet.getConfig().isWritable()) {
+-                indexNamesBuilder.add(indexSet.getWriteIndexAlias());
+-            }
+-        }
+-
+-        final ImmutableSet<String> indexNames = indexNamesBuilder.build();
+-        return indexNames.toArray(new String[0]);
++        return doWithWritableIndices(MongoIndexSet::getWriteIndexAlias);
+     }
+ 
+     @Override
+@@ -223,26 +204,18 @@ public class MongoIndexSetRegistry implements IndexSetRegistry {
+ 
+     @Override
+     public boolean isCurrentWriteIndexAlias(String indexName) {
+-        for (MongoIndexSet indexSet : findAllMongoIndexSets()) {
+-            if (indexSet.isWriteIndexAlias(indexName)) {
+-                return true;
+-            }
+-        }
+-
+-        return false;
++        return findAllMongoIndexSets().stream()
++                .anyMatch(indexSet -> indexSet.isWriteIndexAlias(indexName));
+     }
+ 
+     @Override
+     public boolean isCurrentWriteIndex(String indexName) throws TooManyAliasesException {
+-        for (MongoIndexSet indexSet : findAllMongoIndexSets()) {
+-            if (indexSet.getActiveWriteIndex() != null && indexSet.getActiveWriteIndex().equals(indexName)) {
+-                return true;
+-            }
+-        }
+-
+-        return false;
++        return getForIndex(indexName)
++                .map(indexSet -> Objects.equals(indexSet.getActiveWriteIndex(), indexName))
++                .orElse(false);
+     }
+ 
++    @Nonnull
+     @Override
+     public Iterator<IndexSet> iterator() {
+         return getAll().iterator();
+diff --git a/graylog2-server/src/test/java/org/graylog2/indexer/MongoIndexSetRegistryTest.java b/graylog2-server/src/test/java/org/graylog2/indexer/MongoIndexSetRegistryTest.java
+index 80349e8ea2..dbb842c943 100644
+--- a/graylog2-server/src/test/java/org/graylog2/indexer/MongoIndexSetRegistryTest.java
++++ b/graylog2-server/src/test/java/org/graylog2/indexer/MongoIndexSetRegistryTest.java
+@@ -16,6 +16,7 @@
+  */
+ package org.graylog2.indexer;
+ 
++import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableSet;
+ import com.google.common.eventbus.EventBus;
+ import org.graylog2.indexer.indexset.IndexSetConfig;
+@@ -28,15 +29,22 @@ import org.junit.Test;
+ import org.mockito.Mock;
+ import org.mockito.junit.MockitoJUnit;
+ import org.mockito.junit.MockitoRule;
++import org.mockito.stubbing.Answer;
+ 
++import java.time.ZonedDateTime;
+ import java.util.Collections;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Objects;
++import java.util.concurrent.atomic.AtomicReference;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.lenient;
+ import static org.mockito.Mockito.mock;
+ import static org.mockito.Mockito.times;
+ import static org.mockito.Mockito.verify;
++import static org.mockito.Mockito.verifyNoMoreInteractions;
+ import static org.mockito.Mockito.when;
+ 
+ public class MongoIndexSetRegistryTest {
+@@ -266,4 +274,93 @@ public class MongoIndexSetRegistryTest {
+ 
+         assertThat(indexSetRegistry.isManagedIndex("index")).isFalse();
+     }
++
++    @Test
++    public void isCurrentWriteIndexSingleIndexSetConfigHappyPath() {
++        final String idxName = "index";
++        final IndexSetConfig indexSetConfig = mock(IndexSetConfig.class);
++        final List<IndexSetConfig> indexSetConfigs = Collections.singletonList(indexSetConfig);
++        final MongoIndexSet indexSet = mock(MongoIndexSet.class);
++        when(mongoIndexSetFactory.create(indexSetConfig)).thenReturn(indexSet);
++        when(indexSetService.findAll()).thenReturn(indexSetConfigs);
++        when(indexSet.isManagedIndex(idxName)).thenReturn(true);
++        when(indexSet.getActiveWriteIndex()).thenReturn(idxName);
++        assertThat(indexSetRegistry.isCurrentWriteIndex(idxName)).isTrue();
++
++        verify(indexSet).isManagedIndex(idxName);
++        verify(indexSet).getActiveWriteIndex();
++        verifyNoMoreInteractions(indexSetConfig, indexSet);
++    }
++
++    @Test
++    public void isCurrentWriteIndexSingleIndexSetConfigNoneFound() {
++        final String idxName = "index";
++        final IndexSetConfig indexSetConfig = mock(IndexSetConfig.class);
++        final List<IndexSetConfig> indexSetConfigs = Collections.singletonList(indexSetConfig);
++        final MongoIndexSet indexSet = mock(MongoIndexSet.class);
++        when(mongoIndexSetFactory.create(indexSetConfig)).thenReturn(indexSet);
++        when(indexSetService.findAll()).thenReturn(indexSetConfigs);
++        lenient().when(indexSet.getActiveWriteIndex()).thenReturn("non_existing_index");
++        assertThat(indexSetRegistry.isCurrentWriteIndex(idxName)).isFalse();
++
++        verify(indexSet).isManagedIndex(idxName);
++        verify(indexSetService).findAll();
++        verifyNoMoreInteractions(indexSetConfig, indexSet);
++    }
++
++    @Test
++    public void isCurrentWriteIndexOnManyIndexSetConfigsNoneFoundDueToMismatchingIndexName() {
++        final String idxName = "index";
++        final int noOfIndices = 2;
++        // The following constructs are necessary, because internally the IndexSetConfigs are handled as Set.
++        // Simply mocking a gazillion of them would de-duplicate, rendering the entire test useless.
++        final List<IndexSetConfig> indexSetConfigs = mkIndexSetConfigs(noOfIndices);
++        final ImmutableSet.Builder<MongoIndexSet> mockedMongosBuilder = ImmutableSet.builder();
++        final AtomicReference<MongoIndexSet> matchingMongoMock = new AtomicReference<>();
++        when(mongoIndexSetFactory.create(any(IndexSetConfig.class)))
++                .thenAnswer((Answer<MongoIndexSet>) invocation -> {
++                            Object[] args = invocation.getArguments();
++                            final IndexSetConfig cfg = (IndexSetConfig) args[0];
++                            final MongoIndexSet mockedIndexSet = mock(MongoIndexSet.class);
++                            lenient().when(mockedIndexSet.getConfig()).thenReturn(cfg);
++                            final int currentIndex = Integer.parseInt(Objects.requireNonNull(cfg.id()));
++                            if (currentIndex == noOfIndices - 1) {
++                                when(mockedIndexSet.getActiveWriteIndex()).thenReturn(cfg.indexPrefix() + "_0");
++                                //Let the last MongoIndexSet be the one responsible to the index we're looking for:
++                                when(mockedIndexSet.isManagedIndex(idxName)).thenReturn(true);
++                                matchingMongoMock.getAndSet(mockedIndexSet);
++                            }
++                            mockedMongosBuilder.add(mockedIndexSet);
++                            return mockedIndexSet;
++                        }
++                );
++        when(indexSetService.findAll()).thenReturn(indexSetConfigs);
++        assertThat(indexSetRegistry.isCurrentWriteIndex(idxName)).isFalse();
++
++        final ImmutableSet<MongoIndexSet> mockedMongos = mockedMongosBuilder.build();
++        mockedMongos.forEach(mockedMongo -> verify(mockedMongo).isManagedIndex(idxName));
++        verify(matchingMongoMock.get()).getActiveWriteIndex();
++        verifyNoMoreInteractions(mockedMongos.toArray(new Object[0]));
++    }
++
++    private List<IndexSetConfig> mkIndexSetConfigs(final int howMany) {
++        final ImmutableList.Builder<IndexSetConfig> configs = ImmutableList.builder();
++        for (int i = 0; i < howMany; i++) {
++            configs.add(IndexSetConfig.builder()
++                    .id(String.valueOf(i))
++                    .title("title " + i)
++                    .indexPrefix("index" + i)
++                    .shards(1)
++                    .replicas(0)
++                    .creationDate(ZonedDateTime.now())
++                    .indexOptimizationMaxNumSegments(1)
++                    .indexOptimizationDisabled(false)
++                    .indexAnalyzer("any")
++                    .indexTemplateName("template" + i)
++                    .build()
++            );
++
++        }
++        return configs.build();
++    }
+ }

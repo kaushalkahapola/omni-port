@@ -1,0 +1,182 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "af6014ecb534a38e42b33c0783731ab0c0264e9b",
+  "backport_commit": "d2778383792d414973065084d5cbcf4da32a2399",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/ingest/PipelineConfiguration.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 46,
+          "end_line": 52,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.97,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch modifies a single line in PipelineConfiguration.java by changing parser.map() to parser.mapOrdered(), which is an exact string replacement with no structural changes. The test addition is straightforward and does not affect the complexity classification. The localization evidence confirms the main hunk was found via 'git_exact' with high confidence, indicating a trivial backport. Therefore, this patch is classified as TYPE_I with high confidence and a modest token budget estimate.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/ingest/PipelineConfiguration.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.ingest.PipelineConfigurationTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.ingest.PipelineConfigurationTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.ingest.PipelineConfigurationTests#testMapKeyOrderingRoundTrip": "passed",
+          "org.elasticsearch.ingest.PipelineConfigurationTests#testSerialization": "passed",
+          "org.elasticsearch.ingest.PipelineConfigurationTests#testParser": "passed",
+          "org.elasticsearch.ingest.PipelineConfigurationTests#testGetVersion": "passed",
+          "org.elasticsearch.ingest.PipelineConfigurationTests#testFromXContent": "passed",
+          "org.elasticsearch.ingest.PipelineConfigurationTests#testConfigInvariants": "passed",
+          "org.elasticsearch.ingest.PipelineConfigurationTests#testMetaSerialization": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.ingest.PipelineConfigurationTests": "passed"
+        },
+        "summary": {
+          "passed": 7,
+          "failed": 0,
+          "skipped": 0,
+          "total": 7
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": false,
+        "fail_to_pass": [],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 7,
+        "patched_total": 7,
+        "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 7
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 818,
+    "target_patch_bytes": 4358,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": false,
+      "fail_to_pass": [],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 7,
+      "patched_total": 7,
+      "reason": "Invalid: No fail-to-pass or newly passing tests observed."
+    },
+    "fail_to_pass_count": 0,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": false
+  }
+}

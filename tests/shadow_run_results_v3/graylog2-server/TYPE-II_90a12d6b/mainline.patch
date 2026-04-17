@@ -1,0 +1,238 @@
+commit 90a12d6b4170ed10ada22f909af4a6089113dad6
+Author: Zack King <91903901+kingzacko1@users.noreply.github.com>
+Date:   Tue Nov 12 11:27:42 2024 -0600
+
+    Add multi_grok pipeline rule (#20924)
+    
+    * Add multi_grok pipeline rule
+    
+    * Add unit test
+
+diff --git a/changelog/unreleased/issue-15301.toml b/changelog/unreleased/issue-15301.toml
+new file mode 100644
+index 0000000000..459a41bab1
+--- /dev/null
++++ b/changelog/unreleased/issue-15301.toml
+@@ -0,0 +1,5 @@
++type = "added"
++message = "Added multi_grok pipeline rule to support processing a string against many grok patterns at once."
++
++issues = ["15301"]
++pulls = ["20924"]
+diff --git a/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java b/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java
+index 69b7cffd14..92dded00fb 100644
+--- a/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java
++++ b/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/ProcessorFunctionsModule.java
+@@ -128,6 +128,7 @@ import org.graylog.plugins.pipelineprocessor.functions.strings.Join;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.KeyValue;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.Length;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.Lowercase;
++import org.graylog.plugins.pipelineprocessor.functions.strings.MultiGrokMatch;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.RegexMatch;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.RegexReplace;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.Replace;
+@@ -202,6 +203,7 @@ public class ProcessorFunctionsModule extends PluginModule {
+         addMessageProcessorFunction(RegexMatch.NAME, RegexMatch.class);
+         addMessageProcessorFunction(RegexReplace.NAME, RegexReplace.class);
+         addMessageProcessorFunction(GrokMatch.NAME, GrokMatch.class);
++        addMessageProcessorFunction(MultiGrokMatch.NAME, MultiGrokMatch.class);
+         addMessageProcessorFunction(GrokExists.NAME, GrokExists.class);
+ 
+         // string functions
+diff --git a/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/MultiGrokMatch.java b/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/MultiGrokMatch.java
+new file mode 100644
+index 0000000000..2a8abd9a0b
+--- /dev/null
++++ b/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/functions/strings/MultiGrokMatch.java
+@@ -0,0 +1,104 @@
++/*
++ * Copyright (C) 2020 Graylog, Inc.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the Server Side Public License, version 1,
++ * as published by MongoDB, Inc.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * Server Side Public License for more details.
++ *
++ * You should have received a copy of the Server Side Public License
++ * along with this program. If not, see
++ * <http://www.mongodb.com/licensing/server-side-public-license>.
++ */
++package org.graylog.plugins.pipelineprocessor.functions.strings;
++
++import com.google.common.reflect.TypeToken;
++import io.krakens.grok.api.Grok;
++import io.krakens.grok.api.Match;
++import jakarta.inject.Inject;
++import org.graylog.plugins.pipelineprocessor.EvaluationContext;
++import org.graylog.plugins.pipelineprocessor.ast.functions.AbstractFunction;
++import org.graylog.plugins.pipelineprocessor.ast.functions.FunctionArgs;
++import org.graylog.plugins.pipelineprocessor.ast.functions.FunctionDescriptor;
++import org.graylog.plugins.pipelineprocessor.ast.functions.ParameterDescriptor;
++import org.graylog2.grok.GrokPatternRegistry;
++
++import java.util.Collection;
++import java.util.Collections;
++import java.util.List;
++import java.util.Map;
++import java.util.Objects;
++import java.util.stream.Collectors;
++
++import static com.google.common.collect.ImmutableList.of;
++
++public class MultiGrokMatch extends AbstractFunction<GrokMatch.GrokResult> {
++    public static final String NAME = "multi_grok";
++
++    @SuppressWarnings("unchecked")
++    private static final Class<List<String>> LIST_RETURN_TYPE = (Class<List<String>>) new TypeToken<List<String>>() {
++    }.getRawType();
++    private final ParameterDescriptor<String, String> valueParam;
++    private final ParameterDescriptor<Object, List<String>> patternsParam;
++    private final ParameterDescriptor<Boolean, Boolean> namedOnly;
++
++    private final GrokPatternRegistry grokPatternRegistry;
++
++    @Inject
++    public MultiGrokMatch(GrokPatternRegistry grokPatternRegistry) {
++        this.grokPatternRegistry = grokPatternRegistry;
++
++        valueParam = ParameterDescriptor.string("value").description("The string to apply each Grok pattern against").build();
++        patternsParam = ParameterDescriptor.object("patterns", LIST_RETURN_TYPE)
++                .description("The Grok patterns to match in order")
++                .transform(this::transformToList)
++                .build();
++        namedOnly = ParameterDescriptor.bool("only_named_captures").optional().description("Whether to only use explicitly named groups in the patterns").build();
++    }
++
++    @Override
++    public GrokMatch.GrokResult evaluate(FunctionArgs args, EvaluationContext context) {
++        final String value = valueParam.required(args, context);
++        final List<String> patterns = patternsParam.required(args, context);
++        final boolean onlyNamedCaptures = namedOnly.optional(args, context).orElse(false);
++
++        if (value == null || patterns == null || patterns.isEmpty()) {
++            return null;
++        }
++
++        for (String pattern : patterns) {
++            final Grok grok = grokPatternRegistry.cachedGrokForPattern(pattern, onlyNamedCaptures);
++
++            final Match match = grok.match(value);
++            if (!match.isNull()) {
++                return new GrokMatch.GrokResult(match.captureFlattened());
++            }
++        }
++        return new GrokMatch.GrokResult(Map.of());
++    }
++
++    private List<String> transformToList(Object value) {
++        if (value instanceof Collection<?>) {
++            return ((Collection<?>) value).stream()
++                    .map(Object::toString)
++                    .filter(Objects::nonNull)
++                    .collect(Collectors.toList());
++        }
++        return Collections.emptyList();
++    }
++
++    @Override
++    public FunctionDescriptor<GrokMatch.GrokResult> descriptor() {
++        return FunctionDescriptor.<GrokMatch.GrokResult>builder()
++                .name(NAME)
++                .returnType(GrokMatch.GrokResult.class)
++                .params(of(patternsParam, valueParam, namedOnly))
++                .description("Applies a list of Grok patterns to a string and returns the first match")
++                .build();
++    }
++
++}
+diff --git a/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java b/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java
+index 05702825f9..6191b9f88a 100644
+--- a/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java
++++ b/graylog2-server/src/test/java/org/graylog/plugins/pipelineprocessor/functions/FunctionsSnippetsTest.java
+@@ -132,6 +132,7 @@ import org.graylog.plugins.pipelineprocessor.functions.strings.Join;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.KeyValue;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.Length;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.Lowercase;
++import org.graylog.plugins.pipelineprocessor.functions.strings.MultiGrokMatch;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.RegexMatch;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.RegexReplace;
+ import org.graylog.plugins.pipelineprocessor.functions.strings.Replace;
+@@ -393,6 +394,7 @@ public class FunctionsSnippetsTest extends BaseParserTest {
+                 grokPatternService,
+                 Executors.newScheduledThreadPool(1));
+         functions.put(GrokMatch.NAME, new GrokMatch(grokPatternRegistry));
++        functions.put(MultiGrokMatch.NAME, new MultiGrokMatch(grokPatternRegistry));
+         functions.put(GrokExists.NAME, new GrokExists(grokPatternRegistry));
+ 
+         functions.put(MetricCounterIncrement.NAME, new MetricCounterIncrement(metricRegistry));
+@@ -902,6 +904,20 @@ public class FunctionsSnippetsTest extends BaseParserTest {
+                 .isNull();
+     }
+ 
++
++    @Test
++    void multiGrok() {
++        final Rule rule = parser.parseRule(ruleForTest(), false);
++        final Message message = evaluateRule(rule);
++
++        assertThat(message).isNotNull();
++        assertThat(message.hasField("abc_message")).isTrue();
++        assertThat(message.hasField("abc_ip")).isTrue();
++        assertThat(message.hasField("abc2_message")).isFalse();
++        assertThat(message.hasField("abc2_ip")).isFalse();
++        assertThat(message.getField("123_ip")).isEqualTo("192.168.0.2");
++    }
++
+     @Test
+     void urls() {
+         final Rule rule = parser.parseRule(ruleForTest(), false);
+diff --git a/graylog2-server/src/test/resources/org/graylog/plugins/pipelineprocessor/functions/multiGrok.txt b/graylog2-server/src/test/resources/org/graylog/plugins/pipelineprocessor/functions/multiGrok.txt
+new file mode 100644
+index 0000000000..51ba690eb1
+--- /dev/null
++++ b/graylog2-server/src/test/resources/org/graylog/plugins/pipelineprocessor/functions/multiGrok.txt
+@@ -0,0 +1,40 @@
++rule "multi_grok"
++when true
++then
++    set_fields(
++        fields: multi_grok(
++            patterns: [
++                "^ABC %{IPV4:abc_ip}: %{GREEDY:abc_message}",
++                "^123 %{IPV4:123_ip}: %{GREEDY:123_message}",
++                "^ABC %{IPV4:abc2_ip}: %{GREEDY:abc2_message}"
++            ],
++            value: "ABC 192.168.0.1: ABC message1",
++            only_named_captures: true
++        )
++    );
++
++    set_fields(
++        fields: multi_grok(
++            patterns: [
++                "^ABC %{IPV4:abc_ip}: %{GREEDY:abc_message}",
++                "^123 %{IPV4:123_ip}: %{GREEDY:123_message}",
++                "^ABC %{IPV4:abc2_ip}: %{GREEDY:abc2_message}"
++            ],
++            value: "123 192.168.0.2: 123 message",
++            only_named_captures: true
++        )
++    );
++
++    set_fields(
++        fields: multi_grok(
++            patterns: [
++                "^ABC %{IPV4:abc_ip}: %{GREEDY:abc_message}",
++                "^123 %{IPV4:123_ip}: %{GREEDY:123_message}",
++                "^ABC %{IPV4:abc2_ip}: %{GREEDY:abc2_message}"
++            ],
++            value: "XYZ 192.168.0.3: XYZ message",
++            only_named_captures: true
++        )
++    );
++
++end

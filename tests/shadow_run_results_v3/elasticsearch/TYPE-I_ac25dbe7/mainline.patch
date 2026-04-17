@@ -1,0 +1,287 @@
+commit ac25dbe70692df19bd424e7ef1e4bc2c16c41329
+Author: Joe Gallo <joe.gallo@elastic.co>
+Date:   Fri Oct 18 20:19:30 2024 -0400
+
+    Fix IPinfo geolocation schema (#115147)
+
+diff --git a/docs/changelog/115147.yaml b/docs/changelog/115147.yaml
+new file mode 100644
+index 00000000000..36f40bba1da
+--- /dev/null
++++ b/docs/changelog/115147.yaml
+@@ -0,0 +1,5 @@
++pr: 115147
++summary: Fix IPinfo geolocation schema
++area: Ingest Node
++type: bug
++issues: []
+diff --git a/modules/ingest-geoip/src/main/java/org/elasticsearch/ingest/geoip/IpinfoIpDataLookups.java b/modules/ingest-geoip/src/main/java/org/elasticsearch/ingest/geoip/IpinfoIpDataLookups.java
+index 5a13ea93ff0..8ce2424844d 100644
+--- a/modules/ingest-geoip/src/main/java/org/elasticsearch/ingest/geoip/IpinfoIpDataLookups.java
++++ b/modules/ingest-geoip/src/main/java/org/elasticsearch/ingest/geoip/IpinfoIpDataLookups.java
+@@ -218,8 +218,8 @@ final class IpinfoIpDataLookups {
+     public record GeolocationResult(
+         String city,
+         String country,
+-        Double latitude,
+-        Double longitude,
++        Double lat,
++        Double lng,
+         String postalCode,
+         String region,
+         String timezone
+@@ -229,14 +229,15 @@ final class IpinfoIpDataLookups {
+         public GeolocationResult(
+             @MaxMindDbParameter(name = "city") String city,
+             @MaxMindDbParameter(name = "country") String country,
+-            @MaxMindDbParameter(name = "latitude") String latitude,
+-            @MaxMindDbParameter(name = "longitude") String longitude,
+-            // @MaxMindDbParameter(name = "network") String network, // for now we're not exposing this
++            // @MaxMindDbParameter(name = "geoname_id") String geonameId, // for now we're not exposing this
++            @MaxMindDbParameter(name = "lat") String lat,
++            @MaxMindDbParameter(name = "lng") String lng,
+             @MaxMindDbParameter(name = "postal_code") String postalCode,
+             @MaxMindDbParameter(name = "region") String region,
++            // @MaxMindDbParameter(name = "region_code") String regionCode, // for now we're not exposing this
+             @MaxMindDbParameter(name = "timezone") String timezone
+         ) {
+-            this(city, country, parseLocationDouble(latitude), parseLocationDouble(longitude), postalCode, region, timezone);
++            this(city, country, parseLocationDouble(lat), parseLocationDouble(lng), postalCode, region, timezone);
+         }
+     }
+ 
+@@ -395,8 +396,8 @@ final class IpinfoIpDataLookups {
+                         }
+                     }
+                     case LOCATION -> {
+-                        Double latitude = response.latitude;
+-                        Double longitude = response.longitude;
++                        Double latitude = response.lat;
++                        Double longitude = response.lng;
+                         if (latitude != null && longitude != null) {
+                             Map<String, Object> locationObject = new HashMap<>();
+                             locationObject.put("lat", latitude);
+diff --git a/modules/ingest-geoip/src/test/java/org/elasticsearch/ingest/geoip/GeoIpProcessorTests.java b/modules/ingest-geoip/src/test/java/org/elasticsearch/ingest/geoip/GeoIpProcessorTests.java
+index 640480ed277..4548e92239c 100644
+--- a/modules/ingest-geoip/src/test/java/org/elasticsearch/ingest/geoip/GeoIpProcessorTests.java
++++ b/modules/ingest-geoip/src/test/java/org/elasticsearch/ingest/geoip/GeoIpProcessorTests.java
+@@ -82,13 +82,13 @@ public class GeoIpProcessorTests extends ESTestCase {
+     }
+ 
+     public void testIpinfoGeolocation() throws Exception {
+-        String ip = "13.107.39.238";
++        String ip = "72.20.12.220";
+         GeoIpProcessor processor = new GeoIpProcessor(
+             IP_LOCATION_TYPE, // n.b. this is an "ip_location" processor
+             randomAlphaOfLength(10),
+             null,
+             "source_field",
+-            loader("ipinfo/ip_geolocation_sample.mmdb"),
++            loader("ipinfo/ip_geolocation_standard_sample.mmdb"),
+             () -> true,
+             "target_field",
+             getIpinfoGeolocationLookup(),
+@@ -107,7 +107,7 @@ public class GeoIpProcessorTests extends ESTestCase {
+         Map<String, Object> data = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("target_field");
+         assertThat(data, notNullValue());
+         assertThat(data.get("ip"), equalTo(ip));
+-        assertThat(data.get("city_name"), equalTo("Des Moines"));
++        assertThat(data.get("city_name"), equalTo("Chicago"));
+         // see IpinfoIpDataLookupsTests for more tests of the data lookup behavior
+     }
+ 
+diff --git a/modules/ingest-geoip/src/test/java/org/elasticsearch/ingest/geoip/IpinfoIpDataLookupsTests.java b/modules/ingest-geoip/src/test/java/org/elasticsearch/ingest/geoip/IpinfoIpDataLookupsTests.java
+index e998748efbc..d0cdc5a3e1b 100644
+--- a/modules/ingest-geoip/src/test/java/org/elasticsearch/ingest/geoip/IpinfoIpDataLookupsTests.java
++++ b/modules/ingest-geoip/src/test/java/org/elasticsearch/ingest/geoip/IpinfoIpDataLookupsTests.java
+@@ -102,17 +102,17 @@ public class IpinfoIpDataLookupsTests extends ESTestCase {
+     public void testAsnFree() {
+         assumeFalse("https://github.com/elastic/elasticsearch/issues/114266", Constants.WINDOWS);
+         String databaseName = "ip_asn_sample.mmdb";
+-        String ip = "5.182.109.0";
++        String ip = "23.32.184.0";
+         assertExpectedLookupResults(
+             databaseName,
+             ip,
+             new IpinfoIpDataLookups.Asn(Database.AsnV2.properties()),
+             Map.ofEntries(
+                 entry("ip", ip),
+-                entry("organization_name", "M247 Europe SRL"),
+-                entry("asn", 9009L),
+-                entry("network", "5.182.109.0/24"),
+-                entry("domain", "m247.com")
++                entry("organization_name", "Akamai Technologies, Inc."),
++                entry("asn", 16625L),
++                entry("network", "23.32.184.0/21"),
++                entry("domain", "akamai.com")
+             )
+         );
+     }
+@@ -120,17 +120,17 @@ public class IpinfoIpDataLookupsTests extends ESTestCase {
+     public void testAsnStandard() {
+         assumeFalse("https://github.com/elastic/elasticsearch/issues/114266", Constants.WINDOWS);
+         String databaseName = "asn_sample.mmdb";
+-        String ip = "23.53.116.0";
++        String ip = "69.19.224.0";
+         assertExpectedLookupResults(
+             databaseName,
+             ip,
+             new IpinfoIpDataLookups.Asn(Database.AsnV2.properties()),
+             Map.ofEntries(
+                 entry("ip", ip),
+-                entry("organization_name", "Akamai Technologies, Inc."),
+-                entry("asn", 32787L),
+-                entry("network", "23.53.116.0/24"),
+-                entry("domain", "akamai.com"),
++                entry("organization_name", "TPx Communications"),
++                entry("asn", 14265L),
++                entry("network", "69.19.224.0/22"),
++                entry("domain", "tpx.com"),
+                 entry("type", "hosting"),
+                 entry("country_iso_code", "US")
+             )
+@@ -177,25 +177,25 @@ public class IpinfoIpDataLookupsTests extends ESTestCase {
+     public void testCountryFree() {
+         assumeFalse("https://github.com/elastic/elasticsearch/issues/114266", Constants.WINDOWS);
+         String databaseName = "ip_country_sample.mmdb";
+-        String ip = "4.221.143.168";
++        String ip = "20.33.76.0";
+         assertExpectedLookupResults(
+             databaseName,
+             ip,
+             new IpinfoIpDataLookups.Country(Database.CountryV2.properties()),
+             Map.ofEntries(
+                 entry("ip", ip),
+-                entry("country_name", "South Africa"),
+-                entry("country_iso_code", "ZA"),
+-                entry("continent_name", "Africa"),
+-                entry("continent_code", "AF")
++                entry("country_name", "Ireland"),
++                entry("country_iso_code", "IE"),
++                entry("continent_name", "Europe"),
++                entry("continent_code", "EU")
+             )
+         );
+     }
+ 
+     public void testGeolocationStandard() {
+         assumeFalse("https://github.com/elastic/elasticsearch/issues/114266", Constants.WINDOWS);
+-        String databaseName = "ip_geolocation_sample.mmdb";
+-        String ip = "2.124.90.182";
++        String databaseName = "ip_geolocation_standard_sample.mmdb";
++        String ip = "62.69.48.19";
+         assertExpectedLookupResults(
+             databaseName,
+             ip,
+@@ -215,36 +215,37 @@ public class IpinfoIpDataLookupsTests extends ESTestCase {
+     public void testGeolocationInvariants() {
+         assumeFalse("https://github.com/elastic/elasticsearch/issues/114266", Constants.WINDOWS);
+         Path configDir = tmpDir;
+-        copyDatabase("ipinfo/ip_geolocation_sample.mmdb", configDir.resolve("ip_geolocation_sample.mmdb"));
++        copyDatabase("ipinfo/ip_geolocation_standard_sample.mmdb", configDir.resolve("ip_geolocation_standard_sample.mmdb"));
+ 
+         {
+             final Set<String> expectedColumns = Set.of(
+-                "network",
+                 "city",
++                "geoname_id",
+                 "region",
++                "region_code",
+                 "country",
+                 "postal_code",
+                 "timezone",
+-                "latitude",
+-                "longitude"
++                "lat",
++                "lng"
+             );
+ 
+-            Path databasePath = configDir.resolve("ip_geolocation_sample.mmdb");
++            Path databasePath = configDir.resolve("ip_geolocation_standard_sample.mmdb");
+             assertDatabaseInvariants(databasePath, (ip, row) -> {
+                 assertThat(row.keySet(), equalTo(expectedColumns));
+                 {
+-                    String latitude = (String) row.get("latitude");
++                    String latitude = (String) row.get("lat");
+                     assertThat(latitude, equalTo(latitude.trim()));
+                     Double parsed = parseLocationDouble(latitude);
+                     assertThat(parsed, notNullValue());
+-                    assertThat(latitude, equalTo(Double.toString(parsed))); // reverse it
++                    assertThat(Double.parseDouble(latitude), equalTo(Double.parseDouble(Double.toString(parsed)))); // reverse it
+                 }
+                 {
+-                    String longitude = (String) row.get("longitude");
++                    String longitude = (String) row.get("lng");
+                     assertThat(longitude, equalTo(longitude.trim()));
+                     Double parsed = parseLocationDouble(longitude);
+                     assertThat(parsed, notNullValue());
+-                    assertThat(longitude, equalTo(Double.toString(parsed))); // reverse it
++                    assertThat(Double.parseDouble(longitude), equalTo(Double.parseDouble(Double.toString(parsed)))); // reverse it
+                 }
+             });
+         }
+@@ -253,7 +254,7 @@ public class IpinfoIpDataLookupsTests extends ESTestCase {
+     public void testPrivacyDetectionStandard() {
+         assumeFalse("https://github.com/elastic/elasticsearch/issues/114266", Constants.WINDOWS);
+         String databaseName = "privacy_detection_sample.mmdb";
+-        String ip = "1.53.59.33";
++        String ip = "2.57.109.154";
+         assertExpectedLookupResults(
+             databaseName,
+             ip,
+@@ -272,16 +273,16 @@ public class IpinfoIpDataLookupsTests extends ESTestCase {
+     public void testPrivacyDetectionStandardNonEmptyService() {
+         assumeFalse("https://github.com/elastic/elasticsearch/issues/114266", Constants.WINDOWS);
+         String databaseName = "privacy_detection_sample.mmdb";
+-        String ip = "216.131.74.65";
++        String ip = "59.29.201.246";
+         assertExpectedLookupResults(
+             databaseName,
+             ip,
+             new IpinfoIpDataLookups.PrivacyDetection(Database.PrivacyDetection.properties()),
+             Map.ofEntries(
+                 entry("ip", ip),
+-                entry("hosting", true),
++                entry("hosting", false),
+                 entry("proxy", false),
+-                entry("service", "FastVPN"),
++                entry("service", "VPNGate"),
+                 entry("relay", false),
+                 entry("tor", false),
+                 entry("vpn", true)
+@@ -391,13 +392,13 @@ public class IpinfoIpDataLookupsTests extends ESTestCase {
+         // pedantic about where precisely it should be.
+ 
+         copyDatabase("ipinfo/ip_asn_sample.mmdb", tmpDir.resolve("ip_asn_sample.mmdb"));
+-        copyDatabase("ipinfo/ip_geolocation_sample.mmdb", tmpDir.resolve("ip_geolocation_sample.mmdb"));
++        copyDatabase("ipinfo/ip_geolocation_standard_sample.mmdb", tmpDir.resolve("ip_geolocation_standard_sample.mmdb"));
+         copyDatabase("ipinfo/asn_sample.mmdb", tmpDir.resolve("asn_sample.mmdb"));
+         copyDatabase("ipinfo/ip_country_sample.mmdb", tmpDir.resolve("ip_country_sample.mmdb"));
+         copyDatabase("ipinfo/privacy_detection_sample.mmdb", tmpDir.resolve("privacy_detection_sample.mmdb"));
+ 
+         assertThat(parseDatabaseFromType("ip_asn_sample.mmdb"), is(Database.AsnV2));
+-        assertThat(parseDatabaseFromType("ip_geolocation_sample.mmdb"), is(Database.CityV2));
++        assertThat(parseDatabaseFromType("ip_geolocation_standard_sample.mmdb"), is(Database.CityV2));
+         assertThat(parseDatabaseFromType("asn_sample.mmdb"), is(Database.AsnV2));
+         assertThat(parseDatabaseFromType("ip_country_sample.mmdb"), is(Database.CountryV2));
+         assertThat(parseDatabaseFromType("privacy_detection_sample.mmdb"), is(Database.PrivacyDetection));
+diff --git a/modules/ingest-geoip/src/test/resources/ipinfo/asn_sample.mmdb b/modules/ingest-geoip/src/test/resources/ipinfo/asn_sample.mmdb
+index 916a8252a5d..289318a124d 100644
+Binary files a/modules/ingest-geoip/src/test/resources/ipinfo/asn_sample.mmdb and b/modules/ingest-geoip/src/test/resources/ipinfo/asn_sample.mmdb differ
+diff --git a/modules/ingest-geoip/src/test/resources/ipinfo/ip_asn_sample.mmdb b/modules/ingest-geoip/src/test/resources/ipinfo/ip_asn_sample.mmdb
+index 3e1fc49ba48..d2bac8452a0 100644
+Binary files a/modules/ingest-geoip/src/test/resources/ipinfo/ip_asn_sample.mmdb and b/modules/ingest-geoip/src/test/resources/ipinfo/ip_asn_sample.mmdb differ
+diff --git a/modules/ingest-geoip/src/test/resources/ipinfo/ip_country_sample.mmdb b/modules/ingest-geoip/src/test/resources/ipinfo/ip_country_sample.mmdb
+index 88428315ee8..caa218f0277 100644
+Binary files a/modules/ingest-geoip/src/test/resources/ipinfo/ip_country_sample.mmdb and b/modules/ingest-geoip/src/test/resources/ipinfo/ip_country_sample.mmdb differ
+diff --git a/modules/ingest-geoip/src/test/resources/ipinfo/ip_geolocation_sample.mmdb b/modules/ingest-geoip/src/test/resources/ipinfo/ip_geolocation_sample.mmdb
+deleted file mode 100644
+index ed738bdde14..00000000000
+Binary files a/modules/ingest-geoip/src/test/resources/ipinfo/ip_geolocation_sample.mmdb and /dev/null differ
+diff --git a/modules/ingest-geoip/src/test/resources/ipinfo/ip_geolocation_standard_sample.mmdb b/modules/ingest-geoip/src/test/resources/ipinfo/ip_geolocation_standard_sample.mmdb
+new file mode 100644
+index 00000000000..205bd77fd53
+Binary files /dev/null and b/modules/ingest-geoip/src/test/resources/ipinfo/ip_geolocation_standard_sample.mmdb differ
+diff --git a/modules/ingest-geoip/src/test/resources/ipinfo/privacy_detection_sample.mmdb b/modules/ingest-geoip/src/test/resources/ipinfo/privacy_detection_sample.mmdb
+index ac669536ae1..4f2fca5559e 100644
+Binary files a/modules/ingest-geoip/src/test/resources/ipinfo/privacy_detection_sample.mmdb and b/modules/ingest-geoip/src/test/resources/ipinfo/privacy_detection_sample.mmdb differ

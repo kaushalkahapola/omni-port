@@ -1,0 +1,29 @@
+diff --git a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/BaseElasticsearchInternalService.java b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/BaseElasticsearchInternalService.java
+index d75d9f302ce..98777e97222 100644
+--- a/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/BaseElasticsearchInternalService.java
++++ b/x-pack/plugin/inference/src/main/java/org/elasticsearch/xpack/inference/services/elasticsearch/BaseElasticsearchInternalService.java
+@@ -275,7 +275,7 @@ public abstract class BaseElasticsearchInternalService implements InferenceServi
+         return request;
+     }
+ 
+-    protected abstract boolean isDefaultId(String inferenceId);
++    abstract boolean isDefaultId(String inferenceId);
+ 
+     protected void maybeStartDeployment(
+         ElasticsearchInternalModel model,
+diff --git a/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/action/TransportStartTrainedModelDeploymentAction.java b/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/action/TransportStartTrainedModelDeploymentAction.java
+index e130b13f4ec..0bda2de2ce9 100644
+--- a/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/action/TransportStartTrainedModelDeploymentAction.java
++++ b/x-pack/plugin/ml/src/main/java/org/elasticsearch/xpack/ml/action/TransportStartTrainedModelDeploymentAction.java
+@@ -234,9 +234,9 @@ public class TransportStartTrainedModelDeploymentAction extends TransportMasterN
+             if (getModelResponse.getResources().results().size() > 1) {
+                 listener.onFailure(
+                     ExceptionsHelper.badRequestException(
+-                        "cannot deploy more than one models at the same time; [{}] matches [{}] models]",
++                        "cannot deploy more than one model at the same time; [{}] matches models [{}]",
+                         request.getModelId(),
+-                        getModelResponse.getResources().results().size()
++                        getModelResponse.getResources().results().stream().map(TrainedModelConfig::getModelId).toList()
+                     )
+                 );
+                 return;

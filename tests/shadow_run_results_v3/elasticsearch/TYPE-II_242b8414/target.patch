@@ -1,0 +1,232 @@
+commit 90569c6b10cac00a38ad0bc2d3858a9d7af7863d
+Author: Ievgen Degtiarenko <ievgen.degtiarenko@elastic.co>
+Date:   Mon Jan 27 13:07:56 2025 +0100
+
+    Disallow CCS with lookup join (#120277) (#120882)
+
+diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java
+index bd07d573881..3397a5f6adf 100644
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/parser/LogicalPlanBuilder.java
+@@ -11,10 +11,12 @@ import org.antlr.v4.runtime.ParserRuleContext;
+ import org.antlr.v4.runtime.Token;
+ import org.antlr.v4.runtime.tree.ParseTree;
+ import org.elasticsearch.Build;
++import org.elasticsearch.common.Strings;
+ import org.elasticsearch.core.Tuple;
+ import org.elasticsearch.dissect.DissectException;
+ import org.elasticsearch.dissect.DissectParser;
+ import org.elasticsearch.index.IndexMode;
++import org.elasticsearch.transport.RemoteClusterAware;
+ import org.elasticsearch.xpack.esql.VerificationException;
+ import org.elasticsearch.xpack.esql.action.EsqlCapabilities;
+ import org.elasticsearch.xpack.esql.common.Failure;
+@@ -545,6 +547,13 @@ public class LogicalPlanBuilder extends ExpressionBuilder {
+         if (rightPattern.contains(WILDCARD)) {
+             throw new ParsingException(source(target), "invalid index pattern [{}], * is not allowed in LOOKUP JOIN", rightPattern);
+         }
++        if (RemoteClusterAware.isRemoteIndexName(rightPattern)) {
++            throw new ParsingException(
++                source(target),
++                "invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN",
++                rightPattern
++            );
++        }
+ 
+         UnresolvedRelation right = new UnresolvedRelation(
+             source(target),
+@@ -575,6 +584,20 @@ public class LogicalPlanBuilder extends ExpressionBuilder {
+             throw new ParsingException(source, "JOIN ON clause only supports one field at the moment, found [{}]", matchFieldsCount);
+         }
+ 
+-        return p -> new LookupJoin(source, p, right, joinFields);
++        return p -> {
++            p.forEachUp(UnresolvedRelation.class, r -> {
++                for (var leftPattern : Strings.splitStringByCommaToArray(r.indexPattern().indexPattern())) {
++                    if (RemoteClusterAware.isRemoteIndexName(leftPattern)) {
++                        throw new ParsingException(
++                            source(target),
++                            "invalid index pattern [{}], remote clusters are not supported in LOOKUP JOIN",
++                            r.indexPattern().indexPattern()
++                        );
++                    }
++                }
++            });
++
++            return new LookupJoin(source, p, right, joinFields);
++        };
+     }
+ }
+diff --git a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java
+index 5a6ec484b38..5287c5be310 100644
+--- a/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java
++++ b/x-pack/plugin/esql/src/test/java/org/elasticsearch/xpack/esql/parser/StatementParserTests.java
+@@ -78,6 +78,7 @@ import static org.elasticsearch.xpack.esql.EsqlTestUtils.paramAsConstant;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.paramAsIdentifier;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.paramAsPattern;
+ import static org.elasticsearch.xpack.esql.EsqlTestUtils.referenceAttribute;
++import static org.elasticsearch.xpack.esql.IdentifierGenerator.Features.CROSS_CLUSTER;
+ import static org.elasticsearch.xpack.esql.IdentifierGenerator.Features.WILDCARD_PATTERN;
+ import static org.elasticsearch.xpack.esql.IdentifierGenerator.randomIndexPattern;
+ import static org.elasticsearch.xpack.esql.IdentifierGenerator.randomIndexPatterns;
+@@ -307,18 +308,18 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         );
+     }
+ 
+-    public void testStatsWithoutAggs() throws Exception {
++    public void testStatsWithoutAggs() {
+         assertEquals(
+             new Aggregate(EMPTY, PROCESSING_CMD_INPUT, Aggregate.AggregateType.STANDARD, List.of(attribute("a")), List.of(attribute("a"))),
+             processingCommand("stats by a")
+         );
+     }
+ 
+-    public void testStatsWithoutAggsOrGroup() throws Exception {
++    public void testStatsWithoutAggsOrGroup() {
+         expectError("from text | stats", "At least one aggregation or grouping expression required in [stats]");
+     }
+ 
+-    public void testAggsWithGroupKeyAsAgg() throws Exception {
++    public void testAggsWithGroupKeyAsAgg() {
+         var queries = new String[] { """
+             row a = 1, b = 2
+             | stats a by a
+@@ -339,7 +340,7 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         }
+     }
+ 
+-    public void testStatsWithGroupKeyAndAggFilter() throws Exception {
++    public void testStatsWithGroupKeyAndAggFilter() {
+         var a = attribute("a");
+         var f = new UnresolvedFunction(EMPTY, "min", DEFAULT, List.of(a));
+         var filter = new Alias(EMPTY, "min(a) where a > 1", new FilteredExpression(EMPTY, f, new GreaterThan(EMPTY, a, integer(1))));
+@@ -349,7 +350,7 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         );
+     }
+ 
+-    public void testStatsWithGroupKeyAndMixedAggAndFilter() throws Exception {
++    public void testStatsWithGroupKeyAndMixedAggAndFilter() {
+         var a = attribute("a");
+         var min = new UnresolvedFunction(EMPTY, "min", DEFAULT, List.of(a));
+         var max = new UnresolvedFunction(EMPTY, "max", DEFAULT, List.of(a));
+@@ -384,7 +385,7 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         );
+     }
+ 
+-    public void testStatsWithoutGroupKeyMixedAggAndFilter() throws Exception {
++    public void testStatsWithoutGroupKeyMixedAggAndFilter() {
+         var a = attribute("a");
+         var f = new UnresolvedFunction(EMPTY, "min", DEFAULT, List.of(a));
+         var filter = new Alias(EMPTY, "min(a) where a > 1", new FilteredExpression(EMPTY, f, new GreaterThan(EMPTY, a, integer(1))));
+@@ -2073,41 +2074,41 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         assertThat(tableName.fold(FoldContext.small()), equalTo(string));
+     }
+ 
+-    public void testIdPatternUnquoted() throws Exception {
++    public void testIdPatternUnquoted() {
+         var string = "regularString";
+         assertThat(breakIntoFragments(string), contains(string));
+     }
+ 
+-    public void testIdPatternQuoted() throws Exception {
++    public void testIdPatternQuoted() {
+         var string = "`escaped string`";
+         assertThat(breakIntoFragments(string), contains(string));
+     }
+ 
+-    public void testIdPatternQuotedWithDoubleBackticks() throws Exception {
++    public void testIdPatternQuotedWithDoubleBackticks() {
+         var string = "`escaped``string`";
+         assertThat(breakIntoFragments(string), contains(string));
+     }
+ 
+-    public void testIdPatternUnquotedAndQuoted() throws Exception {
++    public void testIdPatternUnquotedAndQuoted() {
+         var string = "this`is`a`mix`of`ids`";
+         assertThat(breakIntoFragments(string), contains("this", "`is`", "a", "`mix`", "of", "`ids`"));
+     }
+ 
+-    public void testIdPatternQuotedTraling() throws Exception {
++    public void testIdPatternQuotedTraling() {
+         var string = "`foo`*";
+         assertThat(breakIntoFragments(string), contains("`foo`", "*"));
+     }
+ 
+-    public void testIdPatternWithDoubleQuotedStrings() throws Exception {
++    public void testIdPatternWithDoubleQuotedStrings() {
+         var string = "`this``is`a`quoted `` string``with`backticks";
+         assertThat(breakIntoFragments(string), contains("`this``is`", "a", "`quoted `` string``with`", "backticks"));
+     }
+ 
+-    public void testSpaceNotAllowedInIdPattern() throws Exception {
++    public void testSpaceNotAllowedInIdPattern() {
+         expectError("ROW a = 1| RENAME a AS this is `not okay`", "mismatched input 'is' expecting {<EOF>, '|', ',', '.'}");
+     }
+ 
+-    public void testSpaceNotAllowedInIdPatternKeep() throws Exception {
++    public void testSpaceNotAllowedInIdPatternKeep() {
+         expectError("ROW a = 1, b = 1| KEEP a b", "extraneous input 'b'");
+     }
+ 
+@@ -2938,13 +2939,20 @@ public class StatementParserTests extends AbstractStatementParserTests {
+         }
+     }
+ 
+-    public void testValidJoinPattern() {
++    public void testValidFromPattern() {
+         var basePattern = randomIndexPatterns();
+-        var joinPattern = randomIndexPattern(without(WILDCARD_PATTERN));
++
++        var plan = statement("FROM " + basePattern);
++
++        assertThat(as(plan, UnresolvedRelation.class).indexPattern().indexPattern(), equalTo(unquoteIndexPattern(basePattern)));
++    }
++
++    public void testValidJoinPattern() {
++        var basePattern = randomIndexPatterns(without(CROSS_CLUSTER));
++        var joinPattern = randomIndexPattern(without(WILDCARD_PATTERN), without(CROSS_CLUSTER));
+         var onField = randomIdentifier();
+-        var type = randomFrom("", "LOOKUP ");
+ 
+-        var plan = statement("FROM " + basePattern + " | " + type + " JOIN " + joinPattern + " ON " + onField);
++        var plan = statement("FROM " + basePattern + " | LOOKUP JOIN " + joinPattern + " ON " + onField);
+ 
+         var join = as(plan, LookupJoin.class);
+         assertThat(as(join.left(), UnresolvedRelation.class).indexPattern().indexPattern(), equalTo(unquoteIndexPattern(basePattern)));
+@@ -2957,10 +2965,31 @@ public class StatementParserTests extends AbstractStatementParserTests {
+     }
+ 
+     public void testInvalidJoinPatterns() {
+-        var joinPattern = randomIndexPattern(WILDCARD_PATTERN);
+-        expectError(
+-            "FROM " + randomIndexPatterns() + " | JOIN " + joinPattern + " ON " + randomIdentifier(),
+-            "invalid index pattern [" + unquoteIndexPattern(joinPattern) + "], * is not allowed in LOOKUP JOIN"
+-        );
++        {
++            // wildcard
++            var joinPattern = randomIndexPattern(WILDCARD_PATTERN, without(CROSS_CLUSTER));
++            expectError(
++                "FROM " + randomIndexPatterns() + " | LOOKUP JOIN " + joinPattern + " ON " + randomIdentifier(),
++                "invalid index pattern [" + unquoteIndexPattern(joinPattern) + "], * is not allowed in LOOKUP JOIN"
++            );
++        }
++        {
++            // remote cluster on the right
++            var fromPatterns = randomIndexPatterns(without(CROSS_CLUSTER));
++            var joinPattern = randomIndexPattern(CROSS_CLUSTER, without(WILDCARD_PATTERN));
++            expectError(
++                "FROM " + fromPatterns + " | LOOKUP JOIN " + joinPattern + " ON " + randomIdentifier(),
++                "invalid index pattern [" + unquoteIndexPattern(joinPattern) + "], remote clusters are not supported in LOOKUP JOIN"
++            );
++        }
++        {
++            // remote cluster on the left
++            var fromPatterns = randomIndexPatterns(CROSS_CLUSTER);
++            var joinPattern = randomIndexPattern(without(CROSS_CLUSTER), without(WILDCARD_PATTERN));
++            expectError(
++                "FROM " + fromPatterns + " | LOOKUP JOIN " + joinPattern + " ON " + randomIdentifier(),
++                "invalid index pattern [" + unquoteIndexPattern(fromPatterns) + "], remote clusters are not supported in LOOKUP JOIN"
++            );
++        }
+     }
+ }

@@ -1,0 +1,25 @@
+diff --git a/docs/changelog/122497.yaml b/docs/changelog/122497.yaml
+new file mode 100644
+index 00000000000..46c385ea4ed
+--- /dev/null
++++ b/docs/changelog/122497.yaml
+@@ -0,0 +1,5 @@
++pr: 122497
++summary: Check if index patterns conform to valid format before validation
++area: CCS
++type: enhancement
++issues: []
+diff --git a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java
+index 1a768378eb3..86e14961df0 100644
+--- a/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java
++++ b/x-pack/plugin/esql/src/main/java/org/elasticsearch/xpack/esql/optimizer/rules/physical/local/PushTopNToSource.java
+@@ -189,8 +189,7 @@ public class PushTopNToSource extends PhysicalOptimizerRules.ParameterizedOptimi
+                     break;
+                 }
+             }
+-            // TODO: We can push down partial sorts where `pushableSorts.size() < orders.size()`, but that should involve benchmarks
+-            if (pushableSorts.size() > 0 && pushableSorts.size() == orders.size()) {
++            if (pushableSorts.isEmpty() == false) {
+                 return new PushableCompoundExec(evalExec, queryExec, pushableSorts);
+             }
+         }

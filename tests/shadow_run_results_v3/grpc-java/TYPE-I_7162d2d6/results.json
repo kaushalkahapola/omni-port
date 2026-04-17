@@ -1,0 +1,198 @@
+{
+  "run_timestamp": "2026-04-13T00:15:13.324388",
+  "repo": "grpc-java",
+  "patch_type": "TYPE-I",
+  "original_commit": "7162d2d6615eb36814e151bf8e926b68409dbed9",
+  "backport_commit": "7dada7d5a9d6efd9eafc25ef992689cbe94a4377",
+  "description": "master \u2192 v1.70.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.34,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "xds/src/main/java/io/grpc/xds/ClusterImplLoadBalancer.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 385,
+          "end_line": 390,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 3.55,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_I",
+        "confidence": 0.95,
+        "reasoning": "The patch consists of a straightforward addition of a single line to pass an optional label in the pickSubchannel method, and corresponding test updates that add verification for this new label. The main code hunk was found via 'git_exact' with high confidence, indicating an exact match in the target branch, which suggests a trivial backport. The test changes are additive and do not involve structural or API changes. Overall, the patch is a simple string addition and test augmentation without structural modifications, fitting TYPE_I classification.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "xds/src/main/java/io/grpc/xds/ClusterImplLoadBalancer.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "grpc-java-helper",
+      "test_success": true,
+      "test_mode": "grpc-java-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/grpc-java/xds/build/test-results/test/TEST-io.grpc.xds.ClusterImplLoadBalancerTest.xml"
+        ],
+        "target_classes": [
+          "ClusterImplLoadBalancerTest"
+        ],
+        "test_cases": {
+          "io.grpc.xds.ClusterImplLoadBalancerTest#endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#pick_addsOptionalLabels": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#nameResolutionError_beforeChildPolicyInstantiated_returnErrorPickerToUpstream": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#maxConcurrentRequests_appliedByLbConfig_circuitBreakingEnabledByDefault": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#nameResolutionError_afterChildPolicyInstantiated_propagateToDownstream": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#handleResolvedAddresses_propagateToChildPolicy": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#maxConcurrentRequests_appliedByLbConfig_disableCircuitBreaking": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#endpointAddressesAttachedWithClusterName": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#maxConcurrentRequests_appliedWithDefaultValue_disableCircuitBreaking": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#endpointWithAuthorityHostname_autoHostRewriteNotEnabled_pickResultNoAuthorityHostname": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#pick_noResult_addsClusterLabel": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#maxConcurrentRequests_appliedWithDefaultValue_circuitBreakingEnabledByDefault": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#recordLoadStats": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#dropRpcsWithRespectToLbConfigDropCategories": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#handleResolvedAddresses_childPolicyChanges": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#endpointsWithAuthorityHostname_autoHostRewriteEnabled_pickResultHasAuthorityHostname": "passed",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#pickFirstLoadReport_onUpdateAddress": "passed"
+        },
+        "classes": {
+          "io.grpc.xds.ClusterImplLoadBalancerTest": "passed"
+        },
+        "summary": {
+          "passed": 17,
+          "failed": 0,
+          "skipped": 0,
+          "total": 17
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.grpc.xds.ClusterImplLoadBalancerTest#pick_addsOptionalLabels",
+          "io.grpc.xds.ClusterImplLoadBalancerTest#pick_noResult_addsClusterLabel"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 17,
+        "patched_total": 17,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 4,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-grpc-java-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 17
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 829,
+    "target_patch_bytes": 4536,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "grpc-java-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.grpc.xds.ClusterImplLoadBalancerTest#pick_addsOptionalLabels",
+        "io.grpc.xds.ClusterImplLoadBalancerTest#pick_noResult_addsClusterLabel"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 17,
+      "patched_total": 17,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 2,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

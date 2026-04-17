@@ -1,0 +1,195 @@
+{
+  "run_timestamp": "2026-04-12T08:11:37.449139",
+  "repo": "elasticsearch",
+  "patch_type": "TYPE-I",
+  "original_commit": "46e26c7237ba2ffa659c55aa801353d51aacbe9c",
+  "backport_commit": "0f0efb79e327b3ce626ee8cd88e8bf3a4730154e",
+  "description": "main \u2192 8.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "java_hunks": 1,
+      "aux_hunks": 2,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 54,
+          "end_line": 60,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 2.95,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_II",
+        "confidence": 0.85,
+        "reasoning": "The patch adds a try-catch block around an existing method call to improve exception messages, which is a small structural change but does not alter the overall method structure or API. The localization evidence shows the main hunk was found via 'git_exact' with high confidence, indicating the code context is very similar. The addition of a new test method is straightforward and does not increase complexity significantly. Therefore, the patch is best classified as TYPE_II, involving minor structural changes and formatting adjustments requiring fuzzy matching rather than an exact string replacement.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 1,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "server/src/main/java/org/elasticsearch/node/InternalSettingsPreparer.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.09,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "elasticsearch-helper",
+      "test_success": true,
+      "test_mode": "elasticsearch-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/elasticsearch/server/build/test-results/test/TEST-org.elasticsearch.node.InternalSettingsPreparerTests.xml"
+        ],
+        "target_classes": [
+          "org.elasticsearch.node.InternalSettingsPreparerTests"
+        ],
+        "test_cases": {
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testExplicitClusterName": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testOverridesOverride": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testDefaultPropertiesDoNothing": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testReplacePlaceholderFailure": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testGarbageIsNotSwallowed": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testOverridesEmpty": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testSubstitutionBrokenLenient": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testSecureSettings": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testSubstitutionMultiple": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testEmptySettings": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testSubstitutionFirstLine": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testOverridesNew": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testOverridesMultiple": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testSubstitutionMissingLenient": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testSubstitutionLastLine": "passed",
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testSubstitutionEntireLine": "passed"
+        },
+        "classes": {
+          "org.elasticsearch.node.InternalSettingsPreparerTests": "passed"
+        },
+        "summary": {
+          "passed": 16,
+          "failed": 0,
+          "skipped": 0,
+          "total": 16
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "org.elasticsearch.node.InternalSettingsPreparerTests#testReplacePlaceholderFailure"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 16,
+        "patched_total": 16,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 3,
+    "developer_aux_hunks_from_target": 2,
+    "phase0_baseline": {
+      "mode": "baseline-elasticsearch-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 16
+    },
+    "java_production_hunks": 1,
+    "developer_aux_hunks": 2,
+    "processed_hunk_indices": [
+      0
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 1,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 941,
+    "target_patch_bytes": 2842,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "elasticsearch-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "org.elasticsearch.node.InternalSettingsPreparerTests#testReplacePlaceholderFailure"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 16,
+      "patched_total": 16,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 1,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

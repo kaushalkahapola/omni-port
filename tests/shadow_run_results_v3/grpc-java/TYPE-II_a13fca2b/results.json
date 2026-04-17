@@ -1,0 +1,232 @@
+{
+  "run_timestamp": "2026-04-13T00:15:13.324388",
+  "repo": "grpc-java",
+  "patch_type": "TYPE-II",
+  "original_commit": "a13fca2bf2cddd58d917865bc0bb24036c5eb873",
+  "backport_commit": "868178651f6ae0dcef5bc0048c1e94ed1a8c13cc",
+  "description": "master \u2192 v1.72.x",
+  "skip_validation": false,
+  "agents": {
+    "agent1_localizer": {
+      "elapsed_s": 0.38,
+      "error": null,
+      "java_hunks": 2,
+      "aux_hunks": 1,
+      "localization_results": [
+        {
+          "hunk_index": 0,
+          "file_path": "xds/src/main/java/io/grpc/xds/ClusterResolverLoadBalancer.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 33,
+          "end_line": 38,
+          "symbol_mappings": {}
+        },
+        {
+          "hunk_index": 1,
+          "file_path": "xds/src/main/java/io/grpc/xds/ClusterResolverLoadBalancer.java",
+          "method_used": "git_exact",
+          "confidence": 1.0,
+          "start_line": 657,
+          "end_line": 735,
+          "symbol_mappings": {}
+        }
+      ]
+    },
+    "agent2_classifier": {
+      "elapsed_s": 4.04,
+      "error": null,
+      "classification": {
+        "patch_type": "PatchType.TYPE_III",
+        "confidence": 0.95,
+        "reasoning": "The patch involves a significant structural change in the ClusterResolverLoadBalancer.java file. It replaces an inner class and anonymous Runnable implementations with lambda expressions and a new method onResult2 that returns a Status, changing the way resolution results and errors are handled. This is a structural change beyond simple string replacement or whitespace changes, involving method signature changes and control flow restructuring. The test code changes also introduce a new FakeNameResolverProvider variant and adjust test methods to accommodate the new callback style, indicating adaptation to the new structure. The patch was found via 'git_exact' with high confidence, but the complexity of structural changes justifies a TYPE_III classification with high confidence but not absolute certainty due to possible minor differences in the target branch. The token budget estimate is moderate to high due to the complexity and size of the patch.",
+        "is_auto_generated": false
+      }
+    },
+    "agent3_fastapply": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "applied_count": 2,
+      "applied_hunks": [
+        {
+          "applied": true,
+          "file_path": "xds/src/main/java/io/grpc/xds/ClusterResolverLoadBalancer.java",
+          "error": null
+        },
+        {
+          "applied": true,
+          "file_path": "xds/src/main/java/io/grpc/xds/ClusterResolverLoadBalancer.java",
+          "error": null
+        }
+      ]
+    },
+    "agent4_namespace": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "adapted_count": 0
+    },
+    "agent5_structural": {
+      "elapsed_s": 0.08,
+      "error": null,
+      "refactored_count": 0
+    },
+    "agent6_synthesizer": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "synthesized_count": 0,
+      "failed_count": 0,
+      "synthesis_status": "success",
+      "synthesized_hunks": []
+    },
+    "agent8_syntax_repair": {
+      "elapsed_s": 0.0,
+      "error": null,
+      "syntax_repair_status": "skipped",
+      "syntax_repair_attempts": 0,
+      "syntax_repair_log": [],
+      "synthesized_count_after_repair": 0
+    },
+    "agent7_validator": {
+      "validation_passed": true,
+      "validation_failure_category": "",
+      "validation_error_context": "",
+      "validation_attempts": 1,
+      "retry_files": [],
+      "build_success": true,
+      "build_mode": "grpc-java-helper",
+      "test_success": true,
+      "test_mode": "grpc-java-helper",
+      "test_state": {
+        "xml_reports": [
+          "/home/cseroot/omni-port/repos/grpc-java/xds/build/test-results/test/TEST-io.grpc.xds.ClusterResolverLoadBalancerTest.xml"
+        ],
+        "target_classes": [
+          "ClusterResolverLoadBalancerTest"
+        ],
+        "test_cases": {
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsUpdatePriorityName_mergeTwoPriorities": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionErrorBeforeChildLbCreated_edsOnly_returnErrorPicker": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#handleNameResolutionErrorFromUpstream_afterChildLbCreated_fallThrough": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsResourceRevoked_dnsResolutionError_shutDownChildLbPolicyAndReturnErrorPicker": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#handleNameResolutionErrorFromUpstream_beforeChildLbCreated_returnErrorPicker": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#onlyLogicalDnsCluster_handleRefreshNameResolution": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionErrorBeforeChildLbCreated_returnErrorPickerIfAllClustersEncounterError": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#onlyEdsClusters_allResourcesRevoked_shutDownChildLbPolicy": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#onlyLogicalDnsCluster_refreshNameResolutionRaceWithResolutionError": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#onlyEdsClusters_receivedEndpoints": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionErrorAfterChildLbCreated_propagateErrorIfAllClustersEncounterError": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#handleEdsResource_noHealthyEndpoint": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsUpdatePriorityName_twoPriorities": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionError_backoffAndRefresh": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#handleEdsResource_ignoreLocalitiesWithNoHealthyEndpoints": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsClustersEndpointHostname_addedToAddressAttribute": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsClustersWithLeastRequestEndpointLbPolicy": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#onlyLogicalDnsCluster_endpointsResolved": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#handleEdsResource_ignoreUnhealthyEndpoints": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#endpointAddressRewritten_whenProxyMetadataIsInEndpointMetadata": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsUpdatePriorityName_swapTwoPriorities": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#handleEdsResource_ignorePrioritiesWithNoHealthyEndpoints": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsUpdatePriorityName_addOnePriority": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#noEdsResourceExists_useDnsResolutionResults": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#onlyEdsClusters_resourceNeverExist_returnErrorPicker": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#oldListenerCallback_resolutionError_backoffAndRefresh": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsClustersAndLogicalDnsCluster_receivedEndpoints": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#oldListenerCallback_onlyLogicalDnsCluster_endpointsResolved": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#endpointAddressRewritten_whenProxyMetadataIsInLocalityMetadata": "passed",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsClustersWithRingHashEndpointLbPolicy": "passed"
+        },
+        "classes": {
+          "io.grpc.xds.ClusterResolverLoadBalancerTest": "passed"
+        },
+        "summary": {
+          "passed": 30,
+          "failed": 0,
+          "skipped": 0,
+          "total": 30
+        }
+      },
+      "test_state_transition": {
+        "valid_backport_signal": true,
+        "fail_to_pass": [
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#edsResourceRevoked_dnsResolutionError_shutDownChildLbPolicyAndReturnErrorPicker",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#onlyLogicalDnsCluster_refreshNameResolutionRaceWithResolutionError",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionErrorAfterChildLbCreated_propagateErrorIfAllClustersEncounterError",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionErrorBeforeChildLbCreated_returnErrorPickerIfAllClustersEncounterError",
+          "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionError_backoffAndRefresh"
+        ],
+        "pass_to_fail": [],
+        "newly_passing": [],
+        "baseline_total": 30,
+        "patched_total": 30,
+        "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+      },
+      "compile_errors": []
+    }
+  },
+  "summary": {
+    "total_hunks_in_patch": 11,
+    "developer_aux_hunks_from_target": 1,
+    "phase0_baseline": {
+      "mode": "baseline-grpc-java-helper",
+      "skipped": false,
+      "cached": false,
+      "test_cases_total": 30
+    },
+    "java_production_hunks": 2,
+    "developer_aux_hunks": 1,
+    "processed_hunk_indices": [
+      0,
+      1
+    ],
+    "tokens_used": 0,
+    "llm_token_usage": {
+      "agent2_classifier": {
+        "input": 0,
+        "output": 0
+      },
+      "agent5_structural": {
+        "input": 0,
+        "output": 0
+      },
+      "agent6_synthesizer": {
+        "input": 0,
+        "output": 0
+      }
+    },
+    "synthesis_status": "success",
+    "applied_on_disk_ag3": 2,
+    "synthesized_count": 0,
+    "failed_hunks_total": 0,
+    "syntax_repair_status": "skipped",
+    "fallback_status": "not_run",
+    "fallback_attempts": 0,
+    "retry_contexts": [],
+    "failed_hunks": [],
+    "generated_patch_bytes": 8080,
+    "target_patch_bytes": 16450,
+    "validation_passed": true,
+    "validation_failure_category": "",
+    "build_success": true,
+    "test_success": true,
+    "test_mode": "grpc-java-helper",
+    "test_transition": {
+      "valid_backport_signal": true,
+      "fail_to_pass": [
+        "io.grpc.xds.ClusterResolverLoadBalancerTest#edsResourceRevoked_dnsResolutionError_shutDownChildLbPolicyAndReturnErrorPicker",
+        "io.grpc.xds.ClusterResolverLoadBalancerTest#onlyLogicalDnsCluster_refreshNameResolutionRaceWithResolutionError",
+        "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionErrorAfterChildLbCreated_propagateErrorIfAllClustersEncounterError",
+        "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionErrorBeforeChildLbCreated_returnErrorPickerIfAllClustersEncounterError",
+        "io.grpc.xds.ClusterResolverLoadBalancerTest#resolutionError_backoffAndRefresh"
+      ],
+      "pass_to_fail": [],
+      "newly_passing": [],
+      "baseline_total": 30,
+      "patched_total": 30,
+      "reason": "Valid: Observed fail-to-pass and/or newly passing tests with no regressions."
+    },
+    "fail_to_pass_count": 5,
+    "newly_passing_count": 0,
+    "pass_to_fail_count": 0,
+    "backport_success": true
+  }
+}

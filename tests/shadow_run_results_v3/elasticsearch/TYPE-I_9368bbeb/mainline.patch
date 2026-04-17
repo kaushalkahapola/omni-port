@@ -1,0 +1,47 @@
+commit 9368bbeb193b1d2e7f33af90909311c86fc9a948
+Author: Larry Gregory <larry.gregory@elastic.co>
+Date:   Mon Oct 7 09:29:58 2024 -0400
+
+    Adds manage_inference cluster privilege to kibana_system role (#114051)
+    
+    * Adds manage_inference cluster privilege to kibana_system role
+    
+    * Fix
+    
+    * this is what I get for not using a real IDE
+    
+    * Remove whitespace
+    
+    ---------
+    
+    Co-authored-by: Elastic Machine <elasticmachine@users.noreply.github.com>
+
+diff --git a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/authz/store/KibanaOwnedReservedRoleDescriptors.java b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/authz/store/KibanaOwnedReservedRoleDescriptors.java
+index 91a8ea4d368..6c28c6f3053 100644
+--- a/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/authz/store/KibanaOwnedReservedRoleDescriptors.java
++++ b/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/authz/store/KibanaOwnedReservedRoleDescriptors.java
+@@ -65,6 +65,8 @@ class KibanaOwnedReservedRoleDescriptors {
+             new String[] {
+                 "monitor",
+                 "manage_index_templates",
++                // manage_inference required for Kibana's inference plugin to setup an ELSER endpoint.
++                "manage_inference",
+                 MonitoringBulkAction.NAME,
+                 "manage_saml",
+                 "manage_token",
+diff --git a/x-pack/plugin/core/src/test/java/org/elasticsearch/xpack/core/security/authz/store/ReservedRolesStoreTests.java b/x-pack/plugin/core/src/test/java/org/elasticsearch/xpack/core/security/authz/store/ReservedRolesStoreTests.java
+index acf530fb7c5..26b306d6f13 100644
+--- a/x-pack/plugin/core/src/test/java/org/elasticsearch/xpack/core/security/authz/store/ReservedRolesStoreTests.java
++++ b/x-pack/plugin/core/src/test/java/org/elasticsearch/xpack/core/security/authz/store/ReservedRolesStoreTests.java
+@@ -436,6 +436,11 @@ public class ReservedRolesStoreTests extends ESTestCase {
+         assertThat(kibanaRole.cluster().check(ClusterUpdateSettingsAction.NAME, request, authentication), is(false));
+         assertThat(kibanaRole.cluster().check(MonitoringBulkAction.NAME, request, authentication), is(true));
+ 
++        // Inference
++        assertTrue(kibanaRole.cluster().check("cluster:admin/xpack/inference/get", request, authentication));
++        assertTrue(kibanaRole.cluster().check("cluster:admin/xpack/inference/put", request, authentication));
++        assertTrue(kibanaRole.cluster().check("cluster:admin/xpack/inference/delete", request, authentication));
++
+         // Enrich
+         assertThat(kibanaRole.cluster().check("cluster:admin/xpack/enrich/put", request, authentication), is(true));
+         assertThat(kibanaRole.cluster().check("cluster:admin/xpack/enrich/execute", request, authentication), is(true));

@@ -1,0 +1,30 @@
+diff --git a/rls/src/main/java/io/grpc/rls/ChildLoadBalancerHelper.java b/rls/src/main/java/io/grpc/rls/ChildLoadBalancerHelper.java
+index 3131aba75..7a5d5dcc6 100644
+--- a/rls/src/main/java/io/grpc/rls/ChildLoadBalancerHelper.java
++++ b/rls/src/main/java/io/grpc/rls/ChildLoadBalancerHelper.java
+@@ -77,6 +77,10 @@ final class ChildLoadBalancerHelper extends ForwardingLoadBalancerHelper {
+       this.picker = checkNotNull(picker, "picker");
+     }
+ 
++    void init() {
++      helper.updateBalancingState(ConnectivityState.CONNECTING, picker);
++    }
++
+     ChildLoadBalancerHelper forTarget(String target) {
+       return new ChildLoadBalancerHelper(target, helper, subchannelStateManager, picker);
+     }
+diff --git a/rls/src/main/java/io/grpc/rls/LbPolicyConfiguration.java b/rls/src/main/java/io/grpc/rls/LbPolicyConfiguration.java
+index be067732b..4d6ceed92 100644
+--- a/rls/src/main/java/io/grpc/rls/LbPolicyConfiguration.java
++++ b/rls/src/main/java/io/grpc/rls/LbPolicyConfiguration.java
+@@ -225,6 +225,10 @@ final class LbPolicyConfiguration {
+       this.childLbStatusListener = checkNotNull(childLbStatusListener, "childLbStatusListener");
+     }
+ 
++    void init() {
++      childLbHelperProvider.init();
++    }
++
+     ChildPolicyWrapper createOrGet(String target) {
+       // TODO(creamsoup) check if the target is valid or not
+       RefCountedChildPolicyWrapper pooledChildPolicyWrapper = childPolicyMap.get(target);

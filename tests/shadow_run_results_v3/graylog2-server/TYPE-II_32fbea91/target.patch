@@ -1,0 +1,85 @@
+commit 97ec98b39d4f4bd57439cd766e01834dbf2537f0
+Author: graylog-internal-actions-access[bot] <121166801+graylog-internal-actions-access[bot]@users.noreply.github.com>
+Date:   Wed Mar 5 08:58:53 2025 +0100
+
+    Add support for quoted (default) MongoDB search term values in SearchQueryParser (#21567) (#21607)
+    
+    * Add support for quoted default search term values
+    
+    * Add change log
+    
+    * Cleanup
+    
+    (cherry picked from commit 32fbea9125bfe253f7d4bed94aa71eca60a8843c)
+    
+    Co-authored-by: Dan Torrey <dan.torrey@graylog.com>
+
+diff --git a/changelog/unreleased/issue-21565.toml b/changelog/unreleased/issue-21565.toml
+new file mode 100644
+index 0000000000..75d2958e90
+--- /dev/null
++++ b/changelog/unreleased/issue-21565.toml
+@@ -0,0 +1,5 @@
++type = "fixed"
++message = "Fixed issue preventing quoted entity search values from finding exact matches on various pages throughout Graylog."
++
++issues = ["21565"]
++pulls = ["21567"]
+diff --git a/graylog2-server/src/main/java/org/graylog2/search/SearchQueryParser.java b/graylog2-server/src/main/java/org/graylog2/search/SearchQueryParser.java
+index c5d38926a0..489483a634 100644
+--- a/graylog2-server/src/main/java/org/graylog2/search/SearchQueryParser.java
++++ b/graylog2-server/src/main/java/org/graylog2/search/SearchQueryParser.java
+@@ -78,8 +78,16 @@ public class SearchQueryParser {
+     private static final Splitter FIELD_VALUE_SPLITTER = Splitter.on(":").limit(2).omitEmptyStrings().trimResults();
+     private static final Splitter VALUE_SPLITTER = Splitter.on(",").omitEmptyStrings().trimResults();
+ 
++    // Pattern to split a search query into individual parsable elements terms.
++    private static final String TERM_SPLIT_PATTERN =
++            "(\\S+:(=|=~|<|<=|>|>=)?'(?:[^'\\\\]|\\\\.)*')|" + // Split field-specific terms with single-quotes: title:'value'
++                    "(\\S+:(=|=~|<|<=|>|>=)?\"(?:[^\"\\\\]|\\\\.)*\")|" + // Split field-specific terms with double-quotes title:"value"
++                    "['\"][^\\\\]*?(?:\\\\.[^\\\\]*)*?['\"]|" + // Split single quoted value: "value one"
++                    "\\S+:(=|=~|<|<=|>|>=)?\\S+|" + // Split field-specific terms without quotes title:value
++                    "\\S+"; // Split the words of any other string value
++
+     // This needs to be updated if more operators are added
+-    private static final Pattern QUERY_SPLITTER_PATTERN = Pattern.compile("(\\S+:(=|=~|<|<=|>|>=)?'(?:[^'\\\\]|\\\\.)*')|(\\S+:(=|=~|<|<=|>|>=)?\"(?:[^\"\\\\]|\\\\.)*\")|\\S+|\\S+:(=|=~|<|<=|>|>=)?\\S+");
++    private static final Pattern QUERY_SPLITTER_PATTERN = Pattern.compile(TERM_SPLIT_PATTERN);
+     private static final String INVALID_ENTRY_MESSAGE = "Chunk [%s] is not a valid entry";
+     private static final String QUOTE_REPLACE_REGEX = "^[\"']|[\"']$";
+     public static final SearchQueryOperator DEFAULT_STRING_OPERATOR = SearchQueryOperators.REGEXP;
+diff --git a/graylog2-server/src/test/java/org/graylog2/search/SearchQueryParserTest.java b/graylog2-server/src/test/java/org/graylog2/search/SearchQueryParserTest.java
+index aa2aade2a2..67a53b1e39 100644
+--- a/graylog2-server/src/test/java/org/graylog2/search/SearchQueryParserTest.java
++++ b/graylog2-server/src/test/java/org/graylog2/search/SearchQueryParserTest.java
+@@ -299,6 +299,31 @@ public class SearchQueryParserTest {
+         assertThat(searchQuery.hasDisallowedKeys()).isFalse();
+     }
+ 
++    @Test
++    void unquotedEmptyFieldPrefixSingleSearchTerm() {
++        final SearchQueryParser parser = new SearchQueryParser("name", Set.of(), "");
++        // Verify unquoted term is split into two search values.
++        final SearchQuery searchQuery = parser.parse("Bobby testerson");
++        final Multimap<String, SearchQueryParser.FieldValue> queryMap = searchQuery.getQueryMap();
++        assertThat(queryMap.keySet().size()).isEqualTo(1);
++        final Collection<SearchQueryParser.FieldValue> values = queryMap.get("name");
++        assertThat(values.size()).isEqualTo(2);
++        assertThat(values).contains(new SearchQueryParser.FieldValue("Bobby", false));
++        assertThat(values).contains(new SearchQueryParser.FieldValue("testerson", false));
++    }
++
++    @Test
++    void quotedEmptyFieldPrefixSingleSearchTerm() {
++        final SearchQueryParser parser = new SearchQueryParser("name", Set.of(), "");
++        // Verify quoted term is maintained as a single search value.
++        final SearchQuery searchQuery = parser.parse("\"Bobby testerson\"");
++        final Multimap<String, SearchQueryParser.FieldValue> queryMap = searchQuery.getQueryMap();
++        assertThat(queryMap.keySet().size()).isEqualTo(1);
++        final Collection<SearchQueryParser.FieldValue> values = queryMap.get("name");
++        assertThat(values.size()).isEqualTo(1);
++        assertThat(values).containsOnly(new SearchQueryParser.FieldValue("Bobby testerson", false));
++    }
++
+     @Test
+     void booleanValuesSupported() {
+         final SearchQueryParser parser = new SearchQueryParser("name",

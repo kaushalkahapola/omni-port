@@ -1,0 +1,195 @@
+commit da799e6aca360d0bf12a3302588649f445e2c920
+Author: graylog-internal-actions-access[bot] <121166801+graylog-internal-actions-access[bot]@users.noreply.github.com>
+Date:   Wed Dec 18 11:35:17 2024 -0600
+
+    Safely render Maps and Collections in JSON strings (#21167) (#21201)
+    
+    * Safely render Maps in JSON strings
+    
+    * Handle Iterable and Collection typed objects in the JsonSafeEngine
+    
+    (cherry picked from commit 92dab916a50f809fccb0943e53f0165dd9a121c8)
+    
+    Co-authored-by: Zack King <91903901+kingzacko1@users.noreply.github.com>
+
+diff --git a/changelog/unreleased/issue-20955.toml b/changelog/unreleased/issue-20955.toml
+new file mode 100644
+index 0000000000..7f3232612b
+--- /dev/null
++++ b/changelog/unreleased/issue-20955.toml
+@@ -0,0 +1,5 @@
++type = "fixed"
++message = "Fix unescaped double quotes in map and collection typed fields in Custom HTTP Notification JSON body."
++
++issues = ["20955"]
++pulls = ["21167"]
+diff --git a/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java b/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
+index b616c662a7..9abfbd42d5 100644
+--- a/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
++++ b/graylog2-server/src/main/java/org/graylog2/bindings/providers/JsonSafeEngineProvider.java
+@@ -23,6 +23,8 @@ import jakarta.inject.Provider;
+ import jakarta.inject.Singleton;
+ import org.apache.commons.lang.StringEscapeUtils;
+ 
++import java.util.Collection;
++import java.util.Iterator;
+ import java.util.Locale;
+ import java.util.Map;
+ 
+@@ -34,7 +36,11 @@ public class JsonSafeEngineProvider implements Provider<Engine> {
+     public JsonSafeEngineProvider() {
+         engine = Engine.createEngine();
+         engine.registerRenderer(String.class, new JsonSafeRenderer());
++        engine.registerRenderer(Map.class, new JsonSafeMapRenderer());
++        engine.registerRenderer(Iterable.class, new JsonSafeIterableRenderer());
++        engine.registerRenderer(Collection.class, new JsonSafeCollectionRenderer());
+     }
++
+     @Override
+     public Engine get() {
+         return engine;
+@@ -52,4 +58,55 @@ public class JsonSafeEngineProvider implements Provider<Engine> {
+             return StringEscapeUtils.escapeJava(s).replace("/", "\\/");
+         }
+     }
++
++    @SuppressWarnings("rawtypes")
++    private static class JsonSafeMapRenderer implements Renderer<Map> {
++
++        @Override
++        public String render(Map map, Locale locale, Map<String, Object> map2) {
++            final String renderedResult;
++
++            if (map.isEmpty()) {
++                renderedResult = "";
++            } else if (map.size() == 1) {
++                renderedResult = map.values().iterator().next().toString();
++            } else {
++                renderedResult = map.toString();
++            }
++            return StringEscapeUtils.escapeJava(renderedResult).replace("/", "\\/");
++        }
++    }
++
++    private static class JsonSafeIterableRenderer implements Renderer<Iterable> {
++
++        @Override
++        public String render(Iterable iterable, Locale locale, Map<String, Object> model) {
++            final String renderedResult;
++
++            final Iterator<?> iterator = iterable.iterator();
++            renderedResult = iterator.hasNext() ? iterator.next().toString() : "";
++            return StringEscapeUtils.escapeJava(renderedResult).replace("/", "\\/");
++
++        }
++
++    }
++
++    private static class JsonSafeCollectionRenderer implements Renderer<Collection> {
++
++        @Override
++        public String render(Collection collection, Locale locale, Map<String, Object> model) {
++            final String renderedResult;
++
++            if (collection.isEmpty()) {
++                renderedResult = "";
++            } else if (collection.size() == 1) {
++                renderedResult = collection.iterator().next().toString();
++            } else {
++                renderedResult = collection.toString();
++            }
++            return StringEscapeUtils.escapeJava(renderedResult).replace("/", "\\/");
++
++        }
++
++    }
+ }
+diff --git a/graylog2-server/src/test/java/org/graylog/events/notifications/types/HTTPEventNotificationV2Test.java b/graylog2-server/src/test/java/org/graylog/events/notifications/types/HTTPEventNotificationV2Test.java
+index a01d2b7a08..241090c937 100644
+--- a/graylog2-server/src/test/java/org/graylog/events/notifications/types/HTTPEventNotificationV2Test.java
++++ b/graylog2-server/src/test/java/org/graylog/events/notifications/types/HTTPEventNotificationV2Test.java
+@@ -16,7 +16,6 @@
+  */
+ package org.graylog.events.notifications.types;
+ 
+-import com.fasterxml.jackson.core.JsonProcessingException;
+ import com.floreysoft.jmte.Engine;
+ import com.google.common.collect.ImmutableList;
+ import org.graylog.events.configuration.EventsConfigurationProvider;
+@@ -38,7 +37,8 @@ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.Test;
+ import org.mockito.Mock;
+ 
+-import java.io.UnsupportedEncodingException;
++import java.util.HashMap;
++import java.util.List;
+ import java.util.Map;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+@@ -74,21 +74,63 @@ public class HTTPEventNotificationV2Test {
+     }
+ 
+     @Test
+-    public void testEscapedQuotesInBacklog() throws UnsupportedEncodingException, JsonProcessingException {
++    public void testEscapedQuotesInBacklog() {
+         Map<String, Object> model = Map.of(
+                 "event_definition_title", "<<Test Event Title>>",
+-                "event", Map.of("message", "Event Message & Whatnot"),
+-                "backlog", createBacklog()
++                "backlog", createBacklog(),
++                "event", createEvent()
+         );
+         String bodyTemplate = "${if backlog}{\"backlog\": [${foreach backlog message}{ \"title\": \"Message\", \"value\": \"${message.message}\" }${if last_message}${else},${end}${end}]}${end}";
+         String body = notification.transformBody(bodyTemplate, HTTPEventNotificationConfigV2.ContentType.JSON, model);
+         assertThat(body).contains("\"value\": \"Message with \\\"Double Quotes\\\"");
+     }
+ 
++    @Test
++    public void testEscapedQuotesInEventFields() {
++        Map<String, Object> model = Map.of(
++                "event_definition_title", "<<Test Event Title>>",
++                "backlog", createBacklog(),
++                "event", createEvent()
++        );
++        String bodyTemplate = "{\n" +
++                "    \"message\": \"${event.message}\\\\n\\\\n${event.fields}\",\n" +
++                "    \"title\": \"${event_definition_title}\"\n" +
++                "}";
++        String body = notification.transformBody(bodyTemplate, HTTPEventNotificationConfigV2.ContentType.JSON, model);
++        assertThat(body).contains("\\\"bad_field\\\"");
++    }
++
++    @Test
++    public void testEscapedQuotesInList() {
++        Map<String, Object> model = Map.of(
++                "event_definition_title", "<<Test Event Title>>",
++                "backlog", createBacklog(),
++                "event", createEvent()
++        );
++        String bodyTemplate = "{\n" +
++                "    \"message\": \"${event.message}\\\\n\\\\n${event.list_field}\",\n" +
++                "    \"title\": \"${event_definition_title}\"\n" +
++                "}";
++        String body = notification.transformBody(bodyTemplate, HTTPEventNotificationConfigV2.ContentType.JSON, model);
++        assertThat(body).contains("\\\"list_value1\\\"");
++    }
++
+     private ImmutableList<MessageSummary> createBacklog() {
+         Message message = new TestMessageFactory().createMessage("Message with \"Double Quotes\"", "Unit Test", DateTime.now(DateTimeZone.UTC));
+         MessageSummary summary = new MessageSummary("index1", message);
+         return ImmutableList.of(summary);
+     }
+ 
++    private Map<String, Object> createEvent() {
++        final Map<String, Object> event = new HashMap<>();
++        final Map<String, Object> fields = Map.of(
++                "field1", "\"bad_field\"",
++                "field2", "A somehow \"worse\" field!"
++        );
++        event.put("message", "Event Message & Whatnot");
++        event.put("fields", fields);
++        event.put("list_field", List.of("\"list_value1\"", "\"list_value2\""));
++        return event;
++    }
++
+ }
