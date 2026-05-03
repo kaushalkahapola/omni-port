@@ -92,7 +92,7 @@ Results appear in `tests/shadow_run_results/<TYPE>_<sha>/`:
 
 ## Architecture Overview
 
-![OmniPort Architecture](digrams/omniport-arch.png)
+![OmniPort Architecture](readme-images/omniport-arch.png)
 
 The system processes patches through a **10-agent pipeline**:
 
