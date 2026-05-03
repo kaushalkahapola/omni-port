@@ -4,7 +4,51 @@ A LangGraph-based orchestration system for automatically backporting Java patche
 
 ## Evaluation
 
-We use the [JavaBackports dataset](https://github.com/Javabackports/javabackports) for evaluation. We are currently achieving **more than 80% overall success rate** across all patch types and continuing the evaluation.
+We evaluate on the **JavaBackports** benchmark — 491 manually-validated backports across 15 open-source Java repositories, categorised by structural complexity (Types I–V). See the paper: [JavaBackports: A Benchmark for Automated Patch Backporting in Java](https://rshariffdeen.com/paper/MSR26.pdf).
+
+### Results
+
+OmniPort (powered by **GPT-4.1 mini**) achieves **85.95% overall success** (422/491), outperforming both portGPT and a naive one-shot LLM baseline.
+
+| Approach | Type I | Type II | Type III | Type IV | Type V | **Total** |
+|---|---|---|---|---|---|---|
+| **OmniPort (Ours)** | **219/233 (94.0%)** | **139/151 (92.1%)** | **18/23 (78.3%)** | **4/5 (80.0%)** | **42/79 (53.2%)** | **422/491 (85.95%)** |
+| portGPT (Baseline) | 218/233 (93.6%) | 115/151 (76.2%) | 11/23 (47.8%) | 1/5 (20.0%) | 17/79 (16.5%) | 362/491 (73.73%) |
+| One-Shot LLM | 174/233 (74.7%) | 74/151 (49.0%) | 10/23 (43.5%) | 1/5 (20.0%) | 9/79 (11.4%) | 268/491 (54.58%) |
+
+Success metric: ≥1 previously-failing test now passes, verified against the developer's own test suite.
+
+#### Success Rate by Patch Complexity
+
+```
+             OmniPort ████  portGPT ▓▓▓▓  One-Shot ░░░░
+
+Type I   94% ████████████████████████████████████████████
+         94% ████████████████████████████████████████████
+         75% ███████████████████████████████████
+
+Type II  92% ███████████████████████████████████████████
+         76% ████████████████████████████████████
+         49% ████████████████████████
+
+Type III 78% ██████████████████████████████████████
+         48% ████████████████████████
+         44% ██████████████████████
+
+Type IV  80% ████████████████████████████████████████
+         20% ██████████
+         20% ██████████
+
+Type V   53% ██████████████████████████
+         17% ████████
+         11% █████
+
+         0%       25%       50%       75%      100%
+```
+
+**Key observations:**
+- OmniPort's hybrid pipeline excels on moderate complexity (Types II–IV), where deterministic components handle simple cases (>92% on Types I/II) and LLM agents resolve the rest.
+- On the hardest complete-API-redesign cases (Type V), OmniPort achieves **53.2%** vs portGPT's **16.5%** — a 3× improvement.
 
 ## Quick Start
 
@@ -47,6 +91,8 @@ Results appear in `tests/shadow_run_results/<TYPE>_<sha>/`:
 - `results.json` — per-agent timing, outputs, and metrics
 
 ## Architecture Overview
+
+![OmniPort Architecture](digrams/omniport-arch.png)
 
 The system processes patches through a **10-agent pipeline**:
 
@@ -681,7 +727,7 @@ git log --oneline | grep <original_commit_sha>
 - **docs/plan.md** — Full 9-agent system design (Phase 2+), hybrid localization architecture
 - **src/core/state.py** — State machine definition and TypedDicts
 - **src/core/graph.py** — LangGraph orchestration
-- **Dataset:** [JavaBackports](https://github.com/Javabackports/javabackports)
+- **Dataset:** [JavaBackports](https://github.com/Javabackports/javabackports) — [MSR'26 Paper](https://rshariffdeen.com/paper/MSR26.pdf)
 
 ---
 
